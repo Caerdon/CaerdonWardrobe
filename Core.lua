@@ -13,7 +13,6 @@ local bindTextTable = {
 
 local InventorySlots = {
     ['INVTYPE_HEAD'] = 1,
-    ['INVTYPE_NECK'] = 2,
     ['INVTYPE_SHOULDER'] = 3,
     ['INVTYPE_BODY'] = 4,
     ['INVTYPE_CHEST'] = 5,
@@ -161,8 +160,6 @@ local function OnContainerUpdate(self)
 
 		local topText = _G[button:GetName().."Stock"]
 		local bottomText = _G[button:GetName().."Count"]
-		topText:SetText("")
-		bottomText:SetText("")
 
 		local size = 40
 		local xoffset = -15 * scale
@@ -180,24 +177,30 @@ local function OnContainerUpdate(self)
 				if not PlayerHasAppearance(appearanceID) and not IsSourceArtifact(sourceID) then
 					if PlayerCanCollectAppearance(appearanceID) then
 						topText:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
+						topText:Show();
+
 						if bindingStatus then
 							bottomText:SetText(bindingStatus)
+							bottomText:Show();
 						end
 					else
 						if bindingStatus then
-							-- Can't equip on current toon but still need to learn
-							topText:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
+							if CanTransmogItem(itemLink) then
+							--if not isCollected then
+								-- Can't equip on current toon but still need to learn
+								topText:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
+								topText:Show();
+							end
 							bottomText:SetText("|cFFFF0000" .. bindingStatus .. "|r")
+							bottomText:Show();
 						end
 					end
 				end
 			elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
 				topText:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
+				topText:Show();
 			end
 		end
-
-		topText:Show();
-		bottomText:Show();
 	end
 end
 
@@ -220,7 +223,6 @@ local function OnAuctionBrowseUpdate()
 		local name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemId, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
 		local buttonName = "BrowseButton"..i;
 		local itemCount = _G[buttonName.."ItemCount"];
-		itemCount:SetText("")
 
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
@@ -231,17 +233,18 @@ local function OnAuctionBrowseUpdate()
 				if not PlayerHasAppearance(appearanceID) and not IsSourceArtifact(sourceID) then
 					if PlayerCanCollectAppearance(appearanceID) then
 						itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
+						itemCount:Show()
 					else
 						-- Can't equip on current toon but still need to learn
 						itemCount:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
+						itemCount:Show()
 					end
 				end
 			elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
 				itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
+				itemCount:Show()
 			end
 		end
-
-		itemCount:Show()
 	end
 end
 
@@ -257,7 +260,6 @@ local function OnMerchantUpdate()
 	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
 		local index = (((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i)
 		local itemCount = _G["MerchantItem"..i.."ItemButtonCount"]
-		itemCount:SetText("")
 
 		local itemLink = GetMerchantItemLink(index);
 		if(itemLink) then
@@ -268,19 +270,20 @@ local function OnMerchantUpdate()
 				if not PlayerHasAppearance(appearanceID) and not IsSourceArtifact(sourceID) then
 					if PlayerCanCollectAppearance(appearanceID) then
 						itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
+						itemCount:Show()
 					else
 						if CanTransmogItem(itemLink) then
 							-- Can't equip on current toon but still need to learn
 							itemCount:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
+							itemCount:Show()
 						end
 					end
 				end
 			elseif(PlayerNeedsTransmogMissingAppearance(itemLink)) then
 				itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
+				itemCount:Show()
 			end
 		end
-
-		itemCount:Show()
 	end
 end
 
