@@ -125,6 +125,8 @@ local function GetBindingStatus(bag, slot, itemLink)
 			scanTip:SetAuctionItem("list", slot)
 		elseif bag == "MerchantFrame" then
 			scanTip:SetMerchantItem(slot)
+		elseif bag == "BankFrame" then
+			scanTip:SetInventoryItem("player", slot)
 		else
 			scanTip:SetBagItem(bag, slot)
 		end
@@ -182,12 +184,10 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 				end
 			end
 		else
-			topText:SetText("")
-			topText:Show()
+			topText:Hide()
 
 			if bottomText then
-				bottomText:SetText("")
-				bottomText:Show()
+				bottomText:Hide()
 			end
 		end
 	elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
@@ -195,8 +195,7 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 		topText:Show()
 	else
 		if topText:GetText() == otherIconString or topText:GetText() == ownIconString then
-			topText:SetText("")
-			topText:Show()
+			topText:Hide()
 		end
 	end
 end
@@ -227,16 +226,51 @@ local function OnContainerUpdate(self)
 				ProcessItem(itemID, bag, slot, position, topText, bottomText)
 			end
 		else
-			topText:SetText("")
-			topText:Show()
-
-			bottomText:SetText("")
-			bottomText:Show()
+			topText:Hide()
+			bottomText:Hide()
 		end
 	end
 end
 
 hooksecurefunc("ContainerFrame_Update", OnContainerUpdate)
+
+local function OnBankItemUpdate(button)
+	local bag = button:GetParent():GetID();
+	if( button.isBag ) then
+		bag = -4;
+		return
+	end
+
+	local slot = button:GetID()
+
+	local scale = button:GetEffectiveScale()
+
+	local topText = _G[button:GetName().."Stock"]
+	local bottomText = button.Count or _G[button:GetName().."Count"];
+
+	local size = 40
+	local xoffset = -15 * scale
+	local yoffset = 17 * scale
+
+	local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
+
+	local inventoryID = button:GetInventorySlot();
+
+	local itemID = GetContainerItemID(bag, slot)
+	if itemID then
+		local itemName = GetItemInfo(itemID)
+		if itemName == nil then
+			waitingOnItemData[itemID] = {bag = "BankFrame", slot = inventoryID, position = position, topText = topText, bottomText = bottomText}
+		else
+			ProcessItem(itemID, "BankFrame", inventoryID, position, topText, bottomText)
+		end
+	else
+		topText:Hide()
+		bottomText:Hide()
+	end
+end
+
+hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
 
 local function OnAuctionBrowseUpdate()
 	local scale = AuctionFrameBrowse:GetEffectiveScale()
@@ -301,8 +335,7 @@ local function OnMerchantUpdate()
 				ProcessItem(itemID, "MerchantFrame", index, position, itemCount, nil)
 			end
 		else
-			itemCount:SetText("")
-			itemCount:Show()
+			itemCount:Hide()
 		end
 	end
 end
