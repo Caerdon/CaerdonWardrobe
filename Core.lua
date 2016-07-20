@@ -36,12 +36,9 @@ local InventorySlots = {
 
 local model = CreateFrame('DressUpModel')
 
-local function CanTransmogItem(itemLink)
-    local itemID = GetItemInfoInstant(itemLink)
-    if itemID then
-        local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
-        return canBeSource, noSourceReason
-    end
+local function CanTransmogItem(itemID)
+	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
+	return canBeSource, noSourceReason
 end
 
 local function GetItemAppearance(itemLink)
@@ -72,7 +69,8 @@ local function PlayerNeedsTransmogMissingAppearance(itemLink)
 
     local slot = InventorySlots[slotName]
     if slot and IsDressableItem(itemLink) then
-		local canBeSource, noSourceReason = CanTransmogItem(itemLink)
+
+		local canBeSource, noSourceReason = CanTransmogItem(itemID)
 		if canBeSource then
 			needsItem = not C_TransmogCollection.PlayerHasTransmog(itemID)
 		end
@@ -150,6 +148,59 @@ local function GetBindingStatus(bag, slot, itemLink)
 	return bindingText
 end
 
+local waitingOnItemData = {}
+
+local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
+	local itemLink = 'item:' .. itemID
+	local bindingStatus = GetBindingStatus(bag, slot, itemLink)
+	local ownIconString = "|TInterface\\Store\\category-icon-featured:" .. position .. "|t"
+	local otherIconString = "|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t"
+
+	local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
+	if(appearanceID and not IsSourceArtifact(sourceID)) then
+		if not PlayerHasAppearance(appearanceID) then
+			if PlayerCanCollectAppearance(appearanceID) then
+				topText:SetText(ownIconString)
+				topText:Show()
+
+				if bindingStatus and bottomText then
+					bottomText:SetText(bindingStatus)
+					bottomText:Show()
+				end
+			else
+				if bindingStatus then
+					if CanTransmogItem(itemID) then
+						-- Can't equip on current toon but still need to learn
+						topText:SetText(otherIconString)
+						topText:Show()
+					end
+
+					if bottomText then 
+						bottomText:SetText("|cFFFF0000" .. bindingStatus .. "|r")
+						bottomText:Show()
+					end
+				end
+			end
+		else
+			topText:SetText("")
+			topText:Show()
+
+			if bottomText then
+				bottomText:SetText("")
+				bottomText:Show()
+			end
+		end
+	elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
+		topText:SetText(ownIconString)
+		topText:Show()
+	else
+		if topText:GetText() == otherIconString or topText:GetText() == ownIconString then
+			topText:SetText("")
+			topText:Show()
+		end
+	end
+end
+
 local function OnContainerUpdate(self)
 	local bag = self:GetID()
 
@@ -167,39 +218,20 @@ local function OnContainerUpdate(self)
 
 		local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
 
-
-		local itemLink = GetContainerItemLink(bag, slot)
-		if(itemLink) then
-			local bindingStatus = GetBindingStatus(bag, slot, itemLink)
-
-			local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
-			if(appearanceID) then
-				if not PlayerHasAppearance(appearanceID) and not IsSourceArtifact(sourceID) then
-					if PlayerCanCollectAppearance(appearanceID) then
-						topText:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
-						topText:Show();
-
-						if bindingStatus then
-							bottomText:SetText(bindingStatus)
-							bottomText:Show();
-						end
-					else
-						if bindingStatus then
-							if CanTransmogItem(itemLink) then
-							--if not isCollected then
-								-- Can't equip on current toon but still need to learn
-								topText:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
-								topText:Show();
-							end
-							bottomText:SetText("|cFFFF0000" .. bindingStatus .. "|r")
-							bottomText:Show();
-						end
-					end
-				end
-			elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
-				topText:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
-				topText:Show();
+		local itemID = GetContainerItemID(bag, slot)
+		if itemID then
+			local itemName = GetItemInfo(itemID)
+			if itemName == nil then
+				waitingOnItemData[itemID] = {bag = bag, slot = slot, position = position, topText = topText, bottomText = bottomText}
+			else
+				ProcessItem(itemID, bag, slot, position, topText, bottomText)
 			end
+		else
+			topText:SetText("")
+			topText:Show()
+
+			bottomText:SetText("")
+			bottomText:Show()
 		end
 	end
 end
@@ -256,33 +288,21 @@ local function OnMerchantUpdate()
 
 	local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
 
-	local name, texture, price, stackCount, numAvailable, isUsable, extendedCost
 	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
 		local index = (((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i)
 		local itemCount = _G["MerchantItem"..i.."ItemButtonCount"]
 
-		local itemLink = GetMerchantItemLink(index);
-		if(itemLink) then
-			local bindingStatus = GetBindingStatus("MerchantFrame", index, itemLink)
-
-			local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
-			if appearanceID then
-				if not PlayerHasAppearance(appearanceID) and not IsSourceArtifact(sourceID) then
-					if PlayerCanCollectAppearance(appearanceID) then
-						itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
-						itemCount:Show()
-					else
-						if CanTransmogItem(itemLink) then
-							-- Can't equip on current toon but still need to learn
-							itemCount:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
-							itemCount:Show()
-						end
-					end
-				end
-			elseif(PlayerNeedsTransmogMissingAppearance(itemLink)) then
-				itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
-				itemCount:Show()
+		local itemID = GetMerchantItemID(index)
+		if itemID then
+			local itemName = GetItemInfo(itemID)
+			if itemName == nil then
+				waitingOnItemData[itemID] = {bag = "MerchantFrame", slot = index, position = position, topText = itemCount, bottomText = nil}
+			else
+				ProcessItem(itemID, "MerchantFrame", index, position, itemCount, nil)
 			end
+		else
+			itemCount:SetText("")
+			itemCount:Show()
 		end
 	end
 end
@@ -313,11 +333,13 @@ function eventFrame:ADDON_LOADED(name)
 end
 
 function eventFrame:PLAYER_LOGIN(...)
+	eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
+	eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 end
 
-function eventFrame:TRANSMOG_COLLECTION_UPDATED()
+local function RefreshItems()
 	if MerchantFrame:IsShown() then
 		OnMerchantUpdate()
 	end
@@ -327,4 +349,23 @@ function eventFrame:TRANSMOG_COLLECTION_UPDATED()
 	end
 
 	ContainerFrame_UpdateAll()
+end
+
+function eventFrame:BAG_UPDATE_DELAYED()
+	RefreshItems()
+end
+
+function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
+	local itemInfo = waitingOnItemData[itemID]
+	if itemInfo then
+		local itemName, _, itemQuality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+		if itemName then
+			waitingOnItemData[itemID] = nil
+			ProcessItem(itemID, itemInfo.bag, itemInfo.slot, itemInfo.position, itemInfo.topText, itemInfo.bottomText)
+		end
+	end
+end
+
+function eventFrame:TRANSMOG_COLLECTION_UPDATED()
+	RefreshItems()
 end
