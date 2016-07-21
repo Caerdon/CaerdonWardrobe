@@ -116,7 +116,13 @@ end
 local cachedBinding = {}
 
 local function GetBindingStatus(bag, slot, itemLink)
-	local itemKey = bag .. slot .. itemLink
+	local itemKey
+	-- TODO: Clean this up
+	if bag == "GuildBankFrame" then
+		itemKey = bag .. slot.tab .. slot.index .. itemLink
+	else
+		itemKey = bag .. slot .. itemLink
+	end
 	local bindingText = cachedBinding[itemKey]
 
 	if not bindingText then
@@ -127,6 +133,8 @@ local function GetBindingStatus(bag, slot, itemLink)
 			scanTip:SetMerchantItem(slot)
 		elseif bag == "BankFrame" then
 			scanTip:SetInventoryItem("player", slot)
+		elseif bag == "GuildBankFrame" then
+			scanTip:SetGuildBankItem(slot.tab, slot.index)
 		else
 			scanTip:SetBagItem(bag, slot)
 		end
@@ -154,12 +162,13 @@ local waitingOnItemData = {}
 
 local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 	local itemLink = 'item:' .. itemID
-	local bindingStatus = GetBindingStatus(bag, slot, itemLink)
 	local ownIconString = "|TInterface\\Store\\category-icon-featured:" .. position .. "|t"
 	local otherIconString = "|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t"
 
 	local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
 	if(appearanceID and not IsSourceArtifact(sourceID)) then
+		local bindingStatus = GetBindingStatus(bag, slot, itemLink)
+
 		if not PlayerHasAppearance(appearanceID) then
 			if PlayerCanCollectAppearance(appearanceID) then
 				topText:SetText(ownIconString)
@@ -187,16 +196,21 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 			topText:Hide()
 
 			if bottomText then
-				bottomText:Hide()
+				if bindingStatus then
+					bottomText:SetText("|cFF00FF00" .. bindingStatus .. "|r")
+					bottomText:Show()
+				else
+					bottomText:Hide()
+				end
 			end
 		end
 	elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
-		topText:SetText(ownIconString)
-		topText:Show()
+	 	topText:SetText(ownIconString)
+	 	topText:Show()
 	else
-		if topText:GetText() == otherIconString or topText:GetText() == ownIconString then
-			topText:Hide()
-		end
+	 	if topText:GetText() == otherIconString or topText:GetText() == ownIconString then
+	 		topText:Hide()
+	 	end
 	end
 end
 
@@ -272,6 +286,69 @@ end
 
 hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
 
+local isGuildBankFrameUpdateRequested = false
+
+local function OnGuildBankFrameUpdate_Coroutine()
+	if( GuildBankFrame.mode == "bank" ) then
+		local tab = GetCurrentGuildBankTab();
+		-- if( tab <= GetNumGuildBankTabs() ) then
+		-- end
+
+		local button, index, column;
+		local texture, itemCount, locked, isFiltered, quality;
+
+		for i=1, MAX_GUILDBANK_SLOTS_PER_TAB do
+			index = mod(i, NUM_SLOTS_PER_GUILDBANK_GROUP);
+			if ( index == 0 ) then
+				index = NUM_SLOTS_PER_GUILDBANK_GROUP;
+
+				coroutine.yield()
+			end
+
+			if isGuildBankFrameUpdateRequested then
+				return
+			end
+
+			column = ceil((i-0.5)/NUM_SLOTS_PER_GUILDBANK_GROUP);
+			button = _G["GuildBankColumn"..column.."Button"..index];
+
+			local scale = button:GetEffectiveScale()
+
+			local topText = _G[button:GetName().."Stock"]
+			local bottomText = button.Count or _G[button:GetName().."Count"];
+
+			local size = 40
+			local xoffset = -15 * scale
+			local yoffset = 17 * scale
+
+			local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
+
+			local itemLink = GetGuildBankItemLink(tab, i)
+			if itemLink then
+				local itemID = itemLink:match("item:(%d+)")
+				if itemID then
+					local itemName = GetItemInfo(itemID)
+					if itemName == nil then
+						waitingOnItemData[itemID] = {bag = "GuildBankFrame", slot = {tab = tab, index = i}, position = position, topText = topText, bottomText = bottomText}
+					else
+						ProcessItem(itemID, "GuildBankFrame", {tab = tab, index = i}, position, topText, bottomText)
+					end
+				else
+					topText:Hide()
+					bottomText:Hide()
+				end
+			else
+				topText:Hide()
+				bottomText:Hide()
+			end
+		end
+	end
+end
+
+local function OnGuildBankFrameUpdate()
+	isGuildBankFrameUpdateRequested = true
+end
+
 local function OnAuctionBrowseUpdate()
 	local scale = AuctionFrameBrowse:GetEffectiveScale()
 	local size = 30
@@ -346,12 +423,41 @@ local function OnEvent(self, event, ...)
 	local handler = self[event]
 	if(handler) then
 		handler(self, ...)
+	-- else
+	-- 	print(event .. " UNKNOWN")
+	end
+end
+
+local timeSinceLastGuildBankUpdate = nil
+local GUILDBANKFRAMEUPDATE_INTERVAL = 0.1
+
+local function OnUpdate(self, elapsed)
+	if(self.guildBankUpdateCoroutine) then
+		if coroutine.status(self.guildBankUpdateCoroutine) ~= "dead" then
+			coroutine.resume(self.guildBankUpdateCoroutine)
+		else
+			self.guildBankUpdateCoroutine = nil
+		end
+		return
+	end
+
+	if isGuildBankFrameUpdateRequested then
+		isGuildBankFrameUpdateRequested = false
+		timeSinceLastGuildBankUpdate = 0
+	elseif timeSinceLastGuildBankUpdate then
+		timeSinceLastGuildBankUpdate = timeSinceLastGuildBankUpdate + elapsed
+	end
+
+	if( timeSinceLastGuildBankUpdate ~= nil and (timeSinceLastGuildBankUpdate > GUILDBANKFRAMEUPDATE_INTERVAL) ) then
+		timeSinceLastGuildBankUpdate = nil
+		self.guildBankUpdateCoroutine = coroutine.create(OnGuildBankFrameUpdate_Coroutine)
 	end
 end
 
 eventFrame = CreateFrame("FRAME", "CaerdonWardrobeFrame")
 eventFrame:RegisterEvent "ADDON_LOADED"
 eventFrame:SetScript("OnEvent", OnEvent)
+eventFrame:SetScript("OnUpdate", OnUpdate)
 
 function eventFrame:ADDON_LOADED(name)
 	if name == ADDON_NAME then
@@ -362,6 +468,8 @@ function eventFrame:ADDON_LOADED(name)
 		end
 	elseif name == "Blizzard_AuctionUI" then
 		hooksecurefunc("AuctionFrameBrowse_Update", OnAuctionBrowseUpdate)
+	elseif name == "Blizzard_GuildBankUI" then
+		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	end
 end
 
@@ -369,10 +477,13 @@ function eventFrame:PLAYER_LOGIN(...)
 	eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
 	eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+	-- eventFrame:RegisterAllEvents()
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 end
 
 local function RefreshItems()
+	cachedBinding = {}
+	
 	if MerchantFrame:IsShown() then
 		OnMerchantUpdate()
 	end
@@ -385,7 +496,7 @@ local function RefreshItems()
 end
 
 function eventFrame:BAG_UPDATE_DELAYED()
-	RefreshItems()
+	-- RefreshItems()
 end
 
 function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
