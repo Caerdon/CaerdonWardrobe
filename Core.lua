@@ -12,82 +12,130 @@ local bindTextTable = {
 }
 
 local InventorySlots = {
-    ['INVTYPE_HEAD'] = 1,
-    ['INVTYPE_SHOULDER'] = 3,
-    ['INVTYPE_BODY'] = 4,
-    ['INVTYPE_CHEST'] = 5,
-    ['INVTYPE_ROBE'] = 5,
-    ['INVTYPE_WAIST'] = 6,
-    ['INVTYPE_LEGS'] = 7,
-    ['INVTYPE_FEET'] = 8,
-    ['INVTYPE_WRIST'] = 9,
-    ['INVTYPE_HAND'] = 10,
-    ['INVTYPE_CLOAK'] = 15,
-    ['INVTYPE_WEAPON'] = 16,
-    ['INVTYPE_SHIELD'] = 17,
-    ['INVTYPE_2HWEAPON'] = 16,
-    ['INVTYPE_WEAPONMAINHAND'] = 16,
-    ['INVTYPE_RANGED'] = 16,
-    ['INVTYPE_RANGEDRIGHT'] = 16,
-    ['INVTYPE_WEAPONOFFHAND'] = 17,
-    ['INVTYPE_HOLDABLE'] = 17,
-    ['INVTYPE_TABARD'] = 19,
+    ['INVTYPE_HEAD'] = INVSLOT_HEAD,
+    ['INVTYPE_SHOULDER'] = INVSLOT_SHOULDER,
+    ['INVTYPE_BODY'] = INVSLOT_BODY,
+    ['INVTYPE_CHEST'] = INVSLOT_CHEST,
+    ['INVTYPE_ROBE'] = INVSLOT_CHEST,
+    ['INVTYPE_WAIST'] = INVSLOT_WAIST,
+    ['INVTYPE_LEGS'] = INVSLOT_LEGS,
+    ['INVTYPE_FEET'] = INVSLOT_FEET,
+    ['INVTYPE_WRIST'] = INVSLOT_WRIST,
+    ['INVTYPE_HAND'] = INVSLOT_HAND,
+    ['INVTYPE_CLOAK'] = INVSLOT_BACK,
+    ['INVTYPE_WEAPON'] = INVSLOT_MAINHAND,
+    ['INVTYPE_SHIELD'] = INVSLOT_OFFHAND,
+    ['INVTYPE_2HWEAPON'] = INVSLOT_MAINHAND,
+    ['INVTYPE_WEAPONMAINHAND'] = INVSLOT_MAINHAND,
+    ['INVTYPE_RANGED'] = INVSLOT_MAINHAND,
+    ['INVTYPE_RANGEDRIGHT'] = INVSLOT_MAINHAND,
+    ['INVTYPE_WEAPONOFFHAND'] = INVSLOT_OFFHAND,
+    ['INVTYPE_HOLDABLE'] = INVSLOT_OFFHAND,
+    ['INVTYPE_TABARD'] = INVSLOT_TABARD,
 }
+
+local scanTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
+local cachedBinding = {}
 
 local model = CreateFrame('DressUpModel')
 
-local function CanTransmogItem(itemID)
+local function GetItemID(itemLink)
+	return itemLink:match("item:(%d+)")
+end
+
+local function CanTransmogItem(itemLink)
+	local itemID = GetItemID(itemLink)
 	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 	return canBeSource, noSourceReason
 end
 
-local function GetItemAppearance(itemLink)
-    local itemID, _, _, slotName = GetItemInfoInstant(itemLink)
-    if itemLink == itemID then
-        itemLink = 'item:' .. itemID
-    end
+local function GetItemSource(itemID)
+	local itemLink = 'item:' .. itemID
+    local _, _, _, slotName = GetItemInfoInstant(itemID)
+
     local slot = InventorySlots[slotName]
-    if not slot or not IsDressableItem(itemLink) then return end
+    if not slot or not IsDressableItem(itemLink) then
+    	return 
+    end
 
     model:SetUnit('player')
     model:Undress()
     model:TryOn(itemLink, slot)
-    local sourceID = model:GetSlotTransmogSources(slot)
-    if sourceID then
-        local categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
-        return appearanceID, isCollected, sourceID, canBeSource
+    return model:GetSlotTransmogSources(slot)
+end
+
+local function GetItemAppearance(itemID)
+	local categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink
+	local sourceID = GetItemSource(itemID)
+    if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
+        categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
     end
+
+    return appearanceID, isCollected, sourceID
 end
 
 local function PlayerNeedsTransmogMissingAppearance(itemLink)
 	-- Tabards (at the least) don't return in an appearance lookup, but this seems to work
 	local needsItem = false
     local itemID, _, _, slotName = GetItemInfoInstant(itemLink)
-    if itemLink == itemID then
-        itemLink = 'item:' .. itemID
-    end
 
     local slot = InventorySlots[slotName]
     if slot and IsDressableItem(itemLink) then
 
-		local canBeSource, noSourceReason = CanTransmogItem(itemID)
+		local canBeSource, noSourceReason = CanTransmogItem(itemLink)
 		if canBeSource then
 			needsItem = not C_TransmogCollection.PlayerHasTransmog(itemID)
+			if needsItem then
+
+				scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+				scanTip:SetItemByID(GetItemID(itemLink))
+
+				for lineIndex = 1, scanTip:NumLines() do
+					local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
+					if lineText then
+						if strmatch(lineText, USE_COLON) then -- it's a recipe
+							break
+						end
+					end
+
+					if lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
+						needsItem = false
+					end
+				end
+			end
 		end
 	end
 
 	return needsItem
 end
 
-local function PlayerHasAppearance(appearanceID)
+local function PlayerHasAppearance(appearanceID, itemLink)
+	local hasAppearance = false
+	local itemID = GetItemID(itemLink)
+
     local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
     if sources then
         for i, source in pairs(sources) do
             if source.isCollected then
-                return true
+                hasAppearance = true
             end
         end
     end
+
+    if not hasAppearance then
+    	-- TODO: Do I need to worry about affixes?
+		-- local itemString = string.match(itemLink, "item[%-?%d:]+") or ""
+		-- local instaid, _, numBonuses, affixes = select(12, strsplit(":", itemString, 15))
+		-- instaid=tonumber(instaid) or 7
+		-- numBonuses=tonumber(numBonuses) or 0
+		-- local upgradeID = nil
+		-- if instaid >0 and (instaid-4)%8==0 then
+		-- 	upgradeID = tonumber((select(numBonuses + 1, strsplit(":", affixes))))
+		-- 	print("Upgrade ID: " .. upgradeID)
+		-- end
+    end
+
+    return hasAppearance
 end
  
 local function PlayerCanCollectAppearance(appearanceID)
@@ -99,6 +147,8 @@ local function PlayerCanCollectAppearance(appearanceID)
             end
         end
     end
+
+    return false
 end
 
 local function IsSourceArtifact(sourceID)
@@ -106,14 +156,6 @@ local function IsSourceArtifact(sourceID)
 	local _, _, quality = GetItemInfo(link);
 	return quality == LE_ITEM_QUALITY_ARTIFACT;
 end
-
-local scanTip = CreateFrame("GameTooltip", "CaerdonWardrobeGameTooltip")
-for lineIndex = 1, 5 do
-	scanTip[lineIndex] = scanTip:CreateFontString()
-	scanTip:AddFontStrings(scanTip[lineIndex], scanTip:CreateFontString())
-end
-
-local cachedBinding = {}
 
 local function GetBindingStatus(bag, slot, itemLink)
 	local itemKey
@@ -123,24 +165,14 @@ local function GetBindingStatus(bag, slot, itemLink)
 	else
 		itemKey = bag .. slot .. itemLink
 	end
-	local bindingText = cachedBinding[itemKey]
+	local bindingText = nil --cachedBinding[itemKey]
 
 	if not bindingText then
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
-		if bag == "AuctionFrame" then
-			scanTip:SetAuctionItem("list", slot)
-		elseif bag == "MerchantFrame" then
-			scanTip:SetMerchantItem(slot)
-		elseif bag == "BankFrame" then
-			scanTip:SetInventoryItem("player", slot)
-		elseif bag == "GuildBankFrame" then
-			scanTip:SetGuildBankItem(slot.tab, slot.index)
-		else
-			scanTip:SetBagItem(bag, slot)
-		end
+		scanTip:SetItemByID(GetItemID(itemLink))
 
 		for lineIndex = 1, 5 do
-			local lineText = scanTip[lineIndex]:GetText()
+			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
 			if lineText then
 				if strmatch(lineText, USE_COLON) then -- it's a recipe
 					break
@@ -158,18 +190,54 @@ local function GetBindingStatus(bag, slot, itemLink)
 	return bindingText
 end
 
+local function addDebugInfo(tooltip, itemLink)
+	local itemID = GetItemID(itemLink)
+	local _, _, quality, _, _, itemClass, itemSubClass, _, equipSlot = GetItemInfo(itemID)
+
+	tooltip:AddDoubleLine("Item ID:", tostring(itemID))
+	tooltip:AddDoubleLine("Item Class:", tostring(itemClass))
+	tooltip:AddDoubleLine("Item SubClass:", tostring(itemSubClass))
+	tooltip:AddDoubleLine("Item EquipSlot:", tostring(equipSlot))
+
+	local playerClass = select(2, UnitClass("player"))
+	local playerLevel = UnitLevel("player")
+	local playerSpec = GetSpecialization()
+	local playerSpecName = playerSpec and select(2, GetSpecializationInfo(playerSpec)) or "None"
+	tooltip:AddDoubleLine("Player Class:", playerClass)
+	tooltip:AddDoubleLine("Player Spec:", playerSpecName)
+	tooltip:AddDoubleLine("Player Level:", playerLevel)
+
+	local appearanceID, isCollected, sourceID = GetItemAppearance(itemID)
+
+	tooltip:AddDoubleLine("Appearance ID:", tostring(appearanceID))
+	tooltip:AddDoubleLine("Is Collected:", tostring(isCollected))
+	tooltip:AddDoubleLine("Item Source:", sourceID and tostring(sourceID) or "none")
+
+	if appearanceID then
+		local hasAppearance = PlayerHasAppearance(appearanceID, itemLink)
+		tooltip:AddDoubleLine("PlayerHasAppearance:", tostring(hasAppearance))
+		tooltip:AddDoubleLine("PlayerCanCollectAppearance:", tostring(PlayerCanCollectAppearance(appearanceID)))
+	end
+
+	tooltip:AddDoubleLine("CanTransmogItem:", tostring(CanTransmogItem(itemLink)))
+	tooltip:AddDoubleLine("PlayerNeedsTransmogMissingAppearance:", tostring(PlayerNeedsTransmogMissingAppearance(itemLink)))
+
+	tooltip:Show()
+end
+
 local waitingOnItemData = {}
 
-local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
-	local itemLink = 'item:' .. itemID
+local function ProcessItem(itemID, bag, slot, position, topText, bottomText, button)
 	local ownIconString = "|TInterface\\Store\\category-icon-featured:" .. position .. "|t"
 	local otherIconString = "|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t"
 
-	local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
+	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
+
+	local appearanceID, isCollected, sourceID = GetItemAppearance(itemID)
 	if(appearanceID and not IsSourceArtifact(sourceID)) then
 		local bindingStatus = GetBindingStatus(bag, slot, itemLink)
 
-		if not PlayerHasAppearance(appearanceID) then
+		if(not isCollected and not PlayerHasAppearance(appearanceID, itemLink)) then -- and PlayerNeedsTransmogMissingAppearance(itemLink)) then
 			if PlayerCanCollectAppearance(appearanceID) then
 				topText:SetText(ownIconString)
 				topText:Show()
@@ -180,7 +248,7 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 				end
 			else
 				if bindingStatus then
-					if CanTransmogItem(itemID) then
+					if PlayerNeedsTransmogMissingAppearance(itemLink) then
 						-- Can't equip on current toon but still need to learn
 						topText:SetText(otherIconString)
 						topText:Show()
@@ -193,6 +261,13 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 				end
 			end
 		else
+			-- TODO: Decide how to expose this functionality
+			-- Hide anything that doesn't match
+			-- if button then
+			-- 	--button.IconBorder:SetVertexColor(100, 255, 50)
+			-- 	button.searchOverlay:Show()
+			-- end
+
 			topText:Hide()
 
 			if bottomText then
@@ -208,6 +283,12 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText)
 	 	topText:SetText(ownIconString)
 	 	topText:Show()
 	else
+		-- Hide anything that doesn't match
+		-- if button then
+		-- 	--button.IconBorder:SetVertexColor(100, 255, 50)
+		-- 	button.searchOverlay:Show()
+		-- end
+
 	 	if topText:GetText() == otherIconString or topText:GetText() == ownIconString then
 	 		topText:Hide()
 	 	end
@@ -235,9 +316,9 @@ local function OnContainerUpdate(self)
 		if itemID then
 			local itemName = GetItemInfo(itemID)
 			if itemName == nil then
-				waitingOnItemData[itemID] = {bag = bag, slot = slot, position = position, topText = topText, bottomText = bottomText}
+				waitingOnItemData[itemID] = {bag = bag, slot = slot, position = position, topText = topText, bottomText = bottomText, button = button}
 			else
-				ProcessItem(itemID, bag, slot, position, topText, bottomText)
+				ProcessItem(itemID, bag, slot, position, topText, bottomText, button)
 			end
 		else
 			topText:Hide()
@@ -251,7 +332,7 @@ hooksecurefunc("ContainerFrame_Update", OnContainerUpdate)
 local function OnBankItemUpdate(button)
 	local bag = button:GetParent():GetID();
 	if( button.isBag ) then
-		bag = -4;
+		bag = -ITEM_INVENTORY_BANK_BAG_OFFSET;
 		return
 	end
 
@@ -329,9 +410,9 @@ local function OnGuildBankFrameUpdate_Coroutine()
 				if itemID then
 					local itemName = GetItemInfo(itemID)
 					if itemName == nil then
-						waitingOnItemData[itemID] = {bag = "GuildBankFrame", slot = {tab = tab, index = i}, position = position, topText = topText, bottomText = bottomText}
+						waitingOnItemData[itemID] = {bag = "GuildBankFrame", slot = {tab = tab, index = i}, position = position, topText = topText, bottomText = bottomText, button = button}
 					else
-						ProcessItem(itemID, "GuildBankFrame", {tab = tab, index = i}, position, topText, bottomText)
+						ProcessItem(itemID, "GuildBankFrame", {tab = tab, index = i}, position, topText, bottomText, button)
 					end
 				else
 					topText:Hide()
@@ -363,29 +444,20 @@ local function OnAuctionBrowseUpdate()
 		local auctionIndex = offset + i
 		local index = auctionIndex + (NUM_AUCTION_ITEMS_PER_PAGE * AuctionFrameBrowse.page);
 		local button = _G["BrowseButton"..i];
-		local name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemId, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
+		local name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemID, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
 		local buttonName = "BrowseButton"..i;
 		local itemCount = _G[buttonName.."ItemCount"];
 
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
-			local bindingStatus = GetBindingStatus("AuctionFrame", auctionIndex, itemLink)
-
-			local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
-			if appearanceID then
-				if not PlayerHasAppearance(appearanceID) and not IsSourceArtifact(sourceID) then
-					if PlayerCanCollectAppearance(appearanceID) then
-						itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
-						itemCount:Show()
-					else
-						-- Can't equip on current toon but still need to learn
-						itemCount:SetText("|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t")
-						itemCount:Show()
-					end
+			local itemID = itemLink:match("item:(%d+)")
+			if itemID then
+				local itemName = GetItemInfo(itemID)
+				if itemName == nil then
+					waitingOnItemData[itemID] = {bag = "AuctionFrame", slot = auctionIndex, position = position, topText = itemCount, bottomText = nil, button = button}
+				else
+					ProcessItem(itemID, "AuctionFrame", auctionIndex, position, itemCount, nil, button)
 				end
-			elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
-				itemCount:SetText("|TInterface\\Store\\category-icon-featured:" .. position .. "|t")
-				itemCount:Show()
 			end
 		end
 	end
@@ -454,10 +526,18 @@ local function OnUpdate(self, elapsed)
 	end
 end
 
+local function addDebugInfo(self)
+	local link = select(2, self:GetItem())
+	if link then
+		addDebugInfo(self, link)
+	end
+end
+
 eventFrame = CreateFrame("FRAME", "CaerdonWardrobeFrame")
 eventFrame:RegisterEvent "ADDON_LOADED"
 eventFrame:SetScript("OnEvent", OnEvent)
 eventFrame:SetScript("OnUpdate", OnUpdate)
+--GameTooltip:HookScript("OnTooltipSetItem", attachDebugInfo)
 
 function eventFrame:ADDON_LOADED(name)
 	if name == ADDON_NAME then
@@ -483,7 +563,7 @@ end
 
 local function RefreshItems()
 	cachedBinding = {}
-	
+
 	if MerchantFrame:IsShown() then
 		OnMerchantUpdate()
 	end
@@ -505,7 +585,7 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
 		local itemName, _, itemQuality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
 		if itemName then
 			waitingOnItemData[itemID] = nil
-			ProcessItem(itemID, itemInfo.bag, itemInfo.slot, itemInfo.position, itemInfo.topText, itemInfo.bottomText)
+			ProcessItem(itemID, itemInfo.bag, itemInfo.slot, itemInfo.position, itemInfo.topText, itemInfo.bottomText, itemInfo.button)
 		end
 	end
 end
