@@ -265,6 +265,59 @@ end
 
 local waitingOnItemData = {}
 
+local function SetItemButtonMogStatus(button, status)
+	local mogStatus = button.mogStatus
+	if not status and not mogStatus then return end
+	if not status then
+		mogStatus:SetTexture("")
+		return
+	end
+
+	if not mogStatus then
+		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
+		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 1)
+		mogStatus:SetPoint("TOPLEFT", -15, 15)
+		mogStatus:SetSize(40, 40)
+		button.mogStatus = mogStatus
+	end
+
+	local mogFlash = button.mogFlash
+	if not mogFlash then
+		mogFlash = button:CreateTexture(nil, "OVERLAY")
+		mogFlash:SetAlpha(0)
+		mogFlash:SetBlendMode("ADD")
+		mogFlash:SetAtlas("bags-glow-flash", true)
+		mogFlash:SetPoint("CENTER")
+
+		button.mogFlash = mogFlash
+	end
+
+	local mogAnim = button.mogAnim
+	if not mogAnim then
+		mogAnim = button:CreateAnimationGroup()
+		mogAnim:SetToFinalAlpha(true)
+		mogAnim.alpha1 = mogAnim:CreateAnimation("Alpha")
+		mogAnim.alpha1:SetChildKey("mogFlash")
+		mogAnim.alpha1:SetSmoothing("OUT");
+		mogAnim.alpha1:SetDuration(0.6)
+		mogAnim.alpha1:SetOrder(1)
+		mogAnim.alpha1:SetFromAlpha(1);
+		mogAnim.alpha1:SetToAlpha(0);
+
+		button.mogAnim = mogAnim
+	end
+
+	mogAnim:Play()
+
+	if status == "own" then
+		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+	else
+		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
+	end
+
+-- PlayerCooldown:SetCooldown(0,0)
+end
+
 local function SetItemButtonBindType(button, text)
 	local bindsOnText = button.bindsOnText
 	if not text and not bindsOnText then return end
@@ -282,9 +335,8 @@ local function SetItemButtonBindType(button, text)
 end
 
 local function ProcessItem(itemID, bag, slot, position, topText, bottomText, button)
-	local ownIconString = "|TInterface\\Store\\category-icon-featured:" .. position .. "|t"
-	local otherIconString = "|TInterface\\Store\\category-icon-placeholder:" .. position .. "|t"
 	local bindingText
+	local mogStatus = nil
 
 	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
 
@@ -296,27 +348,20 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText, but
 
 		if(not isCollected and not PlayerHasAppearance(appearanceID, itemLink)) then
 			if PlayerCanCollectAppearance(appearanceID, itemLink) then
-				topText:SetText(ownIconString)
-				topText:Show()
+				mogStatus = "own"
 
 				if bindingStatus and bottomText then
 					bindingText = bindingStatus
-					-- bottomText:SetText(bindingStatus)
-					-- bottomText:Show()
 				end
 			else
 				if bindingStatus then
 					if PlayerNeedsTransmogMissingAppearance(itemLink) then
 						-- Can't equip on current toon but still need to learn
-						topText:SetText(otherIconString)
-						topText:Show()
+						mogStatus = "other"
 					end
 
 					if bottomText then 
 						bindingText = "|cFFFF0000" .. bindingStatus .. "|r"
-
-						-- bottomText:SetText("|cFFFF0000" .. bindingStatus .. "|r")
-						-- bottomText:Show()
 					end
 				end
 			end
@@ -328,32 +373,25 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText, but
 			-- 	button.searchOverlay:Show()
 			-- end
 
-			topText:Hide()
-
 			if bottomText then
 				if bindingStatus then
 					bindingText = "|cFF00FF00" .. bindingStatus .. "|r"
-					-- bottomText:SetText("|cFF00FF00" .. bindingStatus .. "|r")
-					-- bottomText:Show()
 				else
 					bindingText = nil
-					-- bottomText:Hide()
 				end
 			end
 		end
 	elseif PlayerNeedsTransmogMissingAppearance(itemLink) then
-	 	topText:SetText(ownIconString)
-	 	topText:Show()
+		mogStatus = "own"
 	else
 		-- Hide anything that doesn't match
 		-- if button then
 		-- 	--button.IconBorder:SetVertexColor(100, 255, 50)
 		-- 	button.searchOverlay:Show()
 		-- end
-	 	if topText:GetText() == otherIconString or topText:GetText() == ownIconString then
-	 		topText:Hide()
-	 	end
 	end
+
+	SetItemButtonMogStatus(button, mogStatus)
 
 	if bag ~= "GuildBankFrame" then
 		SetItemButtonBindType(button, bindingText)
@@ -362,6 +400,10 @@ end
 
 local function OnContainerUpdate(self, asyncUpdate)
 	if isBagUpdate and not asyncUpdate then
+		return
+	end
+
+	if not self:IsShown() then
 		return
 	end
 
@@ -392,7 +434,7 @@ local function OnContainerUpdate(self, asyncUpdate)
 				ProcessItem(itemID, bag, slot, position, topText, bottomText, button)
 			end
 		else
-			topText:Hide()
+			SetItemButtonMogStatus(button, nil)
 			SetItemButtonBindType(button, nil)
 		end
 	end
@@ -448,7 +490,7 @@ local function OnBankItemUpdate(button)
 			ProcessItem(itemID, "BankFrame", inventoryID, position, topText, bottomText, button)
 		end
 	else
-		topText:Hide()
+		SetItemButtonMogStatus(button, nil)
 		SetItemButtonBindType(button, nil)
 	end
 end
@@ -500,11 +542,11 @@ local function OnGuildBankFrameUpdate_Coroutine()
 						ProcessItem(itemID, "GuildBankFrame", {tab = tab, index = i}, position, topText, bottomText, button)
 					end
 				else
-					topText:Hide()
+					SetItemButtonMogStatus(button, nil)
 					SetItemButtonBindType(button, nil)
 				end
 			else
-				topText:Hide()
+				SetItemButtonMogStatus(button, nil)
 				SetItemButtonBindType(button, nil)
 			end
 		end
@@ -528,10 +570,10 @@ local function OnAuctionBrowseUpdate()
 	for i=1, NUM_BROWSE_TO_DISPLAY do
 		local auctionIndex = offset + i
 		local index = auctionIndex + (NUM_AUCTION_ITEMS_PER_PAGE * AuctionFrameBrowse.page);
-		local button = _G["BrowseButton"..i];
+		local buttonName = "BrowseButton"..i.."Item";
+		local button = _G[buttonName];
 		local name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemID, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
-		local buttonName = "BrowseButton"..i;
-		local itemCount = _G[buttonName.."ItemCount"];
+		local itemCount = _G[buttonName.."Count"];
 
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
@@ -627,7 +669,10 @@ local BAGUPDATE_INTERVAL = 0.3
 local function OnUpdate(self, elapsed)
 	if(self.bagUpdateCoroutine) then
 		if coroutine.status(self.bagUpdateCoroutine) ~= "dead" then
-			coroutine.resume(self.bagUpdateCoroutine)
+			local ok, result = coroutine.resume(self.bagUpdateCoroutine)
+			if not ok then
+				error(result)
+			end
 		else
 			self.bagUpdateCoroutine = nil
 		end
@@ -636,7 +681,10 @@ local function OnUpdate(self, elapsed)
 
 	if(self.guildBankUpdateCoroutine) then
 		if coroutine.status(self.guildBankUpdateCoroutine) ~= "dead" then
-			coroutine.resume(self.guildBankUpdateCoroutine)
+			local ok, result = coroutine.resume(self.guildBankUpdateCoroutine)
+			if not ok then
+				error(result)
+			end
 		else
 			self.guildBankUpdateCoroutine = nil
 		end
