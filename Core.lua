@@ -175,10 +175,10 @@ local function PlayerCanCollectAppearance(appearanceID, itemLink)
     return canCollect, matchedSource
 end
 
-local function IsSourceArtifact(sourceID)
+local function ShouldIgnoreSource(sourceID)
 	local link = select(6, C_TransmogCollection.GetAppearanceSourceInfo(sourceID));
 	local _, _, quality = GetItemInfo(link);
-	return quality == LE_ITEM_QUALITY_ARTIFACT;
+	return quality == LE_ITEM_QUALITY_ARTIFACT or quality == LE_ITEM_QUALITY_COMMON
 end
 
 local function GetBindingStatus(bag, slot, itemLink)
@@ -346,7 +346,7 @@ local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, bu
 	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
 
 	local appearanceID, isCollected, sourceID = GetItemAppearance(itemID)
-	if(appearanceID and not IsSourceArtifact(sourceID)) then
+	if(appearanceID and not ShouldIgnoreSource(sourceID)) then
 		local bindingStatus
 
 		bindingStatus = GetBindingStatus(bag, slot, itemLink)
