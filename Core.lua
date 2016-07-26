@@ -339,7 +339,7 @@ function CaerdonWardrobe:ResetButton(button)
 	SetItemButtonBindType(button, nil)
 end
 
-local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, button)
+local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, button, itemProcessed)
 	local bindingText
 	local mogStatus = nil
 
@@ -396,19 +396,26 @@ local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, bu
 		-- end
 	end
 
-	SetItemButtonMogStatus(button, mogStatus)
+	if button then
+		SetItemButtonMogStatus(button, mogStatus)
 
-	if bag ~= "GuildBankFrame" then
-		SetItemButtonBindType(button, bindingText)
+		-- TODO: Consider making this an option
+		-- if bag ~= "GuildBankFrame" then
+			SetItemButtonBindType(button, bindingText)
+		-- end
+	end
+
+	if itemProcessed then
+		itemProcessed(mogStatus, bindingText)
 	end
 end
 
-function CaerdonWardrobe:ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+function CaerdonWardrobe:ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
 	local itemName = GetItemInfo(itemID)
 	if itemName == nil then
-		waitingOnItemData[itemID] = {bag = bag, slot = slot, topText = showMogIcon, bottomText = showBindStatus, button = button}
+		waitingOnItemData[itemID] = {bag = bag, slot = slot, topText = showMogIcon, bottomText = showBindStatus, button = button, itemProcessed = itemProcessed}
 	else
-		ProcessItem(itemID, bag, slot, nil, showMogIcon, showBindStatus, button)
+		ProcessItem(itemID, bag, slot, nil, showMogIcon, showBindStatus, button, itemProcessed)
 	end
 end
 
