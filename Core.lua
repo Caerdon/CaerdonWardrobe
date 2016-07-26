@@ -4,6 +4,8 @@ local L = namespace.L
 local eventFrame
 local isBagUpdate = false
 
+CaerdonWardrobe = {}
+
 local bindTextTable = {
 	[ITEM_ACCOUNTBOUND]        = L["BoA"],
 	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
@@ -307,15 +309,13 @@ local function SetItemButtonMogStatus(button, status)
 		button.mogAnim = mogAnim
 	end
 
-	mogAnim:Play()
-
 	if status == "own" then
 		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 	else
 		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
 	end
 
--- PlayerCooldown:SetCooldown(0,0)
+	mogAnim:Play()
 end
 
 local function SetItemButtonBindType(button, text)
@@ -334,7 +334,12 @@ local function SetItemButtonBindType(button, text)
 	bindsOnText:SetText(text)
 end
 
-local function ProcessItem(itemID, bag, slot, position, topText, bottomText, button)
+function CaerdonWardrobe:ResetButton(button)
+	SetItemButtonMogStatus(button, nil)
+	SetItemButtonBindType(button, nil)
+end
+
+local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, button)
 	local bindingText
 	local mogStatus = nil
 
@@ -350,7 +355,7 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText, but
 			if PlayerCanCollectAppearance(appearanceID, itemLink) then
 				mogStatus = "own"
 
-				if bindingStatus and bottomText then
+				if bindingStatus and showBindStatus then
 					bindingText = bindingStatus
 				end
 			else
@@ -360,7 +365,7 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText, but
 						mogStatus = "other"
 					end
 
-					if bottomText then 
+					if showBindStatus then 
 						bindingText = "|cFFFF0000" .. bindingStatus .. "|r"
 					end
 				end
@@ -373,7 +378,7 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText, but
 			-- 	button.searchOverlay:Show()
 			-- end
 
-			if bottomText then
+			if showBindStatus then
 				if bindingStatus then
 					bindingText = "|cFF00FF00" .. bindingStatus .. "|r"
 				else
@@ -395,6 +400,15 @@ local function ProcessItem(itemID, bag, slot, position, topText, bottomText, but
 
 	if bag ~= "GuildBankFrame" then
 		SetItemButtonBindType(button, bindingText)
+	end
+end
+
+function CaerdonWardrobe:ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+	local itemName = GetItemInfo(itemID)
+	if itemName == nil then
+		waitingOnItemData[itemID] = {bag = bag, slot = slot, topText = showMogIcon, bottomText = showBindStatus, button = button}
+	else
+		ProcessItem(itemID, bag, slot, nil, showMogIcon, showBindStatus, button)
 	end
 end
 
