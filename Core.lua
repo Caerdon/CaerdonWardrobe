@@ -181,7 +181,7 @@ local function ShouldIgnoreSource(sourceID)
 	return quality == LE_ITEM_QUALITY_ARTIFACT or quality == LE_ITEM_QUALITY_COMMON
 end
 
-local function GetBindingStatus(bag, slot, itemLink)
+local function GetItemKey(bag, slot, itemLink)
 	local itemKey
 	-- TODO: Clean this up
 	if bag == "GuildBankFrame" then
@@ -189,6 +189,12 @@ local function GetBindingStatus(bag, slot, itemLink)
 	else
 		itemKey = bag .. slot .. itemLink
 	end
+
+	return itemKey
+end
+
+local function GetBindingStatus(bag, slot, itemLink)
+	local itemKey = GetItemKey(bag, slot, itemLink)
 
 	local bindingText = cachedBinding[itemKey]
 	if not bindingText then
@@ -339,7 +345,7 @@ function CaerdonWardrobe:ResetButton(button)
 	SetItemButtonBindType(button, nil)
 end
 
-local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, button, itemProcessed)
+local function ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
 	local bindingText
 	local mogStatus = nil
 
@@ -410,19 +416,41 @@ local function ProcessItem(itemID, bag, slot, _, showMogIcon, showBindStatus, bu
 	end
 end
 
-function CaerdonWardrobe:ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
-	local itemName = GetItemInfo(itemID)
-	if itemName == nil then
-		waitingOnItemData[itemID] = {bag = bag, slot = slot, topText = showMogIcon, bottomText = showBindStatus, button = button, itemProcessed = itemProcessed}
+local function ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+	if itemID then
+		local waitItem = waitingOnItemData[itemID]
+		if not waitItem then
+			waitItem = {}
+			waitingOnItemData[tostring(itemID)] = waitItem
+		end
+
+		local waitBag = waitItem[tostring(bag)]
+		if not waitBag then
+			waitBag = {}
+			waitItem[tostring(bag)] = waitBag
+		end
+
+		local itemName = GetItemInfo(itemID)
+		if itemName == nil then
+			waitBag[tostring(slot)] = { slot = slot, showMogIcon = showMogIcon, showBindStatus = showBindStatus, button = button, itemProcessed = itemProcessed}
+		else
+			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
+			ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+		end
 	else
-		ProcessItem(itemID, bag, slot, nil, showMogIcon, showBindStatus, button, itemProcessed)
+		SetItemButtonMogStatus(button, nil)
+		SetItemButtonBindType(button, nil)
 	end
 end
 
+function CaerdonWardrobe:ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+	ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+end
+
 local function OnContainerUpdate(self, asyncUpdate)
-	if isBagUpdate and not asyncUpdate then
-		return
-	end
+	-- if isBagUpdate and not asyncUpdate then
+	-- 	return
+	-- end
 
 	if not self:IsShown() then
 		return
@@ -433,31 +461,14 @@ local function OnContainerUpdate(self, asyncUpdate)
 	for buttonIndex = 1, self.size do
 		local button = _G[self:GetName() .. "Item" .. buttonIndex]
 		local slot = button:GetID()
-		local scale = self:GetEffectiveScale()
 
-		local topText = _G[button:GetName().."Stock"]
-		local bottomText = _G[button:GetName().."Count"]
-
-		local size = 40
-		local xoffset = -15 * scale
-		local yoffset = 17 * scale
-
-		local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
+		local showMogIcon = true
+		local showBindStatus = true
 
 		local itemID = GetContainerItemID(bag, slot)
 		local texture, itemCount, locked = GetContainerItemInfo(bag, slot)
 
-		if itemID then
-			local itemName = GetItemInfo(itemID)
-			if itemName == nil then
-				waitingOnItemData[itemID] = {bag = bag, slot = slot, position = position, topText = topText, bottomText = bottomText, button = button}
-			else
-				ProcessItem(itemID, bag, slot, position, topText, bottomText, button)
-			end
-		else
-			SetItemButtonMogStatus(button, nil)
-			SetItemButtonBindType(button, nil)
-		end
+		ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
 	end
 end
 
@@ -481,39 +492,22 @@ end
 hooksecurefunc("ContainerFrame_Update", ScheduleContainerUpdate)
 
 local function OnBankItemUpdate(button)
-	local bag = button:GetParent():GetID();
+	local containerID = button:GetParent():GetID();
 	if( button.isBag ) then
-		bag = -ITEM_INVENTORY_BANK_BAG_OFFSET;
+		containerID = -ITEM_INVENTORY_BANK_BAG_OFFSET;
 		return
 	end
 
-	local slot = button:GetID()
+	local buttonID = button:GetID()
 
-	local scale = button:GetEffectiveScale()
+	local bag = "BankFrame"
+	local slot = button:GetInventorySlot();
 
-	local topText = _G[button:GetName().."Stock"]
-	local bottomText = button.Count or _G[button:GetName().."Count"];
+	local showMogIcon = true
+	local showBindStatus = true
 
-	local size = 40
-	local xoffset = -15 * scale
-	local yoffset = 17 * scale
-
-	local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
-
-	local inventoryID = button:GetInventorySlot();
-
-	local itemID = GetContainerItemID(bag, slot)
-	if itemID then
-		local itemName = GetItemInfo(itemID)
-		if itemName == nil then
-			waitingOnItemData[itemID] = {bag = "BankFrame", slot = inventoryID, position = position, topText = topText, bottomText = bottomText, button = button}
-		else
-			ProcessItem(itemID, "BankFrame", inventoryID, position, topText, bottomText, button)
-		end
-	else
-		SetItemButtonMogStatus(button, nil)
-		SetItemButtonBindType(button, nil)
-	end
+	local itemID = GetContainerItemID(containerID, buttonID)
+	ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
 end
 
 hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
@@ -541,34 +535,19 @@ local function OnGuildBankFrameUpdate_Coroutine()
 			column = ceil((i-0.5)/NUM_SLOTS_PER_GUILDBANK_GROUP);
 			button = _G["GuildBankColumn"..column.."Button"..index];
 
-			local scale = button:GetEffectiveScale()
+			local bag = "GuildBankFrame"
+			local slot = {tab = tab, index = i}
 
-			local topText = _G[button:GetName().."Stock"]
-			local bottomText = button.Count or _G[button:GetName().."Count"];
-
-			local size = 40
-			local xoffset = -15 * scale
-			local yoffset = 17 * scale
-
-			local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
+			local showMogIcon = true
+			local showBindStatus = true
 
 			local itemLink = GetGuildBankItemLink(tab, i)
 			if itemLink then
 				local itemID = itemLink:match("item:(%d+)")
-				if itemID then
-					local itemName = GetItemInfo(itemID)
-					if itemName == nil then
-						waitingOnItemData[itemID] = {bag = "GuildBankFrame", slot = {tab = tab, index = i}, position = position, topText = topText, bottomText = bottomText, button = button}
-					else
-						ProcessItem(itemID, "GuildBankFrame", {tab = tab, index = i}, position, topText, bottomText, button)
-					end
-				else
-					SetItemButtonMogStatus(button, nil)
-					SetItemButtonBindType(button, nil)
-				end
+				ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
 			else
-				SetItemButtonMogStatus(button, nil)
-				SetItemButtonBindType(button, nil)
+				-- nil results in button icon / text reset
+				ProcessOrWaitItem(nil, bag, slot, showMogIcon, showBindStatus, button)
 			end
 		end
 	end
@@ -579,13 +558,6 @@ local function OnGuildBankFrameUpdate()
 end
 
 local function OnAuctionBrowseUpdate()
-	local scale = AuctionFrameBrowse:GetEffectiveScale()
-	local size = 30
-	local xoffset = 1 * scale
-	local yoffset = 6 * scale
-
-	local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
-
 	local offset = FauxScrollFrame_GetOffset(BrowseScrollFrame);
 
 	for i=1, NUM_BROWSE_TO_DISPLAY do
@@ -594,47 +566,37 @@ local function OnAuctionBrowseUpdate()
 		local buttonName = "BrowseButton"..i.."Item";
 		local button = _G[buttonName];
 		local name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemID, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
-		local itemCount = _G[buttonName.."Count"];
+
+		local bag = "AuctionFrame"
+		local slot = auctionIndex
+
+		local showMogIcon = true
+		local showBindStatus = false
 
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
 			local itemID = itemLink:match("item:(%d+)")
 			if itemID then
-				local itemName = GetItemInfo(itemID)
-				if itemName == nil then
-					waitingOnItemData[itemID] = {bag = "AuctionFrame", slot = auctionIndex, position = position, topText = itemCount, bottomText = nil, button = button}
-				else
-					ProcessItem(itemID, "AuctionFrame", auctionIndex, position, itemCount, nil, button)
-				end
+				ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
 			end
 		end
 	end
 end
 
 local function OnMerchantUpdate()
-	local scale = MerchantFrame:GetEffectiveScale()
-	local size = 40
-	local xoffset = -10 * scale
-	local yoffset = 10 * scale
-
-	local position = size .. ":" .. size .. ":" .. xoffset .. ":" .. yoffset
-
 	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
 		local index = (((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i)
-		local itemCount = _G["MerchantItem"..i.."ItemButtonCount"]
-		local itemButton = _G["MerchantItem"..i.."ItemButton"]
+
+		local button = _G["MerchantItem"..i.."ItemButton"];
+
+		local bag = "MerchantFrame"
+		local slot = index
+
+		local showMogIcon = true
+		local showBindStatus = true
 
 		local itemID = GetMerchantItemID(index)
-		if itemID then
-			local itemName = GetItemInfo(itemID)
-			if itemName == nil then
-				waitingOnItemData[itemID] = {bag = "MerchantFrame", slot = index, position = position, topText = itemCount, bottomText = nil, button = itemButton}
-			else
-				ProcessItem(itemID, "MerchantFrame", index, position, itemCount, nil, itemButton)
-			end
-		else
-			itemCount:Hide()
-		end
+		ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
 	end
 end
 
@@ -797,23 +759,23 @@ local function RefreshItems()
 end
 
 function eventFrame:BAG_UPDATE(bagID)
-	isBagUpdate = true
-	waitingOnBagUpdate[tostring(tonumber(bagID) + 1)] = true
+	-- isBagUpdate = true
+	-- waitingOnBagUpdate[tostring(tonumber(bagID) + 1)] = true
 end
 
 function eventFrame:BAG_UPDATE_DELAYED()
-	isBagUpdate = false
-	isBagUpdateRequested = true
+	-- isBagUpdate = false
+	-- isBagUpdateRequested = true
 end
 
 function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
-	local itemInfo = waitingOnItemData[itemID]
-	if itemInfo then
-		local itemName, _, itemQuality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
-		if itemName then
-			waitingOnItemData[itemID] = nil
-			ProcessItem(itemID, itemInfo.bag, itemInfo.slot, itemInfo.position, itemInfo.topText, itemInfo.bottomText, itemInfo.button)
-		end
+	local itemData = waitingOnItemData[tostring(itemID)]
+	if itemData then
+        for bag, bagData in pairs(itemData) do
+        	for slot, slotData in pairs(bagData) do
+				ProcessOrWaitItem(itemID, bag, slotData.slot, slotData.showMogIcon, slotData.showBindStatus, slotData.button, slotData.itemProcessed)
+        	end
+        end
 	end
 end
 
