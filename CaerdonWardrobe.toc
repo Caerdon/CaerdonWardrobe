@@ -3,7 +3,7 @@
 ## Title: Caerdon Wardrobe
 ## Notes: Shows BOE / BOA and unlearned wardrobe indicator on bank / bag / auction / merchant slots
 ## Author: Caerdon
-## Version: v0.13.0
+## Version: v0.14.0
 
 Localization.lua
 localization\deDE.lua
