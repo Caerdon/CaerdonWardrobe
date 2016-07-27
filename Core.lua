@@ -283,7 +283,7 @@ local function SetItemButtonMogStatus(button, status)
 
 	if not mogStatus then
 		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
-		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 1)
+		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
 		mogStatus:SetPoint("TOPLEFT", -15, 15)
 		mogStatus:SetSize(40, 40)
 		button.mogStatus = mogStatus
@@ -327,9 +327,10 @@ local function SetItemButtonMogStatus(button, status)
 	end
 
 	if showAnim then
+		mogFlash:Show()
 		mogAnim:Play()
 	else
-		mogAnim:Stop()
+		mogFlash:Hide()
 	end
 end
 
