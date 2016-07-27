@@ -328,6 +328,8 @@ local function SetItemButtonMogStatus(button, status)
 
 	if showAnim then
 		mogAnim:Play()
+	else
+		mogAnim:Stop()
 	end
 end
 
