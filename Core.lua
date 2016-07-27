@@ -321,7 +321,14 @@ local function SetItemButtonMogStatus(button, status)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
 	end
 
-	mogAnim:Play()
+	local showAnim = true
+	if MailFrame:IsShown() or (AuctionFrame and AuctionFrame:IsShown()) then
+		showAnim = false
+	end
+
+	if showAnim then
+		mogAnim:Play()
+	end
 end
 
 local function SetItemButtonBindType(button, text)
@@ -647,7 +654,7 @@ end
 local timeSinceLastGuildBankUpdate = nil
 local timeSinceLastBagUpdate = nil
 local GUILDBANKFRAMEUPDATE_INTERVAL = 0.1
-local BAGUPDATE_INTERVAL = 0.3
+local BAGUPDATE_INTERVAL = 0.1
 
 local function OnUpdate(self, elapsed)
 	if(self.bagUpdateCoroutine) then
