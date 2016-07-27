@@ -273,7 +273,7 @@ end
 
 local waitingOnItemData = {}
 
-local function SetItemButtonMogStatus(button, status)
+local function SetItemButtonMogStatus(button, status, iconPosition)
 	local mogStatus = button.mogStatus
 	if not status and not mogStatus then return end
 	if not status then
@@ -284,7 +284,12 @@ local function SetItemButtonMogStatus(button, status)
 	if not mogStatus then
 		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
 		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
-		mogStatus:SetPoint("TOPLEFT", -15, 15)
+
+		if iconPosition == "TOPRIGHT" then
+			mogStatus:SetPoint("TOPRIGHT", 15, 15)
+		else
+			mogStatus:SetPoint("TOPLEFT", -15, 15)
+		end
 		mogStatus:SetSize(40, 40)
 		button.mogStatus = mogStatus
 	end
@@ -355,9 +360,12 @@ function CaerdonWardrobe:ResetButton(button)
 	SetItemButtonBindType(button, nil)
 end
 
-local function ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	local bindingText
 	local mogStatus = nil
+
+	local showMogIcon = options and options.showMogIcon
+	local showBindStatus = options and options.showBindStatus
 
 	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
 
@@ -413,7 +421,7 @@ local function ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, butto
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus)
+		SetItemButtonMogStatus(button, mogStatus, options.iconPosition)
 
 		-- TODO: Consider making this an option
 		-- if bag ~= "GuildBankFrame" then
@@ -426,7 +434,7 @@ local function ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, butto
 	end
 end
 
-local function ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
 	if itemID then
 		local waitItem = waitingOnItemData[itemID]
 		if not waitItem then
@@ -442,10 +450,10 @@ local function ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus,
 
 		local itemName = GetItemInfo(itemID)
 		if itemName == nil then
-			waitBag[tostring(slot)] = { slot = slot, showMogIcon = showMogIcon, showBindStatus = showBindStatus, button = button, itemProcessed = itemProcessed}
+			waitBag[tostring(slot)] = { slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
 			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
-			ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+			ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		end
 	else
 		SetItemButtonMogStatus(button, nil)
@@ -453,8 +461,8 @@ local function ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus,
 	end
 end
 
-function CaerdonWardrobe:ProcessItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
-	ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button, itemProcessed)
+function CaerdonWardrobe:ProcessItem(itemID, bag, slot, button, options, itemProcessed)
+	ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
 end
 
 local function OnContainerUpdate(self, asyncUpdate)
@@ -472,13 +480,10 @@ local function OnContainerUpdate(self, asyncUpdate)
 		local button = _G[self:GetName() .. "Item" .. buttonIndex]
 		local slot = button:GetID()
 
-		local showMogIcon = true
-		local showBindStatus = true
-
 		local itemID = GetContainerItemID(bag, slot)
 		local texture, itemCount, locked = GetContainerItemInfo(bag, slot)
 
-		ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon = true, showBindStatus = true })
 	end
 end
 
@@ -513,11 +518,8 @@ local function OnBankItemUpdate(button)
 	local bag = "BankFrame"
 	local slot = button:GetInventorySlot();
 
-	local showMogIcon = true
-	local showBindStatus = true
-
 	local itemID = GetContainerItemID(containerID, buttonID)
-	ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+	ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true })
 end
 
 hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
@@ -548,16 +550,18 @@ local function OnGuildBankFrameUpdate_Coroutine()
 			local bag = "GuildBankFrame"
 			local slot = {tab = tab, index = i}
 
-			local showMogIcon = true
-			local showBindStatus = true
+			local options = {
+				showMogIcon = true,
+				showBindStatus = true
+			}
 
 			local itemLink = GetGuildBankItemLink(tab, i)
 			if itemLink then
 				local itemID = itemLink:match("item:(%d+)")
-				ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+				ProcessOrWaitItem(itemID, bag, slot, button, options)
 			else
 				-- nil results in button icon / text reset
-				ProcessOrWaitItem(nil, bag, slot, showMogIcon, showBindStatus, button)
+				ProcessOrWaitItem(nil, bag, slot, button, options)
 			end
 		end
 	end
@@ -580,14 +584,11 @@ local function OnAuctionBrowseUpdate()
 		local bag = "AuctionFrame"
 		local slot = auctionIndex
 
-		local showMogIcon = true
-		local showBindStatus = false
-
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
 			local itemID = itemLink:match("item:(%d+)")
 			if itemID then
-				ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+				ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false })
 			end
 		end
 	end
@@ -602,11 +603,8 @@ local function OnMerchantUpdate()
 		local bag = "MerchantFrame"
 		local slot = index
 
-		local showMogIcon = true
-		local showBindStatus = true
-
 		local itemID = GetMerchantItemID(index)
-		ProcessOrWaitItem(itemID, bag, slot, showMogIcon, showBindStatus, button)
+		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true })
 	end
 end
 
@@ -783,7 +781,7 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
 	if itemData then
         for bag, bagData in pairs(itemData) do
         	for slot, slotData in pairs(bagData) do
-				ProcessOrWaitItem(itemID, bag, slotData.slot, slotData.showMogIcon, slotData.showBindStatus, slotData.button, slotData.itemProcessed)
+				ProcessOrWaitItem(itemID, bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
         	end
         end
 	end
