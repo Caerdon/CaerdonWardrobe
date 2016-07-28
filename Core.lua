@@ -474,23 +474,23 @@ local function OnContainerUpdate(self, asyncUpdate)
 		return
 	end
 
-	local bag = self:GetID()
+	local bagID = self:GetID()
 
 	for buttonIndex = 1, self.size do
 		local button = _G[self:GetName() .. "Item" .. buttonIndex]
 		local slot = button:GetID()
 
-		local itemID = GetContainerItemID(bag, slot)
-		local texture, itemCount, locked = GetContainerItemInfo(bag, slot)
+		local itemID = GetContainerItemID(bagID, slot)
+		local texture, itemCount, locked = GetContainerItemInfo(bagID, slot)
 
-		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon = true, showBindStatus = true })
+		ProcessOrWaitItem(itemID, bagID, slot, button, { showMogIcon = true, showBindStatus = true })
 	end
 end
 
 local waitingOnBagUpdate = {}
 local function OnBagUpdate_Coroutine()
-    for bagID, shouldUpdate in pairs(waitingOnBagUpdate) do
-		local frame = _G["ContainerFrame".. bagID]
+    for frameID, shouldUpdate in pairs(waitingOnBagUpdate) do
+		local frame = _G["ContainerFrame".. frameID]
 		OnContainerUpdate(frame, true)
 		coroutine.yield()
     end
@@ -498,10 +498,19 @@ local function OnBagUpdate_Coroutine()
 	waitingOnBagUpdate = {}
 end
 
-local function ScheduleContainerUpdate(bag)
-	local bagID = bag:GetID()
-	waitingOnBagUpdate[tostring(tonumber(bagID) + 1)] = true
-	isBagUpdateRequested = true
+local function AddBagUpdateRequest(bagID)
+	for i=1, NUM_CONTAINER_FRAMES, 1 do
+		local frame = _G["ContainerFrame"..i];
+		if ( frame:IsShown() and frame:GetID() == bagID ) then
+			waitingOnBagUpdate[tostring(i)] = true
+			isBagUpdateRequested = true
+		end
+	end
+end
+
+local function ScheduleContainerUpdate(frame)
+	local bagID = frame:GetID()
+	AddBagUpdateRequest(bagID)
 end
 
 hooksecurefunc("ContainerFrame_Update", ScheduleContainerUpdate)
