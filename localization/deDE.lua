@@ -7,4 +7,5 @@ local LOCALE = GetLocale()
 if LOCALE == "deDE" then
 	L["BoA"] = "BoA"
 	L["BoE"] = "BoE"
+	L["Equip:"] = "Equip:"
 return end
