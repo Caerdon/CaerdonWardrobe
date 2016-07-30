@@ -333,8 +333,13 @@ local function IsGearSetStatus(status)
 	return status and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
-local function SetItemButtonMogStatus(button, status, bindingStatus, iconPosition)
+local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	local mogStatus = button.mogStatus
+	local iconPosition, showSellables
+	if options then 
+		showSellables = options.showSellables
+		iconPosition = options.iconPosition
+	end
 	if not status and not mogStatus then return end
 	if not status then
 		mogStatus:SetTexture("")
@@ -383,12 +388,15 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, iconPositio
 	local showAnim = true
 
 	if status == "own" then
+		mogStatus:SetSize(40, 40)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 	elseif status == "other" then
+		mogStatus:SetSize(40, 40)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
 	elseif status == "collected" then
 		showAnim = false
-		if not IsGearSetStatus(bindingStatus) then -- it's known and can be sold
+		if not IsGearSetStatus(bindingStatus) and showSellables then -- it's known and can be sold
+			mogStatus:SetSize(35, 35)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
 		else
 			mogStatus:SetTexture("")
@@ -407,7 +415,7 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, iconPositio
 	end
 end
 
-local function SetItemButtonBindType(button, mogStatus, bindingStatus)
+local function SetItemButtonBindType(button, mogStatus, bindingStatus, options)
 	local bindsOnText = button.bindsOnText
 	if not bindingStatus and not bindsOnText then return end
 	if not bindingStatus then
@@ -416,7 +424,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus)
 	end
 	if not bindsOnText then
 		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
-		bindsOnText = button:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") -- "GameFontNormalOutline")
+		bindsOnText = button:CreateFontString(nil, "BORDER", "SystemFont_Outline_Small") 
 		bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
 		bindsOnText:SetWidth(button:GetWidth())
 		button.bindsOnText = bindsOnText
@@ -471,6 +479,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 	local showMogIcon = options and options.showMogIcon
 	local showBindStatus = options and options.showBindStatus
+	local showSellables = options and options.showSellables
 
 	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
 	itemLink = GetItemLink(bag, slot)
@@ -530,12 +539,12 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options.iconPosition)
+		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options)
 
 		-- TODO: Consider making this an option
 		-- if bag ~= "GuildBankFrame" then
 			if showBindStatus then
-				SetItemButtonBindType(button, mogStatus, bindingStatus)
+				SetItemButtonBindType(button, mogStatus, bindingStatus, options)
 			end
 		-- end
 	end
@@ -725,7 +734,7 @@ local function OnMerchantUpdate()
 		local slot = index
 
 		local itemID = GetMerchantItemID(index)
-		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true })
+		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
 	end
 end
 
