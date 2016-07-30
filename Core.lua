@@ -333,6 +333,16 @@ local function IsGearSetStatus(status)
 	return status and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
+local function SetIconPositionAndSize(icon, startingPoint, offset, size)
+	if startingPoint == "TOPRIGHT" then
+		icon:SetPoint("TOPRIGHT", offset, offset)
+	else
+		icon:SetPoint("TOPLEFT", offset * -1, offset)
+	end
+
+	icon:SetSize(size, size)
+end
+
 local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	local mogStatus = button.mogStatus
 	local iconPosition, showSellables
@@ -349,13 +359,7 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	if not mogStatus then
 		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
 		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
-
-		if iconPosition == "TOPRIGHT" then
-			mogStatus:SetPoint("TOPRIGHT", 15, 15)
-		else
-			mogStatus:SetPoint("TOPLEFT", -15, 15)
-		end
-		mogStatus:SetSize(40, 40)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
 		button.mogStatus = mogStatus
 	end
 
@@ -387,16 +391,19 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 
 	local showAnim = true
 
+	mogStatus:SetAlpha(1)
+
 	if status == "own" then
-		mogStatus:SetSize(40, 40)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 	elseif status == "other" then
-		mogStatus:SetSize(40, 40)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
 	elseif status == "collected" then
 		showAnim = false
 		if not IsGearSetStatus(bindingStatus) and showSellables then -- it's known and can be sold
-			mogStatus:SetSize(35, 35)
+			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30)
+			mogStatus:SetAlpha(0.9)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
 		else
 			mogStatus:SetTexture("")
