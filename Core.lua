@@ -47,19 +47,6 @@ local function GetItemID(itemLink)
 	return itemLink:match("item:(%d+)")
 end
 
-local function CanTransmogItem(itemLink)
-	local canBeChanged = false
-	local noChangeReason = nil
-	local canBeSource = false
-	local noSourceReason = nil
-
-	local itemID = GetItemID(itemLink)
-	if itemID then
-		canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
-	end
-	return canBeSource, noSourceReason
-end
-
 local function GetItemSource(itemLink)
     local _, _, _, slotName = GetItemInfoInstant(itemLink)
 
@@ -93,9 +80,8 @@ local function GetItemAppearance(itemLink)
     return appearanceID, isCollected, sourceID
 end
 
-local function PlayerHasAppearance(appearanceID, itemLink)
+local function PlayerHasAppearance(appearanceID)
 	local hasAppearance = false
-	local itemID = GetItemID(itemLink)
 
     local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
     local matchedSource
@@ -109,25 +95,11 @@ local function PlayerHasAppearance(appearanceID, itemLink)
         end
     end
 
-    if not hasAppearance then
-    	-- TODO: Do I need to worry about affixes?
-		-- local itemString = string.match(itemLink, "item[%-?%d:]+") or ""
-		-- local instaid, _, numBonuses, affixes = select(12, strsplit(":", itemString, 15))
-		-- instaid=tonumber(instaid) or 7
-		-- numBonuses=tonumber(numBonuses) or 0
-		-- local upgradeID = nil
-		-- if instaid >0 and (instaid-4)%8==0 then
-		-- 	upgradeID = tonumber((select(numBonuses + 1, strsplit(":", affixes))))
-		-- 	print("Upgrade ID: " .. upgradeID)
-		-- end
-    end
-
     return hasAppearance, matchedSource
 end
  
-local function PlayerCanCollectAppearance(appearanceID, itemLink)
-	local itemID = GetItemID(itemLink)
-	local name, _, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
+local function PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+	local _, _, quality, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
 	local playerLevel = UnitLevel("player")
 	local canCollect = false
 	local matchedSource
@@ -165,7 +137,7 @@ end
 
 local equipLocations = {}
 
-local function GetBindingStatus(bag, slot, itemLink)
+local function GetBindingStatus(bag, slot, itemID, itemLink)
 	local itemKey =  itemLink
 
 	local binding = cachedBinding[itemKey]
@@ -192,7 +164,7 @@ local function GetBindingStatus(bag, slot, itemLink)
 			scanTip:SetBagItem(bag, slot)
 		end
 
-	    local itemID, _, _, slotName = GetItemInfoInstant(itemLink)
+	    local _, _, _, slotName = GetItemInfoInstant(itemLink)
 
 	    local isDressable = IsDressableItem(itemLink)
 	    local inventorySlot = InventorySlots[slotName]
@@ -313,15 +285,13 @@ local function addDebugInfo(tooltip)
 		tooltip:AddDoubleLine("Item Source:", sourceID and tostring(sourceID) or "none")
 
 		if appearanceID then
-			local hasAppearance, matchedSource = PlayerHasAppearance(appearanceID, itemLink)
+			local hasAppearance, matchedSource = PlayerHasAppearance(appearanceID)
 			tooltip:AddDoubleLine("PlayerHasAppearance:", tostring(hasAppearance))
 			tooltip:AddDoubleLine("Has Matched Source:", matchedSource and matchedSource.name or "none")
-			local canCollect, matchedSource = PlayerCanCollectAppearance(appearanceID, itemLink)
+			local canCollect, matchedSource = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
 			tooltip:AddDoubleLine("PlayerCanCollectAppearance:", tostring(canCollect))
 			tooltip:AddDoubleLine("Collect Matched Source:", matchedSource and matchedSource.name or "none")
 		end
-
-		tooltip:AddDoubleLine("CanTransmogItem:", tostring(CanTransmogItem(itemLink)))
 
 		tooltip:Show()
 	end
@@ -488,16 +458,18 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	local showBindStatus = options and options.showBindStatus
 	local showSellables = options and options.showSellables
 
+	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
+
 	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
 	itemLink = GetItemLink(bag, slot)
 
-	local bindingStatus, needsItem, hasUse = GetBindingStatus(bag, slot, itemLink)
+	local bindingStatus, needsItem, hasUse = GetBindingStatus(bag, slot, itemID, itemLink)
 
 	local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
 	if appearanceID then
-		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID, itemLink)) then
+		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
 
-			if PlayerCanCollectAppearance(appearanceID, itemLink) then
+			if PlayerCanCollectAppearance(appearanceID, itemID, itemLink) then
 				mogStatus = "own"
 			else
 				if bindingStatus and needsItem then
@@ -508,7 +480,6 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 			-- If an item isn't flagged as a source or has a usable effect,
 			-- then don't mark it as sellable right now to avoid accidents.
 			-- May need to expand this to account for other items, too, for now.
-			local canBeChanged, noChangeReason, canBeSource, noSourceReason, arg1, arg2 = C_Transmog.GetItemInfo(itemID)
 			if canBeSource then
 				if not hasUse then -- don't flag items for sale that have use effects for now
 					mogStatus = "collected"
@@ -523,12 +494,10 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 		end
 	elseif needsItem then
-		local canBeChanged, noChangeReason, canBeSource, noSourceReason, arg1, arg2 = C_Transmog.GetItemInfo(itemID)
 		if canBeSource then
 			mogStatus = "own"
 		end
 	else
-		local canBeChanged, noChangeReason, canBeSource, noSourceReason, arg1, arg2 = C_Transmog.GetItemInfo(itemID)
 		if canBeSource then
 	        local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
 	        if hasTransmog and not hasUse then
