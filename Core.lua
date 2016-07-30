@@ -604,7 +604,7 @@ local function OnContainerUpdate(self, asyncUpdate)
 		local itemID = GetContainerItemID(bagID, slot)
 		local texture, itemCount, locked = GetContainerItemInfo(bagID, slot)
 
-		ProcessOrWaitItem(itemID, bagID, slot, button, { showMogIcon = true, showBindStatus = true })
+		ProcessOrWaitItem(itemID, bagID, slot, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
 	end
 end
 
@@ -649,7 +649,7 @@ local function OnBankItemUpdate(button)
 	local slot = button:GetInventorySlot();
 
 	local itemID = GetContainerItemID(containerID, buttonID)
-	ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true })
+	ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
 end
 
 hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
@@ -682,7 +682,8 @@ local function OnGuildBankFrameUpdate_Coroutine()
 
 			local options = {
 				showMogIcon = true,
-				showBindStatus = true
+				showBindStatus = true,
+				showSellables = true
 			}
 
 			local itemLink = GetGuildBankItemLink(tab, i)
@@ -718,7 +719,7 @@ local function OnAuctionBrowseUpdate()
 		if(itemLink) then
 			local itemID = itemLink:match("item:(%d+)")
 			if itemID then
-				ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false })
+				ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false, showSellables=false })
 			end
 		end
 	end
