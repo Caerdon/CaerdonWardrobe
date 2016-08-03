@@ -47,23 +47,75 @@ local function GetItemID(itemLink)
 	return itemLink:match("item:(%d+)")
 end
 
-local function GetItemSource(itemLink)
-    local _, _, _, slotName = GetItemInfoInstant(itemLink)
+local cachedIsDressable = {}
+local function IsDressableItemCheck(itemID, itemLink)
+	local isDressable = true
+	local shouldRetry = false
+	local slot
 
-    local slot = InventorySlots[slotName]
-    if not slot or not IsDressableItem(itemLink) then
-    	return 
-    end
+	local dressableCache = cachedIsDressable[itemLink]
+	if dressableCache then
+		isDressable = dressableCache.isDressable
+		slot = dressableCache.slot
+	else
+	    local _, _, _, slotName = GetItemInfoInstant(itemID)
+	    if slotName and slotName ~= "" then -- make sure it's a supported slot
+		    slot = InventorySlots[slotName]
+		    if not slot then
+				isDressable = false
+		    elseif not IsDressableItem(itemLink) then
+		    	-- IsDressableItem can return false instead of true for
+		    	-- an item that is actually dressable (seems to happen
+		    	-- most often during item caching).  Adding some
+		    	-- retry tags to the cache if IsDressableItem says its
+		    	-- not but transmog says it can be a source
+				local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
+				isDressable = false
+				if canBeSource then
+					shouldRetry = true
+				end
+			end
+		else
+			isDressable = false
+		end
 
-    model:SetUnit('player')
-    model:Undress()
-    model:TryOn(itemLink, slot)
-    return model:GetSlotTransmogSources(slot)
+		if not shouldRetry then
+			cachedIsDressable[itemLink] = { isDressable = isDressable, slot = slot }
+		end
+	end
+    return isDressable, shouldRetry, slot
 end
 
-local function GetItemAppearance(itemLink)
+local cachedItemSources = {}
+local function GetItemSource(itemID, itemLink)
+	local itemSources = cachedItemSources[itemLink]
+	if itemSources == "NONE" then
+		itemSources = nil
+	elseif not itemSources then
+		local isDressable, shouldRetry, slot = IsDressableItemCheck(itemID, itemLink)
+		if not shouldRetry then
+			if not isDressable then
+		    	cachedItemSources[itemLink] = "NONE"
+			else
+			    model:SetUnit('player')
+			    model:Undress()
+			    model:TryOn(itemLink, slot)
+			    itemSources = model:GetSlotTransmogSources(slot)
+			    if itemSources then
+					cachedItemSources[itemLink] = itemSources
+				else
+					cachedItemSources[itemLink] = "NONE"
+				end
+			end
+		end
+	end
+    return itemSources, shouldRetry
+end
+
+local function GetItemAppearance(itemID, itemLink)
 	local categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink
-	local sourceID = GetItemSource(itemLink)
+	local sourceID, shouldRetry = GetItemSource(itemID, itemLink)
+
     if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
         categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
         if sourceItemLink then
@@ -77,7 +129,7 @@ local function GetItemAppearance(itemLink)
 		end
     end
 
-    return appearanceID, isCollected, sourceID
+    return appearanceID, isCollected, sourceID, shouldRetry
 end
 
 local function PlayerHasAppearance(appearanceID)
@@ -99,28 +151,79 @@ local function PlayerHasAppearance(appearanceID)
 end
  
 local function PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
-	local _, _, quality, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+	local _, _, quality, _, reqLevel, itemClass, itemSubClass, _, equipSlot, _, _, itemClassID, itemSubClassID = GetItemInfo(itemID)
 	local playerLevel = UnitLevel("player")
 	local canCollect = false
+	local isInfoReady
 	local matchedSource
+	local shouldRetry
+
+	local playerClass = select(2, UnitClass("player"))
+
+	local classArmor;
+	if playerClass == "MAGE" or 
+		playerClass == "PRIEST" or 
+		playerClass == "WARLOCK" then
+		classArmor = LE_ITEM_ARMOR_CLOTH
+	elseif playerClass == "DEMONHUNTER" or
+		playerClass == "DRUID" or 
+		playerClass == "MONK" or
+		playerClass == "ROGUE" then
+		classArmor = LE_ITEM_ARMOR_LEATHER
+	elseif playerClass == "DEATHKNIGHT" or
+		playerClass == "PALADIN" or
+		playerClass == "WARRIOR" then
+		classArmor = LE_ITEM_ARMOR_PLATE
+	elseif playerClass == "HUNTER" or 
+		playerClass == "SHAMAN" then
+		classArmor = LE_ITEM_ARMOR_MAIL
+	end
+
+	if equipSlot ~= "INVTYPE_CLOAK"
+		and itemClassID == LE_ITEM_CLASS_ARMOR and 
+		(	itemSubClassID == LE_ITEM_ARMOR_CLOTH or 
+			itemSubClassID == LE_ITEM_ARMOR_LEATHER or 
+			itemSubClassID == LE_ITEM_ARMOR_MAIL or
+			itemSubClassID == LE_ITEM_ARMOR_PLATE)
+		and itemSubClassID ~= classArmor then 
+			canCollect = false
+			return
+		end
 
 	if playerLevel >= reqLevel then
 	    local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
 	    if sources then
 	        for i, source in pairs(sources) do
-	            if C_TransmogCollection.PlayerCanCollectSource(source.sourceID) then
-	            	matchedSource = source
-	                canCollect = true
+		        isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(source.sourceID)
+	            if isInfoReady then
+	            	if canCollect then
+		            	matchedSource = source
+		            end
 	                break
+	            else
+	            	shouldRetry = true
 	            end
 	        end
 	    end
 	end
 
-    return canCollect, matchedSource
+    return canCollect, matchedSource, shouldRetry
 end
 
-local function GetItemLink(bag, slot)
+local function GetItemInfoLocal(itemID, bag, slot)
+	local name = GetItemInfo(itemID)
+	if name then
+		if bag == "AuctionFrame" then
+			name = GetAuctionItemInfo("list", slot)
+		elseif bag == "MerchantFrame" then
+			name = GetMerchantItemInfo(slot)
+		end
+	end
+
+	return name
+end
+
+local function GetItemLinkLocal(bag, slot)
 	if bag == "AuctionFrame" then
 		return GetAuctionItemLink("list", slot)
 	elseif bag == "MerchantFrame" then
@@ -132,24 +235,38 @@ local function GetItemLink(bag, slot)
 	else
 		return GetContainerItemLink(bag, slot)
 	end
+end
 
+local function GetItemKey(bag, slot, itemLink)
+	local itemKey
+	if bag == "AuctionFrame" or bag == "MerchantFrame" then
+		itemKey = itemLink
+	elseif bag == "GuildBankFrame" then
+		itemKey = itemLink .. slot.tab .. slot.index
+	else
+		itemKey = itemLink .. bag .. slot
+	end
+
+	return itemKey
 end
 
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	local itemKey =  itemLink
+	local itemKey = GetItemKey(bag, slot, itemLink)
 
 	local binding = cachedBinding[itemKey]
 	local bindingText, needsItem, hasUse
+
+    local isInEquipmentSet = false
+    local isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
 
 	if binding then
 		bindingText = binding.bindingText
 		needsItem = binding.needsItem
 		hasUse = binding.hasUse
-	end
-
-	if needsItem == nil then
+		isInEquipmentSet = binding.isInEquipmentSet
+	elseif not shouldRetry then
 		needsItem = true
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
 		if bag == "AuctionFrame" then
@@ -163,14 +280,6 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		else
 			scanTip:SetBagItem(bag, slot)
 		end
-
-	    local _, _, _, slotName = GetItemInfoInstant(itemLink)
-
-	    local isDressable = IsDressableItem(itemLink)
-	    local inventorySlot = InventorySlots[slotName]
-	    if not inventorySlot or not isDressable then
-	    	needsItem = false
-	    end
 
 	    -- Use equipment set for binding text if it's assigned to one
 		if isDressable and CanUseEquipmentSets() then
@@ -188,6 +297,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					if location ~= nil then
 					    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
 					    if isVoidStorage then
+					    	-- Do nothing for now
 					    elseif isBank and not isBags then -- player or bank
 					    	if bag == "BankFrame" and slot == equipSlot then
 					    		needsItem = false
@@ -197,10 +307,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 									break
 								else
 									bindingText = name
+									isInEquipmentSet = true
 								end
 					    	end
-							-- inventoryItemID = GetInventoryItemID("player", slot)
-							-- name, _, _, _, _, _, _, _, invType, textureName = GetItemInfo(id);
 					    else
 						    if equipSlot == slot and equipBag == bag then
 								needsItem = false
@@ -210,6 +319,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 									break
 								else
 									bindingText = name
+									isInEquipmentSet = true
 								end
 							end
 						end
@@ -222,7 +332,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			end
 		end
 
-		local canBeChanged, noChangeReason, canBeSource, noSourceReason, arg1, arg2 = C_Transmog.GetItemInfo(itemID)
+		local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 		if canBeSource then
 	        local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
 	        if hasTransmog then
@@ -232,31 +342,40 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	    	needsItem = false
 	    end
 
-		for lineIndex = 1, scanTip:NumLines() do
-			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
-			if lineText then
-				-- TODO: Look at switching to GetItemSpell
-				-- TODO: Figure out if there's a constant for Equip: as well.
-				if strmatch(lineText, USE_COLON) or strmatch(lineText, L["Equip:"]) then -- it's a recipe or has a "use" effect
-					hasUse = true
-					break
-				end
+	    local tipLines = scanTip:NumLines()
+	    if tipLines == 1 then
+	    	-- Something with transmog is causing tooltips to retrieve additional info
+	    	-- Checking for it here to flag for retry in a bit.
+	    	shouldRetry = true
+	    else
+			for lineIndex = 1, scanTip:NumLines() do
+				local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
+				if lineText then
+					-- TODO: Look at switching to GetItemSpell
+					-- TODO: Figure out if there's a constant for Equip: as well.
+					if strmatch(lineText, USE_COLON) or strmatch(lineText, L["Equip:"]) then -- it's a recipe or has a "use" effect
+						hasUse = true
+						break
+					end
 
-				if not bindingText then
-					bindingText = bindTextTable[lineText]
-				end
+					if not bindingText then
+						bindingText = bindTextTable[lineText]
+					end
 
-				if lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
-					needsItem = false
-					break
+					if lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
+						needsItem = false
+						break
+					end
 				end
 			end
 		end
 
-		cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse}
+		if not shouldRetry then
+			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet }
+		end
 	end
 
-	return bindingText, needsItem, hasUse
+	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, shouldRetry
 end
 
 local function addDebugInfo(tooltip)
@@ -278,7 +397,7 @@ local function addDebugInfo(tooltip)
 		tooltip:AddDoubleLine("Player Spec:", playerSpecName)
 		tooltip:AddDoubleLine("Player Level:", playerLevel)
 
-		local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
+		local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
 
 		tooltip:AddDoubleLine("Appearance ID:", tostring(appearanceID))
 		tooltip:AddDoubleLine("Is Collected:", tostring(isCollected))
@@ -313,15 +432,37 @@ local function SetIconPositionAndSize(icon, startingPoint, offset, size)
 	icon:SetSize(size, size)
 end
 
+local function AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
+	local anim = group:CreateAnimation("Rotation")
+	group["anim" .. order] = anim
+	anim:SetDegrees(degrees)
+    anim:SetDuration(duration)
+	anim:SetOrder(order)
+	anim:SetSmoothing(smoothing)
+
+	if startDelay then
+		anim:SetStartDelay(startDelay)
+	end
+
+	if endDelay then
+		anim:SetEndDelay(endDelay)
+	end
+end
+
 local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	local mogStatus = button.mogStatus
-	local iconPosition, showSellables
+	local mogAnim = button.mogAnim
+	local iconPosition, showSellables, isSellable
 	if options then 
 		showSellables = options.showSellables
 		iconPosition = options.iconPosition
+		isSellable = options.isSellable
 	end
-	if not status and not mogStatus then return end
+	if not status and not mogStatus and not mogAnim then return end
 	if not status then
+		if mogAnim and mogAnim:IsPlaying() then
+			mogAnim:Stop()
+		end
 		mogStatus:SetTexture("")
 		return
 	end
@@ -333,33 +474,73 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 		button.mogStatus = mogStatus
 	end
 
-	local mogFlash = button.mogFlash
-	if not mogFlash then
-		mogFlash = button:CreateTexture(nil, "OVERLAY")
-		mogFlash:SetAlpha(0)
-		mogFlash:SetBlendMode("ADD")
-		mogFlash:SetAtlas("bags-glow-flash", true)
-		mogFlash:SetPoint("CENTER")
+	-- local mogFlash = button.mogFlash
+	-- if not mogFlash then
+	-- 	mogFlash = button:CreateTexture(nil, "OVERLAY")
+	-- 	mogFlash:SetAlpha(0)
+	-- 	mogFlash:SetBlendMode("ADD")
+	-- 	mogFlash:SetAtlas("bags-glow-flash", true)
+	-- 	mogFlash:SetPoint("CENTER")
 
-		button.mogFlash = mogFlash
+	-- 	button.mogFlash = mogFlash
+	-- end
+
+	local showAnim = false
+	if status == "waiting" then
+		showAnim = true
+
+		if not mogAnim or not button.isWaitingIcon then
+			mogAnim = mogStatus:CreateAnimationGroup()
+
+			AddRotation(mogAnim, 1, 360, 0.5, "IN_OUT")
+
+		    mogAnim:SetLooping("REPEAT")
+			button.mogAnim = mogAnim
+			button.isWaitingIcon = true
+		end
+	else
+		if status == "own" then
+			showAnim = true
+			if mogAnim and button.isWaitingIcon then
+				if mogAnim:IsPlaying() then
+					mogAnim:Finish()
+				end
+
+				mogAnim = nil
+			end
+
+			if not mogAnim then
+				mogAnim = mogStatus:CreateAnimationGroup()
+
+				AddRotation(mogAnim, 1, 110, 0.2, "OUT")
+				AddRotation(mogAnim, 2, -155, 0.2, "OUT")
+				AddRotation(mogAnim, 3, 60, 0.2, "OUT")
+				AddRotation(mogAnim, 4, -15, 0.1, "OUT", 0, 2)
+
+			    mogAnim:SetLooping("REPEAT")
+				button.mogAnim = mogAnim
+				button.isWaitingIcon = false
+			end
+		else
+			showAnim = false
+			-- mogAnim = nil
+			-- button.mogAnim = nil
+		end
 	end
 
-	local mogAnim = button.mogAnim
-	if not mogAnim then
-		mogAnim = button:CreateAnimationGroup()
-		mogAnim:SetToFinalAlpha(true)
-		mogAnim.alpha1 = mogAnim:CreateAnimation("Alpha")
-		mogAnim.alpha1:SetChildKey("mogFlash")
-		mogAnim.alpha1:SetSmoothing("OUT");
-		mogAnim.alpha1:SetDuration(0.6)
-		mogAnim.alpha1:SetOrder(1)
-		mogAnim.alpha1:SetFromAlpha(1);
-		mogAnim.alpha1:SetToAlpha(0);
+	-- 	if not mogAnim then
+	-- 		mogAnim = button:CreateAnimationGroup()
+	-- 		mogAnim:SetToFinalAlpha(true)
+	-- 		mogAnim.alpha1 = mogAnim:CreateAnimation("Alpha")
+	-- 		mogAnim.alpha1:SetChildKey("mogFlash")
+	-- 		mogAnim.alpha1:SetSmoothing("OUT");
+	-- 		mogAnim.alpha1:SetDuration(0.6)
+	-- 		mogAnim.alpha1:SetOrder(1)
+	-- 		mogAnim.alpha1:SetFromAlpha(1);
+	-- 		mogAnim.alpha1:SetToAlpha(0);
 
-		button.mogAnim = mogAnim
-	end
-
-	local showAnim = true
+	-- 		button.mogAnim = mogAnim
+	-- 	end
 
 	mogStatus:SetAlpha(1)
 
@@ -369,15 +550,21 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	elseif status == "other" then
 		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
+		-- showAnim = false
 	elseif status == "collected" then
-		showAnim = false
-		if not IsGearSetStatus(bindingStatus) and showSellables then -- it's known and can be sold
+		-- showAnim = false
+		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable then -- it's known and can be sold
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30)
 			mogStatus:SetAlpha(0.9)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
 		else
 			mogStatus:SetTexture("")
 		end
+	elseif status == "waiting" then
+		mogStatus:SetAlpha(0.5)
+		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30)
+		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
+		-- showAnim = false
 	end
 
 	if MailFrame:IsShown() or (AuctionFrame and AuctionFrame:IsShown()) then
@@ -385,10 +572,15 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	end
 
 	if showAnim then
-		mogFlash:Show()
-		mogAnim:Play()
+		-- mogFlash:Show()
+		if mogAnim and not mogAnim:IsPlaying() then
+			mogAnim:Play()
+		end
 	else
-		mogFlash:Hide()
+		if mogAnim and mogAnim:IsPlaying() then
+			mogAnim:Finish()
+		end
+		-- mogFlash:Hide()
 	end
 end
 
@@ -450,6 +642,23 @@ function CaerdonWardrobe:ResetButton(button)
 	SetItemButtonBindType(button, nil)
 end
 
+local itemQueue = {}
+local function QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+	local itemKey = GetItemKey(bag, slot, itemLink)
+	itemQueue[itemKey] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed }
+	SetItemButtonMogStatus(button, "waiting", nil, options)
+	isItemUpdateRequested = true
+end
+
+local function ItemIsSellable(itemID, itemLink)
+	local isSellable = true
+	if itemID == 23192 then -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
+		isSellable = false
+	end
+
+	return isSellable
+end
+
 local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	local bindingText
 	local mogStatus = nil
@@ -460,16 +669,28 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 
-	local name, itemLink, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice = GetItemInfo(itemID)
-	itemLink = GetItemLink(bag, slot)
+	itemLink = GetItemLinkLocal(bag, slot)
 
-	local bindingStatus, needsItem, hasUse = GetBindingStatus(bag, slot, itemID, itemLink)
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
+	if shouldRetry then
+		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+		return
+	end
 
-	local appearanceID, isCollected, sourceID = GetItemAppearance(itemLink)
+	local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
+	if shouldRetry then
+		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+		return
+	end
 	if appearanceID then
 		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
+			local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+			if shouldRetry then
+				QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+				return
+			end
 
-			if PlayerCanCollectAppearance(appearanceID, itemID, itemLink) then
+			if canCollect then
 				mogStatus = "own"
 			else
 				if bindingStatus and needsItem then
@@ -480,8 +701,8 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 			-- If an item isn't flagged as a source or has a usable effect,
 			-- then don't mark it as sellable right now to avoid accidents.
 			-- May need to expand this to account for other items, too, for now.
-			if canBeSource then
-				if not hasUse then -- don't flag items for sale that have use effects for now
+			if canBeSource and not isInEquipmentSet then
+				if not hasUse and isDressable and not shouldRetry then -- don't flag items for sale that have use effects for now
 					mogStatus = "collected"
 				end
 			end
@@ -494,15 +715,21 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 		end
 	elseif needsItem then
-		if canBeSource then
-			mogStatus = "own"
+		if canBeSource and isDressable and not shouldRetry then
+			local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+			local playerLevel = UnitLevel("player")
+
+			if playerLevel >= reqLevel then
+				mogStatus = "own"
+			else
+				mogStatus = "other"
+			end
 		end
 	else
 		if canBeSource then
 	        local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
-	        if hasTransmog and not hasUse then
+	        if hasTransmog and not hasUse and isDressable then
 	        	-- Tabards don't have an appearance ID and will end up here.
-	        	-- Anything that reports as the player having should be safe to sell.
 	        	mogStatus = "collected"
 	        end
 	    end
@@ -512,6 +739,16 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		-- 	--button.IconBorder:SetVertexColor(100, 255, 50)
 		-- 	button.searchOverlay:Show()
 		-- end
+	end
+
+	if mogStatus == "collected" and 
+		ItemIsSellable(itemID, itemLink) and 
+		not isInEquipmentSet then
+
+       	-- Anything that reports as the player having should be safe to sell
+       	-- unless it's in an equipment set or needs to be excluded for some
+       	-- other reason
+		options.isSellable = true
 	end
 
 	if button then
@@ -544,9 +781,11 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 			waitItem[tostring(bag)] = waitBag
 		end
 
-		local itemName = GetItemInfo(itemID)
-		local itemLink = GetItemLink(bag, slot)
+		local itemName = GetItemInfoLocal(itemID, bag, slot)
+		local itemLink = GetItemLinkLocal(bag, slot)
+
 		if itemName == nil or itemLink == nil then
+			SetItemButtonMogStatus(button, "waiting", nil, options)
 			waitBag[tostring(slot)] = { slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
 			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
@@ -563,14 +802,6 @@ function CaerdonWardrobe:ProcessItem(itemID, bag, slot, button, options, itemPro
 end
 
 local function OnContainerUpdate(self, asyncUpdate)
-	-- if isBagUpdate and not asyncUpdate then
-	-- 	return
-	-- end
-
-	if not self:IsShown() then
-		return
-	end
-
 	local bagID = self:GetID()
 
 	for buttonIndex = 1, self.size do
@@ -584,23 +815,43 @@ local function OnContainerUpdate(self, asyncUpdate)
 	end
 end
 
+local function OnItemUpdate_Coroutine()
+	local processQueue = {}
+	local itemCount = 0
+
+	for itemKey, itemInfo in pairs(itemQueue) do
+		itemQueue[itemKey] = nil
+		itemCount = itemCount + 1
+
+		ProcessOrWaitItem(itemInfo.itemID, itemInfo.bag, itemInfo.slot, itemInfo.button, itemInfo.options, itemInfo.itemProcessed)
+		if itemCount % 8 == 0 then
+			coroutine.yield()
+		end
+	end
+end
+
 local waitingOnBagUpdate = {}
 local function OnBagUpdate_Coroutine()
     for frameID, shouldUpdate in pairs(waitingOnBagUpdate) do
 		local frame = _G["ContainerFrame".. frameID]
-		OnContainerUpdate(frame, true)
+
+		if frame:IsShown() then
+			OnContainerUpdate(frame, true)
+			waitingOnBagUpdate[frameID] = nil
+		end
 		coroutine.yield()
     end
 
-	waitingOnBagUpdate = {}
+	-- waitingOnBagUpdate = {}
 end
 
 local function AddBagUpdateRequest(bagID)
+	local foundBag = false
 	for i=1, NUM_CONTAINER_FRAMES, 1 do
 		local frame = _G["ContainerFrame"..i];
-		if ( frame:IsShown() and frame:GetID() == bagID ) then
+		if ( frame:GetID() == bagID ) then
 			waitingOnBagUpdate[tostring(i)] = true
-			isBagUpdateRequested = true
+			foundBag = true
 		end
 	end
 end
@@ -610,7 +861,7 @@ local function ScheduleContainerUpdate(frame)
 	AddBagUpdateRequest(bagID)
 end
 
-hooksecurefunc("ContainerFrame_Update", ScheduleContainerUpdate)
+-- hooksecurefunc("ContainerFrame_Update", ScheduleContainerUpdate)
 
 local function OnBankItemUpdate(button)
 	local containerID = button:GetParent():GetID();
@@ -628,7 +879,7 @@ local function OnBankItemUpdate(button)
 	ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
 end
 
-hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
+-- hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
 
 local isGuildBankFrameUpdateRequested = false
 
@@ -718,6 +969,8 @@ end
 hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
 
 local ignoreEvents = {
+	["ACTIONBAR_UPDATE_COOLDOWN"] = {},
+	["BAG_UPDATE_COOLDOWN"] = {},
 	["BN_FRIEND_INFO_CHANGED"] = {},
 	["CHAT_MSG_BN_WHISPER"] = {},
 	["CHAT_MSG_BN_WHISPER_INFORM"] = {},
@@ -726,15 +979,18 @@ local ignoreEvents = {
 	["CHAT_MSG_TRADESKILLS"] = {},
 	["COMBAT_LOG_EVENT_UNFILTERED"] = {},
 	["COMPANION_UPDATE"] = {},
+	["CRITERIA_UPDATE"] = {},
 	["CURSOR_UPDATE"] = {},
-	-- ["GET_ITEM_INFO_RECEIVED"] = {},
+	["GET_ITEM_INFO_RECEIVED"] = {},
 	["GUILDBANKBAGSLOTS_CHANGED"] = {},
 	["GUILD_ROSTER_UPDATE"] = {},
 	["ITEM_LOCK_CHANGED"] = {},
 	["ITEM_LOCKED"] = {},
 	["ITEM_UNLOCKED"] = {},
 	["MODIFIER_STATE_CHANGED"] = {},
+	["NAME_PLATE_UNIT_REMOVED"] = {},
 	["QUEST_LOG_UPDATE"] = {},
+	["SPELL_UPDATE_COOLDOWN"] = {},
 	["SPELL_UPDATE_USABLE"] = {},
 	["UNIT_ABSORBE_AMOUNT_CHANGED"] = {},
 	["UNIT_AURA"] = {},
@@ -763,8 +1019,22 @@ local timeSinceLastGuildBankUpdate = nil
 local timeSinceLastBagUpdate = nil
 local GUILDBANKFRAMEUPDATE_INTERVAL = 0.1
 local BAGUPDATE_INTERVAL = 0.1
+local ITEMUPDATE_INTERVAL = 0.1
+local timeSinceLastItemUpdate = nil
 
 local function OnUpdate(self, elapsed)
+	if self.itemUpdateCoroutine then
+		if coroutine.status(self.itemUpdateCoroutine) ~= "dead" then
+			local ok, result = coroutine.resume(self.itemUpdateCoroutine)
+			if not ok then
+				error(result)
+			end
+		else
+			self.itemUpdateCoroutine = nil
+		end
+		return
+	end
+
 	if(self.bagUpdateCoroutine) then
 		if coroutine.status(self.bagUpdateCoroutine) ~= "dead" then
 			local ok, result = coroutine.resume(self.bagUpdateCoroutine)
@@ -803,6 +1073,13 @@ local function OnUpdate(self, elapsed)
 		timeSinceLastBagUpdate = timeSinceLastBagUpdate + elapsed
 	end
 
+	if isItemUpdateRequested then
+		isItemUpdateRequested = false
+		timeSinceLastItemUpdate = 0
+	elseif timeSinceLastItemUpdate then
+		timeSinceLastItemUpdate = timeSinceLastItemUpdate + elapsed
+	end
+
 	if( timeSinceLastGuildBankUpdate ~= nil and (timeSinceLastGuildBankUpdate > GUILDBANKFRAMEUPDATE_INTERVAL) ) then
 		timeSinceLastGuildBankUpdate = nil
 		self.guildBankUpdateCoroutine = coroutine.create(OnGuildBankFrameUpdate_Coroutine)
@@ -811,6 +1088,11 @@ local function OnUpdate(self, elapsed)
 	if( timeSinceLastBagUpdate ~= nil and (timeSinceLastBagUpdate > BAGUPDATE_INTERVAL) ) then
 		timeSinceLastBagUpdate = nil
 		self.bagUpdateCoroutine = coroutine.create(OnBagUpdate_Coroutine)
+	end
+
+	if( timeSinceLastItemUpdate ~= nil and (timeSinceLastItemUpdate > ITEMUPDATE_INTERVAL) ) then
+		timeSinceLastItemUpdate = nil
+		self.itemUpdateCoroutine = coroutine.create(OnItemUpdate_Coroutine)
 	end
 end
 
@@ -821,6 +1103,8 @@ eventFrame:SetScript("OnUpdate", OnUpdate)
 if DEBUG_ENABLED then
 	GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
 end
+
+C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 
 function eventFrame:ADDON_LOADED(name)
 	if name == ADDON_NAME then
@@ -840,13 +1124,22 @@ function eventFrame:PLAYER_LOGIN(...)
 	if DEBUG_ENABLED then
 		eventFrame:RegisterAllEvents()
 	else
+		eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
+		eventFrame:RegisterEvent "BAG_OPEN"
 		eventFrame:RegisterEvent "BAG_UPDATE"
 		eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
+		eventFrame:RegisterEvent "BANKFRAME_OPENED"
 		eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 		eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-		eventFrame:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
 	end
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+end
+
+function RefreshMainBank()
+	for i=1, NUM_BANKGENERIC_SLOTS, 1 do
+		button = BankSlotsFrame["Item"..i];
+		OnBankItemUpdate(button);
+	end
 end
 
 local function RefreshItems()
@@ -864,23 +1157,61 @@ local function RefreshItems()
 	end
 
 	if BankFrame:IsShown() then
-		for i=1, NUM_BANKBAGSLOTS, 1 do
-			local button = BankSlotsFrame["Bag"..i];
-			OnBankItemUpdate(button);
-		end
+		RefreshMainBank()
 	end
 
-	ContainerFrame_UpdateAll()
+	for i=1, NUM_CONTAINER_FRAMES, 1 do
+		local frame = _G["ContainerFrame"..i];
+		-- if ( frame:IsShown() and frame:GetID() == bagID ) then
+		-- print("Updating bag " .. i)
+		waitingOnBagUpdate[tostring(i)] = true
+		isBagUpdateRequested = true
+	end
 end
 
+local function OnEquipPendingItem()
+	-- TODO: Bit of a hack... wait a bit and then update...
+	--       Need to figure out a better way.  Otherwise,
+	--		 you end up with BoE markers on things you've put on.
+	C_Timer.After(1, function() RefreshItems() end)
+end
+
+hooksecurefunc("EquipPendingItem", OnEquipPendingItem)
+
+local function OnOpenBag(bagID)
+	for i=1, NUM_CONTAINER_FRAMES, 1 do
+		local frame = _G["ContainerFrame"..i];
+		if ( frame:IsShown() and frame:GetID() == bagID ) then
+			waitingOnBagUpdate[tostring(i)] = true
+			isBagUpdateRequested = true
+			break
+		end
+	end
+end
+
+local function OnOpenBackpack()
+	isBagUpdateRequested = true
+end
+
+hooksecurefunc("OpenBag", OnOpenBag)
+hooksecurefunc("OpenBackpack", OnOpenBackpack)
+hooksecurefunc("ToggleBag", OnOpenBag)
+
 function eventFrame:BAG_UPDATE(bagID)
-	-- isBagUpdate = true
-	-- waitingOnBagUpdate[tostring(tonumber(bagID) + 1)] = true
+	AddBagUpdateRequest(bagID)
 end
 
 function eventFrame:BAG_UPDATE_DELAYED()
-	-- isBagUpdate = false
-	-- isBagUpdateRequested = true
+	local count = 0
+	for _ in pairs(waitingOnBagUpdate) do 
+		count = count + 1
+	end
+
+	if count == 0 then
+		RefreshItems()
+	else
+		isBagUpdateRequested = true
+	end
 end
 
 function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
@@ -888,16 +1219,41 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
 	if itemData then
         for bag, bagData in pairs(itemData) do
         	for slot, slotData in pairs(bagData) do
-				ProcessOrWaitItem(itemID, bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
+        		-- Checking item info before continuing.  In certain cases,
+        		-- the name / link are still nil here for some reason.
+        		-- I've seen it at merchants so far.  I'm assuming that
+        		-- these requests will ultimately result in yet another
+        		-- GET_ITEM_INFO_RECEIVED event as that seems to be the case.
+				local itemName = GetItemInfoLocal(bag, slotData.slot)
+				local itemLink = GetItemLinkLocal(bag, slotData.slot)
+
+				if itemLink and itemName then
+					ProcessItem(itemID, bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
+				else
+					ProcessOrWaitItem(itemID, bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
+				end
         	end
         end
 	end
 end
 
 function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
-	RefreshItems()
+	-- RefreshItems()
 end
 
 function eventFrame:TRANSMOG_COLLECTION_UPDATED()
 	RefreshItems()
 end
+
+function eventFrame:BANKFRAME_OPENED()
+	RefreshMainBank()
+end
+
+function eventFrame:PLAYERBANKSLOTS_CHANGED(slot)
+	button = BankSlotsFrame["Item" .. slot]
+	OnBankItemUpdate(button)
+end
+
+-- BAG_OPEN
+-- GUILDBANKBAGSLOTS_CHANGED
+-- GUILDBANKFRAME_OPENED
