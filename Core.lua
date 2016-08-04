@@ -1249,9 +1249,12 @@ function eventFrame:BANKFRAME_OPENED()
 	RefreshMainBank()
 end
 
-function eventFrame:PLAYERBANKSLOTS_CHANGED(slot)
-	button = BankSlotsFrame["Item" .. slot]
-	OnBankItemUpdate(button)
+function eventFrame:PLAYERBANKSLOTS_CHANGED(slot, arg2)
+	if ( slot <= NUM_BANKGENERIC_SLOTS ) then
+		OnBankItemUpdate(BankSlotsFrame["Item"..slot]);
+	else
+		OnBankItemUpdate(BankSlotsFrame["Bag"..(slot-NUM_BANKGENERIC_SLOTS)]);
+	end
 end
 
 -- BAG_OPEN
