@@ -235,8 +235,8 @@ local function GetItemLinkLocal(bag, slot)
 	elseif bag == "EncounterJournal" then
 		-- local itemID, encounterID, name, icon, slotName, armorType, itemLink = EJ_GetLootInfoByIndex(slot)
 		return slot.link
-	elseif bag == "LootFrame" then
-		return slot
+	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
+		return slot.link
 	else
 		return GetContainerItemLink(bag, slot)
 	end
@@ -250,7 +250,7 @@ local function GetItemKey(bag, slot, itemLink)
 		itemKey = itemLink .. slot.tab .. slot.index
 	elseif bag == "EncounterJournal" then
 		itemKey = itemLink .. bag .. slot.index
-	elseif bag == "LootFrame" then
+	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		itemKey = itemLink
 	else
 		itemKey = itemLink .. bag .. slot
@@ -268,6 +268,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	local bindingText, needsItem, hasUse
 
     local isInEquipmentSet = false
+    local isBindOnPickup = false
     local isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
 
 	if binding then
@@ -275,6 +276,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		needsItem = binding.needsItem
 		hasUse = binding.hasUse
 		isInEquipmentSet = binding.isInEquipmentSet
+		isBindOnPickup = binding.isBindOnPickup
 	elseif not shouldRetry then
 		needsItem = true
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
@@ -286,6 +288,10 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			scanTip:SetInventoryItem("player", slot)
 		elseif bag == "GuildBankFrame" then
 			scanTip:SetGuildBankItem(slot.tab, slot.index)
+		elseif bag == "LootFrame" then
+			scanTip:SetLootItem(slot.index)
+		elseif bag == "GroupLootFrame" then
+			scanTip:SetLootRollItem(slot.index)
 		else
 			scanTip:SetBagItem(bag, slot)
 		end
@@ -351,40 +357,38 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	    	needsItem = false
 	    end
 
-	    local tipLines = scanTip:NumLines()
-	    if tipLines == 1 then
-	    	-- Something with transmog is causing tooltips to retrieve additional info
-	    	-- Checking for it here to flag for retry in a bit.
-	    	shouldRetry = true
-	    else
-			for lineIndex = 1, scanTip:NumLines() do
-				local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
-				if lineText then
-					-- TODO: Look at switching to GetItemSpell
-					-- TODO: Figure out if there's a constant for Equip: as well.
-					if strmatch(lineText, USE_COLON) or strmatch(lineText, L["Equip:"]) then -- it's a recipe or has a "use" effect
-						hasUse = true
-						break
-					end
+		for lineIndex = 1, scanTip:NumLines() do
+			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
+			if lineText then
+				-- TODO: Look at switching to GetItemSpell
+				-- TODO: Figure out if there's a constant for Equip: as well. -- Try ITEM_SPELL_TRIGGER_ONEQUIP
+				if strmatch(lineText, USE_COLON) or strmatch(lineText, L["Equip:"]) then -- it's a recipe or has a "use" effect
+					hasUse = true
+					break
+				end
 
-					if not bindingText then
-						bindingText = bindTextTable[lineText]
-					end
+				if not bindingText then
+					bindingText = bindTextTable[lineText]
+				end
 
-					if lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
-						needsItem = false
-						break
-					end
+				if lineText == RETRIEVING_ITEM_INFO then
+					shouldRetry = true
+					break
+				elseif lineText == ITEM_BIND_ON_PICKUP then
+					isBindOnPickup = true
+				elseif lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
+					needsItem = false
+					break
 				end
 			end
 		end
 
 		if not shouldRetry then
-			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet }
+			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup }
 		end
 	end
 
-	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, shouldRetry
+	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, shouldRetry
 end
 
 local function addDebugInfo(tooltip)
@@ -694,7 +698,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
 		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 		return
@@ -719,6 +723,8 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				if bindingStatus and needsItem then
 					mogStatus = "other"
 				elseif bag == "EncounterJournal" and needsItem then
+					mogStatus = "other"
+				elseif (bag == "LootFrame" or bag == "GroupLootFrame") and needsItem and not isBindOnPickup then
 					mogStatus = "other"
 				end
 			end
@@ -1311,25 +1317,40 @@ local function OnLootFrameUpdateButton(index)
 		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
 			-- texture, item, quantity, quality, locked, isQuestItem, questId, isActive = GetLootSlotInfo(slot)
 			link = GetLootSlotLink(slot)
-			local itemID = GetItemID(link)
-			if itemID then
-				ProcessOrWaitItem(itemID, "LootFrame", link, button, nil)
+			if link then
+				local itemID = GetItemID(link)
+				if itemID then
+					ProcessOrWaitItem(itemID, "LootFrame", { index = slot, link = link }, button, nil)
+				end
 			end
 		end
 	end
 end
 
--- local function OnGroupLootFrameShow(frame)
--- 	local texture, name, count, quality, bindOnPickUp, canNeed, canGreed, canDisenchant, reasonNeed, reasonGreed, reasonDisenchant, deSkillRequired = GetLootRollItemInfo(frame.rollID);
--- 	if (name == nil) then
--- 		return;
--- 	end
+function OnGroupLootFrameShow(frame)
+	-- local texture, name, count, quality, bindOnPickUp, canNeed, canGreed, canDisenchant, reasonNeed, reasonGreed, reasonDisenchant, deSkillRequired = GetLootRollItemInfo(frame.rollID)
+	-- if name == nil then
+	-- 	return
+	-- end
 
--- 	print("Group Loot: " .. name)
--- end
+	local itemLink = GetLootRollItemLink(frame.rollID)
+	if itemLink == nil then
+		return
+	end
+
+	local itemID = GetItemID(itemLink)
+	if itemID then
+		ProcessOrWaitItem(itemID, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
+	end
+end
 
 hooksecurefunc("LootFrame_UpdateButton", OnLootFrameUpdateButton)
--- hooksecurefunc("GroupLootFrame_OnShow", OnGroupLootFrameShow)
+
+GroupLootFrame1:HookScript("OnShow", OnGroupLootFrameShow)
+GroupLootFrame2:HookScript("OnShow", OnGroupLootFrameShow)
+GroupLootFrame3:HookScript("OnShow", OnGroupLootFrameShow)
+GroupLootFrame4:HookScript("OnShow", OnGroupLootFrameShow)
+
 -- BAG_OPEN
 -- GUILDBANKBAGSLOTS_CHANGED
 -- GUILDBANKFRAME_OPENED

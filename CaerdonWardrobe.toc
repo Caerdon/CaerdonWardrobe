@@ -1,9 +1,9 @@
 ## Interface: 70000
 ## X-Compatible-With: 70000
 ## Title: Caerdon Wardrobe
-## Notes: Shows BOE / BOA and unlearned wardrobe indicator on bank / bag / auction / merchant slots
+## Notes: Shows BOE / BOA and unlearned wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v0.25.0
+## Version: v0.26.0
 
 Localization.lua
 localization\deDE.lua
