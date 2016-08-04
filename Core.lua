@@ -232,6 +232,11 @@ local function GetItemLinkLocal(bag, slot)
 		return GetInventoryItemLink("player", slot)
 	elseif bag == "GuildBankFrame" then
 		return GetGuildBankItemLink(slot.tab, slot.index)
+	elseif bag == "EncounterJournal" then
+		-- local itemID, encounterID, name, icon, slotName, armorType, itemLink = EJ_GetLootInfoByIndex(slot)
+		return slot.link
+	elseif bag == "LootFrame" then
+		return slot
 	else
 		return GetContainerItemLink(bag, slot)
 	end
@@ -243,6 +248,10 @@ local function GetItemKey(bag, slot, itemLink)
 		itemKey = itemLink
 	elseif bag == "GuildBankFrame" then
 		itemKey = itemLink .. slot.tab .. slot.index
+	elseif bag == "EncounterJournal" then
+		itemKey = itemLink .. bag .. slot.index
+	elseif bag == "LootFrame" then
+		itemKey = itemLink
 	else
 		itemKey = itemLink .. bag .. slot
 	end
@@ -422,11 +431,12 @@ local function IsGearSetStatus(status)
 	return status and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
-local function SetIconPositionAndSize(icon, startingPoint, offset, size)
+local function SetIconPositionAndSize(icon, startingPoint, offset, size, iconOffset)
+	local offsetSum = offset - iconOffset
 	if startingPoint == "TOPRIGHT" then
-		icon:SetPoint("TOPRIGHT", offset, offset)
+		icon:SetPoint("TOPRIGHT", offsetSum, offsetSum)
 	else
-		icon:SetPoint("TOPLEFT", offset * -1, offset)
+		icon:SetPoint("TOPLEFT", offsetSum * -1, offsetSum)
 	end
 
 	icon:SetSize(size, size)
@@ -452,11 +462,17 @@ end
 local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
-	local iconPosition, showSellables, isSellable
+	local iconPosition, showSellables, isSellable, iconOffset
+
+	iconOffset = 0
+
 	if options then 
 		showSellables = options.showSellables
 		iconPosition = options.iconPosition
 		isSellable = options.isSellable
+		if options.iconOffset then
+			iconOffset = options.iconOffset
+		end
 	end
 	if not status and not mogStatus and not mogAnim then return end
 	if not status then
@@ -470,7 +486,7 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	if not mogStatus then
 		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
 		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
 		button.mogStatus = mogStatus
 	end
 
@@ -545,16 +561,16 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	mogStatus:SetAlpha(1)
 
 	if status == "own" then
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 	elseif status == "other" then
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
 		-- showAnim = false
 	elseif status == "collected" then
 		-- showAnim = false
 		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable then -- it's known and can be sold
-			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30)
+			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 			mogStatus:SetAlpha(0.9)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
 		else
@@ -562,7 +578,7 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 		end
 	elseif status == "waiting" then
 		mogStatus:SetAlpha(0.5)
-		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30)
+		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
 		-- showAnim = false
 	end
@@ -663,13 +679,20 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	local bindingText
 	local mogStatus = nil
 
-	local showMogIcon = options and options.showMogIcon
-	local showBindStatus = options and options.showBindStatus
-	local showSellables = options and options.showSellables
+   	if not options then
+   		options = {}
+   	end
+
+	local showMogIcon = options.showMogIcon
+	local showBindStatus = options.showBindStatus
+	local showSellables = options.showSellables
 
 	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 
 	itemLink = GetItemLinkLocal(bag, slot)
+	if bag == "EncounterJournal" and not itemLink then
+		return
+	end
 
 	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
@@ -694,6 +717,8 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				mogStatus = "own"
 			else
 				if bindingStatus and needsItem then
+					mogStatus = "other"
+				elseif bag == "EncounterJournal" and needsItem then
 					mogStatus = "other"
 				end
 			end
@@ -1096,6 +1121,17 @@ local function OnUpdate(self, elapsed)
 	end
 end
 
+local function OnEncounterJournalSetLootButton(item)
+	local itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(item.index);
+	local options = {
+		iconOffset = 7
+	}
+
+	if name then
+		ProcessItem(itemID, "EncounterJournal", item, item, options)
+	end
+end
+
 eventFrame = CreateFrame("FRAME", "CaerdonWardrobeFrame")
 eventFrame:RegisterEvent "ADDON_LOADED"
 eventFrame:SetScript("OnEvent", OnEvent)
@@ -1117,6 +1153,8 @@ function eventFrame:ADDON_LOADED(name)
 		hooksecurefunc("AuctionFrameBrowse_Update", OnAuctionBrowseUpdate)
 	elseif name == "Blizzard_GuildBankUI" then
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
+	elseif name == "Blizzard_EncounterJournal" then
+		hooksecurefunc("EncounterJournal_SetLootButton", OnEncounterJournalSetLootButton)
 	end
 end
 
@@ -1162,8 +1200,6 @@ local function RefreshItems()
 
 	for i=1, NUM_CONTAINER_FRAMES, 1 do
 		local frame = _G["ContainerFrame"..i];
-		-- if ( frame:IsShown() and frame:GetID() == bagID ) then
-		-- print("Updating bag " .. i)
 		waitingOnBagUpdate[tostring(i)] = true
 		isBagUpdateRequested = true
 	end
@@ -1257,6 +1293,43 @@ function eventFrame:PLAYERBANKSLOTS_CHANGED(slot, arg2)
 	end
 end
 
+local function OnLootFrameUpdateButton(index)
+	local numLootItems = LootFrame.numLootItems;
+	local numLootToShow = LOOTFRAME_NUMBUTTONS;
+
+	if LootFrame.AutoLootTable then
+		numLootItems = #LootFrame.AutoLootTable
+	end
+
+	if numLootItems > LOOTFRAME_NUMBUTTONS then
+		numLootToShow = numLootToShow - 1
+	end
+	
+	local button = _G["LootButton"..index];
+	local slot = (numLootToShow * (LootFrame.page - 1)) + index;
+	if slot <= numLootItems then
+		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
+			-- texture, item, quantity, quality, locked, isQuestItem, questId, isActive = GetLootSlotInfo(slot)
+			link = GetLootSlotLink(slot)
+			local itemID = GetItemID(link)
+			if itemID then
+				ProcessOrWaitItem(itemID, "LootFrame", link, button, nil)
+			end
+		end
+	end
+end
+
+-- local function OnGroupLootFrameShow(frame)
+-- 	local texture, name, count, quality, bindOnPickUp, canNeed, canGreed, canDisenchant, reasonNeed, reasonGreed, reasonDisenchant, deSkillRequired = GetLootRollItemInfo(frame.rollID);
+-- 	if (name == nil) then
+-- 		return;
+-- 	end
+
+-- 	print("Group Loot: " .. name)
+-- end
+
+hooksecurefunc("LootFrame_UpdateButton", OnLootFrameUpdateButton)
+-- hooksecurefunc("GroupLootFrame_OnShow", OnGroupLootFrameShow)
 -- BAG_OPEN
 -- GUILDBANKBAGSLOTS_CHANGED
 -- GUILDBANKFRAME_OPENED
