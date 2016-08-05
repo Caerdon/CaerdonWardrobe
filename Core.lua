@@ -44,7 +44,7 @@ local cachedBinding = {}
 local model = CreateFrame('DressUpModel')
 
 local function GetItemID(itemLink)
-	return itemLink:match("item:(%d+)")
+	return tonumber(itemLink:match("item:(%d+)"))
 end
 
 local cachedIsDressable = {}
@@ -311,6 +311,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					local location = equipLocations[locationIndex]
 					if location ~= nil then
 					    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
+					    equipSlot = tonumber(equipSlot)
+					    equipBag = tonumber(equipBag)
 					    if isVoidStorage then
 					    	-- Do nothing for now
 					    elseif isBank and not isBags then -- player or bank
@@ -361,8 +363,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
 			if lineText then
 				-- TODO: Look at switching to GetItemSpell
-				-- TODO: Consider skipping sets, too: ITEM_SET_BONUS 
-				if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect
+				if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect or belongs to a set
 					hasUse = true
 					break
 				end
@@ -394,14 +395,6 @@ end
 local function addDebugInfo(tooltip)
 	local itemLink = select(2, tooltip:GetItem())
 	if itemLink then
-		local itemID = GetItemID(itemLink) or "not found"
-		local _, _, quality, _, _, itemClass, itemSubClass, _, equipSlot = GetItemInfo(itemID)
-
-		tooltip:AddDoubleLine("Item ID:", tostring(itemID))
-		tooltip:AddDoubleLine("Item Class:", tostring(itemClass))
-		tooltip:AddDoubleLine("Item SubClass:", tostring(itemSubClass))
-		tooltip:AddDoubleLine("Item EquipSlot:", tostring(equipSlot))
-
 		local playerClass = select(2, UnitClass("player"))
 		local playerLevel = UnitLevel("player")
 		local playerSpec = GetSpecialization()
@@ -410,19 +403,29 @@ local function addDebugInfo(tooltip)
 		tooltip:AddDoubleLine("Player Spec:", playerSpecName)
 		tooltip:AddDoubleLine("Player Level:", playerLevel)
 
-		local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
+		local itemID = GetItemID(itemLink)
+		tooltip:AddDoubleLine("Item ID:", tostring(itemID))
 
-		tooltip:AddDoubleLine("Appearance ID:", tostring(appearanceID))
-		tooltip:AddDoubleLine("Is Collected:", tostring(isCollected))
-		tooltip:AddDoubleLine("Item Source:", sourceID and tostring(sourceID) or "none")
+		if itemID then
+			local _, _, quality, _, _, itemClass, itemSubClass, _, equipSlot = GetItemInfo(itemID)
+			tooltip:AddDoubleLine("Item Class:", tostring(itemClass))
+			tooltip:AddDoubleLine("Item SubClass:", tostring(itemSubClass))
+			tooltip:AddDoubleLine("Item EquipSlot:", tostring(equipSlot))
 
-		if appearanceID then
-			local hasAppearance, matchedSource = PlayerHasAppearance(appearanceID)
-			tooltip:AddDoubleLine("PlayerHasAppearance:", tostring(hasAppearance))
-			tooltip:AddDoubleLine("Has Matched Source:", matchedSource and matchedSource.name or "none")
-			local canCollect, matchedSource = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
-			tooltip:AddDoubleLine("PlayerCanCollectAppearance:", tostring(canCollect))
-			tooltip:AddDoubleLine("Collect Matched Source:", matchedSource and matchedSource.name or "none")
+			local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
+
+			tooltip:AddDoubleLine("Appearance ID:", tostring(appearanceID))
+			tooltip:AddDoubleLine("Is Collected:", tostring(isCollected))
+			tooltip:AddDoubleLine("Item Source:", sourceID and tostring(sourceID) or "none")
+
+			if appearanceID then
+				local hasAppearance, matchedSource = PlayerHasAppearance(appearanceID)
+				tooltip:AddDoubleLine("PlayerHasAppearance:", tostring(hasAppearance))
+				tooltip:AddDoubleLine("Has Matched Source:", matchedSource and matchedSource.name or "none")
+				local canCollect, matchedSource = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+				tooltip:AddDoubleLine("PlayerCanCollectAppearance:", tostring(canCollect))
+				tooltip:AddDoubleLine("Collect Matched Source:", matchedSource and matchedSource.name or "none")
+			end
 		end
 
 		tooltip:Show()
@@ -463,7 +466,29 @@ local function AddRotation(group, order, degrees, duration, smoothing, startDela
 	end
 end
 
-local function SetItemButtonMogStatus(button, status, bindingStatus, options)
+local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
+	local button = originalButton.caerdonButton
+	if button then
+		local mogStatus = button.mogStatus
+		if mogStatus then
+			if isFiltered then
+				mogStatus:SetAlpha(0.3)
+			else
+				mogStatus:SetAlpha(mogStatus.assignedAlpha)
+			end
+		end
+	end
+end
+
+local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, itemID)
+	local button = originalButton.caerdonButton
+	if not button then
+		button = CreateFrame("Frame", nil, originalButton)
+		button:SetAllPoints()
+		button.searchOverlay = originalButton.searchOverlay
+		originalButton.caerdonButton = button
+	end
+
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
 	local iconPosition, showSellables, isSellable
@@ -503,7 +528,6 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	end
 
 	if not mogStatus then
-		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
 		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
 		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
 		button.mogStatus = mogStatus
@@ -558,8 +582,6 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 			end
 		else
 			showAnim = false
-			-- mogAnim = nil
-			-- button.mogAnim = nil
 		end
 	end
 
@@ -577,7 +599,7 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	-- 		button.mogAnim = mogAnim
 	-- 	end
 
-	mogStatus:SetAlpha(1)
+	local alpha = 1
 
 	if status == "own" then
 		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
@@ -585,29 +607,30 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	elseif status == "other" then
 		SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
 		mogStatus:SetTexture(otherIcon)
-		-- showAnim = false
 	elseif status == "collected" then
-		-- showAnim = false
 		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable then -- it's known and can be sold
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
-			mogStatus:SetAlpha(0.9)
+			alpha = 0.9
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
 		else
 			mogStatus:SetTexture("")
 		end
 	elseif status == "waiting" then
-		mogStatus:SetAlpha(0.5)
+		alpha = 0.5
 		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
-		-- showAnim = false
 	end
 
-	-- if MailFrame:IsShown() or (AuctionFrame and AuctionFrame:IsShown()) then
-	-- 	showAnim = false
-	-- end
+	mogStatus:SetAlpha(alpha)
+	mogStatus.assignedAlpha = alpha
+
+	C_Timer.After(0, function() 
+		if(button.searchOverlay and button.searchOverlay:IsShown()) then
+			mogStatus:SetAlpha(0.3)
+		end
+	end)
 
 	if showAnim then
-		-- mogFlash:Show()
 		if mogAnim and not mogAnim:IsPlaying() then
 			mogAnim:Play()
 		end
@@ -615,7 +638,6 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 		if mogAnim and mogAnim:IsPlaying() then
 			mogAnim:Finish()
 		end
-		-- mogFlash:Hide()
 	end
 end
 
@@ -627,7 +649,6 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options)
 		return
 	end
 	if not bindsOnText then
-		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
 		bindsOnText = button:CreateFontString(nil, "BORDER", "SystemFont_Outline_Small") 
 		bindsOnText:SetWidth(button:GetWidth())
 		button.bindsOnText = bindsOnText
@@ -687,7 +708,7 @@ local itemQueue = {}
 local function QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 	local itemKey = GetItemKey(bag, slot, itemLink)
 	itemQueue[itemKey] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed }
-	SetItemButtonMogStatus(button, "waiting", nil, options)
+	SetItemButtonMogStatus(button, "waiting", nil, options, itemID)
 	isItemUpdateRequested = true
 end
 
@@ -797,7 +818,6 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	if mogStatus == "collected" and 
 		ItemIsSellable(itemID, itemLink) and 
 		not isInEquipmentSet then
-
        	-- Anything that reports as the player having should be safe to sell
        	-- unless it's in an equipment set or needs to be excluded for some
        	-- other reason
@@ -805,7 +825,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options)
+		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, itemID)
 
 		-- TODO: Consider making this an option
 		-- if bag ~= "GuildBankFrame" then
@@ -838,8 +858,8 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 		local itemLink = GetItemLinkLocal(bag, slot)
 
 		if itemName == nil or itemLink == nil then
-			SetItemButtonMogStatus(button, "waiting", nil, options)
-			waitBag[tostring(slot)] = { slot = slot, button = button, options = options, itemProcessed = itemProcessed}
+			SetItemButtonMogStatus(button, "waiting", nil, options, itemID)
+			waitBag[tostring(slot)] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
 			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
 			ProcessItem(itemID, bag, slot, button, options, itemProcessed)
@@ -968,7 +988,7 @@ local function OnGuildBankFrameUpdate_Coroutine()
 
 			local itemLink = GetGuildBankItemLink(tab, i)
 			if itemLink then
-				local itemID = itemLink:match("item:(%d+)")
+				local itemID = GetItemID(itemLink)
 				ProcessOrWaitItem(itemID, bag, slot, button, options)
 			else
 				-- nil results in button icon / text reset
@@ -997,7 +1017,7 @@ local function OnAuctionBrowseUpdate()
 
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
-			local itemID = itemLink:match("item:(%d+)")
+			local itemID = GetItemID(itemLink)
 			if itemID then
 				ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false, showSellables=false })
 			end
@@ -1238,6 +1258,21 @@ local function RefreshItems()
 	end
 end
 
+local function OnContainerFrameUpdateSearchResults(frame)
+	local id = frame:GetID();
+	local name = frame:GetName().."Item";
+	local itemButton;
+	local _, isFiltered;
+	
+	for i=1, frame.size, 1 do
+		itemButton = _G[name..i] or frame["Item"..i];
+		_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(id, itemButton:GetID())
+		SetItemButtonMogStatusFilter(itemButton, isFiltered)
+	end
+end
+
+hooksecurefunc("ContainerFrame_UpdateSearchResults", OnContainerFrameUpdateSearchResults)
+
 local function OnEquipPendingItem()
 	-- TODO: Bit of a hack... wait a bit and then update...
 	--       Need to figure out a better way.  Otherwise,
@@ -1293,13 +1328,13 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
         		-- I've seen it at merchants so far.  I'm assuming that
         		-- these requests will ultimately result in yet another
         		-- GET_ITEM_INFO_RECEIVED event as that seems to be the case.
-				local itemName = GetItemInfoLocal(bag, slotData.slot)
-				local itemLink = GetItemLinkLocal(bag, slotData.slot)
+				local itemName = GetItemInfoLocal(slotData.bag, slotData.slot)
+				local itemLink = GetItemLinkLocal(slotData.bag, slotData.slot)
 
 				if itemLink and itemName then
-					ProcessItem(itemID, bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
+					ProcessItem(itemID, slotData.bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
 				else
-					ProcessOrWaitItem(itemID, bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
+					ProcessOrWaitItem(itemID, slotData.bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
 				end
         	end
         end
