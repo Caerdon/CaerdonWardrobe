@@ -1310,6 +1310,8 @@ local function OnLootFrameUpdateButton(index)
 	if numLootItems > LOOTFRAME_NUMBUTTONS then
 		numLootToShow = numLootToShow - 1
 	end
+
+	local isProcessing = false
 	
 	local button = _G["LootButton"..index];
 	local slot = (numLootToShow * (LootFrame.page - 1)) + index;
@@ -1320,10 +1322,16 @@ local function OnLootFrameUpdateButton(index)
 			if link then
 				local itemID = GetItemID(link)
 				if itemID then
+					isProcessing = true
 					ProcessOrWaitItem(itemID, "LootFrame", { index = slot, link = link }, button, nil)
 				end
 			end
 		end
+	end
+
+	if not isProcessing then
+		SetItemButtonMogStatus(button, nil)
+		SetItemButtonBindType(button, nil)
 	end
 end
 
