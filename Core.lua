@@ -361,8 +361,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
 			if lineText then
 				-- TODO: Look at switching to GetItemSpell
-				-- TODO: Figure out if there's a constant for Equip: as well. -- Try ITEM_SPELL_TRIGGER_ONEQUIP
-				if strmatch(lineText, USE_COLON) or strmatch(lineText, L["Equip:"]) then -- it's a recipe or has a "use" effect
+				-- TODO: Consider skipping sets, too: ITEM_SET_BONUS 
+				if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect
 					hasUse = true
 					break
 				end
@@ -466,9 +466,11 @@ end
 local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
-	local iconPosition, showSellables, isSellable, iconOffset
-
-	iconOffset = 0
+	local iconPosition, showSellables, isSellable
+	local otherIcon = "Interface\\Store\\category-icon-placeholder"
+	local otherIconSize = 40
+	local otherIconOffset = 0
+	local iconOffset = 0
 
 	if options then 
 		showSellables = options.showSellables
@@ -476,6 +478,19 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 		isSellable = options.isSellable
 		if options.iconOffset then
 			iconOffset = options.iconOffset
+			otherIconOffset = iconOffset
+		end
+
+		if options.otherIcon then
+			otherIcon = options.otherIcon
+		end
+
+		if options.otherIconSize then
+			otherIconSize = options.otherIconSize
+		end
+
+		if options.otherIconOffset then
+			otherIconOffset = options.otherIconOffset
 		end
 	end
 	if not status and not mogStatus and not mogAnim then return end
@@ -568,8 +583,8 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 	elseif status == "other" then
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
-		mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
+		mogStatus:SetTexture(otherIcon)
 		-- showAnim = false
 	elseif status == "collected" then
 		-- showAnim = false
@@ -587,9 +602,9 @@ local function SetItemButtonMogStatus(button, status, bindingStatus, options)
 		-- showAnim = false
 	end
 
-	if MailFrame:IsShown() or (AuctionFrame and AuctionFrame:IsShown()) then
-		showAnim = false
-	end
+	-- if MailFrame:IsShown() or (AuctionFrame and AuctionFrame:IsShown()) then
+	-- 	showAnim = false
+	-- end
 
 	if showAnim then
 		-- mogFlash:Show()
@@ -614,9 +629,15 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options)
 	if not bindsOnText then
 		-- see ItemButtonTemplate.Count @ ItemButtonTemplate.xml#13
 		bindsOnText = button:CreateFontString(nil, "BORDER", "SystemFont_Outline_Small") 
-		bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
 		bindsOnText:SetWidth(button:GetWidth())
 		button.bindsOnText = bindsOnText
+	end
+
+	bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
+	if bindingStatus == L["BoA"] then
+		if button.count and button.count > 1 then
+			bindsOnText:SetPoint("BOTTOMRIGHT", 0, 15)
+		end
 	end
 
 	local bindingText
@@ -674,8 +695,9 @@ local function ItemIsSellable(itemID, itemLink)
 	local isSellable = true
 	if itemID == 23192 then -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
 		isSellable = false
+	elseif itemID == 116916 then -- Gorepetal's Gentle Grasp allows faster herbalism in Draenor
+		isSellable = false
 	end
-
 	return isSellable
 end
 
@@ -1130,7 +1152,10 @@ end
 local function OnEncounterJournalSetLootButton(item)
 	local itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(item.index);
 	local options = {
-		iconOffset = 7
+		iconOffset = 7,
+		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
+		otherIconSize = 20,
+		otherIconOffset = 15
 	}
 
 	if name then
@@ -1147,6 +1172,8 @@ if DEBUG_ENABLED then
 end
 
 C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+-- SetCVar("missingTransmogSourceInItemTooltips", 1)
+-- SetCVar("transmogCurrentSpecOnly", 1)
 
 function eventFrame:ADDON_LOADED(name)
 	if name == ADDON_NAME then
