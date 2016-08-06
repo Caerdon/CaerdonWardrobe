@@ -1,6 +1,6 @@
 local DEBUG_ENABLED = false
-local ADDON_NAME, namespace = ...
-local L = namespace.L
+local ADDON_NAME, NS = ...
+local L = NS.L
 local eventFrame
 local isBagUpdate = false
 
@@ -439,11 +439,17 @@ local function IsGearSetStatus(status)
 end
 
 local function SetIconPositionAndSize(icon, startingPoint, offset, size, iconOffset)
+	icon:ClearAllPoints()
+
 	local offsetSum = offset - iconOffset
 	if startingPoint == "TOPRIGHT" then
 		icon:SetPoint("TOPRIGHT", offsetSum, offsetSum)
-	else
+	elseif startingPoint == "TOPLEFT" then
 		icon:SetPoint("TOPLEFT", offsetSum * -1, offsetSum)
+	elseif startingPoint == "BOTTOMRIGHT" then
+		icon:SetPoint("BOTTOMRIGHT", offsetSum, offsetSum * -1)
+	elseif startingPoint == "BOTTOMLEFT" then
+		icon:SetPoint("BOTTOMLEFT", offsetSum * -1, offsetSum * -1)
 	end
 
 	icon:SetSize(size, size)
@@ -518,6 +524,10 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 			otherIconOffset = options.otherIconOffset
 		end
 	end
+
+	-- TODO: Should this be globally applied?
+	iconPosition = CaerdonWardrobeConfig.Icon.Position
+
 	if not status and not mogStatus and not mogAnim then return end
 	if not status then
 		if mogAnim and mogAnim:IsPlaying() then
@@ -630,7 +640,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		end
 	end)
 
-	if showAnim then
+	if showAnim and CaerdonWardrobeConfig.Icon.EnableAnimation then
 		if mogAnim and not mogAnim:IsPlaying() then
 			mogAnim:Play()
 		end
@@ -663,7 +673,9 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options)
 
 	local bindingText
 	if IsGearSetStatus(bindingStatus) then -- is gear set
-		bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
+		if CaerdonWardrobeConfig.ShowGearSets then
+			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
+		end
 	else
 		if mogStatus == "own" then
 			if bindingStatus == L["BoA"] then
@@ -1185,6 +1197,7 @@ end
 
 eventFrame = CreateFrame("FRAME", "CaerdonWardrobeFrame")
 eventFrame:RegisterEvent "ADDON_LOADED"
+eventFrame:RegisterEvent "PLAYER_LOGOUT"
 eventFrame:SetScript("OnEvent", OnEvent)
 eventFrame:SetScript("OnUpdate", OnUpdate)
 if DEBUG_ENABLED then
@@ -1193,10 +1206,97 @@ end
 
 C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 -- SetCVar("missingTransmogSourceInItemTooltips", 1)
--- SetCVar("transmogCurrentSpecOnly", 1)
+SetCVar("transmogCurrentSpecOnly", 0)
+
+function NS:GetDefaultConfig()
+	return {
+		Version = 1,
+		Icon = {
+			EnableAnimation = true,
+			Position = "TOPLEFT",
+
+			ShowLearnable = {
+				Bags = {
+					BoE = true,
+					BoP = true,
+					BoA = true
+				},
+				Bank = {
+					BoE = true,
+					BoP = true,
+					BoA = true
+				},
+				GuildBank = {
+					BoE = true,
+				},
+				Merchant = {
+					BoE = true,
+					BoP = true,
+					BoA = true
+				},
+				SameLookDifferentItem = {
+					BoE = true,
+					BoP = true,
+					BoA = true
+				}
+			},
+
+			ShowLearnableByOther = {
+				Bags = {
+					BoE = true,
+					BoA = true
+				},
+				Bank = {
+					BoE = true,
+					BoA = true
+				},
+				GuildBank = {
+					BoE = true,
+				},
+				Merchant = {
+					BoE = true,
+					BoA = true
+				},
+				SameLookDifferentItem = {
+					BoE = true,
+					BoA = true
+				}
+			},
+
+			ShowSellable = {
+				Bags = {
+					BoE = true,
+					BoP = true,
+					BoA = true
+				},
+				Bank = {
+					BoE = true,
+					BoP = true,
+					BoA = true
+				},
+				GuildBank = {
+				}
+			}
+		},
+
+		ShowGearSets = true
+	}
+end
+
+local function ProcessSettings()
+	if not CaerdonWardrobeConfig then -- or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+		CaerdonWardrobeConfig = NS:GetDefaultConfig()
+	end
+end
+
+function eventFrame:PLAYER_LOGOUT()
+end
 
 function eventFrame:ADDON_LOADED(name)
 	if name == ADDON_NAME then
+		ProcessSettings()
+		NS:FireConfigLoaded()
+
 		if IsLoggedIn() then
 			OnEvent(eventFrame, "PLAYER_LOGIN")
 		else
@@ -1420,6 +1520,23 @@ GroupLootFrame1:HookScript("OnShow", OnGroupLootFrameShow)
 GroupLootFrame2:HookScript("OnShow", OnGroupLootFrameShow)
 GroupLootFrame3:HookScript("OnShow", OnGroupLootFrameShow)
 GroupLootFrame4:HookScript("OnShow", OnGroupLootFrameShow)
+
+local configFrame
+local isConfigLoaded = false
+
+function NS:RegisterConfigFrame(frame)
+	configFrame = frame
+	if isConfigLoaded then
+		NS:FireConfigLoaded()
+	end
+end
+
+function NS:FireConfigLoaded()
+	isConfigLoaded = true
+	if configFrame then
+		configFrame:OnConfigLoaded()
+	end
+end
 
 -- BAG_OPEN
 -- GUILDBANKBAGSLOTS_CHANGED
