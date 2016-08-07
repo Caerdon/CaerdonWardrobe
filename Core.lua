@@ -269,6 +269,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
     local isInEquipmentSet = false
     local isBindOnPickup = false
+    local isCompletionistItem = false
     local isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
 
 	if binding then
@@ -277,6 +278,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		hasUse = binding.hasUse
 		isInEquipmentSet = binding.isInEquipmentSet
 		isBindOnPickup = binding.isBindOnPickup
+		isCompletionistItem = binding.isCompletionistItem
 	elseif not shouldRetry then
 		needsItem = true
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
@@ -378,18 +380,22 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 				elseif lineText == ITEM_BIND_ON_PICKUP then
 					isBindOnPickup = true
 				elseif lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
-					needsItem = false
+					if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+						isCompletionistItem = true
+					else
+						needsItem = false
+					end
 					break
 				end
 			end
 		end
 
 		if not shouldRetry then
-			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup }
+			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup, isCompletionistItem = isCompletionistItem }
 		end
 	end
 
-	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, shouldRetry
+	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry
 end
 
 local function addDebugInfo(tooltip)
@@ -472,6 +478,117 @@ local function AddRotation(group, order, degrees, duration, smoothing, startDela
 	end
 end
 
+local function IsBankOrBags(bag)
+	local isBankOrBags = false
+
+	if bag ~= "AuctionFrame" and 
+	   bag ~= "MerchantFrame" and 
+	   bag ~= "GuildBankFrame" and
+	   bag ~= "EncounterJournal" and
+	   bag ~= "LootFrame" and
+	   bag ~= "GroupLootFrame" then
+		isBankOrBags = true
+	end
+
+	return isBankOrBags
+end
+
+local function ShouldHideBindingStatus(bag, bindingStatus)
+	local shouldHide = false
+
+	if bag == "AuctionFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags and IsBankOrBags(bag) then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank and bag == "GuildBankFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.Merchant and bag == "MerchantFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Binding.ShowBoA and bindingStatus == L["BoA"] then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Binding.ShowBoE and bindingStatus == L["BoE"] then
+		shouldHide = true
+	end
+
+	return shouldHide
+end
+
+local function ShouldHideOwnIcon(bag)
+	local shouldHide = false
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags and IsBankOrBags(bag) then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank and bag == "GuildBankFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and bag == "MerchantFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Auction and bag == "AuctionFrame" then
+		shouldHide = true
+	end
+
+	return shouldHide
+end
+
+local function ShouldHideOtherIcon(bag)
+	local shouldHide = false
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags and IsBankOrBags(bag) then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank and bag == "GuildBankFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and bag == "MerchantFrame" then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction and bag == "AuctionFrame" then
+		shouldHide = true
+	end
+
+	return shouldHide
+end
+
+local function ShouldHideSellableIcon(bag)
+	local shouldHide = false
+
+	if not CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags and IsBankOrBags(bag) then
+		shouldHide = true
+	end
+
+	if not CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank and bag == "GuildBankFrame" then
+		shouldHide = true
+	end
+
+	if bag == "MerchantFrame" then
+		shouldHide = true
+	end
+
+	if bag == "AuctionFrame" then
+		shouldHide = true
+	end
+
+	return shouldHide
+end
+
 local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	local button = originalButton.caerdonButton
 	if button then
@@ -486,7 +603,7 @@ local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	end
 end
 
-local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, itemID)
+local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag)
 	local button = originalButton.caerdonButton
 	if not button then
 		button = CreateFrame("Frame", nil, originalButton)
@@ -505,7 +622,6 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 
 	if options then 
 		showSellables = options.showSellables
-		iconPosition = options.iconPosition
 		isSellable = options.isSellable
 		if options.iconOffset then
 			iconOffset = options.iconOffset
@@ -523,10 +639,15 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		if options.otherIconOffset then
 			otherIconOffset = options.otherIconOffset
 		end
+	else
+		options = {}
 	end
 
-	-- TODO: Should this be globally applied?
-	iconPosition = CaerdonWardrobeConfig.Icon.Position
+	if options.overridePosition then -- for Encounter Journal so far
+		iconPosition = options.overridePosition
+	else
+		iconPosition = CaerdonWardrobeConfig.Icon.Position
+	end
 
 	if not status and not mogStatus and not mogAnim then return end
 	if not status then
@@ -568,7 +689,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" then
+		if status == "own" or status == "ownPlus" or status == "otherPlus" then
 			showAnim = true
 			if mogAnim and button.isWaitingIcon then
 				if mogAnim:IsPlaying() then
@@ -611,14 +732,30 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 
 	local alpha = 1
 
-	if status == "own" then
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
-		mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
-	elseif status == "other" then
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
-		mogStatus:SetTexture(otherIcon)
+	if status == "own" or status == "ownPlus" then
+		if not ShouldHideOwnIcon(bag) then
+			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+			mogStatus:SetVertexColor(1, 1, 1)
+			if status == "ownPlus" then
+				mogStatus:SetVertexColor(0.4, 1, 0)
+			end
+		else
+			mogStatus:SetTexture("")
+		end
+	elseif status == "other" or status == "otherPlus" then
+		if not ShouldHideOtherIcon(bag) then
+			SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
+			mogStatus:SetTexture(otherIcon)
+			mogStatus:SetVertexColor(1, 1, 1)
+			if status == "otherPlus" then
+				mogStatus:SetVertexColor(0.4, 1, 0)
+			end
+		else
+			mogStatus:SetTexture("")
+		end
 	elseif status == "collected" then
-		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable then -- it's known and can be sold
+		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable and not ShouldHideSellableIcon(bag) then -- it's known and can be sold
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 			alpha = 0.9
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
@@ -651,29 +788,41 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	end
 end
 
-local function SetItemButtonBindType(button, mogStatus, bindingStatus, options)
+local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
 	local bindsOnText = button.bindsOnText
+
 	if not bindingStatus and not bindsOnText then return end
-	if not bindingStatus then
-		bindsOnText:SetText("")
+	if not bindingStatus or ShouldHideBindingStatus(bag, bindingStatus) then
+		if bindsOnText then
+			bindsOnText:SetText("")
+		end
 		return
 	end
+
 	if not bindsOnText then
 		bindsOnText = button:CreateFontString(nil, "BORDER", "SystemFont_Outline_Small") 
-		bindsOnText:SetWidth(button:GetWidth())
 		button.bindsOnText = bindsOnText
 	end
 
-	bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
-	if bindingStatus == L["BoA"] then
-		if button.count and button.count > 1 then
-			bindsOnText:SetPoint("BOTTOMRIGHT", 0, 15)
+	bindsOnText:ClearAllPoints()
+	bindsOnText:SetWidth(button:GetWidth())
+
+	if CaerdonWardrobeConfig.Binding.Position == "BOTTOM" then
+		bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
+		if bindingStatus == L["BoA"] then
+			if button.count and button.count > 1 then
+				bindsOnText:SetPoint("BOTTOMRIGHT", 0, 15)
+			end
 		end
+	elseif CaerdonWardrobeConfig.Binding.Position == "CENTER" then
+		bindsOnText:SetPoint("CENTER", 0, 0)
+	elseif CaerdonWardrobeConfig.Binding.Position == "TOP" then
+		bindsOnText:SetPoint("TOPRIGHT", 0, -2)
 	end
 
 	local bindingText
 	if IsGearSetStatus(bindingStatus) then -- is gear set
-		if CaerdonWardrobeConfig.ShowGearSets then
+		if CaerdonWardrobeConfig.Binding.ShowGearSets then
 			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
 		end
 	else
@@ -753,7 +902,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
 		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 		return
@@ -784,10 +933,20 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				end
 			end
 		else
+			if isCompletionistItem then
+				-- You have this, but you want them all.  Why?  Because.
+				local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+				local playerLevel = UnitLevel("player")
+
+				if playerLevel >= reqLevel then
+					mogStatus = "ownPlus"
+				else
+					mogStatus = "otherPlus"
+				end
 			-- If an item isn't flagged as a source or has a usable effect,
 			-- then don't mark it as sellable right now to avoid accidents.
 			-- May need to expand this to account for other items, too, for now.
-			if canBeSource and not isInEquipmentSet then
+			elseif canBeSource and not isInEquipmentSet then
 				if not hasUse and isDressable and not shouldRetry then -- don't flag items for sale that have use effects for now
 					mogStatus = "collected"
 				end
@@ -837,14 +996,8 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, itemID)
-
-		-- TODO: Consider making this an option
-		-- if bag ~= "GuildBankFrame" then
-			if showBindStatus then
-				SetItemButtonBindType(button, mogStatus, bindingStatus, options)
-			end
-		-- end
+		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, bag)
+		SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
 	end
 
 	if itemProcessed then
@@ -870,7 +1023,7 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 		local itemLink = GetItemLinkLocal(bag, slot)
 
 		if itemName == nil or itemLink == nil then
-			SetItemButtonMogStatus(button, "waiting", nil, options, itemID)
+			SetItemButtonMogStatus(button, "waiting", nil, options, bag)
 			waitBag[tostring(slot)] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
 			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
@@ -1187,7 +1340,8 @@ local function OnEncounterJournalSetLootButton(item)
 		iconOffset = 7,
 		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
 		otherIconSize = 20,
-		otherIconOffset = 15
+		otherIconOffset = 15,
+		overridePosition = "TOPLEFT"
 	}
 
 	if name then
@@ -1205,86 +1359,56 @@ if DEBUG_ENABLED then
 end
 
 C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
--- SetCVar("missingTransmogSourceInItemTooltips", 1)
+SetCVar("missingTransmogSourceInItemTooltips", 1)
 SetCVar("transmogCurrentSpecOnly", 0)
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 1,
+		Version = 7,
 		Icon = {
 			EnableAnimation = true,
 			Position = "TOPLEFT",
 
 			ShowLearnable = {
-				Bags = {
-					BoE = true,
-					BoP = true,
-					BoA = true
-				},
-				Bank = {
-					BoE = true,
-					BoP = true,
-					BoA = true
-				},
-				GuildBank = {
-					BoE = true,
-				},
-				Merchant = {
-					BoE = true,
-					BoP = true,
-					BoA = true
-				},
-				SameLookDifferentItem = {
-					BoE = true,
-					BoP = true,
-					BoA = true
-				}
+				BankAndBags = true,
+				GuildBank = true,
+				Merchant = true,
+				Auction = true,
+				SameLookDifferentItem = false
 			},
 
 			ShowLearnableByOther = {
-				Bags = {
-					BoE = true,
-					BoA = true
-				},
-				Bank = {
-					BoE = true,
-					BoA = true
-				},
-				GuildBank = {
-					BoE = true,
-				},
-				Merchant = {
-					BoE = true,
-					BoA = true
-				},
-				SameLookDifferentItem = {
-					BoE = true,
-					BoA = true
-				}
+				BankAndBags = true,
+				GuildBank = true,
+				Merchant = true,
+				Auction = true,
+				EncounterJournal = true,
+				SameLookDifferentItem = false
 			},
 
 			ShowSellable = {
-				Bags = {
-					BoE = true,
-					BoP = true,
-					BoA = true
-				},
-				Bank = {
-					BoE = true,
-					BoP = true,
-					BoA = true
-				},
-				GuildBank = {
-				}
+				BankAndBags = true,
+				GuildBank = false
 			}
 		},
 
-		ShowGearSets = true
+		Binding = {
+			ShowStatus = {
+				BankAndBags = true,
+				GuildBank = true,
+				Merchant = true
+			},
+
+			ShowBoA = true,
+			ShowBoE = true,
+			ShowGearSets = true,
+			Position = "BOTTOM"
+		}
 	}
 end
 
 local function ProcessSettings()
-	if not CaerdonWardrobeConfig then -- or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+	if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
 		CaerdonWardrobeConfig = NS:GetDefaultConfig()
 	end
 end
