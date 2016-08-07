@@ -3,6 +3,7 @@ local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
 local isBagUpdate = false
+local isBagAddon = false
 
 CaerdonWardrobe = {}
 
@@ -603,7 +604,7 @@ local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	end
 end
 
-local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag)
+local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag, slot, itemID)
 	local button = originalButton.caerdonButton
 	if not button then
 		button = CreateFrame("Frame", nil, originalButton)
@@ -691,12 +692,14 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	else
 		if status == "own" or status == "ownPlus" or status == "otherPlus" then
 			showAnim = true
+
 			if mogAnim and button.isWaitingIcon then
 				if mogAnim:IsPlaying() then
 					mogAnim:Finish()
 				end
 
 				mogAnim = nil
+				button.isWaitingIcon = false
 			end
 
 			if not mogAnim then
@@ -869,7 +872,7 @@ local itemQueue = {}
 local function QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 	local itemKey = GetItemKey(bag, slot, itemLink)
 	itemQueue[itemKey] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed }
-	SetItemButtonMogStatus(button, "waiting", nil, options, itemID)
+	SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, itemID)
 	isItemUpdateRequested = true
 end
 
@@ -913,6 +916,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
+
 	if appearanceID then
 		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
 			local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
@@ -996,7 +1000,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, bag)
+		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, bag, slot, itemID)
 		SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
 	end
 
@@ -1023,7 +1027,7 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 		local itemLink = GetItemLinkLocal(bag, slot)
 
 		if itemName == nil or itemLink == nil then
-			SetItemButtonMogStatus(button, "waiting", nil, options, bag)
+			SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, itemID)
 			waitBag[tostring(slot)] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
 			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
@@ -1037,6 +1041,10 @@ end
 
 function CaerdonWardrobe:ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
+end
+
+function CaerdonWardrobe:RegisterBagAddon(options)
+	isBagAddon = true
 end
 
 local function OnContainerUpdate(self, asyncUpdate)
@@ -1360,7 +1368,6 @@ end
 
 C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 SetCVar("missingTransmogSourceInItemTooltips", 1)
-SetCVar("transmogCurrentSpecOnly", 0)
 
 function NS:GetDefaultConfig()
 	return {
@@ -1451,9 +1458,11 @@ function eventFrame:PLAYER_LOGIN(...)
 end
 
 function RefreshMainBank()
-	for i=1, NUM_BANKGENERIC_SLOTS, 1 do
-		button = BankSlotsFrame["Item"..i];
-		OnBankItemUpdate(button);
+	if not isBagAddon then
+		for i=1, NUM_BANKGENERIC_SLOTS, 1 do
+			button = BankSlotsFrame["Item"..i];
+			OnBankItemUpdate(button);
+		end
 	end
 end
 
@@ -1507,18 +1516,22 @@ end
 hooksecurefunc("EquipPendingItem", OnEquipPendingItem)
 
 local function OnOpenBag(bagID)
-	for i=1, NUM_CONTAINER_FRAMES, 1 do
-		local frame = _G["ContainerFrame"..i];
-		if ( frame:IsShown() and frame:GetID() == bagID ) then
-			waitingOnBagUpdate[tostring(i)] = true
-			isBagUpdateRequested = true
-			break
+	if not isBagAddon then
+		for i=1, NUM_CONTAINER_FRAMES, 1 do
+			local frame = _G["ContainerFrame"..i];
+			if ( frame:IsShown() and frame:GetID() == bagID ) then
+				waitingOnBagUpdate[tostring(i)] = true
+				isBagUpdateRequested = true
+				break
+			end
 		end
 	end
 end
 
 local function OnOpenBackpack()
-	isBagUpdateRequested = true
+	if not isBagAddon then
+		isBagUpdateRequested = true
+	end
 end
 
 hooksecurefunc("OpenBag", OnOpenBag)
