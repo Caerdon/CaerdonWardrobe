@@ -1191,7 +1191,7 @@ local function OnAuctionBrowseUpdate()
 		local itemLink = GetAuctionItemLink("list", auctionIndex)
 		if(itemLink) then
 			local itemID = GetItemID(itemLink)
-			if itemID then
+			if itemID and button then
 				ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false, showSellables=false })
 			end
 		end
@@ -1453,6 +1453,7 @@ function eventFrame:PLAYER_LOGIN(...)
 		eventFrame:RegisterEvent "BANKFRAME_OPENED"
 		eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 		eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+		eventFrame:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	end
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 end
@@ -1583,6 +1584,10 @@ function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
 end
 
 function eventFrame:TRANSMOG_COLLECTION_UPDATED()
+	RefreshItems()
+end
+
+function eventFrame:EQUIPMENT_SETS_CHANGED()
 	RefreshItems()
 end
 
