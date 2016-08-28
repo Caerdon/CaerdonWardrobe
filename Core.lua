@@ -1215,6 +1215,7 @@ end
 hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
 
 local ignoreEvents = {
+	["APPEARANCE_SEARCH_UPDATED"] = {},
 	["ACTIONBAR_UPDATE_COOLDOWN"] = {},
 	["BAG_UPDATE_COOLDOWN"] = {},
 	["BN_FRIEND_INFO_CHANGED"] = {},
@@ -1240,6 +1241,8 @@ local ignoreEvents = {
 	["SPELL_UPDATE_USABLE"] = {},
 	["UNIT_ABSORBE_AMOUNT_CHANGED"] = {},
 	["UNIT_AURA"] = {},
+	["UNIT_POWER"] = {},
+	["UNIT_POWER_FREQUENT"] = {},
 	["UPDATE_INVENTORY_DURABILITY"] = {},
 	["UPDATE_MOUSEOVER_UNIT"] = {},
 	["UPDATE_PENDING_MAIL"] = {},
@@ -1453,7 +1456,9 @@ function eventFrame:PLAYER_LOGIN(...)
 		eventFrame:RegisterEvent "BANKFRAME_OPENED"
 		eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 		eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+		-- eventFrame:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
 		eventFrame:RegisterEvent "EQUIPMENT_SETS_CHANGED"
+		eventFrame:RegisterEvent "MERCHANT_UPDATE"
 	end
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 end
@@ -1468,10 +1473,12 @@ function RefreshMainBank()
 end
 
 local function RefreshItems()
+	-- TODO: Add debounce to prevent excessive refresh
 	if DEBUG_ENABLED then
 		print("=== Refreshing Transmog Items")
 	end
 	cachedBinding = {}
+	cachedIsDressable = {}
 
 	if MerchantFrame:IsShown() then
 		OnMerchantUpdate()
@@ -1584,6 +1591,10 @@ function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
 end
 
 function eventFrame:TRANSMOG_COLLECTION_UPDATED()
+	RefreshItems()
+end
+
+function eventFrame:MERCHANT_UPDATE()
 	RefreshItems()
 end
 
