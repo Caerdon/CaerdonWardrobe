@@ -299,8 +299,10 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			scanTip:SetBagItem(bag, slot)
 		end
 
+		local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+
 	    -- Use equipment set for binding text if it's assigned to one
-		if isDressable and CanUseEquipmentSets() then
+		if equipSlot ~= "" and CanUseEquipmentSets() then
 			-- Flag to ensure flagging multiple set membership
 			local isBindingTextDone = false
 
