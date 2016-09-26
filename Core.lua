@@ -303,6 +303,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 	    -- Use equipment set for binding text if it's assigned to one
 		if equipSlot ~= "" and CanUseEquipmentSets() then
+
 			-- Flag to ensure flagging multiple set membership
 			local isBindingTextDone = false
 
@@ -312,20 +313,23 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 			    GetEquipmentSetLocations(name, equipLocations)
 
-				for locationIndex=1, #equipLocations do
+				for locationIndex=INVSLOT_FIRST_EQUIPPED , INVSLOT_LAST_EQUIPPED do
 					local location = equipLocations[locationIndex]
 					if location ~= nil then
 					    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
 					    equipSlot = tonumber(equipSlot)
 					    equipBag = tonumber(equipBag)
+
 					    if isVoidStorage then
 					    	-- Do nothing for now
 					    elseif isBank and not isBags then -- player or bank
+
 					    	if bag == "BankFrame" and slot == equipSlot then
 					    		needsItem = false
 								if bindingText then
 									bindingText = "*" .. bindingText
 									isBindingTextDone = true
+
 									break
 								else
 									bindingText = name
@@ -793,7 +797,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	end
 end
 
-local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
+local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag, itemID)
 	local bindsOnText = button.bindsOnText
 
 	if not bindingStatus and not bindsOnText then return end
@@ -939,6 +943,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				end
 			end
 		else
+
 			if isCompletionistItem then
 				-- You have this, but you want them all.  Why?  Because.
 				local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
@@ -1003,7 +1008,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 	if button then
 		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, bag, slot, itemID)
-		SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
+		SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag, itemID)
 	end
 
 	if itemProcessed then
