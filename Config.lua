@@ -65,6 +65,11 @@ function configFrame:CreateComponents()
 	components.showGearSetsLabel = _G[components.showGearSets:GetName() .. "Text"]
 	components.showGearSetsLabel:SetText(L["Show Gear Sets"])
 
+	components.showGearSetsAsIcon = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showGearSetsAsIcon", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showGearSetsAsIcon:SetPoint("TOPLEFT", components.showGearSets, "BOTTOMLEFT", 22, 8)
+	components.showGearSetsAsIconLabel = _G[components.showGearSetsAsIcon:GetName() .. "Text"]
+	components.showGearSetsAsIconLabel:SetText(L["As Icons"])
+
 	components.showBoA = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBoA", self, "InterfaceOptionsCheckButtonTemplate")
 	components.showBoA:SetPoint("LEFT", components.showGearSetsLabel, "RIGHT", 20, 0)
 	components.showBoA:SetPoint("TOP", components.showGearSets, "TOP", 0, 0)
@@ -81,7 +86,7 @@ function configFrame:CreateComponents()
 
 	components.mogIconLabel = self:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	components.mogIconLabel:SetText(L["Transmog Icon"])
-	components.mogIconLabel:SetPoint("TOPLEFT", components.showGearSets, "BOTTOMLEFT", -10, -20)
+	components.mogIconLabel:SetPoint("TOPLEFT", components.showGearSetsAsIcon, "BOTTOMLEFT", -10, -20)
 
 	components.mogIconPositionLabel = self:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 	components.mogIconPositionLabel:SetText(L["Icon Position:"])
@@ -245,6 +250,7 @@ function configFrame:RefreshComponents()
 	components.showBindingOnGuildBank:SetChecked(config.Binding.ShowStatus.GuildBank)
 	components.showBindingOnMerchant:SetChecked(config.Binding.ShowStatus.Merchant)
 	components.showGearSets:SetChecked(config.Binding.ShowGearSets)
+	components.showGearSetsAsIcon:SetChecked(config.Binding.ShowGearSetsAsIcon)
 	components.showBoA:SetChecked(config.Binding.ShowBoA)
 	components.showBoE:SetChecked(config.Binding.ShowBoE)
 
@@ -275,6 +281,7 @@ function configFrame:UpdatePendingValues()
 	config.Binding.ShowStatus.GuildBank = components.showBindingOnGuildBank:GetChecked()
 	config.Binding.ShowStatus.Merchant = components.showBindingOnMerchant:GetChecked()
 	config.Binding.ShowGearSets = components.showGearSets:GetChecked()
+	config.Binding.ShowGearSetsAsIcon = components.showGearSetsAsIcon:GetChecked()
 	config.Binding.ShowBoA = components.showBoA:GetChecked()
 	config.Binding.ShowBoE = components.showBoE:GetChecked()
 	
