@@ -656,13 +656,16 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		iconPosition = CaerdonWardrobeConfig.Icon.Position
 	end
 
-	if not status and not mogStatus and not mogAnim then return end
 	if not status then
 		if mogAnim and mogAnim:IsPlaying() then
 			mogAnim:Stop()
 		end
-		mogStatus:SetTexture("")
-		return
+		if mogStatus then
+			mogStatus:SetTexture("")
+		end
+
+		-- Keep processing to handle gear set icon
+		-- return
 	end
 
 	if not mogStatus then
@@ -740,7 +743,6 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	-- 	end
 
 	local alpha = 1
-
 	if status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
@@ -768,6 +770,9 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 			alpha = 0.9
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
+		elseif IsGearSetStatus(bindingStatus) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 		else
 			mogStatus:SetTexture("")
 		end
@@ -775,6 +780,9 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		alpha = 0.5
 		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
+	elseif IsGearSetStatus(bindingStatus) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
+		mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 	end
 
 	mogStatus:SetAlpha(alpha)
@@ -831,7 +839,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 
 	local bindingText
 	if IsGearSetStatus(bindingStatus) then -- is gear set
-		if CaerdonWardrobeConfig.Binding.ShowGearSets then
+		if CaerdonWardrobeConfig.Binding.ShowGearSets and not CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
 			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
 		end
 	else
@@ -1419,6 +1427,7 @@ function NS:GetDefaultConfig()
 			ShowBoA = true,
 			ShowBoE = true,
 			ShowGearSets = true,
+			ShowGearSetsAsIcon = false,
 			Position = "BOTTOM"
 		}
 	}
