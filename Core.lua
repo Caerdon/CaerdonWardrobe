@@ -302,16 +302,17 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
 
 	    -- Use equipment set for binding text if it's assigned to one
-		if equipSlot ~= "" and CanUseEquipmentSets() then
+		if equipSlot ~= "" and C_EquipmentSet.CanUseEquipmentSets() then
 
 			-- Flag to ensure flagging multiple set membership
 			local isBindingTextDone = false
 
-			for setIndex=1, GetNumEquipmentSets() do
+			for setIndex=1, C_EquipmentSet.GetNumEquipmentSets() do
+        local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
+        local equipmentSetID = equipmentSetIDs[setIndex]
+				name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored = C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
 
-				name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored = GetEquipmentSetInfo(setIndex)
-
-			    GetEquipmentSetLocations(name, equipLocations)
+        local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
 
 				for locationIndex=INVSLOT_FIRST_EQUIPPED , INVSLOT_LAST_EQUIPPED do
 					local location = equipLocations[locationIndex]
