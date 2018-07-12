@@ -42,7 +42,7 @@ local InventorySlots = {
 local scanTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
 local cachedBinding = {}
 
-local model = CreateFrame('DressUpModel')
+-- local model = CreateFrame('DressUpModel')
 
 local function GetItemID(itemLink)
 	return tonumber(itemLink:match("item:(%d+)"))
@@ -90,18 +90,24 @@ end
 local cachedItemSources = {}
 local function GetItemSource(itemID, itemLink)
 	local itemSources = cachedItemSources[itemLink]
+	local shouldRetry = false
+	local isDressable = false
 	if itemSources == "NONE" then
 		itemSources = nil
 	elseif not itemSources then
-		local isDressable, shouldRetry, slot = IsDressableItemCheck(itemID, itemLink)
+		isDressable, shouldRetry, slot = IsDressableItemCheck(itemID, itemLink)
 		if not shouldRetry then
 			if not isDressable then
 		    	cachedItemSources[itemLink] = "NONE"
 			else
-			    model:SetUnit('player')
-			    model:Undress()
-			    model:TryOn(itemLink, slot)
-			    itemSources = model:GetSlotTransmogSources(slot)
+				-- Looks like I can use this now.  Keeping the old code around for a bit just in case.
+				local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
+			 --    model:SetUnit('player')
+			 --    model:Undress()
+			 --    model:TryOn(itemLink, slot)
+			 --    itemSources = model:GetSlotTransmogSources(slot)
+				itemSources = sourceID
+				-- print("Item "..itemID..", sources: "..(itemSources or "NONE!")..", appearance id = "..(appearanceId or "NONE!"))
 			    if itemSources then
 					cachedItemSources[itemLink] = itemSources
 				else
@@ -239,7 +245,9 @@ local function GetItemLinkLocal(bag, slot)
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		return slot.link
 	else
-		return GetContainerItemLink(bag, slot)
+    if bag then
+      return GetContainerItemLink(bag, slot)
+    end
 	end
 end
 
@@ -431,6 +439,7 @@ local function addDebugInfo(tooltip)
 			tooltip:AddDoubleLine("Appearance ID:", tostring(appearanceID))
 			tooltip:AddDoubleLine("Is Collected:", tostring(isCollected))
 			tooltip:AddDoubleLine("Item Source:", sourceID and tostring(sourceID) or "none")
+			tooltip:AddDoubleLine("Should Retry:", tostring(shouldRetry))
 
 			if appearanceID then
 				local hasAppearance, matchedSource = PlayerHasAppearance(appearanceID)
@@ -1252,6 +1261,7 @@ local ignoreEvents = {
 	["ITEM_UNLOCKED"] = {},
 	["MODIFIER_STATE_CHANGED"] = {},
 	["NAME_PLATE_UNIT_REMOVED"] = {},
+	["RECEIVED_ACHIEVEMENT_LIST"] = {},
 	["QUEST_LOG_UPDATE"] = {},
 	["SPELL_UPDATE_COOLDOWN"] = {},
 	["SPELL_UPDATE_USABLE"] = {},
@@ -1263,6 +1273,7 @@ local ignoreEvents = {
 	["UPDATE_MOUSEOVER_UNIT"] = {},
 	["UPDATE_PENDING_MAIL"] = {},
 	["UPDATE_WORLD_STATES"] = {},
+	["QUESTLINE_UPDATE"] = {},
 	["WORLD_MAP_UPDATE"] = {}
 }
 
