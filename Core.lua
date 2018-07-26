@@ -42,7 +42,7 @@ local InventorySlots = {
 local scanTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
 local cachedBinding = {}
 
--- local model = CreateFrame('DressUpModel')
+local model = CreateFrame('DressUpModel')
 
 local function GetItemID(itemLink)
 	return tonumber(itemLink:match("item:(%d+)"))
@@ -101,13 +101,17 @@ local function GetItemSource(itemID, itemLink)
 		    	cachedItemSources[itemLink] = "NONE"
 			else
 				-- Looks like I can use this now.  Keeping the old code around for a bit just in case.
+				-- Actually, still seeing problems with this...try it first but fallback to model
 				local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
-			 --    model:SetUnit('player')
-			 --    model:Undress()
-			 --    model:TryOn(itemLink, slot)
-			 --    itemSources = model:GetSlotTransmogSources(slot)
-				itemSources = sourceID
-				-- print("Item "..itemID..", sources: "..(itemSources or "NONE!")..", appearance id = "..(appearanceId or "NONE!"))
+				if sourceID then
+					itemSources = sourceID
+				else
+				    model:SetUnit('player')
+				    model:Undress()
+				    model:TryOn(itemLink, slot)
+				    itemSources = model:GetSlotTransmogSources(slot)
+				end
+
 			    if itemSources then
 					cachedItemSources[itemLink] = itemSources
 				else
@@ -128,7 +132,7 @@ local function GetItemAppearance(itemID, itemLink)
         if sourceItemLink then
 			local _, _, quality = GetItemInfo(sourceItemLink)
 			-- Skip artifact weapons and common for now
-			if quality == LE_ITEM_QUALITY_ARTIFACT or quality == LE_ITEM_QUALITY_COMMON then
+			if quality == LE_ITEM_QUALITY_COMMON then
 	 			appearanceID = nil
 	 			isCollected = false
 	 			sourceID = NO_TRANSMOG_SOURCE_ID
@@ -709,7 +713,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" or status == "ownPlus" or status == "otherPlus" then
+		if status == "own" or status == "ownPlus" or status == "otherPlus" or status == "refundable" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -753,7 +757,11 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	-- 	end
 
 	local alpha = 1
-	if status == "own" or status == "ownPlus" then
+	if status == "refundable" and not ShouldHideSellableIcon(bag) then
+		SetIconPositionAndSize(mogStatus, iconPosition, 3, 15, iconOffset)
+		alpha = 0.9
+		mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
+	elseif status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
@@ -910,6 +918,55 @@ local function ItemIsSellable(itemID, itemLink)
 	return isSellable
 end
 
+local function DebugItem(itemID, itemLink, bag, slot)
+
+	print ('=============================================')
+	print ('Item: ' .. itemID, ' ItemLink: ' .. itemLink)
+
+	print ( '---- Blizzard API')
+	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
+	print ('Can Be Changed: ' .. tostring(canBeChanged) .. ', No Change Reason: ' .. tostring(noChangeReason) .. ', Can Be Source: ' .. tostring(canBeSource) .. ', No Source Reason: ' .. tostring(noSourceReason))
+
+    local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
+	print ('Has Transmog: ' .. tostring(hasTransmog))
+
+	local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
+	print ('Appearance ID: ' .. tostring(appearanceID) .. ', Source ID: ' .. tostring(sourceID))
+
+    if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
+        categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+        print ('Category ID: ' .. tostring(categoryID) .. ', Appearance ID: ' .. tostring(appearanceID) .. ', Can Enchant: ' .. tostring(canEnchant) .. ', Texture: ' .. tostring(texture) .. ', Is Collected: ' .. tostring(isCollected) .. ', Source Item Link: ' .. sourceItemLink)
+
+        if sourceItemLink then
+			local _, _, quality = GetItemInfo(sourceItemLink)
+			print ('Source Quality: ' .. tostring(quality))
+		else
+			print ('No Source Item Link!')
+		end
+	else
+		print ('No Transmog Source ID!')
+	end
+
+	if IsBankOrBags(bag) then
+	 	local money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped);
+	 	print ('Money: ' .. money .. ', Item Count: ' .. itemCount .. ', Refund Sec: ' .. refundSec .. ', Currency Count: ' .. currencyCount .. ', Has Enchants: ' .. tostring(hasEnchants))
+	end
+
+	print ( '---- Addon API')
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
+	print ('Binding Status: ' .. tostring(bindingStatus) .. ', Needs Item: ' .. tostring(needsItem) .. ', HasUse: ' .. tostring(hasUse) .. ', Is Dressable: ' .. tostring(isDressable) .. ', Is In Equipment Set: ' .. tostring(isInEquipmentSet) .. ', Is BoP: ' .. tostring(isBindOnPickup) .. ', Is Completionist: ' .. tostring(isCompletionistItem) .. ', Should Retry: ' .. tostring(shouldRetry))
+
+	local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
+	print ('Appearance ID: ' .. tostring(appearanceID) .. ', Is Collected: ' .. tostring(isCollected) .. ', Source ID: ' .. tostring(sourceID) .. ', Should Retry: ' .. tostring(shouldRetry))
+
+	local sourceID, shouldRetry = GetItemSource(itemID, itemLink)
+	print ('Source ID: ' .. tostring(sourceID) .. ', Should Retry: ' .. tostring(shouldRetry))
+
+	local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+	print ('canCollect: ' .. tostring(canCollect) .. ', matchedSource: ' .. tostring(matchedSource) .. ', shouldRetry: ' .. tostring(shouldRetry))
+
+end
+
 local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	local bindingText
 	local mogStatus = nil
@@ -976,8 +1033,17 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 			-- then don't mark it as sellable right now to avoid accidents.
 			-- May need to expand this to account for other items, too, for now.
 			elseif canBeSource and not isInEquipmentSet then
-				if not hasUse and isDressable and not shouldRetry then -- don't flag items for sale that have use effects for now
-					mogStatus = "collected"
+				if isDressable and not shouldRetry then -- don't flag items for sale that have use effects for now
+					if IsBankOrBags(bag) then
+					 	local money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped);
+						if hasUse and refundSec then
+							mogStatus = "refundable"
+						elseif not hasUse then
+							mogStatus = "collected"
+						end
+					else 
+						mogStatus = "collected"
+					end
 				end
 			end
 			-- TODO: Decide how to expose this functionality
