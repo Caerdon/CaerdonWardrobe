@@ -227,7 +227,11 @@ local function GetItemInfoLocal(itemID, bag, slot)
 		if bag == "AuctionFrame" then
 			name = GetAuctionItemInfo("list", slot)
 		elseif bag == "MerchantFrame" then
-			name = GetMerchantItemInfo(slot)
+			if MerchantFrame.selectedTab == 1 then
+				name = GetMerchantItemInfo(slot)
+			else
+				name = GetBuybackItemInfo(slot)
+			end
 		end
 	end
 
@@ -238,7 +242,11 @@ local function GetItemLinkLocal(bag, slot)
 	if bag == "AuctionFrame" then
 		return GetAuctionItemLink("list", slot)
 	elseif bag == "MerchantFrame" then
-		return GetMerchantItemLink(slot)
+		if MerchantFrame.selectedTab == 1 then
+			return GetMerchantItemLink(slot)
+		else
+			return GetBuybackItemLink(slot)
+		end
 	elseif bag == "BankFrame" then
 		return GetInventoryItemLink("player", slot)
 	elseif bag == "GuildBankFrame" then
@@ -275,6 +283,10 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
+	-- local isDebugItem = itemID == 121310
+
+	if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
+
 	local itemKey = GetItemKey(bag, slot, itemLink)
 
 	local binding = cachedBinding[itemKey]
@@ -284,8 +296,10 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
     local isBindOnPickup = false
     local isCompletionistItem = false
     local isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
+    local shouldCheckEquipmentSet = false
 
 	if binding then
+		if isDebugItem then print("Using cached binding: " .. tostring(binding.bindingText)) end
 		bindingText = binding.bindingText
 		needsItem = binding.needsItem
 		hasUse = binding.hasUse
@@ -293,14 +307,20 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		isBindOnPickup = binding.isBindOnPickup
 		isCompletionistItem = binding.isCompletionistItem
 	elseif not shouldRetry then
+		if isDebugItem then print("Processing binding") end
 		needsItem = true
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
 		if bag == "AuctionFrame" then
 			scanTip:SetAuctionItem("list", slot)
 		elseif bag == "MerchantFrame" then
-			scanTip:SetMerchantItem(slot)
-		elseif bag == "BankFrame" then
-			scanTip:SetInventoryItem("player", slot)
+			if MerchantFrame.selectedTab == 1 then
+				scanTip:SetMerchantItem(slot)
+			else
+				scanTip:SetBuybackItem(slot)
+			end
+		elseif bag == BANK_CONTAINER then
+			scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
+			shouldCheckEquipmentSet = true
 		elseif bag == "GuildBankFrame" then
 			scanTip:SetGuildBankItem(slot.tab, slot.index)
 		elseif bag == "LootFrame" then
@@ -308,65 +328,72 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		elseif bag == "GroupLootFrame" then
 			scanTip:SetLootRollItem(slot.index)
 		else
+			if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. slot) end
 			scanTip:SetBagItem(bag, slot)
+			shouldCheckEquipmentSet = true
 		end
 
-		local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+		if shouldCheckEquipmentSet then
+	 		local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+			if isDebugItem then print("equipSlot: " .. tostring(equipSlot)) end
 
-	    -- Use equipment set for binding text if it's assigned to one
-		if equipSlot ~= "" and C_EquipmentSet.CanUseEquipmentSets() then
+		   -- Use equipment set for binding text if it's assigned to one
+			if equipSlot ~= "" and C_EquipmentSet.CanUseEquipmentSets() then
 
-			-- Flag to ensure flagging multiple set membership
-			local isBindingTextDone = false
+				-- Flag to ensure flagging multiple set membership
+				local isBindingTextDone = false
 
-			for setIndex=1, C_EquipmentSet.GetNumEquipmentSets() do
-        local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
-        local equipmentSetID = equipmentSetIDs[setIndex]
-				name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored = C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
+				for setIndex=1, C_EquipmentSet.GetNumEquipmentSets() do
+			        local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
+			        local equipmentSetID = equipmentSetIDs[setIndex]
+							name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored = C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
 
-        local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
+			        local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
 
-				for locationIndex=INVSLOT_FIRST_EQUIPPED , INVSLOT_LAST_EQUIPPED do
-					local location = equipLocations[locationIndex]
-					if location ~= nil then
-					    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
-					    equipSlot = tonumber(equipSlot)
-					    equipBag = tonumber(equipBag)
+							for locationIndex=INVSLOT_FIRST_EQUIPPED , INVSLOT_LAST_EQUIPPED do
+								local location = equipLocations[locationIndex]
+								if location ~= nil then
+								    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
+								    if isDebugItem then
+								    	print("isPlayer: " .. tostring(isPlayer) .. ", isBank: " .. tostring(isBank) .. ", isBags: " .. tostring(isBags) .. ", isVoidStorage: " .. tostring(isVoidStorage) .. ", equipSlot: " .. tostring(equipSlot) .. ", equipBag: " .. tostring(equipBag) .. ", equipTab: " .. tostring(equipTab) .. ", equipVoidSlot: " .. tostring(equipVoidSlot))
+								    end
+								    equipSlot = tonumber(equipSlot)
+								    equipBag = tonumber(equipBag)
 
-					    if isVoidStorage then
-					    	-- Do nothing for now
-					    elseif isBank and not isBags then -- player or bank
+								    if isVoidStorage then
+								    	-- Do nothing for now
+								    elseif isBank and not isBags then -- player or bank
+								    	if bag == BANK_CONTAINER and BankButtonIDToInvSlotID(slot) == equipSlot then
+								    		needsItem = false
+											if bindingText then
+												bindingText = "*" .. bindingText
+												isBindingTextDone = true
 
-					    	if bag == "BankFrame" and slot == equipSlot then
-					    		needsItem = false
-								if bindingText then
-									bindingText = "*" .. bindingText
-									isBindingTextDone = true
-
-									break
-								else
-									bindingText = name
-									isInEquipmentSet = true
-								end
-					    	end
-					    else
-						    if equipSlot == slot and equipBag == bag then
-								needsItem = false
-								if bindingText then
-									bindingText = "*" .. bindingText
-									isBindingTextDone = true
-									break
-								else
-									bindingText = name
-									isInEquipmentSet = true
+												break
+											else
+												bindingText = name
+												isInEquipmentSet = true
+											end
+								    	end
+								    else
+									    if equipSlot == slot and equipBag == bag then
+											needsItem = false
+											if bindingText then
+												bindingText = "*" .. bindingText
+												isBindingTextDone = true
+												break
+											else
+												bindingText = name
+												isInEquipmentSet = true
+											end
+										end
+									end
 								end
 							end
-						end
-					end
-				end
 
-				if isBindingTextDone then
-					break
+							if isBindingTextDone then
+								break
+							end
 				end
 			end
 		end
@@ -381,10 +408,12 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	    	needsItem = false
 	    end
 
+	    if isDebugItem then print('Scan Tip Lines: ' .. tostring(scanTip:NumLines())) end
 		for lineIndex = 1, scanTip:NumLines() do
 			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
 			if lineText then
 				-- TODO: Look at switching to GetItemSpell
+				if isDebugItem then print ("Tip: " .. lineText) end
 				if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect or belongs to a set
 					hasUse = true
 					break
@@ -713,7 +742,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" or status == "ownPlus" or status == "otherPlus" or status == "refundable" then
+		if status == "own" or status == "ownPlus" or status == "otherPlus" or status == "refundable" or status == "openable" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -761,6 +790,10 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		SetIconPositionAndSize(mogStatus, iconPosition, 3, 15, iconOffset)
 		alpha = 0.9
 		mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
+	elseif status == "openable" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
+			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-free")
+			mogStatus:SetVertexColor(1, 1, 1)
 	elseif status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
@@ -949,7 +982,7 @@ local function DebugItem(itemID, itemLink, bag, slot)
 
 	if IsBankOrBags(bag) then
 	 	local money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped);
-	 	print ('Money: ' .. money .. ', Item Count: ' .. itemCount .. ', Refund Sec: ' .. refundSec .. ', Currency Count: ' .. currencyCount .. ', Has Enchants: ' .. tostring(hasEnchants))
+	 	print ('Money: ' .. tostring(money) .. ', Item Count: ' .. tostring(itemCount) .. ', Refund Sec: ' .. tostring(refundSec) .. ', Currency Count: ' .. tostring(currencyCount) .. ', Has Enchants: ' .. tostring(hasEnchants))
 	end
 
 	print ( '---- Addon API')
@@ -965,6 +998,16 @@ local function DebugItem(itemID, itemLink, bag, slot)
 	local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
 	print ('canCollect: ' .. tostring(canCollect) .. ', matchedSource: ' .. tostring(matchedSource) .. ', shouldRetry: ' .. tostring(shouldRetry))
 
+end
+
+local function GetBankContainer(button)
+	local containerID = button:GetParent():GetID();
+	if( button.isBag ) then
+		containerID = -ITEM_INVENTORY_BANK_BAG_OFFSET;
+		return
+	end
+
+	return containerID
 end
 
 local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
@@ -985,6 +1028,14 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	if bag == "EncounterJournal" and not itemLink then
 		return
 	end
+
+ 		-- local printable = gsub(itemLink, "\124", "\124\124");
+		-- local itemString = string.match(itemLink, "item[%-?%d:]+")
+		-- print(itemLink .. ": " .. itemID .. ", printable: " .. tostring(printable))
+
+  	-- if itemID == 82082 then
+   		-- DebugItem(itemID, itemLink, bag, slot)
+   	-- end
 
 	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
@@ -1073,6 +1124,41 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	        	mogStatus = "collected"
 	        end
 	    end
+
+	    if(IsBankOrBags(bag)) then	    	
+	    	local containerID = bag
+	    	local containerSlot = slot
+	    	if(bag == 'BankFrame') then
+	    		containerID = GetBankContainer(button)
+	    		containerSlot = button:GetID();
+	    	end
+
+			local texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot);
+			if lootable then
+				local startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
+				if duration > 0 and not isEnabled then
+					mogStatus = "refundable" -- Can't open yet... show timer
+				else
+					mogStatus = "openable"
+				end
+			end
+
+		elseif bag == "MerchantFrame" then
+			if (MerchantFrame.selectedTab == 1) then
+				-- TODO: If I can ever figure out how to process pets in the MerchantFrame
+			else
+			end
+		end
+
+		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
+		if ( strsub(link, 1, 9) == "battlepet" ) then
+			local _, speciesID, level, breedQuality, maxHealth, power, speed, battlePetID = strsplit(":", link)
+			local owned = C_PetJournal.GetOwnedBattlePetString(speciesID);
+			if not owned then
+				-- local numOwned, maxAllowed = C_PetJournal.GetNumCollectedInfo(speciesID);
+				mogStatus = "own"
+			end	
+		end
 
 		-- Hide anything that doesn't match
 		-- if button then
@@ -1201,22 +1287,22 @@ end
 -- hooksecurefunc("ContainerFrame_Update", ScheduleContainerUpdate)
 
 local function OnBankItemUpdate(button)
-	local containerID = button:GetParent():GetID();
-	if( button.isBag ) then
-		containerID = -ITEM_INVENTORY_BANK_BAG_OFFSET;
-		return
+	-- local containerID = GetBankContainer(button)
+	-- local buttonID = button:GetID()
+
+	-- local bag = "BankFrame"
+	-- local slot = button:GetInventorySlot();
+	local bag = GetBankContainer(button)
+	local slot = button:GetID()
+
+	-- local itemID = GetContainerItemID(containerID, buttonID)
+	if bag and slot then
+		local itemID = GetContainerItemID(bag, slot)
+		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
 	end
-
-	local buttonID = button:GetID()
-
-	local bag = "BankFrame"
-	local slot = button:GetInventorySlot();
-
-	local itemID = GetContainerItemID(containerID, buttonID)
-	ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
 end
 
--- hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
+hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
 
 local isGuildBankFrameUpdateRequested = false
 
@@ -1303,7 +1389,24 @@ local function OnMerchantUpdate()
 	end
 end
 
+local function OnBuybackUpdate()
+	local numBuybackItems = GetNumBuybackItems();
+
+	for index=1, BUYBACK_ITEMS_PER_PAGE, 1 do -- Only 1 actual page for buyback right now
+		if index <= numBuybackItems then
+			local button = _G["MerchantItem"..index.."ItemButton"];
+
+			local bag = "MerchantFrame"
+			local slot = index
+
+			local itemID = C_MerchantFrame.GetBuybackItemID(index)
+			ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
+		end
+	end
+end
+
 hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
+hooksecurefunc("MerchantFrame_UpdateBuybackInfo", OnBuybackUpdate)
 
 local ignoreEvents = {
 	["APPEARANCE_SEARCH_UPDATED"] = {},
@@ -1543,7 +1646,7 @@ function eventFrame:PLAYER_LOGIN(...)
 	if DEBUG_ENABLED then
 		eventFrame:RegisterAllEvents()
 	else
-		eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
+		-- eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
 		eventFrame:RegisterEvent "BAG_OPEN"
 		eventFrame:RegisterEvent "BAG_UPDATE"
 		eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
@@ -1574,8 +1677,12 @@ local function RefreshItems()
 	cachedBinding = {}
 	cachedIsDressable = {}
 
-	if MerchantFrame:IsShown() then
-		OnMerchantUpdate()
+	if MerchantFrame:IsShown() then 
+		if MerchantFrame.selectedTab == 1 then
+			OnMerchantUpdate()
+		else
+			OnBuybackUpdate()
+		end
 	end
 
 	if AuctionFrame and AuctionFrame:IsShown() then
@@ -1667,7 +1774,7 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
         		-- I've seen it at merchants so far.  I'm assuming that
         		-- these requests will ultimately result in yet another
         		-- GET_ITEM_INFO_RECEIVED event as that seems to be the case.
-				local itemName = GetItemInfoLocal(slotData.bag, slotData.slot)
+				local itemName = GetItemInfoLocal(itemID, slotData.bag, slotData.slot)
 				local itemLink = GetItemLinkLocal(slotData.bag, slotData.slot)
 
 				if itemLink and itemName then
@@ -1697,16 +1804,18 @@ function eventFrame:EQUIPMENT_SETS_CHANGED()
 end
 
 function eventFrame:BANKFRAME_OPENED()
-	RefreshMainBank()
+	-- RefreshMainBank()
 end
 
-function eventFrame:PLAYERBANKSLOTS_CHANGED(slot, arg2)
-	if ( slot <= NUM_BANKGENERIC_SLOTS ) then
-		OnBankItemUpdate(BankSlotsFrame["Item"..slot]);
-	else
-		OnBankItemUpdate(BankSlotsFrame["Bag"..(slot-NUM_BANKGENERIC_SLOTS)]);
-	end
-end
+-- Turning this off for now as I made fixes for the container hook and don't
+-- need to do this twice.  Keeping around for a bit just in case.
+-- function eventFrame:PLAYERBANKSLOTS_CHANGED(slot, arg2)
+-- 	if ( slot <= NUM_BANKGENERIC_SLOTS ) then
+-- 		OnBankItemUpdate(BankSlotsFrame["Item"..slot]);
+-- 	else
+-- 		OnBankItemUpdate(BankSlotsFrame["Bag"..(slot-NUM_BANKGENERIC_SLOTS)]);
+-- 	end
+-- end
 
 local function OnLootFrameUpdateButton(index)
 	local numLootItems = LootFrame.numLootItems;
