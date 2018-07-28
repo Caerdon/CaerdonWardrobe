@@ -45,18 +45,21 @@ local cachedBinding = {}
 local model = CreateFrame('DressUpModel')
 
 local function GetItemID(itemLink)
-	return tonumber(itemLink:match("item:(%d+)"))
+	return tonumber(itemLink:match("item:(%d+)") or itemLink:match("battlepet:(%d+)"))
 end
 
 local function IsPetLink(itemLink)
 	-- local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
 	-- return strsub(link, 1, 9) == "battlepet"
 	local isPet = false
-	local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 isCraftingReagent = GetItemInfo(itemLink)
 	if itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
 		isPet = true
+	elseif not itemClassID then
+		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
+		isPet = strsub(link, 1, 9) == "battlepet"
 	end
 
 	return isPet
@@ -64,32 +67,31 @@ end
 
 local function IsMountLink(itemLink)
 	local isMount = false
-	local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 isCraftingReagent = GetItemInfo(itemLink)
 	if itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_MOUNT then
 		isMount = true
-		-- local spellName, spellRank, spellID = GetItemSpell(itemLink)	
-		-- print(spellName .. ": " .. tostring(spellRank) .. ", " ..tostring(spellID))
-		-- print(itemLink .. ": " .. tostring(IsConsumableItem(itemLink)))
-		-- PickupItem(itemLink)
-		-- local infoType, item_id, link, index = GetCursorInfo()
-		-- PickupItem(nil)
-		-- local _, _, _, linkType, spellID = strsplit(":|H", itemLink);
-		-- print(linkType)
-
-		-- local creatureName, spellID, icon, active, isUsable, sourceType, isFavorite, isFactionSpecific, faction, hideOnChar, isCollected, mountID = C_MountJournal.GetDisplayedMountInfo(link)
-		-- print(creatureName)
-		-- local printable = gsub(link, "\124", "\124\124");
-		-- print(printable)
-		-- print("infoType: " .. infoType .. ", ID: " .. item_id .. ", link: " .. link .. ", index: " .. tostring(index))
 	end
 
 	return isMount
 end
 
+local function IsToyLink(itemLink)
+	local isToy = false
+	local itemID = GetItemID(itemLink)
+	if itemID then
+		local itemIDInfo, toyName, icon = C_ToyBox.GetToyInfo(itemID)
+	  	if (itemIDInfo and toyName) then
+			isToy = true
+		end
+	end
+
+	return isToy
+end
+
 local function IsCollectibleLink(itemLink)
-	return IsPetLink(itemLink) or IsMountLink(itemLink)
+	return IsPetLink(itemLink) or IsMountLink(itemLink) or IsToyLink(itemLink)
 end
 
 local cachedIsDressable = {}
@@ -284,7 +286,8 @@ end
 
 local function GetItemLinkLocal(bag, slot)
 	if bag == "AuctionFrame" then
-		return GetAuctionItemLink("list", slot)
+		local _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hasAllInfo =  GetAuctionItemInfo("list", slot);
+		return hasAllInfo and GetAuctionItemLink("list", slot)
 	elseif bag == "MerchantFrame" then
 		if MerchantFrame.selectedTab == 1 then
 			return GetMerchantItemLink(slot)
@@ -327,7 +330,7 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	-- local isDebugItem = itemID == 1394
+	local isDebugItem = itemID == 2072
 
 	-- if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
 
@@ -365,6 +368,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		if isDebugItem then print("Processing binding") end
 		needsItem = true
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+		if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. slot) end
 		if bag == "AuctionFrame" then
 			scanTip:SetAuctionItem("list", slot)
 		elseif bag == "MerchantFrame" then
@@ -385,7 +389,6 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		elseif bag == "GroupLootFrame" then
 			scanTip:SetLootRollItem(slot.index)
 		else
-			if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. slot) end
 			scanTip:SetBagItem(bag, slot)
 		   	if not isCollectionItem then
 				shouldCheckEquipmentSet = true
@@ -469,8 +472,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 	  	local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
 	  	local needsCollectionItem = true
-	    if isDebugItem then print('Scan Tip Lines: ' .. tostring(scanTip:NumLines())) end
-		for lineIndex = 1, scanTip:NumLines() do
+	  	local numLines = scanTip:NumLines()
+	    if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
+		for lineIndex = 1, numLines do
 			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
 			if lineText then
 				-- TODO: Look at switching to GetItemSpell
@@ -502,12 +506,28 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			end
 		end
 
-		if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
-		if isCollectionItem and needsCollectionItem then
-			needsItem = true
-		end
 
 		if not shouldRetry then
+			if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
+
+			if isCollectionItem then
+				if numLines == 0 and IsPetLink(itemLink) then
+					local numCollected = C_PetJournal.GetNumCollectedInfo(itemID)
+					if numCollected and numCollected > 0 then				
+						if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
+						needsItem = false
+					else
+						if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
+						needsItem = true
+					end
+				elseif needsCollectionItem then
+					if isDebugItem then print("Collection Item Needed: " .. itemLink .. ", " .. tostring(owned) .. ", " .. tostring(numCollected)) end
+					needsItem = true
+				else
+					if isDebugItem then print("Not needed collection: " .. itemLink) end
+				end
+			end
+
 			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup, isCompletionistItem = isCompletionistItem }
 		end
 	end
@@ -1093,7 +1113,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 	local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 
-	itemLink = GetItemLinkLocal(bag, slot)
+	local itemLink = GetItemLinkLocal(bag, slot)
 	if bag == "EncounterJournal" and not itemLink then
 		return
 	end
@@ -1114,7 +1134,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
-   	if IsPetLink(itemLink) or IsMountLink(itemLink) then
+   	if IsCollectibleLink(itemLink) then
    		shouldRetry = false
    	else
 		appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
@@ -1181,15 +1201,18 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 		end
 	elseif needsItem then
-		if ((canBeSource and isDressable) or IsCollectibleLink(itemLink)) and not shouldRetry then
+		if ((canBeSource and isDressable) or IsMountLink(itemLink)) and not shouldRetry then
 			local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
 			local playerLevel = UnitLevel("player")
 
-			if playerLevel >= reqLevel then
+			if not reqLevel or playerLevel >= reqLevel then
 				mogStatus = "own"
 			else
+				print(itemLink .. ": " .. tostring(reqLevel))
 				mogStatus = "other"
 			end
+		elseif IsPetLink(itemLink) or IsToyLink(itemLink) then
+			mogStatus = "own"
 		end
 	else
 		if canBeSource then
@@ -1219,18 +1242,6 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				-- TODO: If I can ever figure out how to process pets in the MerchantFrame
 			else
 			end
-		end
-
-		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
-		if ( strsub(link, 1, 9) == "battlepet" ) then
-			local _, speciesID, level, breedQuality, maxHealth, power, speed, battlePetID = strsplit(":", link)
-			-- local _, battlepetID = strsplit(":", itemLink)
-			-- C_PetJournal.GetNumCollectedInfo(battlepetID) > 0	
-			local owned = C_PetJournal.GetOwnedBattlePetString(speciesID);
-			if not owned then
-				-- local numOwned, maxAllowed = C_PetJournal.GetNumCollectedInfo(speciesID);
-				mogStatus = "own"
-			end	
 		end
 
 		-- Hide anything that doesn't match
@@ -1434,16 +1445,27 @@ local function OnAuctionBrowseUpdate()
 		local index = auctionIndex + (NUM_AUCTION_ITEMS_PER_PAGE * AuctionFrameBrowse.page);
 		local buttonName = "BrowseButton"..i.."Item";
 		local button = _G[buttonName];
-		local name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemID, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
 
-		local bag = "AuctionFrame"
-		local slot = auctionIndex
+		local numBatchAuctions, totalAuctions = GetNumAuctionItems("list");
+		local shouldHide = index > (numBatchAuctions + (NUM_AUCTION_ITEMS_PER_PAGE * AuctionFrameBrowse.page));
+		if ( not shouldHide ) then
+			name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemId, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
+			
+			if ( not hasAllInfo ) then --Bug  145328
+				shouldHide = true;
+			end
+		end
 
-		local itemLink = GetAuctionItemLink("list", auctionIndex)
-		if(itemLink) then
-			local itemID = GetItemID(itemLink)
-			if itemID and button then
-				ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false, showSellables=false })
+		if not shouldHide then
+			local bag = "AuctionFrame"
+			local slot = auctionIndex
+
+			local itemLink = GetAuctionItemLink("list", auctionIndex)
+			if(itemLink) then
+				local itemID = GetItemID(itemLink)
+				if itemID and button then
+					ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false, showSellables=false })
+				end
 			end
 		end
 	end
