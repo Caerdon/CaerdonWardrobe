@@ -1,9 +1,9 @@
 ## Interface: 80000
 ## X-Compatible-With: 80000
 ## Title: Caerdon Wardrobe
-## Notes: Shows BOE / BOA, openable, and unlearned pets and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
+## Notes: Shows BOE / BOA, openable, and unlearned pets, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v1.2.0
+## Version: v1.3.0
 ## SavedVariables: CaerdonWardrobeConfig
 
 Localization.lua

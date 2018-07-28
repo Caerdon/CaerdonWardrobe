@@ -48,6 +48,50 @@ local function GetItemID(itemLink)
 	return tonumber(itemLink:match("item:(%d+)"))
 end
 
+local function IsPetLink(itemLink)
+	-- local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
+	-- return strsub(link, 1, 9) == "battlepet"
+	local isPet = false
+	local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+isCraftingReagent = GetItemInfo(itemLink)
+	if itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
+		isPet = true
+	end
+
+	return isPet
+end
+
+local function IsMountLink(itemLink)
+	local isMount = false
+	local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+isCraftingReagent = GetItemInfo(itemLink)
+	if itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_MOUNT then
+		isMount = true
+		-- local spellName, spellRank, spellID = GetItemSpell(itemLink)	
+		-- print(spellName .. ": " .. tostring(spellRank) .. ", " ..tostring(spellID))
+		-- print(itemLink .. ": " .. tostring(IsConsumableItem(itemLink)))
+		-- PickupItem(itemLink)
+		-- local infoType, item_id, link, index = GetCursorInfo()
+		-- PickupItem(nil)
+		-- local _, _, _, linkType, spellID = strsplit(":|H", itemLink);
+		-- print(linkType)
+
+		-- local creatureName, spellID, icon, active, isUsable, sourceType, isFavorite, isFactionSpecific, faction, hideOnChar, isCollected, mountID = C_MountJournal.GetDisplayedMountInfo(link)
+		-- print(creatureName)
+		-- local printable = gsub(link, "\124", "\124\124");
+		-- print(printable)
+		-- print("infoType: " .. infoType .. ", ID: " .. item_id .. ", link: " .. link .. ", index: " .. tostring(index))
+	end
+
+	return isMount
+end
+
+local function IsCollectibleLink(itemLink)
+	return IsPetLink(itemLink) or IsMountLink(itemLink)
+end
+
 local cachedIsDressable = {}
 local function IsDressableItemCheck(itemID, itemLink)
 	local isDressable = true
@@ -283,9 +327,9 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	-- local isDebugItem = itemID == 121310
+	-- local isDebugItem = itemID == 1394
 
-	if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
+	-- if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
 
 	local itemKey = GetItemKey(bag, slot, itemLink)
 
@@ -295,8 +339,19 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
     local isInEquipmentSet = false
     local isBindOnPickup = false
     local isCompletionistItem = false
-    local isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
+    local isDressable, shouldRetry
+
+    local isCollectionItem = IsCollectibleLink(itemLink)
+
     local shouldCheckEquipmentSet = false
+
+   	if isCollectionItem then
+		isDressable = false
+		shouldRetry = false
+	else
+	    isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
+	end
+
 
 	if binding then
 		if isDebugItem then print("Using cached binding: " .. tostring(binding.bindingText)) end
@@ -320,7 +375,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			end
 		elseif bag == BANK_CONTAINER then
 			scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
-			shouldCheckEquipmentSet = true
+		   	if not isCollectionItem then
+				shouldCheckEquipmentSet = true
+			end
 		elseif bag == "GuildBankFrame" then
 			scanTip:SetGuildBankItem(slot.tab, slot.index)
 		elseif bag == "LootFrame" then
@@ -330,7 +387,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		else
 			if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. slot) end
 			scanTip:SetBagItem(bag, slot)
-			shouldCheckEquipmentSet = true
+		   	if not isCollectionItem then
+				shouldCheckEquipmentSet = true
+			end
 		end
 
 		if shouldCheckEquipmentSet then
@@ -408,6 +467,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	    	needsItem = false
 	    end
 
+	  	local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
+	  	local needsCollectionItem = true
 	    if isDebugItem then print('Scan Tip Lines: ' .. tostring(scanTip:NumLines())) end
 		for lineIndex = 1, scanTip:NumLines() do
 			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
@@ -416,7 +477,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 				if isDebugItem then print ("Tip: " .. lineText) end
 				if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect or belongs to a set
 					hasUse = true
-					break
+					-- break
 				end
 
 				if not bindingText then
@@ -435,8 +496,15 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						needsItem = false
 					end
 					break
+				elseif lineText == ITEM_SPELL_KNOWN or strmatch(lineText, PET_KNOWN) then
+					needsCollectionItem = false
 				end
 			end
+		end
+
+		if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
+		if isCollectionItem and needsCollectionItem then
+			needsItem = true
 		end
 
 		if not shouldRetry then
@@ -751,6 +819,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 				end
 
 				mogAnim = nil
+				button.mogAnim = nil
 				button.isWaitingIcon = false
 			end
 
@@ -1029,24 +1098,30 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
- 		-- local printable = gsub(itemLink, "\124", "\124\124");
+ 	-- 	local printable = gsub(itemLink, "\124", "\124\124");
 		-- local itemString = string.match(itemLink, "item[%-?%d:]+")
 		-- print(itemLink .. ": " .. itemID .. ", printable: " .. tostring(printable))
 
   	-- if itemID == 82082 then
    		-- DebugItem(itemID, itemLink, bag, slot)
    	-- end
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry
+	local appearanceID, isCollected, sourceID
 
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
+	bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
 		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
-	local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
-	if shouldRetry then
-		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
-		return
+   	if IsPetLink(itemLink) or IsMountLink(itemLink) then
+   		shouldRetry = false
+   	else
+		appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
+		if shouldRetry then
+			QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+			return
+		end
 	end
 
 	if appearanceID then
@@ -1106,7 +1181,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 
 		end
 	elseif needsItem then
-		if canBeSource and isDressable and not shouldRetry then
+		if ((canBeSource and isDressable) or IsCollectibleLink(itemLink)) and not shouldRetry then
 			local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
 			local playerLevel = UnitLevel("player")
 
@@ -1128,10 +1203,6 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	    if(IsBankOrBags(bag)) then	    	
 	    	local containerID = bag
 	    	local containerSlot = slot
-	    	if(bag == 'BankFrame') then
-	    		containerID = GetBankContainer(button)
-	    		containerSlot = button:GetID();
-	    	end
 
 			local texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot);
 			if lootable then
@@ -1153,6 +1224,8 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
 		if ( strsub(link, 1, 9) == "battlepet" ) then
 			local _, speciesID, level, breedQuality, maxHealth, power, speed, battlePetID = strsplit(":", link)
+			-- local _, battlepetID = strsplit(":", itemLink)
+			-- C_PetJournal.GetNumCollectedInfo(battlepetID) > 0	
 			local owned = C_PetJournal.GetOwnedBattlePetString(speciesID);
 			if not owned then
 				-- local numOwned, maxAllowed = C_PetJournal.GetNumCollectedInfo(speciesID);
@@ -1200,10 +1273,11 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 			waitItem[tostring(bag)] = waitBag
 		end
 
-		local itemName = GetItemInfoLocal(itemID, bag, slot)
+		-- Turning off item name check for now as it seems unnecessary - revisit if problems
+		-- local itemName = GetItemInfoLocal(itemID, bag, slot)
 		local itemLink = GetItemLinkLocal(bag, slot)
-
-		if itemName == nil or itemLink == nil then
+		if itemLink == nil then
+		-- if itemName == nil or itemLink == nil then
 			SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, itemID)
 			waitBag[tostring(slot)] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
@@ -1774,10 +1848,12 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
         		-- I've seen it at merchants so far.  I'm assuming that
         		-- these requests will ultimately result in yet another
         		-- GET_ITEM_INFO_RECEIVED event as that seems to be the case.
-				local itemName = GetItemInfoLocal(itemID, slotData.bag, slotData.slot)
+				-- Turning off item name check for now as it seems unnecessary - revisit if problems
+				-- local itemName = GetItemInfoLocal(itemID, slotData.bag, slotData.slot)
 				local itemLink = GetItemLinkLocal(slotData.bag, slotData.slot)
 
-				if itemLink and itemName then
+				if itemLink then
+				-- if itemLink and itemName then
 					ProcessItem(itemID, slotData.bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
 				else
 					ProcessOrWaitItem(itemID, slotData.bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
