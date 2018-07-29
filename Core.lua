@@ -7,6 +7,18 @@ local isBagAddon = false
 
 CaerdonWardrobe = {}
 
+StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
+  text = "It looks like multiple bag addons are currently running! I can't guarantee Caerdon Wardrobe will work properly in this case.  You should only have one bag addon enabled!",
+  button1 = "Got it!",
+  OnAccept = function()
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,  -- avoid some UI taint, see http://www.wowace.com/announcements/how-to-avoid-some-ui-taint/
+}		
+
+
 local bindTextTable = {
 	[ITEM_ACCOUNTBOUND]        = L["BoA"],
 	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
@@ -1027,11 +1039,6 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 	bindsOnText:SetText(bindingText)
 end
 
-function CaerdonWardrobe:ResetButton(button)
-	SetItemButtonMogStatus(button, nil)
-	SetItemButtonBindType(button, nil)
-end
-
 local itemQueue = {}
 local function QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 	local itemKey = GetItemKey(bag, slot, itemLink)
@@ -1322,12 +1329,36 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 	end
 end
 
-function CaerdonWardrobe:ProcessItem(itemID, bag, slot, button, options, itemProcessed)
+function CaerdonWardrobe:SetBagAddon(options)
+	if isBagAddon then
+		StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS")
+	end
+
+	isBagAddon = true
+end
+
+function CaerdonWardrobe:ClearButton(button)
+	SetItemButtonMogStatus(button, nil)
+	SetItemButtonBindType(button, nil)
+end
+
+function CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options, itemProcessed)
 	ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
 end
 
+function CaerdonWardrobe:ResetButton(button)
+	-- Deprecating to merge my other bag extensions
+	-- Moved to CaerdonWardrobe:ClearButton
+end
+
+function CaerdonWardrobe:ProcessItem(itemID, bag, slot, button, options, itemProcessed)
+	-- Deprecating to merge my other bag extensions
+	-- Moved to CaerdonWardrobe:UpdateButton
+end
+
 function CaerdonWardrobe:RegisterBagAddon(options)
-	isBagAddon = true
+	-- Deprecating to merge my other bag extensions
+	-- Moved to CaerdonWardrobe:SetBagAddon
 end
 
 local function OnContainerUpdate(self, asyncUpdate)
