@@ -49,13 +49,15 @@ local function GetItemID(itemLink)
 end
 
 local function IsPetLink(itemLink)
-	-- local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
-	-- return strsub(link, 1, 9) == "battlepet"
 	local isPet = false
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 isCraftingReagent = GetItemInfo(itemLink)
-	if itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
+
+	local itemID = GetItemID(itemLink)
+	if itemID == 82800 then
+		isPet = true -- probably at the guild bank
+	elseif itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
 		isPet = true
 	elseif not itemClassID then
 		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
@@ -330,7 +332,7 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	local isDebugItem = itemID == 2072
+	-- local isDebugItem = itemID == 82800
 
 	-- if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
 
@@ -368,7 +370,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		if isDebugItem then print("Processing binding") end
 		needsItem = true
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
-		if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. slot) end
+		if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. tostring(slot)) end
 		if bag == "AuctionFrame" then
 			scanTip:SetAuctionItem("list", slot)
 		elseif bag == "MerchantFrame" then
@@ -512,13 +514,21 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 			if isCollectionItem then
 				if numLines == 0 and IsPetLink(itemLink) then
-					local numCollected = C_PetJournal.GetNumCollectedInfo(itemID)
-					if numCollected and numCollected > 0 then				
-						if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
-						needsItem = false
-					else
-						if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
-						needsItem = true
+					local petID = GetItemID(itemLink)
+					if petID then
+						if petID ~= 82800 then -- generic pet cage
+							local numCollected = C_PetJournal.GetNumCollectedInfo(petID)
+							if numCollected and numCollected > 0 then				
+								if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
+								needsItem = false
+							else
+								if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
+								needsItem = true
+							end
+						else
+							-- TODO: Can we do something here?
+							needsItem = false
+						end
 					end
 				elseif needsCollectionItem then
 					if isDebugItem then print("Collection Item Needed: " .. itemLink .. ", " .. tostring(owned) .. ", " .. tostring(numCollected)) end
@@ -1042,6 +1052,13 @@ end
 
 local function DebugItem(itemID, itemLink, bag, slot)
 
+	if itemLink then
+		local testID = GetItemID(itemLink)
+		if testID ~= itemID then
+			DebugItem(testID, itemLink, bag, slot)
+		end
+	end
+
 	print ('=============================================')
 	print ('Item: ' .. itemID, ' ItemLink: ' .. itemLink)
 
@@ -1084,9 +1101,10 @@ local function DebugItem(itemID, itemLink, bag, slot)
 	local sourceID, shouldRetry = GetItemSource(itemID, itemLink)
 	print ('Source ID: ' .. tostring(sourceID) .. ', Should Retry: ' .. tostring(shouldRetry))
 
-	local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
-	print ('canCollect: ' .. tostring(canCollect) .. ', matchedSource: ' .. tostring(matchedSource) .. ', shouldRetry: ' .. tostring(shouldRetry))
-
+	if appearanceID then
+		local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+		print ('canCollect: ' .. tostring(canCollect) .. ', matchedSource: ' .. tostring(matchedSource) .. ', shouldRetry: ' .. tostring(shouldRetry))
+	end
 end
 
 local function GetBankContainer(button)
@@ -1118,11 +1136,14 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
- 	-- 	local printable = gsub(itemLink, "\124", "\124\124");
+	-- print(itemLink .. ": " .. itemID)
+
+ 		-- local printable = gsub(itemLink, "\124", "\124\124");
+ 		-- print(printable)
 		-- local itemString = string.match(itemLink, "item[%-?%d:]+")
 		-- print(itemLink .. ": " .. itemID .. ", printable: " .. tostring(printable))
 
-  	-- if itemID == 82082 then
+  	-- if itemID == 82800 then
    		-- DebugItem(itemID, itemLink, bag, slot)
    	-- end
 	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry
