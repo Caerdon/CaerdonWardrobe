@@ -1331,7 +1331,8 @@ end
 
 function CaerdonWardrobe:SetBagAddon(options)
 	if isBagAddon then
-		StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS")
+		-- Disabling for now until I figure out ElvUI
+		-- StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS")
 	end
 
 	isBagAddon = true
