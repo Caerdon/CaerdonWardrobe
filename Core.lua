@@ -425,51 +425,52 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 							name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored = C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
 
 			        local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
+			        if equipLocations then
+						for locationIndex=INVSLOT_FIRST_EQUIPPED , INVSLOT_LAST_EQUIPPED do
+							local location = equipLocations[locationIndex]
+							if location ~= nil then
+							    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
+							    if isDebugItem then
+							    	print("isPlayer: " .. tostring(isPlayer) .. ", isBank: " .. tostring(isBank) .. ", isBags: " .. tostring(isBags) .. ", isVoidStorage: " .. tostring(isVoidStorage) .. ", equipSlot: " .. tostring(equipSlot) .. ", equipBag: " .. tostring(equipBag) .. ", equipTab: " .. tostring(equipTab) .. ", equipVoidSlot: " .. tostring(equipVoidSlot))
+							    end
+							    equipSlot = tonumber(equipSlot)
+							    equipBag = tonumber(equipBag)
 
-							for locationIndex=INVSLOT_FIRST_EQUIPPED , INVSLOT_LAST_EQUIPPED do
-								local location = equipLocations[locationIndex]
-								if location ~= nil then
-								    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
-								    if isDebugItem then
-								    	print("isPlayer: " .. tostring(isPlayer) .. ", isBank: " .. tostring(isBank) .. ", isBags: " .. tostring(isBags) .. ", isVoidStorage: " .. tostring(isVoidStorage) .. ", equipSlot: " .. tostring(equipSlot) .. ", equipBag: " .. tostring(equipBag) .. ", equipTab: " .. tostring(equipTab) .. ", equipVoidSlot: " .. tostring(equipVoidSlot))
-								    end
-								    equipSlot = tonumber(equipSlot)
-								    equipBag = tonumber(equipBag)
+							    if isVoidStorage then
+							    	-- Do nothing for now
+							    elseif isBank and not isBags then -- player or bank
+							    	if bag == BANK_CONTAINER and BankButtonIDToInvSlotID(slot) == equipSlot then
+							    		needsItem = false
+										if bindingText then
+											bindingText = "*" .. bindingText
+											isBindingTextDone = true
 
-								    if isVoidStorage then
-								    	-- Do nothing for now
-								    elseif isBank and not isBags then -- player or bank
-								    	if bag == BANK_CONTAINER and BankButtonIDToInvSlotID(slot) == equipSlot then
-								    		needsItem = false
-											if bindingText then
-												bindingText = "*" .. bindingText
-												isBindingTextDone = true
-
-												break
-											else
-												bindingText = name
-												isInEquipmentSet = true
-											end
-								    	end
-								    else
-									    if equipSlot == slot and equipBag == bag then
-											needsItem = false
-											if bindingText then
-												bindingText = "*" .. bindingText
-												isBindingTextDone = true
-												break
-											else
-												bindingText = name
-												isInEquipmentSet = true
-											end
+											break
+										else
+											bindingText = name
+											isInEquipmentSet = true
+										end
+							    	end
+							    else
+								    if equipSlot == slot and equipBag == bag then
+										needsItem = false
+										if bindingText then
+											bindingText = "*" .. bindingText
+											isBindingTextDone = true
+											break
+										else
+											bindingText = name
+											isInEquipmentSet = true
 										end
 									end
 								end
 							end
+						end
 
-							if isBindingTextDone then
-								break
-							end
+						if isBindingTextDone then
+							break
+						end
+					end
 				end
 			end
 		end

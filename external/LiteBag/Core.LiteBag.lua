@@ -24,33 +24,11 @@ if Version then
 		CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
 	end
 
-	local function OnEvent(self, event, ...)
-		local handler = self[event]
-		if(handler) then
-			handler(self, ...)
-		end
-	end
-
-	local eventFrame = CreateFrame("FRAME")
-	eventFrame:RegisterEvent "ADDON_LOADED"
-	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-	eventFrame:SetScript("OnEvent", OnEvent)
-
-	local function RefreshItems()
-	    for i, b in ipairs(LiteBagInventoryPanel.itemButtons) do
-	        if i > LiteBagInventoryPanel.size then return end
-	        LiteBagItemButton_Update(b)
-	    end
-
-	end
-
-	function eventFrame:ADDON_LOADED(name)
-	end
-
-	function eventFrame:TRANSMOG_COLLECTION_UPDATED()
-		RefreshItems()
-	end
-
 	hooksecurefunc('LiteBagItemButton_Update', UpdateButton)
+    hooksecurefunc('LiteBagPanel_OnShow',
+            function (f) f:RegisterEvent("TRANSMOG_COLLECTION_UPDATED") end
+        )
+    hooksecurefunc('LiteBagPanel_OnHide',
+            function (f) f:UnregisterEvent("TRANSMOG_COLLECTION_UPDATED") end
+        )
 end
-
