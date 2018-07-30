@@ -51,12 +51,17 @@ local InventorySlots = {
     ['INVTYPE_TABARD'] = INVSLOT_TABARD
 }
 
-local scanTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
+local mainTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
+mainTip.ItemTooltip = CreateFrame("FRAME", "CaerdonWardrobeGameTooltipChild", nil, "InternalEmbeddedItemTooltipTemplate")
+mainTip.ItemTooltip.Tooltip.shoppingTooltips = { WorldMapCompareTooltip1, WorldMapCompareTooltip2 }
+
 local cachedBinding = {}
 
 local model = CreateFrame('DressUpModel')
 
 local function GetItemID(itemLink)
+	-- local printable = gsub(itemLink, "\124", "\124\124");
+	-- print(printable)
 	return tonumber(itemLink:match("item:(%d+)") or itemLink:match("battlepet:(%d+)"))
 end
 
@@ -317,10 +322,16 @@ local function GetItemLinkLocal(bag, slot)
 		return slot.link
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		return slot.link
+	elseif bag == "QuestButton" then
+		local itemID = slot.itemID
+		local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+		isCraftingReagent = GetItemInfo(itemID)
+		return itemLink
 	else
-    if bag then
-      return GetContainerItemLink(bag, slot)
-    end
+	    if bag then
+	      return GetContainerItemLink(bag, slot)
+	    end
 	end
 end
 
@@ -332,6 +343,8 @@ local function GetItemKey(bag, slot, itemLink)
 		itemKey = itemLink .. slot.tab .. slot.index
 	elseif bag == "EncounterJournal" then
 		itemKey = itemLink .. bag .. slot.index
+	elseif bag == "QuestButton" then
+		itemKey = itemLink .. bag
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		itemKey = itemLink
 	else
@@ -344,10 +357,11 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	-- local isDebugItem = itemID == 82800
+	-- local isDebugItem = itemID == 140261
 
 	-- if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
 
+	local scanTip = mainTip
 	local itemKey = GetItemKey(bag, slot, itemLink)
 
 	local binding = cachedBinding[itemKey]
@@ -402,6 +416,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			scanTip:SetLootItem(slot.index)
 		elseif bag == "GroupLootFrame" then
 			scanTip:SetLootRollItem(slot.index)
+		elseif bag == "QuestButton" then
+			GameTooltip_AddQuestRewardsToTooltip(scanTip, slot.questID)
+			scanTip = scanTip.ItemTooltip.Tooltip
 		else
 			scanTip:SetBagItem(bag, slot)
 		   	if not isCollectionItem then
@@ -490,7 +507,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	  	local numLines = scanTip:NumLines()
 	    if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
 		for lineIndex = 1, numLines do
-			local lineText = _G["CaerdonWardrobeGameTooltipTextLeft" .. lineIndex]:GetText()
+			local scanName = scanTip:GetName()
+			local lineText = _G[scanName .. "TextLeft" .. lineIndex]:GetText()
 			if lineText then
 				-- TODO: Look at switching to GetItemSpell
 				if isDebugItem then print ("Tip: " .. lineText) end
@@ -531,7 +549,10 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					if petID then
 						if petID ~= 82800 then -- generic pet cage
 							local numCollected = C_PetJournal.GetNumCollectedInfo(petID)
-							if numCollected and numCollected > 0 then				
+							if numCollected == nil then
+								-- TODO: Not sure what else to do here
+								needsItem = false
+							elseif numCollected > 0 then				
 								if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
 								needsItem = false
 							else
@@ -551,7 +572,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 				end
 			end
 
-			cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup, isCompletionistItem = isCompletionistItem }
+			-- cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup, isCompletionistItem = isCompletionistItem }
 		end
 	end
 
@@ -646,6 +667,7 @@ local function IsBankOrBags(bag)
 	   bag ~= "MerchantFrame" and 
 	   bag ~= "GuildBankFrame" and
 	   bag ~= "EncounterJournal" and
+	   bag ~= "QuestButton" and
 	   bag ~= "LootFrame" and
 	   bag ~= "GroupLootFrame" then
 		isBankOrBags = true
@@ -776,6 +798,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
 	local iconPosition, showSellables, isSellable
+	local iconSize = 40
 	local otherIcon = "Interface\\Store\\category-icon-placeholder"
 	local otherIconSize = 40
 	local otherIconOffset = 0
@@ -784,6 +807,9 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	if options then 
 		showSellables = options.showSellables
 		isSellable = options.isSellable
+		if options.iconSize then
+			iconSize = options.iconSize
+		end
 		if options.iconOffset then
 			iconOffset = options.iconOffset
 			otherIconOffset = iconOffset
@@ -795,6 +821,8 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 
 		if options.otherIconSize then
 			otherIconSize = options.otherIconSize
+		else
+			otherIconSize = iconSize
 		end
 
 		if options.otherIconOffset then
@@ -824,7 +852,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 
 	if not mogStatus then
 		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
-		SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 		button.mogStatus = mogStatus
 	end
 
@@ -903,12 +931,12 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		alpha = 0.9
 		mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
 	elseif status == "openable" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
-			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
+			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-free")
 			mogStatus:SetVertexColor(1, 1, 1)
 	elseif status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
-			SetIconPositionAndSize(mogStatus, iconPosition, 15, 40, iconOffset)
+			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 			mogStatus:SetVertexColor(1, 1, 1)
 			if status == "ownPlus" then
@@ -1186,7 +1214,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 			else
 				if bindingStatus and needsItem then
 					mogStatus = "other"
-				elseif bag == "EncounterJournal" and needsItem then
+				elseif (bag == "EncounterJournal" or bag == "QuestButton") and needsItem then
 					mogStatus = "other"
 				elseif (bag == "LootFrame" or bag == "GroupLootFrame") and needsItem and not isBindOnPickup then
 					mogStatus = "other"
@@ -1329,20 +1357,36 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 	end
 end
 
-local registeredAddons = nil
+local registeredAddons = {}
+local registeredBagAddons = {}
 
-function CaerdonWardrobe:RegisterAddon(name, options)
-	if registeredAddons then
-		registeredAddons = registeredAddons .. ", " .. name
-	else 
-		registeredAddons = name
+function CaerdonWardrobe:RegisterAddon(name, addonOptions)
+	local options = {
+		isBag = true	
+	}
+
+	if addonOptions then
+		for key, value in pairs(addonOptions) do
+			options[key] = value
+		end
 	end
 
-	if isBagAddon then
-		StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS", registeredAddons)
-	end
+	registeredAddons[name] = options
 
-	isBagAddon = true
+	if options.isBag then
+		registeredBagAddons[name] = options
+		if isBagAddon then
+			for key in pairs(registeredBagAddons) do
+				if addonList then
+					addonList = addonList .. ", " .. key
+				else
+					addonList = key
+				end	
+			end
+			StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS", addonList)
+		end
+		isBagAddon = true
+	end
 end
 
 function CaerdonWardrobe:ClearButton(button)
