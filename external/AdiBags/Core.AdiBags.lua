@@ -1,17 +1,16 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-local Version, MinVersion = nil, '1.9.9'
-if select(4, GetAddOnInfo('AdiBags')) then
-	Version = GetAddOnMetadata('AdiBags', 'Version')
-	CaerdonWardrobe:SetBagAddon()
+local addonName = 'AdiBags'
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+	Version = GetAddOnMetadata(addonName, 'Version')
+	CaerdonWardrobe:RegisterAddon(addonName)
 end
 
 if Version then
-	local AdiBags, mod, CaerdonWardrobeAdiBagsFrame
-	AdiBags = LibStub('AceAddon-3.0'):GetAddon('AdiBags')
-
-	mod = AdiBags:NewModule("CaerdonWardrobeAdiBagsUpdate", "ABEvent-1.0")
+	local AdiBags = LibStub('AceAddon-3.0'):GetAddon('AdiBags')
+	local mod = AdiBags:NewModule("CaerdonWardrobeAdiBagsUpdate", "ABEvent-1.0")
 	mod.uiName = L["Caerdon Wardrobe"]
 	mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
 
@@ -94,24 +93,19 @@ if Version then
 		end
 	end
 
-	CaerdonWardrobeAdiBagsFrame = CreateFrame("FRAME")
-	CaerdonWardrobeAdiBagsFrame:RegisterEvent "ADDON_LOADED"
-	CaerdonWardrobeAdiBagsFrame:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
-	CaerdonWardrobeAdiBagsFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-	CaerdonWardrobeAdiBagsFrame:SetScript("OnEvent", OnEvent)
+	local eventFrame = CreateFrame("FRAME")
+	eventFrame:RegisterEvent "ADDON_LOADED"
+	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+	eventFrame:SetScript("OnEvent", OnEvent)
 
 	local function RefreshItems()
 		mod:SendMessage('AdiBags_FiltersChanged')
 	end
 
-	function CaerdonWardrobeAdiBagsFrame:ADDON_LOADED(name)
+	function eventFrame:ADDON_LOADED(name)
 	end
 
-	function CaerdonWardrobeAdiBagsFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
-		-- RefreshItems()
-	end
-
-	function CaerdonWardrobeAdiBagsFrame:TRANSMOG_COLLECTION_UPDATED()
+	function eventFrame:TRANSMOG_COLLECTION_UPDATED()
 		RefreshItems()
 	end
 end

@@ -1,10 +1,11 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-local Version, MinVersion = nil, '8.0.2'
-if select(4, GetAddOnInfo('BaudBag')) then
-    Version = GetAddOnMetadata('BaudBag', 'Version')
-    CaerdonWardrobe:SetBagAddon()
+local addonName = 'BaudBag'
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+    Version = GetAddOnMetadata(addonName, 'Version')
+    CaerdonWardrobe:RegisterAddon(addonName)
 end
 
 if Version then
@@ -45,9 +46,9 @@ if Version then
         end
     end
 
-    local CaerdonWardrobeBaudBagFrame = CreateFrame("FRAME")
-    CaerdonWardrobeBaudBagFrame:RegisterEvent "ADDON_LOADED"
-    CaerdonWardrobeBaudBagFrame:SetScript("OnEvent", OnEvent)
+    local eventFrame = CreateFrame("FRAME")
+    eventFrame:RegisterEvent "ADDON_LOADED"
+    eventFrame:SetScript("OnEvent", OnEvent)
 
     hooksecurefunc(BaudBag, "ItemSlot_Updated", ItemSlotUpdated)
 
@@ -60,29 +61,29 @@ if Version then
         BaudUpdateJoinedBags()
     end
 
-    function CaerdonWardrobeBaudBagFrame:ADDON_LOADED(name)
+    function eventFrame:ADDON_LOADED(name)
         if IsLoggedIn() then
-            OnEvent(CaerdonWardrobeBaudBagFrame, "PLAYER_LOGIN")
+            OnEvent(eventFrame, "PLAYER_LOGIN")
         else
-            CaerdonWardrobeBaudBagFrame:RegisterEvent "PLAYER_LOGIN"
+            eventFrame:RegisterEvent "PLAYER_LOGIN"
         end
     end
 
-    function CaerdonWardrobeBaudBagFrame:PLAYER_LOGIN(...)
-        CaerdonWardrobeBaudBagFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-        CaerdonWardrobeBaudBagFrame:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_ADDED"
-        CaerdonWardrobeBaudBagFrame:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_REMOVED"
+    function eventFrame:PLAYER_LOGIN(...)
+        eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+        eventFrame:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_ADDED"
+        eventFrame:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_REMOVED"
     end
 
-    function CaerdonWardrobeBaudBagFrame:TRANSMOG_COLLECTION_UPDATED()
+    function eventFrame:TRANSMOG_COLLECTION_UPDATED()
         RefreshItems()
     end
 
-    function CaerdonWardrobeBaudBagFrame:TRANSMOG_COLLECTION_SOURCE_ADDED()
+    function eventFrame:TRANSMOG_COLLECTION_SOURCE_ADDED()
         RefreshItems()
     end
 
-    function CaerdonWardrobeBaudBagFrame:TRANSMOG_COLLECTION_SOURCE_REMOVED()
+    function eventFrame:TRANSMOG_COLLECTION_SOURCE_REMOVED()
         RefreshItems()
     end
 end

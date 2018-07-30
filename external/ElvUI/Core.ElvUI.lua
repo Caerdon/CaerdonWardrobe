@@ -1,16 +1,18 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
-local Version, MinVersion = nil, '10.75'
-local ElvUIBags
-if select(4, GetAddOnInfo('ElvUI')) then
-	Version = GetAddOnMetadata('ElvUI', 'Version')
-	ElvUIBags = ElvUI[1]:GetModule("Bags")
-	-- if ElvUIBags.enable then
-		CaerdonWardrobe:SetBagAddon()
-	-- end
+local Version = nil
+local bagsEnabled = false
+local addonName = 'ElvUI'
+if select(4, GetAddOnInfo(addonName)) then
+	Version = GetAddOnMetadata(addonName, 'Version')
+	if ElvUI[1].private.bags.enable then
+		CaerdonWardrobe:RegisterAddon(addonName)
+		bagsEnabled = true
+	end
 end
 
-if Version and ElvUIBags then
+if Version and bagsEnabled then
+	local ElvUIBags = ElvUI[1]:GetModule("Bags")
 
 	local function OnUpdateSlot(self, bagID, slotID)
 		if (self.Bags[bagID] and self.Bags[bagID].numSlots ~= GetContainerNumSlots(bagID)) or not self.Bags[bagID] or not self.Bags[bagID][slotID] then

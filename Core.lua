@@ -8,7 +8,7 @@ local isBagAddon = false
 CaerdonWardrobe = {}
 
 StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
-  text = "It looks like multiple bag addons are currently running! I can't guarantee Caerdon Wardrobe will work properly in this case.  You should only have one bag addon enabled!",
+  text = "It looks like multiple bag addons are currently running (%s)! I can't guarantee Caerdon Wardrobe will work properly in this case.  You should only have one bag addon enabled!",
   button1 = "Got it!",
   OnAccept = function()
   end,
@@ -1329,10 +1329,17 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 	end
 end
 
-function CaerdonWardrobe:SetBagAddon(options)
+local registeredAddons = nil
+
+function CaerdonWardrobe:RegisterAddon(name, options)
+	if registeredAddons then
+		registeredAddons = registeredAddons .. ", " .. name
+	else 
+		registeredAddons = name
+	end
+
 	if isBagAddon then
-		-- Disabling for now until I figure out ElvUI
-		-- StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS")
+		StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS", registeredAddons)
 	end
 
 	isBagAddon = true
@@ -1359,7 +1366,7 @@ end
 
 function CaerdonWardrobe:RegisterBagAddon(options)
 	-- Deprecating to merge my other bag extensions
-	-- Moved to CaerdonWardrobe:SetBagAddon
+	-- Moved to CaerdonWardrobe:RegisterAddon
 end
 
 local function OnContainerUpdate(self, asyncUpdate)

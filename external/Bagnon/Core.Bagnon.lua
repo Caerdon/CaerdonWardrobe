@@ -2,10 +2,11 @@ local isBagUpdateRequested = false
 local waitingOnBagUpdate = {}
 local atGuild = false
 
-local Version, MinVersion = nil, '8.0.0'
-if select(4, GetAddOnInfo('Bagnon')) then
-	Version = GetAddOnMetadata('Bagnon', 'Version')
-	CaerdonWardrobe:SetBagAddon()
+local addonName = 'Bagnon'
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+	Version = GetAddOnMetadata(addonName, 'Version')
+	CaerdonWardrobe:RegisterAddon(addonName)
 end
 
 if Version then
@@ -111,28 +112,28 @@ if Version then
 		hooksecurefunc(Bagnon.ItemSlot, "Update", OnUpdateSlot)
 	end
 
-	local CaerdonWardrobeBagnonFrame = CreateFrame("FRAME")
+	local eventFrame = CreateFrame("FRAME")
 
-	CaerdonWardrobeBagnonFrame:SetScript("OnEvent", OnEvent)
-	CaerdonWardrobeBagnonFrame:SetScript("OnUpdate", OnUpdate)
-	-- CaerdonWardrobeBagnonFrame:RegisterEvent("TRANSMOG_COLLECTION_ITEM_UPDATE")
+	eventFrame:SetScript("OnEvent", OnEvent)
+	eventFrame:SetScript("OnUpdate", OnUpdate)
+	-- eventFrame:RegisterEvent("TRANSMOG_COLLECTION_ITEM_UPDATE")
 
 	HookBagnon()
 
-	function CaerdonWardrobeBagnonFrame:ADDON_LOADED(name)
+	function eventFrame:ADDON_LOADED(name)
 	end
 
-	function CaerdonWardrobeBagnonFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
+	function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	    if Bagnon.sets then
 	        Bagnon:UpdateFrames()
 	    end
 	end
 
-	function CaerdonWardrobeBagnonFrame:GUILDBANKFRAME_OPENED()
+	function eventFrame:GUILDBANKFRAME_OPENED()
 		atGuild = true
 	end
 
-	function CaerdonWardrobeBagnonFrame:GUILDBANKFRAME_CLOSED()
+	function eventFrame:GUILDBANKFRAME_CLOSED()
 		atGuild = false
 	end
 

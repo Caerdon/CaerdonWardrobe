@@ -1,10 +1,11 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-local Version, MinVersion = nil, '3.08.05'
-if select(4, GetAddOnInfo('ArkInventory')) then
-	Version = GetAddOnMetadata('ArkInventory', 'Version')
-	CaerdonWardrobe:SetBagAddon()
+local addonName = 'ArkInventory'
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+	Version = GetAddOnMetadata(addonName, 'Version')
+	CaerdonWardrobe:RegisterAddon(addonName)
 end
 
 if Version then
@@ -57,7 +58,7 @@ if Version then
 	-- side effects I'm unaware of.
 	-- hooksecurefunc(ArkInventory, "SetItemButtonTexture", OnSetItemButtonTexture)
 
-	function OnFrameItemUpdate(loc_id, bag_id, slot_id)
+	local function OnFrameItemUpdate(loc_id, bag_id, slot_id)
 		local framename = ArkInventory.ContainerItemNameGet(loc_id, bag_id, slot_id)
 		local frame = _G[framename]
 		if frame and not ArkInventory.Global.Location[loc_id].isOffline then
