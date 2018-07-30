@@ -3,7 +3,7 @@
 ## Title: Caerdon Wardrobe
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v1.6.0
+## Version: v1.6.1
 ## SavedVariables: CaerdonWardrobeConfig
 ## OptionalDeps: AdiBags, ArkInventory, Bagnon, BaudBag, cargBags_Nivaya, ElvUI, Inventorian, LiteBag
 Localization.lua
