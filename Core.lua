@@ -1236,7 +1236,6 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 			if not reqLevel or playerLevel >= reqLevel then
 				mogStatus = "own"
 			else
-				print(itemLink .. ": " .. tostring(reqLevel))
 				mogStatus = "other"
 			end
 		elseif IsPetLink(itemLink) or IsToyLink(itemLink) then
