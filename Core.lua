@@ -1018,8 +1018,12 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 	if CaerdonWardrobeConfig.Binding.Position == "BOTTOM" then
 		bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
 		if bindingStatus == L["BoA"] then
-			if button.count and button.count > 1 then
-				bindsOnText:SetPoint("BOTTOMRIGHT", 0, 15)
+			local offset = options.itemCountOffset or 15
+			if (button.count and button.count > 1) then
+				bindsOnText:SetPoint("BOTTOMRIGHT", 0, offset)
+				if(options.bindingScale) then
+					bindsOnText:SetScale(options.bindingScale)
+				end
 			end
 		end
 	elseif CaerdonWardrobeConfig.Binding.Position == "CENTER" then
