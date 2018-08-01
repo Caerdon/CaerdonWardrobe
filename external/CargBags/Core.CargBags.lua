@@ -15,12 +15,14 @@ StaticPopupDialogs["CAERDON_WARDROBE_CARGBAGS_NOT_SUPPORTED"] = {
 local addonName = 'cargBags_Nivaya'
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
-	Version = GetAddOnMetadata(addonName, 'Version')
-	if not Version then
-		Version = 'Unknown'
+	if IsAddOnLoaded(addonName) then
+		Version = GetAddOnMetadata(addonName, 'Version')
+		if not Version then
+			Version = 'Unknown'
+		end
+		StaticPopup_Show("CAERDON_WARDROBE_CARGBAGS_NOT_SUPPORTED")
+		-- CaerdonWardrobe:RegisterAddon(addonName)
 	end
-	StaticPopup_Show("CAERDON_WARDROBE_CARGBAGS_NOT_SUPPORTED")
-	-- CaerdonWardrobe:RegisterAddon(addonName)
 end
 
 if Version then

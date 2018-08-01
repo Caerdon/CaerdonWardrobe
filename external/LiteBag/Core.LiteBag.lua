@@ -4,8 +4,10 @@ local L = namespace.L
 local addonName = 'LiteBag'
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
-	Version = GetAddOnMetadata(addonName, 'Version')
-	CaerdonWardrobe:RegisterAddon(addonName)
+	if IsAddOnLoaded(addonName) then
+		CaerdonWardrobe:RegisterAddon(addonName)
+		Version = GetAddOnMetadata(addonName, 'Version')
+	end
 end
 
 if Version then

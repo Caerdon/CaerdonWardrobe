@@ -8,14 +8,16 @@ local bagsEnabled = false
 local addonName = 'ElvUI'
 
 if select(4, GetAddOnInfo(addonName)) then
-	Version = GetAddOnMetadata(addonName, 'Version')
-	if ElvUI and ElvUI[1].private.bags.enable then
-		CaerdonWardrobe:RegisterAddon(addonName)
-		bagsEnabled = true
+	if IsAddOnLoaded(addonName) then
+		if ElvUI[1].private.bags.enable then
+			Version = GetAddOnMetadata(addonName, 'Version')
+			CaerdonWardrobe:RegisterAddon(addonName)
+			bagsEnabled = true
+		end
 	end
 end
 
-if Version and bagsEnabled then
+if Version then
 	local function OnBagUpdate_Coroutine()
 	    for bag, bagData in pairs(waitingOnBagUpdate) do
 	    	for slot, slotData in pairs(bagData) do

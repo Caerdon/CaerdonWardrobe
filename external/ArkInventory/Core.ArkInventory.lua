@@ -4,8 +4,10 @@ local L = namespace.L
 local addonName = 'ArkInventory'
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
-	Version = GetAddOnMetadata(addonName, 'Version')
-	CaerdonWardrobe:RegisterAddon(addonName)
+	if IsAddOnLoaded(addonName) then
+		Version = GetAddOnMetadata(addonName, 'Version')
+		CaerdonWardrobe:RegisterAddon(addonName)
+	end
 end
 
 if Version then

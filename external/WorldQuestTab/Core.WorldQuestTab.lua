@@ -4,10 +4,12 @@ local L = namespace.L
 local addonName = 'WorldQuestTab'
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
-    Version = GetAddOnMetadata(addonName, 'Version')
-    CaerdonWardrobe:RegisterAddon(addonName, {
-    	isBag = false
-    })
+	if IsAddOnLoaded(addonName) then
+	    Version = GetAddOnMetadata(addonName, 'Version')
+	    CaerdonWardrobe:RegisterAddon(addonName, {
+	    	isBag = false
+	    })
+	end
 end
 
 if Version then

@@ -15,9 +15,11 @@ StaticPopupDialogs["CAERDON_WARDROBE_INVENTORIAN_NOT_SUPPORTED"] = {
 local addonName = 'Inventorian'
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
-	Version = GetAddOnMetadata(addonName, 'Version')
-	StaticPopup_Show("CAERDON_WARDROBE_INVENTORIAN_NOT_SUPPORTED")
-	-- CaerdonWardrobe:RegisterAddon(addonName)
+	if IsAddOnLoaded(addonName) then
+		Version = GetAddOnMetadata(addonName, 'Version')
+		StaticPopup_Show("CAERDON_WARDROBE_INVENTORIAN_NOT_SUPPORTED")
+		-- CaerdonWardrobe:RegisterAddon(addonName)
+	end
 end
 
 if Version then
