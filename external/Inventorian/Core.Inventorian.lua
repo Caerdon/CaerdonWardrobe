@@ -1,29 +1,33 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-StaticPopupDialogs["CAERDON_WARDROBE_INVENTORIAN_NOT_SUPPORTED"] = {
-  text = "I'd love to add support for Caerdon Wardrobe to Inventorian, but I need some assistance identifying how to do so.  If you can help, please reach out to me!",
-  button1 = "Got it!",
-  OnAccept = function()
-  end,
-  timeout = 0,
-  whileDead = true,
-  hideOnEscape = true,
-  preferredIndex = 3,  -- avoid some UI taint, see http://www.wowace.com/announcements/how-to-avoid-some-ui-taint/
-}		
-
 local addonName = 'Inventorian'
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
 		Version = GetAddOnMetadata(addonName, 'Version')
-		StaticPopup_Show("CAERDON_WARDROBE_INVENTORIAN_NOT_SUPPORTED")
-		-- CaerdonWardrobe:RegisterAddon(addonName)
+		CaerdonWardrobe:RegisterAddon(addonName)
 	end
 end
 
 if Version then
-	function UpdateBag(self)
+	local Inventorian = LibStub('AceAddon-3.0'):GetAddon('Inventorian')
+	local mod = Inventorian:NewModule("CaerdonWardrobeInventorianUpdate")
+	mod.uiName = L["Caerdon Wardrobe Inventorian"]
+	mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
+
+	function mod:OnEnable()
+		hooksecurefunc(Inventorian.bag.itemContainer, "UpdateSlot", UpdateBagSlot)
+		hooksecurefunc(Inventorian.bank.itemContainer, "UpdateSlot", UpdateBankSlot)
+	end
+
+	local function ToIndex(bag, slot)
+		return (bag < 0 and bag * 100 - slot) or (bag * 100 + slot)
+	end
+
+	function UpdateBagSlot(event, bag, slot)
+		local button = Inventorian.bag.itemContainer.items[ToIndex(bag, slot)]
+        local itemID = GetContainerItemID(bag, slot)
 
 		local options = {
 			showMogIcon=true, 
@@ -32,7 +36,25 @@ if Version then
 			iconPosition="TOPRIGHT" 
 		}
 
-		-- CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+		if button then
+			CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+		end
+	end
+
+	function UpdateBankSlot(event, bag, slot)
+		local button = Inventorian.bank.itemContainer.items[ToIndex(bag, slot)]
+        local itemID = GetContainerItemID(bag, slot)
+
+		local options = {
+			showMogIcon=true, 
+			showBindStatus=true,
+			showSellables=true,
+			iconPosition="TOPRIGHT" 
+		}
+
+		if button then
+			CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+		end
 	end
 
 	local function OnEvent(self, event, ...)
@@ -56,8 +78,5 @@ if Version then
 	function eventFrame:TRANSMOG_COLLECTION_UPDATED()
 		RefreshItems()
 	end
-
-	-- local Inventorian = LibStub('AceAddon-3.0'):GetAddon('Inventorian')
-	-- eventFrame:HookScript(Inventorian, 'UpdateBag', UpdateBag)
 end
 

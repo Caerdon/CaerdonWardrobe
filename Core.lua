@@ -3,7 +3,7 @@ local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
 local isBagUpdate = false
-local isBagAddon = false
+local ignoreDefaultBags = false
 
 CaerdonWardrobe = {}
 
@@ -1363,6 +1363,7 @@ end
 
 local registeredAddons = {}
 local registeredBagAddons = {}
+local bagAddonCount = 0
 
 function CaerdonWardrobe:RegisterAddon(name, addonOptions)
 	local options = {
@@ -1379,7 +1380,8 @@ function CaerdonWardrobe:RegisterAddon(name, addonOptions)
 
 	if options.isBag then
 		registeredBagAddons[name] = options
-		if isBagAddon then
+		bagAddonCount = bagAddonCount + 1
+		if bagAddonCount > 1 then
 			for key in pairs(registeredBagAddons) do
 				if addonList then
 					addonList = addonList .. ", " .. key
@@ -1389,7 +1391,9 @@ function CaerdonWardrobe:RegisterAddon(name, addonOptions)
 			end
 			StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS", addonList)
 		end
-		isBagAddon = true
+		if not options.hookDefaultBags then
+			ignoreDefaultBags = true
+		end
 	end
 end
 
@@ -1865,7 +1869,7 @@ function eventFrame:PLAYER_LOGIN(...)
 end
 
 function RefreshMainBank()
-	if not isBagAddon then
+	if not ignoreDefaultBags then
 		for i=1, NUM_BANKGENERIC_SLOTS, 1 do
 			button = BankSlotsFrame["Item"..i];
 			OnBankItemUpdate(button);
@@ -1929,7 +1933,7 @@ end
 hooksecurefunc("EquipPendingItem", OnEquipPendingItem)
 
 local function OnOpenBag(bagID)
-	if not isBagAddon then
+	if not ignoreDefaultBags then
 		for i=1, NUM_CONTAINER_FRAMES, 1 do
 			local frame = _G["ContainerFrame"..i];
 			if ( frame:IsShown() and frame:GetID() == bagID ) then
@@ -1942,7 +1946,7 @@ local function OnOpenBag(bagID)
 end
 
 local function OnOpenBackpack()
-	if not isBagAddon then
+	if not ignoreDefaultBags then
 		isBagUpdateRequested = true
 	end
 end

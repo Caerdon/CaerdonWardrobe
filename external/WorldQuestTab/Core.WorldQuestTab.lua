@@ -35,10 +35,10 @@ if Version then
 					CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = button.questId }, button.reward, options)
 				else
 					button.reward.count = 0
-					CaerdonWardrobe:ClearButton(button)
+					CaerdonWardrobe:ClearButton(button.reward)
 				end
 			else
-				CaerdonWardrobe:ClearButton(button)
+				CaerdonWardrobe:ClearButton(button.reward)
 			end
 		end
 	end
