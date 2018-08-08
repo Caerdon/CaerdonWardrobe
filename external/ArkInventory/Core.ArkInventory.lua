@@ -73,7 +73,7 @@ if Version then
 
 					if slot then
 						if itemDB.loc_id == ArkInventory.Const.Location.Vault then
-							local tab = ArkInventory.Global.Location[itemDB.loc_id].current_tab
+							local tab = ArkInventory.Global.Location[itemDB.loc_id].view_tab
 							bag = "GuildBankFrame"
 							slot = {tab = tab, index = slot}
 						end

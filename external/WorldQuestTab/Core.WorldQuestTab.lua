@@ -29,10 +29,9 @@ if Version then
 			local questInfo = button.info
 			local rewardSlot = 1
 			if questInfo then
-				local _, texture, numItems, quality, _, itemID = GetQuestLogRewardInfo(rewardSlot, questInfo.id);
-				if itemID then
-					button.reward.count = numItems
-					CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = button.questId }, button.reward, options)
+				if questInfo.rewardId then
+					button.reward.count = questInfo.numItems
+					CaerdonWardrobe:UpdateButton(questInfo.rewardId, "QuestButton", { itemID = questInfo.rewardId, questID = button.questId }, button.reward, options)
 				else
 					button.reward.count = 0
 					CaerdonWardrobe:ClearButton(button.reward)
