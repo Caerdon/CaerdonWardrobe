@@ -23,21 +23,21 @@ if Version then
 	}
 
 	local function RefreshButtons()
-		local buttons = WQT_WorldQuestFrame.scrollFrame.buttons;
+		local buttons = WQT_WorldQuestFrame.ScrollFrame.buttons;
 		for i = 1, #buttons do
 			local button = buttons[i]
 			local questInfo = button.info
 			local rewardSlot = 1
 			if questInfo then
-				if questInfo.rewardId then
-					button.reward.count = questInfo.numItems
-					CaerdonWardrobe:UpdateButton(questInfo.rewardId, "QuestButton", { itemID = questInfo.rewardId, questID = button.questId }, button.reward, options)
+				if questInfo.reward.id then
+					button.Reward.count = questInfo.reward.amount
+					CaerdonWardrobe:UpdateButton(questInfo.reward.id, "QuestButton", { itemID = questInfo.reward.id, questID = button.questId }, button.Reward, options)
 				else
-					button.reward.count = 0
-					CaerdonWardrobe:ClearButton(button.reward)
+					button.Reward.count = 0
+					CaerdonWardrobe:ClearButton(button.Reward)
 				end
 			else
-				CaerdonWardrobe:ClearButton(button.reward)
+				CaerdonWardrobe:ClearButton(button.Reward)
 			end
 		end
 	end

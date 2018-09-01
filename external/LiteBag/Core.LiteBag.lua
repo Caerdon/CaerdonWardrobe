@@ -26,11 +26,6 @@ if Version then
 		CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
 	end
 
-	hooksecurefunc('LiteBagItemButton_Update', UpdateButton)
-    hooksecurefunc('LiteBagPanel_OnShow',
-            function (f) f:RegisterEvent("TRANSMOG_COLLECTION_UPDATED") end
-        )
-    hooksecurefunc('LiteBagPanel_OnHide',
-            function (f) f:UnregisterEvent("TRANSMOG_COLLECTION_UPDATED") end
-        )
+    LiteBagItemButton_RegisterHook('LiteBagItemButton_Update', UpdateButton)
+    LiteBagPanel_AddUpdateEvent('TRANSMOG_COLLECTION_UPDATED')
 end
