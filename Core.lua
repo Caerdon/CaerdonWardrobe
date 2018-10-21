@@ -1331,7 +1331,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 end
 
 local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
-	if itemID then
+	if itemID and GetItemInfoInstant(itemID) then
 		local waitItem = waitingOnItemData[tostring(itemID)]
 		if not waitItem then
 			waitItem = {}
