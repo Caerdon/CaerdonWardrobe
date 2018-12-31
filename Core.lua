@@ -323,11 +323,15 @@ local function GetItemLinkLocal(bag, slot)
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		return slot.link
 	elseif bag == "QuestButton" then
-		local itemID = slot.itemID
-		local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-		isCraftingReagent = GetItemInfo(itemID)
-		return itemLink
+		if slot.itemLink then
+			return slot.itemLink
+		else
+			local itemID = slot.itemID
+			local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+			itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+			isCraftingReagent = GetItemInfo(itemID)
+			return itemLink
+		end
 	else
 	    if bag then
 	      return GetContainerItemLink(bag, slot)
@@ -1015,20 +1019,23 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 	bindsOnText:ClearAllPoints()
 	bindsOnText:SetWidth(button:GetWidth())
 
-	if CaerdonWardrobeConfig.Binding.Position == "BOTTOM" then
-		bindsOnText:SetPoint("BOTTOMRIGHT", 0, 2)
+	local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
+	local bindingOffset = options.bindingOffset or 2
+
+	if bindingPosition == "BOTTOM" then
+		bindsOnText:SetPoint("BOTTOMRIGHT", bindingOffset, 2)
 		if bindingStatus == L["BoA"] then
 			local offset = options.itemCountOffset or 15
 			if (button.count and button.count > 1) then
 				bindsOnText:SetPoint("BOTTOMRIGHT", 0, offset)
-				if(options.bindingScale) then
-					bindsOnText:SetScale(options.bindingScale)
-				end
+			end
+			if(options.bindingScale) then
+				bindsOnText:SetScale(options.bindingScale)
 			end
 		end
-	elseif CaerdonWardrobeConfig.Binding.Position == "CENTER" then
+	elseif bindingPosition == "CENTER" then
 		bindsOnText:SetPoint("CENTER", 0, 0)
-	elseif CaerdonWardrobeConfig.Binding.Position == "TOP" then
+	elseif bindingPosition == "TOP" then
 		bindsOnText:SetPoint("TOPRIGHT", 0, -2)
 	end
 
