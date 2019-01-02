@@ -1,4 +1,5 @@
 local DEBUG_ENABLED = false
+-- local DEBUG_ITEM = 55625
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -211,15 +212,19 @@ end
 local function PlayerHasAppearance(appearanceID)
 	local hasAppearance = false
 
-    local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
+    local sources = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
     local matchedSource
     if sources then
-        for i, source in pairs(sources) do
-            if source.isCollected then
-            	matchedSource = source
-                hasAppearance = true
-                break
-            end
+		for i, sourceID in pairs(sources) do
+			if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
+				local categoryID, appearanceID, canEnchant, texture, isCollected, sourceItemLink = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+
+				if isCollected then
+					matchedSource = source
+					hasAppearance = true
+					break
+				end
+			end
         end
     end
 
@@ -227,6 +232,7 @@ local function PlayerHasAppearance(appearanceID)
 end
  
 local function PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+	local isDebugItem = itemID == DEBUG_ITEM
 	local _, _, quality, _, reqLevel, itemClass, itemSubClass, _, equipSlot, _, _, itemClassID, itemSubClassID = GetItemInfo(itemID)
 	local playerLevel = UnitLevel("player")
 	local canCollect = false
@@ -255,22 +261,13 @@ local function PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
 		classArmor = LE_ITEM_ARMOR_MAIL
 	end
 
-	if equipSlot ~= "INVTYPE_CLOAK"
-		and itemClassID == LE_ITEM_CLASS_ARMOR and 
-		(	itemSubClassID == LE_ITEM_ARMOR_CLOTH or 
-			itemSubClassID == LE_ITEM_ARMOR_LEATHER or 
-			itemSubClassID == LE_ITEM_ARMOR_MAIL or
-			itemSubClassID == LE_ITEM_ARMOR_PLATE)
-		and itemSubClassID ~= classArmor then 
-			canCollect = false
-			return
-		end
-
 	if playerLevel >= reqLevel then
+		if isDebugItem then print("Player is high enough level to collect") end
 	    local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
 	    if sources then
 	        for i, source in pairs(sources) do
-		        isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(source.sourceID)
+				isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(source.sourceID)
+				if isDebugItem then print("Info Ready: " .. tostring(isInfoReady) .. ", Can Collect: " .. tostring(canCollect)) end
 	            if isInfoReady then
 	            	if canCollect then
 		            	matchedSource = source
@@ -280,7 +277,20 @@ local function PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
 	            	shouldRetry = true
 	            end
 	        end
-	    end
+		else
+			if isDebugItem then print("No sources found for item: " .. itemLink .. ", Appearance ID: " .. tostring(appearanceID)) end
+		end
+	end
+
+	if equipSlot ~= "INVTYPE_CLOAK"
+		and itemClassID == LE_ITEM_CLASS_ARMOR and 
+		(	itemSubClassID == LE_ITEM_ARMOR_CLOTH or 
+			itemSubClassID == LE_ITEM_ARMOR_LEATHER or 
+			itemSubClassID == LE_ITEM_ARMOR_MAIL or
+			itemSubClassID == LE_ITEM_ARMOR_PLATE)
+		and itemSubClassID ~= classArmor then 
+			if isDebugItem then print("Wrong armor. Can't collect: " .. itemLink) end
+			canCollect = false
 	end
 
     return canCollect, matchedSource, shouldRetry
@@ -361,9 +371,9 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	-- local isDebugItem = itemID == 140261
+	local isDebugItem = itemID == DEBUG_ITEM
 
-	-- if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
+	if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. slot) end
 
 	local scanTip = mainTip
 	local itemKey = GetItemKey(bag, slot, itemLink)
@@ -384,7 +394,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		isDressable = false
 		shouldRetry = false
 	else
-	    isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
+		isDressable, shouldRetry = IsDressableItemCheck(itemID, itemLink)
+		if isDebugItem then print ("IsDressable: " .. tostring(isDressable)) end
 	end
 
 
@@ -498,6 +509,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 		local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 		if canBeSource then
+			if isDebugItem then print(itemLink .. " can be source") end
 	        local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
 	        if hasTransmog then
 	        	needsItem = false
@@ -798,6 +810,11 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		button.searchOverlay = originalButton.searchOverlay
 		originalButton.caerdonButton = button
 	end
+
+	-- Had some addons messing with frame level resulting in this getting covered by the parent button.
+	-- Haven't seen any negative issues with bumping it up, yet, but keep an eye on it if
+	-- the status icon overlaps something it shouldn't.
+	button:SetFrameLevel(originalButton:GetFrameLevel() + 100)
 
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
@@ -1654,8 +1671,12 @@ local ignoreEvents = {
 	["UNIT_POWER"] = {},
 	["UNIT_POWER_FREQUENT"] = {},
 	["UPDATE_INVENTORY_DURABILITY"] = {},
+	["UNIT_ATTACK_SPEED"] = {},
+	["UNIT_SPELL_HASTE"] = {},
+	["UNIT_TARGET"] = {},
 	["UPDATE_MOUSEOVER_UNIT"] = {},
 	["UPDATE_PENDING_MAIL"] = {},
+	["UPDATE_UI_WIDGET"] = {},
 	["UPDATE_WORLD_STATES"] = {},
 	["QUESTLINE_UPDATE"] = {},
 	["WORLD_MAP_UPDATE"] = {}
@@ -1900,6 +1921,8 @@ function eventFrame:PLAYER_LOGIN(...)
 	local mapWQProvider;
 	for k, v in pairs(WorldMapFrame.dataProviders) do 
 		for k1, v2 in pairs(k) do
+			-- Some addons will cause there to be multiple map providers.
+			-- We want to hook to any that are there.
 			if k1=="IsMatchingWorldMapFilters" then 
 				mapWQProvider = k; 
 				hooksecurefunc(mapWQProvider, "RefreshAllData", OnWorldMapRefreshAllData)
