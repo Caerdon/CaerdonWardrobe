@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 55625
+-- local DEBUG_ITEM = 161077
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -463,7 +463,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 							if location ~= nil then
 							    local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
 							    if isDebugItem then
-							    	print("isPlayer: " .. tostring(isPlayer) .. ", isBank: " .. tostring(isBank) .. ", isBags: " .. tostring(isBags) .. ", isVoidStorage: " .. tostring(isVoidStorage) .. ", equipSlot: " .. tostring(equipSlot) .. ", equipBag: " .. tostring(equipBag) .. ", equipTab: " .. tostring(equipTab) .. ", equipVoidSlot: " .. tostring(equipVoidSlot))
+							    	-- print("isPlayer: " .. tostring(isPlayer) .. ", isBank: " .. tostring(isBank) .. ", isBags: " .. tostring(isBags) .. ", isVoidStorage: " .. tostring(isVoidStorage) .. ", equipSlot: " .. tostring(equipSlot) .. ", equipBag: " .. tostring(equipBag) .. ", equipTab: " .. tostring(equipTab) .. ", equipVoidSlot: " .. tostring(equipVoidSlot))
 							    end
 							    equipSlot = tonumber(equipSlot)
 							    equipBag = tonumber(equipBag)
@@ -471,7 +471,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 							    if isVoidStorage then
 							    	-- Do nothing for now
 							    elseif isBank and not isBags then -- player or bank
-							    	if bag == BANK_CONTAINER and BankButtonIDToInvSlotID(slot) == equipSlot then
+									if bag == BANK_CONTAINER and BankButtonIDToInvSlotID(slot) == equipSlot then
+										if isDebugItem then print("=== Setting needs item to false due to set") end
 							    		needsItem = false
 										if bindingText then
 											bindingText = "*" .. bindingText
@@ -485,6 +486,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 							    	end
 							    else
 								    if equipSlot == slot and equipBag == bag then
+										if isDebugItem then print("=== Setting needs item to false due to set 2") end
 										needsItem = false
 										if bindingText then
 											bindingText = "*" .. bindingText
@@ -510,11 +512,18 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
 		if canBeSource then
 			if isDebugItem then print(itemLink .. " can be source") end
-	        local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
-	        if hasTransmog then
-	        	needsItem = false
-	        end
-	    else
+			local appearanceID, isCollected, sourceID
+			appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
+
+			if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then 
+				local hasTransmog = C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)
+				if hasTransmog then
+					if isDebugItem then print("=== Setting needs item to false due to has transmog") end
+					needsItem = false
+				end
+			end
+		else
+			if isDebugItem then print("Can't be source: " .. noSourceReason) end
 	    	needsItem = false
 	    end
 
@@ -549,6 +558,10 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						needsItem = false
 					end
 					break
+				elseif lineText == TRANSMOGRIFY_TOOLTIP_APPEARANCE_UNKNOWN then
+					if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+						isCompletionistItem = true
+					end
 				elseif lineText == ITEM_SPELL_KNOWN or strmatch(lineText, PET_KNOWN) then
 					needsCollectionItem = false
 				end
@@ -1207,9 +1220,10 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		-- local itemString = string.match(itemLink, "item[%-?%d:]+")
 		-- print(itemLink .. ": " .. itemID .. ", printable: " .. tostring(printable))
 
-  	-- if itemID == 82800 then
-   		-- DebugItem(itemID, itemLink, bag, slot)
-   	-- end
+	local isDebugItem = itemID == DEBUG_ITEM
+  	if isDebugItem then
+   		DebugItem(itemID, itemLink, bag, slot)
+   	end
 	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry
 	local appearanceID, isCollected, sourceID
 
@@ -1230,13 +1244,13 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	end
 
 	if appearanceID then
-		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
-			local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
-			if shouldRetry then
-				QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
-				return
-			end
+		local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
+		if shouldRetry then
+			QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+			return
+		end
 
+		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
 			if canCollect then
 				mogStatus = "own"
 			else
@@ -1249,13 +1263,13 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				end
 			end
 		else
-
 			if isCompletionistItem then
 				-- You have this, but you want them all.  Why?  Because.
-				local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
-				local playerLevel = UnitLevel("player")
 
-				if playerLevel >= reqLevel then
+				-- local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
+				-- local playerLevel = UnitLevel("player")
+
+				if canCollect then
 					mogStatus = "ownPlus"
 				else
 					mogStatus = "otherPlus"
