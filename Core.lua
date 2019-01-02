@@ -1857,6 +1857,29 @@ function eventFrame:ADDON_LOADED(name)
 	end
 end
 
+function UpdatePin(pin)
+	local options = {
+		iconOffset = -5,
+		iconSize = 60,
+		overridePosition = "TOPRIGHT",
+		-- itemCountOffset = 10,
+		-- bindingScale = 0.9
+	}
+
+	if GetNumQuestLogRewards(pin.questID) > 0 then
+		local itemName, itemTexture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(1, pin.questID)
+		CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = pin.questID }, pin, options)
+	else
+		CaerdonWardrobe:ClearButton(pin)
+	end
+end
+
+function OnWorldMapRefreshAllData(self) 
+	for qId, pin in pairs(self.activePins) do
+		UpdatePin(pin);
+	end
+end
+
 function eventFrame:PLAYER_LOGIN(...)
 	if DEBUG_ENABLED then
 		eventFrame:RegisterAllEvents()
@@ -1873,6 +1896,17 @@ function eventFrame:PLAYER_LOGIN(...)
 		eventFrame:RegisterEvent "MERCHANT_UPDATE"
 	end
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+
+	local mapWQProvider;
+	for k, v in pairs(WorldMapFrame.dataProviders) do 
+		for k1, v2 in pairs(k) do
+			if k1=="IsMatchingWorldMapFilters" then 
+				mapWQProvider = k; 
+				hooksecurefunc(mapWQProvider, "RefreshAllData", OnWorldMapRefreshAllData)
+				OnWorldMapRefreshAllData(mapWQProvider);
+			end 
+		end 
+	end
 end
 
 function RefreshMainBank()
