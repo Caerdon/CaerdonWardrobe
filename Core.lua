@@ -53,7 +53,7 @@ local InventorySlots = {
 }
 
 local mainTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
-mainTip.ItemTooltip = CreateFrame("FRAME", "CaerdonWardrobeGameTooltipChild", nil, "InternalEmbeddedItemTooltipTemplate")
+mainTip.ItemTooltip = CreateFrame("FRAME", "CaerdonWardrobeGameTooltipChild", mainTip, "InternalEmbeddedItemTooltipTemplate")
 mainTip.ItemTooltip.Tooltip.shoppingTooltips = { WorldMapCompareTooltip1, WorldMapCompareTooltip2 }
 
 local cachedBinding = {}
@@ -604,6 +604,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			-- cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup, isCompletionistItem = isCompletionistItem }
 		end
 	end
+
+	scanTip:Hide()
 
 	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry
 end
