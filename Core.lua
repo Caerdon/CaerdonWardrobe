@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 113926
+-- local DEBUG_ITEM = 113588
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -567,7 +567,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 			local numLines = scanTip:NumLines()
 			if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
-			if numLines == 0 then
+			if not noSourceReason and numLines == 0 then
 				if isDebugItem then print("No scan lines... retrying") end
 				shouldRetry = true
 			end
