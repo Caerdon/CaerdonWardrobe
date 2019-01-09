@@ -544,7 +544,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		end
 
 		local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
-		if canBeSource then
+		if not isCollectionItem and canBeSource then
 			if isDebugItem then print(itemLink .. " can be source") end
 			local appearanceID, isCollected, sourceID
 			appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
@@ -561,17 +561,17 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	    	needsItem = false
 	    end
 
+		local numLines = scanTip:NumLines()
+		local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
+		local needsCollectionItem = true
+
+		if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
+		if not isCollectionItem and not noSourceReason and numLines == 0 then
+			if isDebugItem then print("No scan lines... retrying") end
+			shouldRetry = true
+		end
+
 		if not shouldRetry then
-			local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
-			local needsCollectionItem = true
-
-			local numLines = scanTip:NumLines()
-			if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
-			if not noSourceReason and numLines == 0 then
-				if isDebugItem then print("No scan lines... retrying") end
-				shouldRetry = true
-			end
-
 			for lineIndex = 1, numLines do
 				local scanName = scanTip:GetName()
 				local line = _G[scanName .. "TextLeft" .. lineIndex]
