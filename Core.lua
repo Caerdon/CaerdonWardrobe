@@ -407,6 +407,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		playerSpecID = GetSpecializationInfo(playerSpec, nil, nil, nil, UnitSex("player"));
 	end
 	local playerLootSpecID = GetLootSpecialization()
+	if playerLootSpecID == 0 then
+		playerLootSpecID = playerSpecID
+	end
 
 	if binding then
 		if isDebugItem then print("Using cached binding: " .. tostring(binding.bindingText)) end
@@ -2179,7 +2182,9 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
 end
 
 function eventFrame:PLAYER_LOOT_SPEC_UPDATED()
-	EncounterJournal_LootUpdate()
+	if EncounterJournal then
+		EncounterJournal_LootUpdate()
+	end
 end
 
 function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
