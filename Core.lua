@@ -2027,17 +2027,6 @@ function UpdatePin(pin)
 	end
 end
 
-function OnWorldMapRefreshAllData(self, fromOnShow) 
-	-- local scanTip = mainTip
-	-- if scanTip and scanTip.ItemTooltip and scanTip.ItemTooltip.Tooltip and scanTip.ItemTooltip.Tooltip.shoppingTooltips then
-	-- if not ShoppingTooltip1:IsShown() then
-	-- if fromOnShow then
-		-- for qId, pin in pairs(self.activePins) do
-			-- UpdatePin(pin);
-		-- end
-	-- end
-end
-
 local function OnQuestInfoShowRewards(template, parentFrame)
 	local numQuestRewards = 0;
 	local numQuestChoices = 0;
@@ -2167,7 +2156,9 @@ function eventFrame:PLAYER_LOGIN(...)
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 
 	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
-		UpdatePin(self);
+		if not IsModifiedClick("COMPAREITEMS") then
+			UpdatePin(self);
+		end
 	end)
 	-- hooksecurefunc("QuestInfo_GetRewardButton", OnQuestInfoGetRewardButton)
 	-- hooksecurefunc("QuestInfo_ShowRewards", OnQuestInfoShowRewards)
