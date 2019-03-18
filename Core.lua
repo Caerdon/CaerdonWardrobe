@@ -675,6 +675,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		end
 	end
 
+	ShoppingTooltip1:Hide()
+	ShoppingTooltip2:Hide()
 	scanTip:Hide()
 
 	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec
@@ -2156,7 +2158,7 @@ function eventFrame:PLAYER_LOGIN(...)
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 
 	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
-		if not IsModifiedClick("COMPAREITEMS") then
+		if not IsModifiedClick("COMPAREITEMS") and not ShoppingTooltip1:IsShown() then
 			UpdatePin(self);
 		end
 	end)
