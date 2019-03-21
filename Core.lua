@@ -1152,6 +1152,8 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 		bindsOnText:SetPoint("CENTER", 0, 0)
 	elseif bindingPosition == "TOP" then
 		bindsOnText:SetPoint("TOPRIGHT", 0, -2)
+	else
+		bindsOnText:SetPoint(bindingPosition, options.bindingOffsetX or 2, options.bindingOffsetY or 2)
 	end
 
 	local bindingText
@@ -2062,6 +2064,15 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 		-- spellGetter = GetRewardSpell;
 	end
 
+	local options = {
+		iconOffset = 0,
+		iconSize = 40,
+		overridePosition = "TOPLEFT",
+		overrideBindingPosition = "TOPLEFT",
+		bindingOffsetX = -53,
+		bindingOffsetY = -16
+	}
+
 	local questItem, name, texture, quality, isUsable, numItems, itemID;
 	local rewardsCount = 0;
 	if ( numQuestChoices > 0 ) then
@@ -2079,14 +2090,6 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 				itemID = GetItemID(itemLink)
 			end
 			rewardsCount = rewardsCount + 1;
-
-			local options = {
-				iconOffset = 0,
-				iconSize = 40,
-				overridePosition = "TOPLEFT",
-				-- itemCountOffset = 10,
-				-- bindingScale = 0.9
-			}
 
 			CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
 		end
@@ -2115,12 +2118,6 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 				end
 			end
 			rewardsCount = rewardsCount + 1;
-
-			local options = {
-				iconOffset = 0,
-				iconSize = 40,
-				overridePosition = "TOPLEFT",
-			}
 
 			if itemID ~= -1 then
 				CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
