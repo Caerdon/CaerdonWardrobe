@@ -6,6 +6,7 @@ local L = namespace.L
 local Version = nil
 local bagsEnabled = false
 local addonName = 'ElvUI'
+local ElvUIBags = ElvUI[1]:GetModule("Bags")
 
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
@@ -19,10 +20,23 @@ end
 
 if Version then
 	local function OnBagUpdate_Coroutine()
+			-- TODO: Add support for separate bank and bag sizes
+			-- local iconSize = isBank and ElvUIBags.db.bankSize or ElvUIBags.db.bagSize
+			-- local uiScale = ElvUI[1].global.general.UIScale
+			local iconSize = ElvUIBags.db.bagSize
 	    for bag, bagData in pairs(waitingOnBagUpdate) do
 	    	for slot, slotData in pairs(bagData) do
 	    		for itemID, itemData in pairs(slotData) do
-					CaerdonWardrobe:UpdateButton(itemData.itemID, itemData.bag, itemData.slot, itemData.button, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+						CaerdonWardrobe:UpdateButton(itemData.itemID, itemData.bag, itemData.slot, itemData.button, {
+							showMogIcon = true,
+							showBindStatus = true,
+							showSellables = true,
+							iconSize = iconSize,
+							otherIconSize = iconSize,
+							-- TODO: These aren't correct but hopefully work for now
+							iconOffset = math.abs(40 - iconSize) / 2,
+							otherIconOffset = math.abs(40 - iconSize) / 2
+						})
 	    		end
 	    	end
 
@@ -50,8 +64,6 @@ if Version then
 		isBagUpdateRequested = true
 	end
 
-	local ElvUIBags = ElvUI[1]:GetModule("Bags")
-
 	local function OnUpdateSlot(self, frame, bagID, slotID)
 		if (frame.Bags[bagID] and frame.Bags[bagID].numSlots ~= GetContainerNumSlots(bagID)) or not frame.Bags[bagID] or not frame.Bags[bagID][slotID] then
 			return
@@ -72,6 +84,12 @@ if Version then
 			ScheduleItemUpdate(itemID, bagID, slotID, button)
 			-- CaerdonWardrobe:UpdateButton(itemID, bagID, slotID, button, options)
 		else
+			local waitBag = waitingOnBagUpdate[tostring(bagID)]
+			if waitBag then
+				-- Clear out in case we had scheduled an update
+				-- (Mostly an issue during sorting)
+				waitBag[tostring(slotID)] = nil
+			end
 			CaerdonWardrobe:ClearButton(button)
 			-- CaerdonWardrobe:UpdateButton(nil, bagID, slotID, button, nil)
 		end
