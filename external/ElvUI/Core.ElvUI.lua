@@ -6,7 +6,6 @@ local L = namespace.L
 local Version = nil
 local bagsEnabled = false
 local addonName = 'ElvUI'
-local ElvUIBags = ElvUI[1]:GetModule("Bags")
 
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
@@ -19,6 +18,7 @@ if select(4, GetAddOnInfo(addonName)) then
 end
 
 if Version then
+	local ElvUIBags = ElvUI[1]:GetModule("Bags")
 	local function OnBagUpdate_Coroutine()
 			-- TODO: Add support for separate bank and bag sizes
 			-- local iconSize = isBank and ElvUIBags.db.bankSize or ElvUIBags.db.bagSize

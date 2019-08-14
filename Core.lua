@@ -1034,6 +1034,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	-- 	end
 
 	local alpha = 1
+	mogStatus:SetVertexColor(1, 1, 1)
 	if status == "refundable" and not ShouldHideSellableIcon(bag) then
 		SetIconPositionAndSize(mogStatus, iconPosition, 3, 15, iconOffset)
 		alpha = 0.9
@@ -1041,12 +1042,10 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	elseif status == "openable" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-free")
-			mogStatus:SetVertexColor(1, 1, 1)
 	elseif status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
-			mogStatus:SetVertexColor(1, 1, 1)
 			if status == "ownPlus" then
 				mogStatus:SetVertexColor(0.4, 1, 0)
 			end
@@ -1057,7 +1056,6 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		if not ShouldHideOtherIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
 			mogStatus:SetTexture(otherIcon)
-			mogStatus:SetVertexColor(1, 1, 1)
 			if status == "otherPlus" then
 				mogStatus:SetVertexColor(0.4, 1, 0)
 			end
@@ -1068,7 +1066,6 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		if not ShouldHideOtherIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
 			mogStatus:SetTexture("Interface\\COMMON\\icon-noloot")
-			mogStatus:SetVertexColor(1, 1, 1)
 			if status == "otherSpecPlus" then
 				mogStatus:SetVertexColor(0.4, 1, 0)
 			end
