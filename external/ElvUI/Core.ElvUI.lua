@@ -43,7 +43,6 @@ if Version then
 			waitingOnBagUpdate[bag] = nil
 	    end
 
-		coroutine.yield()
 		waitingOnBagUpdate = {}
 	end
 

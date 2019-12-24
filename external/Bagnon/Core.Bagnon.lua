@@ -1,6 +1,5 @@
 local isBagUpdateRequested = false
 local waitingOnBagUpdate = {}
-local atGuild = false
 
 local addonName = 'Bagnon'
 local Version = nil
@@ -24,7 +23,6 @@ if Version then
 			waitingOnBagUpdate[bag] = nil
 	    end
 
-		coroutine.yield()
 		waitingOnBagUpdate = {}
 	end
 
@@ -50,8 +48,8 @@ if Version then
 			local bag, slot = self:GetBag(), self:GetID()
 
 			if bag ~= "vault" then
-				local tab = GetCurrentGuildBankTab()
-				if atGuild and tab == bag then
+        local tab = GetCurrentGuildBankTab()
+				if Bagnon:InGuild() and tab == bag then
 					local itemLink = GetGuildBankItemLink(tab, slot)
 					if itemLink then
 						local itemID = tonumber(itemLink:match("item:(%d+)"))
@@ -111,7 +109,7 @@ if Version then
 
 
 	local function HookBagnon()
-		hooksecurefunc(Bagnon.ItemSlot, "Update", OnUpdateSlot)
+		hooksecurefunc(Bagnon.Item, "Update", OnUpdateSlot)
 	end
 
 	local eventFrame = CreateFrame("FRAME")
@@ -130,13 +128,4 @@ if Version then
 	        Bagnon:UpdateFrames()
 	    end
 	end
-
-	function eventFrame:GUILDBANKFRAME_OPENED()
-		atGuild = true
-	end
-
-	function eventFrame:GUILDBANKFRAME_CLOSED()
-		atGuild = false
-	end
-
 end

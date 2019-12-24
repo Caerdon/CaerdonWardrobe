@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 131438
+-- local DEBUG_ITEM = 1560
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -1595,7 +1595,11 @@ local function OnItemUpdate_Coroutine()
 	local itemCount = 0
 
 	for itemKey, itemInfo in pairs(itemQueue) do
+		processQueue[itemKey] = itemInfo
 		itemQueue[itemKey] = nil
+	end
+
+	for itemKey, itemInfo in pairs(processQueue) do
 		itemCount = itemCount + 1
 
 		ProcessOrWaitItem(itemInfo.itemID, itemInfo.bag, itemInfo.slot, itemInfo.button, itemInfo.options, itemInfo.itemProcessed)
@@ -1607,14 +1611,19 @@ end
 
 local waitingOnBagUpdate = {}
 local function OnBagUpdate_Coroutine()
+    local processQueue = {}
     for frameID, shouldUpdate in pairs(waitingOnBagUpdate) do
-		local frame = _G["ContainerFrame".. frameID]
+      processQueue[frameID] = shouldUpdate
+      waitingOnBagUpdate[frameID] = nil
+    end
 
-		if frame:IsShown() then
-			OnContainerUpdate(frame, true)
-			waitingOnBagUpdate[frameID] = nil
-		end
-		coroutine.yield()
+    for frameID, shouldUpdate in pairs(processQueue) do
+      local frame = _G["ContainerFrame".. frameID]
+
+      if frame:IsShown() then
+        OnContainerUpdate(frame, true)
+      end
+      coroutine.yield()
     end
 
 	-- waitingOnBagUpdate = {}

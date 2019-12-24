@@ -1,9 +1,9 @@
-## Interface: 80200
-## X-Compatible-With: 80200
+## Interface: 80205
+## X-Compatible-With: 80205
 ## Title: Caerdon Wardrobe
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v2.3.5
+## Version: v2.3.6
 ## SavedVariables: CaerdonWardrobeConfig
 ## OptionalDeps: AdiBags, ArkInventory, Bagnon, BaudBag, cargBags_Nivaya, Combuctor, ElvUI, Inventorian, LiteBag, WorldQuestTab, ZygorGuidesViewer
 Localization.lua
@@ -24,3 +24,4 @@ external\LiteBag\Core.LiteBag.lua
 
 external\WorldQuestTab\Core.WorldQuestTab.lua
 external\Zygor\Core.ZygorWorldQuests.lua
+

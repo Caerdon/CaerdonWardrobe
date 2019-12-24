@@ -26,21 +26,35 @@ if Version then
 		local buttons = WQT_WorldQuestFrame.ScrollFrame.buttons;
 		for i = 1, #buttons do
 			local button = buttons[i]
-			local questInfo = button.info
-			local rewardSlot = 1
-			if questInfo then
-				if questInfo.reward.id then
-					button.Reward.count = questInfo.reward.amount
-					CaerdonWardrobe:UpdateButton(questInfo.reward.id, "QuestButton", { itemID = questInfo.reward.id, questID = button.questId }, button.Reward, options)
-				else
-					button.Reward.count = 0
-					CaerdonWardrobe:ClearButton(button.Reward)
-				end
-			else
-				CaerdonWardrobe:ClearButton(button.Reward)
-			end
+			UpdateButton(button)
 		end
 	end
 
-	hooksecurefunc(WQT_QuestScrollFrame, 'DisplayQuestList', RefreshButtons)
+	local function IsValidItem(type)
+	  return
+      type == WQT_REWARDTYPE.weapon or
+      type == WQT_REWARDTYPE.equipment or 
+      type == WQT_REWARDTYPE.spell or 
+      type == WQT_REWARDTYPE.item
+	end
+
+	local function UpdateButton(button)
+    local questInfo = button.info
+    local rewardSlot = 1
+    if questInfo and questInfo.isValid then
+      if questInfo.reward.id and IsValidItem(questInfo.reward.type) then
+        button.Reward.count = questInfo.reward.amount
+        CaerdonWardrobe:UpdateButton(questInfo.reward.id, "QuestButton", { itemID = questInfo.reward.id, questID = button.questId }, button.Reward, options)
+      else
+        button.Reward.count = 0
+        CaerdonWardrobe:ClearButton(button.Reward)
+      end
+    else
+      CaerdonWardrobe:ClearButton(button.Reward)
+    end
+	end
+
+	WQT_WorldQuestFrame:RegisterCallback('ListButtonUpdate', UpdateButton)
+
+	-- hooksecurefunc(WQT_QuestScrollFrame, 'DisplayQuestList', RefreshButtons)
 end
