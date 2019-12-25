@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 1560
+-- local DEBUG_ITEM = 162721
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -110,8 +110,21 @@ local function IsToyLink(itemLink)
 	return isToy
 end
 
+local function IsRecipeLink(itemLink)
+	local isRecipe = false
+	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+isCraftingReagent = GetItemInfo(itemLink)
+
+	if itemClassID == LE_ITEM_CLASS_RECIPE then
+		isRecipe = true
+	end
+
+	return isRecipe
+end
+
 local function IsCollectibleLink(itemLink)
-	return IsPetLink(itemLink) or IsMountLink(itemLink) or IsToyLink(itemLink)
+	return IsPetLink(itemLink) or IsMountLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink)
 end
 
 local cachedIsDressable = {}
@@ -430,9 +443,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			scanTip:SetAuctionItem("list", slot)
 		elseif bag == "MerchantFrame" then
 			if MerchantFrame.selectedTab == 1 then
-				scanTip:SetMerchantItem(slot)
+         scanTip:SetMerchantItem(slot)
 			else
-				scanTip:SetBuybackItem(slot)
+         scanTip:SetBuybackItem(slot)
 			end
 		elseif bag == BANK_CONTAINER then
 			scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
@@ -627,7 +640,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					local r, g, b = line:GetTextColor()
 					hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
 					if isDebugItem then print("Color: " .. hex) end
-					if hex == "fe1f1f" and isBindOnPickup then
+					if hex == "fe1f1f" and (isBindOnPickup or IsRecipeLink(itemLink)) then
+						-- Assume BoE recipes can't be learned to avoid erroneous stars in AH / vendor
 						if isDebugItem then print("Red text in tooltip indicates item is soulbound and can't be used by this toon") end
 						unusableItem = true
 						if not bag == "EncounterJournal" then
@@ -642,7 +656,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		if not shouldRetry then
 			if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
 
-			if isCollectionItem then
+			if isCollectionItem and not unusableItem then
 				if numLines == 0 and IsPetLink(itemLink) then
 					local petID = GetItemID(itemLink)
 					if petID then
@@ -1426,7 +1440,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 			else
 				mogStatus = "other"
 			end
-		elseif IsPetLink(itemLink) or IsToyLink(itemLink) then
+		elseif IsPetLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink) then
 			mogStatus = "own"
 		end
 	else
