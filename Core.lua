@@ -1155,9 +1155,6 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 			if (button.count and button.count > 1) then
 				bindsOnText:SetPoint("BOTTOMRIGHT", 0, offset)
 			end
-			if(options.bindingScale) then
-				bindsOnText:SetScale(options.bindingScale)
-			end
 		end
 	elseif bindingPosition == "CENTER" then
 		bindsOnText:SetPoint("CENTER", 0, 0)
@@ -1165,6 +1162,9 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 		bindsOnText:SetPoint("TOPRIGHT", 0, -2)
 	else
 		bindsOnText:SetPoint(bindingPosition, options.bindingOffsetX or 2, options.bindingOffsetY or 2)
+	end
+	if(options.bindingScale) then
+		bindsOnText:SetScale(options.bindingScale)
 	end
 
 	local bindingText
