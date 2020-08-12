@@ -211,7 +211,7 @@ local function GetItemAppearance(itemID, itemLink)
         if sourceItemLink then
 			local _, _, quality = GetItemInfo(sourceItemLink)
 			-- Skip artifact weapons and common for now
-			if quality == LE_ITEM_QUALITY_COMMON then
+			if quality == Enum.ItemQuality.Common then
 	 			appearanceID = nil
 	 			isCollected = false
 	 			sourceID = NO_TRANSMOG_SOURCE_ID
@@ -1175,7 +1175,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 	else
 		if mogStatus == "own" then
 			if bindingStatus == L["BoA"] then
-				local color = BAG_ITEM_QUALITY_COLORS[LE_ITEM_QUALITY_HEIRLOOM]
+				local color = BAG_ITEM_QUALITY_COLORS[Enum.ItemQuality.Heirloom]
 				bindsOnText:SetTextColor(color.r, color.g, color.b, 1)
 				bindingText = bindingStatus
 			else
@@ -1185,7 +1185,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 			bindingText = "|cFFFF0000" .. bindingStatus .. "|r"
 		elseif mogStatus == "collected" then
 			if bindingStatus == L["BoA"] then
-				local color = BAG_ITEM_QUALITY_COLORS[LE_ITEM_QUALITY_HEIRLOOM]
+				local color = BAG_ITEM_QUALITY_COLORS[Enum.ItemQuality.Heirloom]
 				bindsOnText:SetTextColor(color.r, color.g, color.b, 1)
 				bindingText = bindingStatus
 			elseif bindingStatus == L["BoE"] then
@@ -1195,7 +1195,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 			end
 		else
 			if bindingStatus == L["BoA"] then
-				local color = BAG_ITEM_QUALITY_COLORS[LE_ITEM_QUALITY_HEIRLOOM]
+				local color = BAG_ITEM_QUALITY_COLORS[Enum.ItemQuality.Heirloom]
 				bindsOnText:SetTextColor(color.r, color.g, color.b, 1)
 				bindingText = bindingStatus
 			else
@@ -2068,10 +2068,15 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 
 	local spellGetter;
 	if ( QuestInfoFrame.questLog ) then
-		questID = select(8, GetQuestLogTitle(GetQuestLogSelection()));
+		questID = C_QuestLog.GetSelectedQuest();
 		if C_QuestLog.ShouldShowQuestRewards(questID) then
+			if not HaveQuestRewardData(questID) then
+				-- Is this async?
+				C_TaskQuest.RequestPreloadRewardData(questID)
+			end
+		
 			numQuestRewards = GetNumQuestLogRewards();
-			numQuestChoices = GetNumQuestLogChoices();
+			numQuestChoices = GetNumQuestLogChoices(questID, true);
 			-- playerTitle = GetQuestLogRewardTitle();
 			-- numSpellRewards = GetNumQuestLogRewardSpells();
 			-- spellGetter = GetQuestLogRewardSpell;
