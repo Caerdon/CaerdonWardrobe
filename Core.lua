@@ -1794,55 +1794,10 @@ end
 hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
 hooksecurefunc("MerchantFrame_UpdateBuybackInfo", OnBuybackUpdate)
 
-local ignoreEvents = {
-	["APPEARANCE_SEARCH_UPDATED"] = {},
-	["ACTIONBAR_UPDATE_COOLDOWN"] = {},
-	["BAG_UPDATE_COOLDOWN"] = {},
-	["BN_FRIEND_INFO_CHANGED"] = {},
-	["CHAT_MSG_BN_WHISPER"] = {},
-	["CHAT_MSG_BN_WHISPER_INFORM"] = {},
-	["CHAT_MSG_CHANNEL"] = {},
-	["CHAT_MSG_SYSTEM"] = {},
-	["CHAT_MSG_TRADESKILLS"] = {},
-	["COMBAT_LOG_EVENT_UNFILTERED"] = {},
-	["COMPANION_UPDATE"] = {},
-	["CRITERIA_UPDATE"] = {},
-	["CURSOR_UPDATE"] = {},
-	["FRIENDLIST_UPDATE"] = {},
-	["GET_ITEM_INFO_RECEIVED"] = {},
-	["GUILDBANKBAGSLOTS_CHANGED"] = {},
-	["GUILD_ROSTER_UPDATE"] = {},
-	["ITEM_LOCK_CHANGED"] = {},
-	["ITEM_LOCKED"] = {},
-	["ITEM_UNLOCKED"] = {},
-	["MODIFIER_STATE_CHANGED"] = {},
-	["NAME_PLATE_UNIT_REMOVED"] = {},
-	["RECEIVED_ACHIEVEMENT_LIST"] = {},
-	["QUEST_LOG_UPDATE"] = {},
-	["SPELL_UPDATE_COOLDOWN"] = {},
-	["SPELL_UPDATE_USABLE"] = {},
-	["UNIT_ABSORBE_AMOUNT_CHANGED"] = {},
-	["UNIT_AURA"] = {},
-	["UNIT_POWER"] = {},
-	["UNIT_POWER_FREQUENT"] = {},
-	["UPDATE_INVENTORY_DURABILITY"] = {},
-	["UNIT_ATTACK_SPEED"] = {},
-	["UNIT_SPELL_HASTE"] = {},
-	["UNIT_TARGET"] = {},
-	["UPDATE_MOUSEOVER_UNIT"] = {},
-	["UPDATE_PENDING_MAIL"] = {},
-	["UPDATE_UI_WIDGET"] = {},
-	["UPDATE_WORLD_STATES"] = {},
-	["QUESTLINE_UPDATE"] = {},
-	["WORLD_MAP_UPDATE"] = {}
-}
-
 local function OnEvent(self, event, ...)
 	if DEBUG_ENABLED then
-		if not ignoreEvents[event] then
-			local arg1, arg2 = ...
-			print(event .. ": " .. tostring(arg1) .. ", " .. tostring(arg2))
-		end
+		local arg1, arg2 = ...
+		print("Caerdon Wardrobe: " .. event .. ": " .. tostring(arg1) .. ", " .. tostring(arg2))
 	end
 
 	local handler = self[event]
@@ -2051,30 +2006,33 @@ function UpdatePin(pin)
 	end
 end
 
+local function QuestInfo_GetQuestID()
+	if ( QuestInfoFrame.questLog ) then
+		return C_QuestLog.GetSelectedQuest();
+	else
+		return GetQuestID();
+	end
+end
+
 local function OnQuestInfoShowRewards(template, parentFrame)
 	local numQuestRewards = 0;
 	local numQuestChoices = 0;
 	local rewardsFrame = QuestInfoFrame.rewardsFrame;
-	local questID
+	local questID = QuestInfo_GetQuestID()
 
-	if ( template.canHaveSealMaterial ) then
-		local questFrame = parentFrame:GetParent():GetParent();
-		if ( template.questLog ) then
-			questID = questFrame.questID;
-		else
-			questID = GetQuestID();
-		end
-	end
+	-- if ( template.canHaveSealMaterial ) then
+	-- 	local questFrame = parentFrame:GetParent():GetParent();
+	-- 	if ( template.questLog ) then
+	-- 		questID = questFrame.questID;
+	-- 	else
+	-- 		questID = GetQuestID();
+	-- 	end
+	-- end
 
 	local spellGetter;
+
 	if ( QuestInfoFrame.questLog ) then
-		questID = C_QuestLog.GetSelectedQuest();
 		if C_QuestLog.ShouldShowQuestRewards(questID) then
-			if not HaveQuestRewardData(questID) then
-				-- Is this async?
-				C_TaskQuest.RequestPreloadRewardData(questID)
-			end
-		
 			numQuestRewards = GetNumQuestLogRewards();
 			numQuestChoices = GetNumQuestLogChoices(questID, true);
 			-- playerTitle = GetQuestLogRewardTitle();
@@ -2087,6 +2045,13 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 		-- playerTitle = GetRewardTitle();
 		-- numSpellRewards = GetNumRewardSpells();
 		-- spellGetter = GetRewardSpell;
+	end
+
+	if not HaveQuestRewardData(questID) then
+		-- HACK: Force load and handle in QUEST_DATA_LOAD_RESULT
+		-- Not needed if Blizzard fixes showing of rewards in follow-up quests
+		C_QuestLog.RequestLoadQuestByID(questID)
+		return
 	end
 
 	local options = {
@@ -2162,21 +2127,19 @@ local function OnQuestInfoDisplay(template, parentFrame)
 end
 
 function eventFrame:PLAYER_LOGIN(...)
-	if DEBUG_ENABLED then
-		eventFrame:RegisterAllEvents()
-	else
-		-- eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
-		eventFrame:RegisterEvent "BAG_OPEN"
-		eventFrame:RegisterEvent "BAG_UPDATE"
-		eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
-		eventFrame:RegisterEvent "BANKFRAME_OPENED"
-		eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
-		eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-		-- eventFrame:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
-		eventFrame:RegisterEvent "EQUIPMENT_SETS_CHANGED"
-		eventFrame:RegisterEvent "MERCHANT_UPDATE"
-		eventFrame:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
-	end
+	-- eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
+	eventFrame:RegisterEvent "BAG_OPEN"
+	eventFrame:RegisterEvent "BAG_UPDATE"
+	eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
+	eventFrame:RegisterEvent "BANKFRAME_OPENED"
+	eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
+	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+	-- eventFrame:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
+	eventFrame:RegisterEvent "EQUIPMENT_SETS_CHANGED"
+	eventFrame:RegisterEvent "MERCHANT_UPDATE"
+	eventFrame:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
+	eventFrame:RegisterEvent "QUEST_DATA_LOAD_RESULT"
+
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 
 	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
@@ -2186,6 +2149,16 @@ function eventFrame:PLAYER_LOGIN(...)
 	end)
 	-- hooksecurefunc("QuestInfo_GetRewardButton", OnQuestInfoGetRewardButton)
 	-- hooksecurefunc("QuestInfo_ShowRewards", OnQuestInfoShowRewards)
+end
+
+function eventFrame:QUEST_DATA_LOAD_RESULT(questID, success)
+	if success then
+		-- Total hack until Blizzard fixes quest rewards not loading
+		-- If they don't, may need to ensure only the questID
+		-- and event I'm expecting shows up here.
+		QuestFrameDetailPanel:Hide();
+		QuestFrameDetailPanel:Show();
+	end
 end
 
 function RefreshMainBank()
