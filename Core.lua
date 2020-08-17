@@ -2020,6 +2020,8 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 	local rewardsFrame = QuestInfoFrame.rewardsFrame;
 	local questID = QuestInfo_GetQuestID()
 
+	if questID == 0 then return end -- quest abandoned
+
 	-- if ( template.canHaveSealMaterial ) then
 	-- 	local questFrame = parentFrame:GetParent():GetParent();
 	-- 	if ( template.questLog ) then
