@@ -1813,6 +1813,8 @@ local BAGUPDATE_INTERVAL = 0.1
 local ITEMUPDATE_INTERVAL = 0.1
 local timeSinceLastItemUpdate = nil
 
+local latestDataRequestQuestID = nil
+
 local function OnUpdate(self, elapsed)
 	if self.itemUpdateCoroutine then
 		if coroutine.status(self.itemUpdateCoroutine) ~= "dead" then
@@ -2042,16 +2044,19 @@ local function OnQuestInfoShowRewards(template, parentFrame)
 			-- spellGetter = GetQuestLogRewardSpell;
 		end
 	else
-		numQuestRewards = GetNumQuestRewards();
-		numQuestChoices = GetNumQuestChoices();
-		-- playerTitle = GetRewardTitle();
-		-- numSpellRewards = GetNumRewardSpells();
-		-- spellGetter = GetRewardSpell;
+		if ( QuestFrameRewardPanel:IsShown() or C_QuestLog.ShouldShowQuestRewards(questID) ) then
+			numQuestRewards = GetNumQuestRewards();
+			numQuestChoices = GetNumQuestChoices();
+			-- playerTitle = GetRewardTitle();
+			-- numSpellRewards = GetNumRewardSpells();
+			-- spellGetter = GetRewardSpell;
+		end
 	end
 
 	if not HaveQuestRewardData(questID) then
 		-- HACK: Force load and handle in QUEST_DATA_LOAD_RESULT
 		-- Not needed if Blizzard fixes showing of rewards in follow-up quests
+		latestDataRequestQuestID = questID
 		C_QuestLog.RequestLoadQuestByID(questID)
 		return
 	end
@@ -2156,10 +2161,14 @@ end
 function eventFrame:QUEST_DATA_LOAD_RESULT(questID, success)
 	if success then
 		-- Total hack until Blizzard fixes quest rewards not loading
-		-- If they don't, may need to ensure only the questID
-		-- and event I'm expecting shows up here.
-		QuestFrameDetailPanel:Hide();
-		QuestFrameDetailPanel:Show();
+		if questID == latestDataRequestQuestID then
+			latestDataRequestQuestID = nil
+
+			if QuestFrameDetailPanel:IsShown() then
+				QuestFrameDetailPanel:Hide();
+				QuestFrameDetailPanel:Show();
+			end
+		end
 	end
 end
 
