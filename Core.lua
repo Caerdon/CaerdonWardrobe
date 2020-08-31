@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 162721
+-- local DEBUG_ITEM = 177807
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -328,8 +328,9 @@ end
 
 local function GetItemLinkLocal(bag, slot)
 	if bag == "AuctionFrame" then
-		local _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hasAllInfo =  GetAuctionItemInfo("list", slot);
-		return hasAllInfo and GetAuctionItemLink("list", slot)
+		local browseResults = C_AuctionHouse.GetBrowseResults()
+		local _, itemLink = GetItemInfo(browseResults[slot].itemKey.itemID);
+		return itemLink
 	elseif bag == "MerchantFrame" then
 		if MerchantFrame.selectedTab == 1 then
 			return GetMerchantItemLink(slot)
@@ -440,7 +441,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
 		if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. tostring(slot)) end
 		if bag == "AuctionFrame" then
-			scanTip:SetAuctionItem("list", slot)
+			local itemKey = C_AuctionHouse.MakeItemKey(itemID)
+			scanTip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
 		elseif bag == "MerchantFrame" then
 			if MerchantFrame.selectedTab == 1 then
          scanTip:SetMerchantItem(slot)
@@ -1728,36 +1730,39 @@ local function OnGuildBankFrameUpdate()
 end
 
 local function OnAuctionBrowseUpdate()
-	local offset = FauxScrollFrame_GetOffset(BrowseScrollFrame);
+	local browseResults = C_AuctionHouse.GetBrowseResults()
+	local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
 
-	for i=1, NUM_BROWSE_TO_DISPLAY do
-		local auctionIndex = offset + i
-		local index = auctionIndex + (NUM_AUCTION_ITEMS_PER_PAGE * AuctionFrameBrowse.page);
-		local buttonName = "BrowseButton"..i.."Item";
-		local button = _G[buttonName];
+	local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
+	for i, button in ipairs(buttons) do
+		local bag = "AuctionFrame"
+		local slot = i + offset
 
-		local numBatchAuctions, totalAuctions = GetNumAuctionItems("list");
-		local shouldHide = index > (numBatchAuctions + (NUM_AUCTION_ITEMS_PER_PAGE * AuctionFrameBrowse.page));
-		if ( not shouldHide ) then
-			name, texture, count, quality, canUse, level, levelColHeader, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemId, hasAllInfo =  GetAuctionItemInfo("list", auctionIndex);
-			
-			if ( not hasAllInfo ) then --Bug  145328
-				shouldHide = true;
-			end
+		local item = browseResults[slot]
+		local _, itemLink
+		if (item) then
+			_, itemLink = GetItemInfo(browseResults[slot].itemKey.itemID);
 		end
 
-		if not shouldHide then
-			local bag = "AuctionFrame"
-			local slot = auctionIndex
-
-			local itemLink = GetAuctionItemLink("list", auctionIndex)
-			if(itemLink) then
-				local itemID = GetItemID(itemLink)
-				if itemID and button then
-					ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=false, showSellables=false })
-				end
+		if(itemLink) then
+			local itemID = GetItemID(itemLink)
+			if itemID and button then
+				ProcessOrWaitItem(itemID, bag, slot, button, 
+					{
+						iconOffset = 10,
+						iconSize = 30,				
+						showMogIcon=true, 
+						showBindStatus=false, 
+						showSellables=false
+					})
 			end
 		end
+	end
+end
+
+local function OnAuctionBrowseClick(self, buttonName, isDown)
+	if (buttonName == "LeftButton" and isDown) then
+		OnAuctionBrowseUpdate()
 	end
 end
 
@@ -1981,8 +1986,6 @@ function eventFrame:ADDON_LOADED(name)
 		else
 			eventFrame:RegisterEvent "PLAYER_LOGIN"
 		end
-	elseif name == "Blizzard_AuctionUI" then
-		hooksecurefunc("AuctionFrameBrowse_Update", OnAuctionBrowseUpdate)
 	elseif name == "Blizzard_GuildBankUI" then
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	elseif name == "Blizzard_EncounterJournal" then
@@ -2135,6 +2138,8 @@ end
 
 function eventFrame:PLAYER_LOGIN(...)
 	-- eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
+	eventFrame:RegisterEvent "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
+	eventFrame:RegisterEvent "AUCTION_HOUSE_SHOW"
 	eventFrame:RegisterEvent "BAG_OPEN"
 	eventFrame:RegisterEvent "BAG_UPDATE"
 	eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
@@ -2156,6 +2161,18 @@ function eventFrame:PLAYER_LOGIN(...)
 	end)
 	-- hooksecurefunc("QuestInfo_GetRewardButton", OnQuestInfoGetRewardButton)
 	-- hooksecurefunc("QuestInfo_ShowRewards", OnQuestInfoShowRewards)
+end
+
+function eventFrame:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
+	OnAuctionBrowseUpdate()
+end
+
+local hookAuction = true
+function eventFrame:AUCTION_HOUSE_SHOW()
+	if (hookAuction) then
+		hookAuction = false
+		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", OnAuctionBrowseUpdate)
+	end
 end
 
 function eventFrame:QUEST_DATA_LOAD_RESULT(questID, success)
