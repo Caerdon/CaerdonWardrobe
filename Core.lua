@@ -352,6 +352,12 @@ local function GetItemLinkLocal(bag, slot)
 		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 		isCraftingReagent = GetItemInfo(itemID)
 		return itemLink
+	elseif bag == "SendMailFrame" then
+		local itemName, itemID, itemTexture, stackCount, quality = GetSendMailItem(slot);
+		local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+		isCraftingReagent = GetItemInfo(itemID)
+		return itemLink
 	elseif bag == "QuestButton" then
 		if slot.itemLink then
 			return slot.itemLink
@@ -381,7 +387,7 @@ local function GetItemKey(bag, slot, itemLink)
 		itemKey = itemLink .. bag
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		itemKey = itemLink
-	elseif bag == "OpenMailFrame" then
+	elseif bag == "OpenMailFrame" or bag == "SendMailFrame" then
 		itemKey = itemLink .. slot
 	else
 		itemKey = itemLink .. bag .. slot
@@ -470,6 +476,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			scanTip:SetLootRollItem(slot.index)
 		elseif bag == "OpenMailFrame" then
 			scanTip:SetInboxItem(InboxFrame.openMailID, slot)
+		elseif bag == "SendMailFrame" then
+			scanTip:SetSendMailItem(slot)
 		elseif bag == "EncounterJournal" then
 			local classID, specID = EJ_GetLootFilter();
 			if (specID == 0) then
@@ -798,7 +806,9 @@ local function IsBankOrBags(bag)
 	   bag ~= "EncounterJournal" and
 	   bag ~= "QuestButton" and
 	   bag ~= "LootFrame" and
-	   bag ~= "GroupLootFrame" then
+	   bag ~= "GroupLootFrame" and
+	   bag ~= "OpenMailFrame" and
+	   bag ~= "SendMailFrame" then
 		isBankOrBags = true
 	end
 
@@ -2375,10 +2385,31 @@ local function OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, s
 			if name then
 				ProcessOrWaitItem(itemID, "OpenMailFrame", i, attachmentButton, nil)
 			else
-				-- TODO: Clear button?
+				SetItemButtonMogStatus(attachmentButton, nil)
+				SetItemButtonBindType(attachmentButton, nil)		
 			end
 		else
-			-- TODO: Clear button?
+			SetItemButtonMogStatus(attachmentButton, nil)
+			SetItemButtonBindType(attachmentButton, nil)		
+		end
+	end
+end
+
+local function OnSendMailFrameUpdate()
+	for i=1, ATTACHMENTS_MAX_SEND do
+		local attachmentButton = SendMailFrame.SendMailAttachments[i];
+
+		if HasSendMailItem(i) then
+			local itemName, itemID, itemTexture, stackCount, quality = GetSendMailItem(i);
+			if itemName then
+				ProcessOrWaitItem(itemID, "SendMailFrame", i, attachmentButton, nil)
+			else
+				SetItemButtonMogStatus(attachmentButton, nil)
+				SetItemButtonBindType(attachmentButton, nil)		
+			end
+		else
+			SetItemButtonMogStatus(attachmentButton, nil)
+			SetItemButtonBindType(attachmentButton, nil)		
 		end
 	end
 end
@@ -2439,6 +2470,7 @@ end
 hooksecurefunc("LootFrame_UpdateButton", OnLootFrameUpdateButton)
 hooksecurefunc("QuestInfo_Display", OnQuestInfoDisplay)
 hooksecurefunc("OpenMailFrame_UpdateButtonPositions", OnMailFrameUpdateButtonPositions)
+hooksecurefunc("SendMailFrame_Update", OnSendMailFrameUpdate)
 
 GroupLootFrame1:HookScript("OnShow", OnGroupLootFrameShow)
 GroupLootFrame2:HookScript("OnShow", OnGroupLootFrameShow)
