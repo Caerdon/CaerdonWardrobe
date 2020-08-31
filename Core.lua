@@ -346,6 +346,12 @@ local function GetItemLinkLocal(bag, slot)
 		return slot.link
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		return slot.link
+	elseif bag == "OpenMailFrame" then
+		local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, slot);
+		local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+		isCraftingReagent = GetItemInfo(itemID)
+		return itemLink
 	elseif bag == "QuestButton" then
 		if slot.itemLink then
 			return slot.itemLink
@@ -375,6 +381,8 @@ local function GetItemKey(bag, slot, itemLink)
 		itemKey = itemLink .. bag
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		itemKey = itemLink
+	elseif bag == "OpenMailFrame" then
+		itemKey = itemLink .. slot
 	else
 		itemKey = itemLink .. bag .. slot
 	end
@@ -460,6 +468,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			scanTip:SetLootItem(slot.index)
 		elseif bag == "GroupLootFrame" then
 			scanTip:SetLootRollItem(slot.index)
+		elseif bag == "OpenMailFrame" then
+			scanTip:SetInboxItem(InboxFrame.openMailID, slot)
 		elseif bag == "EncounterJournal" then
 			local classID, specID = EJ_GetLootFilter();
 			if (specID == 0) then
@@ -2357,6 +2367,22 @@ end
 -- 	end
 -- end
 
+local function OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
+	for i=1, ATTACHMENTS_MAX_RECEIVE do
+		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
+		if HasInboxItem(InboxFrame.openMailID, i) then
+			local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
+			if name then
+				ProcessOrWaitItem(itemID, "OpenMailFrame", i, attachmentButton, nil)
+			else
+				-- TODO: Clear button?
+			end
+		else
+			-- TODO: Clear button?
+		end
+	end
+end
+
 local function OnLootFrameUpdateButton(index)
 	local numLootItems = LootFrame.numLootItems;
 	local numLootToShow = LOOTFRAME_NUMBUTTONS;
@@ -2412,6 +2438,7 @@ end
 
 hooksecurefunc("LootFrame_UpdateButton", OnLootFrameUpdateButton)
 hooksecurefunc("QuestInfo_Display", OnQuestInfoDisplay)
+hooksecurefunc("OpenMailFrame_UpdateButtonPositions", OnMailFrameUpdateButtonPositions)
 
 GroupLootFrame1:HookScript("OnShow", OnGroupLootFrameShow)
 GroupLootFrame2:HookScript("OnShow", OnGroupLootFrameShow)
