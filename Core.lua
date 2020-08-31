@@ -1,5 +1,5 @@
-local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 177807
+local DEBUG_ENABLED = true
+-- local DEBUG_ITEM = 180405
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -67,22 +67,51 @@ local function GetItemID(itemLink)
 end
 
 local function IsPetLink(itemLink)
-	local isPet = false
-	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-isCraftingReagent = GetItemInfo(itemLink)
-
 	local itemID = GetItemID(itemLink)
 	if itemID == 82800 then
-		isPet = true -- probably at the guild bank
-	elseif itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
-		isPet = true
-	elseif not itemClassID then
-		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
-		isPet = strsub(link, 1, 9) == "battlepet"
+		return true -- It's showing up as [Pet Cage] for whatever reason
+	elseif( itemLink ) then 
+		local _, _, _, linkType, linkID, _, _, _, _, _, battlePetID, battlePetDisplayID = strsplit(":|H", itemLink);
+		if ( linkType == "item") then
+			local _, _, _, creatureID, _, _, _, _, _, _, _, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(tonumber(linkID));
+			if (creatureID and displayID) then
+				return true;
+			end
+		elseif ( linkType == "battlepet" ) then
+			local speciesID, _, _, _, _, displayID, _, _, _, _, creatureID = C_PetJournal.GetPetInfoByPetID(battlePetID);
+			if ( speciesID == tonumber(linkID)) then
+				if (creatureID and displayID) then
+					return true;
+				end	
+			else
+				speciesID = tonumber(linkID);
+				local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+				displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
+				if (creatureID and displayID) then
+					return true;
+				end	
+			end
+		end
 	end
+	return false
 
-	return isPet
+
+-- 	local isPet = false
+-- 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+-- itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+-- isCraftingReagent = GetItemInfo(itemLink)
+
+-- 	local itemID = GetItemID(itemLink)
+-- 	if itemID == 82800 then
+-- 		isPet = true -- probably at the guild bank
+-- 	elseif itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
+-- 		isPet = true
+-- 	elseif not itemClassID then
+-- 		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
+-- 		isPet = strsub(link, 1, 9) == "battlepet"
+-- 	end
+
+-- 	return isPet
 end
 
 local function IsMountLink(itemLink)
@@ -124,6 +153,17 @@ isCraftingReagent = GetItemInfo(itemLink)
 end
 
 local function IsCollectibleLink(itemLink)
+	local itemID = GetItemID(itemLink)
+	local isDebugItem = itemID == DEBUG_ITEM
+	if isDebugItem then
+		local isPet = IsPetLink(itemLink)
+		local isMount = IsMountLink(itemLink)
+		local isToy = IsToyLink(itemLink)
+		local isRecipe = IsRecipeLink(itemLink)
+
+		print("isPet: " .. tostring(isPet) .. ", isMount: " .. tostring(isMount) .. ", isToy: " .. tostring(isToy) .. ", isRecipe: " .. tostring(isRecipe))
+	end
+
 	return IsPetLink(itemLink) or IsMountLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink)
 end
 
@@ -414,7 +454,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	local isCompletionistItem = false
 	local matchesLootSpec = true
 	local unusableItem = false
-    local isDressable, shouldRetry
+	local isDressable, shouldRetry
+	
+	local tooltipSpeciesID = 0
 
     local isCollectionItem = IsCollectibleLink(itemLink)
 
@@ -475,9 +517,11 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		elseif bag == "GroupLootFrame" then
 			scanTip:SetLootRollItem(slot.index)
 		elseif bag == "OpenMailFrame" then
-			scanTip:SetInboxItem(InboxFrame.openMailID, slot)
+			local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInboxItem(InboxFrame.openMailID, slot)
+			tooltipSpeciesID = speciesID
 		elseif bag == "SendMailFrame" then
-			scanTip:SetSendMailItem(slot)
+			local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetSendMailItem(slot)
+			tooltipSpeciesID = speciesID
 		elseif bag == "EncounterJournal" then
 			local classID, specID = EJ_GetLootFilter();
 			if (specID == 0) then
@@ -683,7 +727,6 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						if petID ~= 82800 then -- generic pet cage
 							local numCollected = C_PetJournal.GetNumCollectedInfo(petID)
 							if numCollected == nil then
-								-- TODO: Not sure what else to do here
 								needsItem = false
 							elseif numCollected > 0 then				
 								if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
@@ -693,8 +736,21 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 								needsItem = true
 							end
 						else
-							-- TODO: Can we do something here?
-							needsItem = false
+							if tooltipSpeciesID > 0 then
+								-- Pet cages have some magic info that comes back from tooltip setup
+								local numCollected = C_PetJournal.GetNumCollectedInfo(tooltipSpeciesID)
+								if numCollected == nil then
+									needsItem = false
+								elseif numCollected > 0 then
+									if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
+									needsItem = false
+								else
+									if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
+									needsItem = true
+								end
+							else
+								needsItem = false
+							end
 						end
 					end
 				elseif needsCollectionItem then
