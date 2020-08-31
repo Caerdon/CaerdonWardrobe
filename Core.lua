@@ -1730,34 +1730,37 @@ local function OnGuildBankFrameUpdate()
 end
 
 local function OnAuctionBrowseUpdate()
-	local browseResults = C_AuctionHouse.GetBrowseResults()
-	local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
+	-- Event pump since first load won't have UI ready
+	C_Timer.After(0, function() 
+		local browseResults = C_AuctionHouse.GetBrowseResults()
+		local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
 
-	local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
-	for i, button in ipairs(buttons) do
-		local bag = "AuctionFrame"
-		local slot = i + offset
+		local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
+		for i, button in ipairs(buttons) do
+			local bag = "AuctionFrame"
+			local slot = i + offset
 
-		local item = browseResults[slot]
-		local _, itemLink
-		if (item) then
-			_, itemLink = GetItemInfo(browseResults[slot].itemKey.itemID);
-		end
+			local item = browseResults[slot]
+			local _, itemLink
+			if (item) then
+				_, itemLink = GetItemInfo(browseResults[slot].itemKey.itemID);
+			end
 
-		if(itemLink) then
-			local itemID = GetItemID(itemLink)
-			if itemID and button then
-				ProcessOrWaitItem(itemID, bag, slot, button, 
-					{
-						iconOffset = 10,
-						iconSize = 30,				
-						showMogIcon=true, 
-						showBindStatus=false, 
-						showSellables=false
-					})
+			if(itemLink) then
+				local itemID = GetItemID(itemLink)
+				if itemID and button then
+					ProcessOrWaitItem(itemID, bag, slot, button, 
+						{
+							iconOffset = 10,
+							iconSize = 30,				
+							showMogIcon=true, 
+							showBindStatus=false, 
+							showSellables=false
+						})
+				end
 			end
 		end
-	end
+	end)
 end
 
 local function OnAuctionBrowseClick(self, buttonName, isDown)
