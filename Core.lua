@@ -8,6 +8,9 @@ local ignoreDefaultBags = false
 
 CaerdonWardrobe = {}
 
+local version, build, date, tocversion = GetBuildInfo()
+local isShadowlands = tonumber(build) > 35700
+
 StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
   text = "It looks like multiple bag addons are currently running (%s)! I can't guarantee Caerdon Wardrobe will work properly in this case.  You should only have one bag addon enabled!",
   button1 = "Got it!",
@@ -2092,7 +2095,11 @@ end
 
 local function QuestInfo_GetQuestID()
 	if ( QuestInfoFrame.questLog ) then
-		return C_QuestLog.GetSelectedQuest();
+		if (isShadowlands) then
+			return C_QuestLog.GetSelectedQuest();
+		else
+			return select(8, GetQuestLogTitle(GetQuestLogSelection()));
+		end
 	else
 		return GetQuestID();
 	end
