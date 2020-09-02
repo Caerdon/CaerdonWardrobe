@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 180405
+-- local DEBUG_ITEM = 182980
 local ADDON_NAME, NS = ...
 local L = NS.L
 local eventFrame
@@ -385,6 +385,7 @@ local function GetItemLinkLocal(bag, slot)
 	elseif bag == "GuildBankFrame" then
 		return GetGuildBankItemLink(slot.tab, slot.index)
 	elseif bag == "EncounterJournal" then
+		print("ITEM: " .. slot.link)
 		-- local itemID, encounterID, name, icon, slotName, armorType, itemLink = EJ_GetLootInfoByIndex(slot)
 		return slot.link
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
@@ -1990,7 +1991,14 @@ local function OnUpdate(self, elapsed)
 end
 
 local function OnEncounterJournalSetLootButton(item)
-	local itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(item.index);
+	local itemID, encounterID, name, icon, slot, armorType, itemLink;
+	if isShadowlands then
+		local itemInfo = C_EncounterJournal.GetLootInfoByIndex(item.index);
+		itemID = itemInfo.itemID
+	else
+		itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(item.index);
+	end
+	
 	local options = {
 		iconOffset = 7,
 		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
@@ -1999,8 +2007,8 @@ local function OnEncounterJournalSetLootButton(item)
 		overridePosition = "TOPLEFT"
 	}
 
-	if name then
-		ProcessItem(itemID, "EncounterJournal", item, item, options)
+	if itemID then
+		ProcessOrWaitItem(itemID, "EncounterJournal", item, item, options)
 	end
 end
 
@@ -2508,7 +2516,7 @@ local function OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, s
 		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
 		if HasInboxItem(InboxFrame.openMailID, i) then
 			local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
-			if name then
+			if itemID then
 				ProcessOrWaitItem(itemID, "OpenMailFrame", i, attachmentButton, nil)
 			else
 				SetItemButtonMogStatus(attachmentButton, nil)
@@ -2527,7 +2535,7 @@ local function OnSendMailFrameUpdate()
 
 		if HasSendMailItem(i) then
 			local itemName, itemID, itemTexture, stackCount, quality = GetSendMailItem(i);
-			if itemName then
+			if itemID then
 				ProcessOrWaitItem(itemID, "SendMailFrame", i, attachmentButton, nil)
 			else
 				SetItemButtonMogStatus(attachmentButton, nil)
