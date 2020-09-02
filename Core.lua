@@ -401,6 +401,14 @@ local function GetItemLinkLocal(bag, slot)
 		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 		isCraftingReagent = GetItemInfo(itemID)
 		return itemLink
+	elseif bag == "BlackMarketScrollFrame" then
+		if (slot == "HotItem") then
+			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
+			return link
+		else
+			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(slot);
+			return link
+		end
 	elseif bag == "QuestButton" then
 		if slot.itemLink then
 			return slot.itemLink
@@ -431,6 +439,8 @@ local function GetItemKey(bag, slot, itemLink)
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		itemKey = itemLink
 	elseif bag == "OpenMailFrame" or bag == "SendMailFrame" then
+		itemKey = itemLink .. slot
+	elseif bag == "BlackMarketScrollFrame" then
 		itemKey = itemLink .. slot
 	else
 		itemKey = itemLink .. bag .. slot
@@ -525,6 +535,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		elseif bag == "SendMailFrame" then
 			local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetSendMailItem(slot)
 			tooltipSpeciesID = speciesID
+		elseif bag == "BlackMarketScrollFrame" then
+			scanTip:SetHyperlink(itemLink)
 		elseif bag == "EncounterJournal" then
 			local classID, specID = EJ_GetLootFilter();
 			if (specID == 0) then
@@ -867,7 +879,8 @@ local function IsBankOrBags(bag)
 	   bag ~= "LootFrame" and
 	   bag ~= "GroupLootFrame" and
 	   bag ~= "OpenMailFrame" and
-	   bag ~= "SendMailFrame" then
+	   bag ~= "SendMailFrame" and 
+	   bag ~= "BlackMarketScrollFrame" then
 		isBankOrBags = true
 	end
 
@@ -2072,8 +2085,9 @@ function eventFrame:ADDON_LOADED(name)
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	elseif name == "Blizzard_EncounterJournal" then
 		hooksecurefunc("EncounterJournal_SetLootButton", OnEncounterJournalSetLootButton)
+	elseif name == "Blizzard_BlackMarketUI" then
+		eventFrame:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
 	end
-
 end
 
 function UpdatePin(pin)
@@ -2408,6 +2422,55 @@ function eventFrame:PLAYER_LOOT_SPEC_UPDATED()
 	if EncounterJournal then
 		EncounterJournal_LootUpdate()
 	end
+end
+
+local function UpdateBlackMarketItems()
+	local numItems = C_BlackMarket.GetNumItems();
+	
+	if (not numItems) then
+		numItems = 0;
+	end
+	
+	local scrollFrame = BlackMarketScrollFrame;
+	local offset = HybridScrollFrame_GetOffset(scrollFrame);
+	local buttons = scrollFrame.buttons;
+	local numButtons = #buttons;
+
+	for i = 1, numButtons do
+		local button = buttons[i];
+		local index = offset + i; -- adjust index
+
+		if ( index <= numItems ) then
+			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
+			local itemID = GetItemID(link)
+			if ( itemID ) then
+				ProcessOrWaitItem(itemID, "BlackMarketScrollFrame", index, button, nil)
+			else
+				SetItemButtonMogStatus(button, nil)
+				SetItemButtonBindType(button, nil)		
+			end
+		else
+			SetItemButtonMogStatus(button, nil)
+			SetItemButtonBindType(button, nil)		
+		end
+	end
+end
+
+local function UpdateBlackMarketHotItem()
+	local button = BlackMarketFrame.HotDeal.Item
+	local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
+	local itemID = GetItemID(link)
+	if ( itemID ) then
+		ProcessOrWaitItem(itemID, "BlackMarketScrollFrame", "HotItem", button, nil)
+	else
+		SetItemButtonMogStatus(button, nil)
+		SetItemButtonBindType(button, nil)		
+	end
+end
+
+function eventFrame:BLACK_MARKET_ITEM_UPDATE()
+	UpdateBlackMarketItems()
+	UpdateBlackMarketHotItem()
 end
 
 function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
