@@ -1,4 +1,4 @@
-local DEBUG_ENABLED = true
+local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 180405
 local ADDON_NAME, NS = ...
 local L = NS.L
