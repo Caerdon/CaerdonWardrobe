@@ -66,6 +66,10 @@ local model = CreateFrame('DressUpModel')
 local function GetItemID(itemLink)
 	-- local printable = gsub(itemLink, "\124", "\124\124");
 	-- print(printable)
+	if not itemLink then
+		return nil
+	end
+
 	return tonumber(itemLink:match("item:(%d+)") or itemLink:match("battlepet:(%d+)"))
 end
 
