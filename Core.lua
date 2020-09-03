@@ -385,7 +385,6 @@ local function GetItemLinkLocal(bag, slot)
 	elseif bag == "GuildBankFrame" then
 		return GetGuildBankItemLink(slot.tab, slot.index)
 	elseif bag == "EncounterJournal" then
-		print("ITEM: " .. slot.link)
 		-- local itemID, encounterID, name, icon, slotName, armorType, itemLink = EJ_GetLootInfoByIndex(slot)
 		return slot.link
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
