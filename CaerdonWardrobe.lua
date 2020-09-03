@@ -19,6 +19,7 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "AUCTION_HOUSE_SHOW"
 	self:RegisterEvent "BAG_OPEN"
 	self:RegisterEvent "BAG_UPDATE"
+	self:RegisterEvent "BAG_UPDATE_COOLDOWN"
 	self:RegisterEvent "BAG_UPDATE_DELAYED"
 	self:RegisterEvent "BANKFRAME_OPENED"
 	self:RegisterEvent "GET_ITEM_INFO_RECEIVED"
@@ -2502,6 +2503,10 @@ end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	-- RefreshItems()
+end
+
+function CaerdonWardrobeMixin:BAG_UPDATE_COOLDOWN()
+	RefreshItems()
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
