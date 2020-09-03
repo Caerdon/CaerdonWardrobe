@@ -10,7 +10,7 @@ Localization.lua
 localization\deDE.lua
 
 CaerdonWardrobe.xml
-config\CaerdonWardrobeConfig.xml
+config\Config.xml
 Config.lua
 
 external\AdiBags\Core.AdiBags.lua

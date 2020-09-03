@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 182980
+-- local DEBUG_ITEM = 12261
 local ADDON_NAME, NS = ...
 local L = NS.L
 local isBagUpdate = false
@@ -15,7 +15,6 @@ CaerdonWardrobeMixin = {}
 function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "ADDON_LOADED"
 	self:RegisterEvent "PLAYER_LOGOUT"
-	-- self:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
 	self:RegisterEvent "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
 	self:RegisterEvent "AUCTION_HOUSE_SHOW"
 	self:RegisterEvent "BAG_OPEN"
@@ -30,10 +29,6 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
 	self:RegisterEvent "QUEST_DATA_LOAD_RESULT"
 	self:RegisterEvent "PLAYER_LOGIN"
-
-	if DEBUG_ENABLED then
-		GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
-	end
 
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 	SetCVar("missingTransmogSourceInItemTooltips", 1)
@@ -82,10 +77,6 @@ local InventorySlots = {
     ['INVTYPE_HOLDABLE'] = INVSLOT_OFFHAND,
     ['INVTYPE_TABARD'] = INVSLOT_TABARD
 }
-
-local mainTip = CreateFrame( "GameTooltip", "CaerdonWardrobeGameTooltip", nil, "GameTooltipTemplate" )
-mainTip.ItemTooltip = CreateFrame("FRAME", "CaerdonWardrobeGameTooltipChild", mainTip, "InternalEmbeddedItemTooltipTemplate")
-mainTip.ItemTooltip.Tooltip.shoppingTooltips = { ShoppingTooltip1, ShoppingTooltip2 }
 
 local cachedBinding = {}
 
@@ -491,7 +482,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 	if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. tostring(slot)) end
 
-	local scanTip = mainTip
+	local scanTip = CaerdonWardrobeFrameTooltip
 	local itemKey = GetItemKey(bag, slot, itemLink)
 
 	local binding = cachedBinding[itemKey]
@@ -503,6 +494,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	local matchesLootSpec = true
 	local unusableItem = false
 	local isDressable, shouldRetry
+	local isLocked = false
 	
 	local tooltipSpeciesID = 0
 
@@ -542,7 +534,6 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	elseif not shouldRetry then
 		if isDebugItem then print("Processing binding") end
 		needsItem = true
-		scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
 		if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. tostring(slot)) end
 		if bag == "AuctionFrame" then
 			local itemKey = C_AuctionHouse.MakeItemKey(itemID)
@@ -751,12 +742,15 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						end
 					elseif lineText == ITEM_SPELL_KNOWN or strmatch(lineText, PET_KNOWN) then
 						needsCollectionItem = false
+					elseif lineText == LOCKED then
+						isLocked = true
 					end
 
 					-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
 					local r, g, b = line:GetTextColor()
 					hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
 					if isDebugItem then print("Color: " .. hex) end
+					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
 					if hex == "fe1f1f" and (isBindOnPickup or IsRecipeLink(itemLink)) then
 						-- Assume BoE recipes can't be learned to avoid erroneous stars in AH / vendor
 						if isDebugItem then print("Red text in tooltip indicates item is soulbound and can't be used by this toon") end
@@ -818,11 +812,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		end
 	end
 
-	ShoppingTooltip1:Hide()
-	ShoppingTooltip2:Hide()
-	scanTip:Hide()
-
-	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec
+	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked
 end
 
 local function addDebugInfo(tooltip)
@@ -1136,7 +1126,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" then
+		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -1189,6 +1179,9 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	elseif status == "openable" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-free")
+	elseif status == "locked" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
+			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-key")
 	elseif status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
@@ -1400,8 +1393,8 @@ local function DebugItem(itemID, itemLink, bag, slot)
 	end
 
 	print ( '---- Addon API')
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec = GetBindingStatus(bag, slot, itemID, itemLink)
-	print ('Binding Status: ' .. tostring(bindingStatus) .. ', Needs Item: ' .. tostring(needsItem) .. ', HasUse: ' .. tostring(hasUse) .. ', Is Dressable: ' .. tostring(isDressable) .. ', Is In Equipment Set: ' .. tostring(isInEquipmentSet) .. ', Is BoP: ' .. tostring(isBindOnPickup) .. ', Is Completionist: ' .. tostring(isCompletionistItem) .. ', Should Retry: ' .. tostring(shouldRetry) .. ', Unusable: ' .. tostring(unusableItem) .. ', Matches Loot Spec: ' .. tostring(matchesLootSpec))
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
+	print ('Binding Status: ' .. tostring(bindingStatus) .. ', Needs Item: ' .. tostring(needsItem) .. ', HasUse: ' .. tostring(hasUse) .. ', Is Dressable: ' .. tostring(isDressable) .. ', Is In Equipment Set: ' .. tostring(isInEquipmentSet) .. ', Is BoP: ' .. tostring(isBindOnPickup) .. ', Is Completionist: ' .. tostring(isCompletionistItem) .. ', Should Retry: ' .. tostring(shouldRetry) .. ', Unusable: ' .. tostring(unusableItem) .. ', Matches Loot Spec: ' .. tostring(matchesLootSpec) .. ', Is Locked: ' .. tostring(isLocked))
 
 	local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
 	print ('Appearance ID: ' .. tostring(appearanceID) .. ', Is Collected: ' .. tostring(isCollected) .. ', Source ID: ' .. tostring(sourceID) .. ', Should Retry: ' .. tostring(shouldRetry))
@@ -1455,14 +1448,14 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
   	if isDebugItem then
    		DebugItem(itemID, itemLink, bag, slot)
    	end
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, isLocked
 	if isDebugItem then
 		print ('Binding Status: ' .. tostring(bindingStatus) .. ', Needs Item: ' .. tostring(needsItem) .. ', HasUse: ' .. tostring(hasUse) .. ', Is Dressable: ' .. tostring(isDressable) .. ', Is In Equipment Set: ' .. tostring(isInEquipmentSet) .. ', Is BoP: ' .. tostring(isBindOnPickup) .. ', Is Completionist: ' .. tostring(isCompletionistItem) .. ', Should Retry: ' .. tostring(shouldRetry) .. ', Unusable: ' .. tostring(unusableItem) .. ', Matches Loot Spec: ' .. tostring(matchesLootSpec))
 	end
 
 	local appearanceID, isCollected, sourceID
 
-	bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec = GetBindingStatus(bag, slot, itemID, itemLink)
+	bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
 		if isDebugItem then print("Retrying item: " .. itemLink) end
 		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
@@ -1595,7 +1588,11 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				if duration > 0 and not isEnabled then
 					mogStatus = "refundable" -- Can't open yet... show timer
 				else
-					mogStatus = "openable"
+					if isLocked then
+						mogStatus = "locked"
+					else
+						mogStatus = "openable"
+					end
 				end
 			end
 
@@ -1666,6 +1663,10 @@ end
 local registeredAddons = {}
 local registeredBagAddons = {}
 local bagAddonCount = 0
+
+function CaerdonWardrobe:GetItemID(itemLink)
+	return GetItemID(itemLink)
+end
 
 function CaerdonWardrobe:RegisterAddon(name, addonOptions)
 	local options = {
@@ -2274,6 +2275,10 @@ local function OnQuestInfoDisplay(template, parentFrame)
 end
 
 function CaerdonWardrobeMixin:PLAYER_LOGIN(...)
+	if DEBUG_ENABLED then
+		GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
+	end
+
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 
 	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
@@ -2515,140 +2520,7 @@ function CaerdonWardrobeMixin:BANKFRAME_OPENED()
 	-- RefreshMainBank()
 end
 
--- Turning this off for now as I made fixes for the container hook and don't
--- need to do this twice.  Keeping around for a bit just in case.
--- function CaerdonWardrobeMixin:PLAYERBANKSLOTS_CHANGED(slot, arg2)
--- 	if ( slot <= NUM_BANKGENERIC_SLOTS ) then
--- 		OnBankItemUpdate(BankSlotsFrame["Item"..slot]);
--- 	else
--- 		OnBankItemUpdate(BankSlotsFrame["Bag"..(slot-NUM_BANKGENERIC_SLOTS)]);
--- 	end
--- end
-
-local function OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
-	for i=1, ATTACHMENTS_MAX_RECEIVE do
-		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
-		if HasInboxItem(InboxFrame.openMailID, i) then
-			local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
-			if itemID then
-				ProcessOrWaitItem(itemID, "OpenMailFrame", i, attachmentButton, nil)
-			else
-				SetItemButtonMogStatus(attachmentButton, nil)
-				SetItemButtonBindType(attachmentButton, nil)		
-			end
-		else
-			SetItemButtonMogStatus(attachmentButton, nil)
-			SetItemButtonBindType(attachmentButton, nil)		
-		end
-	end
-end
-
-local function OnSendMailFrameUpdate()
-	for i=1, ATTACHMENTS_MAX_SEND do
-		local attachmentButton = SendMailFrame.SendMailAttachments[i];
-
-		if HasSendMailItem(i) then
-			local itemName, itemID, itemTexture, stackCount, quality = GetSendMailItem(i);
-			if itemID then
-				ProcessOrWaitItem(itemID, "SendMailFrame", i, attachmentButton, nil)
-			else
-				SetItemButtonMogStatus(attachmentButton, nil)
-				SetItemButtonBindType(attachmentButton, nil)		
-			end
-		else
-			SetItemButtonMogStatus(attachmentButton, nil)
-			SetItemButtonBindType(attachmentButton, nil)		
-		end
-	end
-end
-
-local function OnInboxFrameUpdate()
-	local numItems, totalItems = GetInboxNumItems();
-
-	for i=1, INBOXITEMS_TO_DISPLAY do
-		local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
-
-		button = _G["MailItem"..i.."Button"];
-		if ( index <= numItems ) then
-			-- Setup mail item
-			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
-			local itemID = GetItemID(firstItemLink)
-			if itemID then
-				ProcessOrWaitItem(itemID, "InboxFrame", index, button, nil)
-			else
-				SetItemButtonMogStatus(button, nil)
-				SetItemButtonBindType(button, nil)		
-			end
-		else
-			SetItemButtonMogStatus(button, nil)
-			SetItemButtonBindType(button, nil)		
-		end
-	end
-end
-
-local function OnLootFrameUpdateButton(index)
-	local numLootItems = LootFrame.numLootItems;
-	local numLootToShow = LOOTFRAME_NUMBUTTONS;
-
-	if LootFrame.AutoLootTable then
-		numLootItems = #LootFrame.AutoLootTable
-	end
-
-	if numLootItems > LOOTFRAME_NUMBUTTONS then
-		numLootToShow = numLootToShow - 1
-	end
-
-	local isProcessing = false
-	
-	local button = _G["LootButton"..index];
-	local slot = (numLootToShow * (LootFrame.page - 1)) + index;
-	if slot <= numLootItems then
-		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
-			-- texture, item, quantity, quality, locked, isQuestItem, questId, isActive = GetLootSlotInfo(slot)
-			link = GetLootSlotLink(slot)
-			if link then
-				local itemID = GetItemID(link)
-				if itemID then
-					isProcessing = true
-					ProcessOrWaitItem(itemID, "LootFrame", { index = slot, link = link }, button, nil)
-				end
-			end
-		end
-	end
-
-	if not isProcessing then
-		SetItemButtonMogStatus(button, nil)
-		SetItemButtonBindType(button, nil)
-	end
-end
-
-function OnGroupLootFrameShow(frame)
-	-- local texture, name, count, quality, bindOnPickUp, canNeed, canGreed, canDisenchant, reasonNeed, reasonGreed, reasonDisenchant, deSkillRequired = GetLootRollItemInfo(frame.rollID)
-	-- if name == nil then
-	-- 	return
-	-- end
-
-	local itemLink = GetLootRollItemLink(frame.rollID)
-	if itemLink == nil then
-		return
-	end
-
-	local itemID = GetItemID(itemLink)
-	if itemID then
-		ProcessOrWaitItem(itemID, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
-	end
-end
-
-hooksecurefunc("LootFrame_UpdateButton", OnLootFrameUpdateButton)
 hooksecurefunc("QuestInfo_Display", OnQuestInfoDisplay)
-hooksecurefunc("OpenMailFrame_UpdateButtonPositions", OnMailFrameUpdateButtonPositions)
-hooksecurefunc("SendMailFrame_Update", OnSendMailFrameUpdate)
-hooksecurefunc("InboxFrame_Update", OnInboxFrameUpdate)
-
-GroupLootFrame1:HookScript("OnShow", OnGroupLootFrameShow)
-GroupLootFrame2:HookScript("OnShow", OnGroupLootFrameShow)
-GroupLootFrame3:HookScript("OnShow", OnGroupLootFrameShow)
-GroupLootFrame4:HookScript("OnShow", OnGroupLootFrameShow)
 
 local configFrame
 local isConfigLoaded = false
