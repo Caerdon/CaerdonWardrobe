@@ -2560,7 +2560,6 @@ local function OnInboxFrameUpdate()
 
 	for i=1, INBOXITEMS_TO_DISPLAY do
 		local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
-		print("INBOXITEMS_TO_DISPLAY: " .. tostring(INBOXITEMS_TO_DISPLAY) .. ", numItems: " .. tostring(numItems) .. ", index: " .. tostring(index))
 
 		button = _G["MailItem"..i.."Button"];
 		if ( index <= numItems ) then
