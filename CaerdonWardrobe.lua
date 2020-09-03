@@ -2,14 +2,42 @@ local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 182980
 local ADDON_NAME, NS = ...
 local L = NS.L
-local eventFrame
 local isBagUpdate = false
 local ignoreDefaultBags = false
 
-CaerdonWardrobe = {}
-
 local version, build, date, tocversion = GetBuildInfo()
 local isShadowlands = tonumber(build) > 35700
+
+CaerdonWardrobe = {}
+
+CaerdonWardrobeMixin = {}
+
+function CaerdonWardrobeMixin:OnLoad()
+	self:RegisterEvent "ADDON_LOADED"
+	self:RegisterEvent "PLAYER_LOGOUT"
+	-- self:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
+	self:RegisterEvent "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
+	self:RegisterEvent "AUCTION_HOUSE_SHOW"
+	self:RegisterEvent "BAG_OPEN"
+	self:RegisterEvent "BAG_UPDATE"
+	self:RegisterEvent "BAG_UPDATE_DELAYED"
+	self:RegisterEvent "BANKFRAME_OPENED"
+	self:RegisterEvent "GET_ITEM_INFO_RECEIVED"
+	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+	-- self:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
+	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
+	self:RegisterEvent "MERCHANT_UPDATE"
+	self:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
+	self:RegisterEvent "QUEST_DATA_LOAD_RESULT"
+	self:RegisterEvent "PLAYER_LOGIN"
+
+	if DEBUG_ENABLED then
+		GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
+	end
+
+	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+	SetCVar("missingTransmogSourceInItemTooltips", 1)
+end
 
 StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
   text = "It looks like multiple bag addons are currently running (%s)! I can't guarantee Caerdon Wardrobe will work properly in this case.  You should only have one bag addon enabled!",
@@ -1834,6 +1862,10 @@ end
 
 local function OnAuctionBrowseUpdate()
 	-- Event pump since first load won't have UI ready
+	if not AuctionHouseFrame:IsVisible() then
+		return
+	end
+
 	C_Timer.After(0, function() 
 		local browseResults = C_AuctionHouse.GetBrowseResults()
 		local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
@@ -1905,7 +1937,7 @@ end
 hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
 hooksecurefunc("MerchantFrame_UpdateBuybackInfo", OnBuybackUpdate)
 
-local function OnEvent(self, event, ...)
+function CaerdonWardrobeMixin:OnEvent(event, ...)
 	if DEBUG_ENABLED then
 		local arg1, arg2 = ...
 		print("Caerdon Wardrobe: " .. event .. ": " .. tostring(arg1) .. ", " .. tostring(arg2))
@@ -1926,7 +1958,7 @@ local timeSinceLastItemUpdate = nil
 
 local latestDataRequestQuestID = nil
 
-local function OnUpdate(self, elapsed)
+function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	if self.itemUpdateCoroutine then
 		if coroutine.status(self.itemUpdateCoroutine) ~= "dead" then
 			local ok, result = coroutine.resume(self.itemUpdateCoroutine)
@@ -2022,18 +2054,6 @@ local function OnEncounterJournalSetLootButton(item)
 	end
 end
 
-eventFrame = CreateFrame("FRAME", "CaerdonWardrobeFrame")
-eventFrame:RegisterEvent "ADDON_LOADED"
-eventFrame:RegisterEvent "PLAYER_LOGOUT"
-eventFrame:SetScript("OnEvent", OnEvent)
-eventFrame:SetScript("OnUpdate", OnUpdate)
-if DEBUG_ENABLED then
-	GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
-end
-
-C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
-SetCVar("missingTransmogSourceInItemTooltips", 1)
-
 function NS:GetDefaultConfig()
 	return {
 		Version = 7,
@@ -2086,25 +2106,24 @@ local function ProcessSettings()
 	end
 end
 
-function eventFrame:PLAYER_LOGOUT()
+function CaerdonWardrobeMixin:PLAYER_LOGOUT()
 end
 
-function eventFrame:ADDON_LOADED(name)
+function CaerdonWardrobeMixin:ADDON_LOADED(name)
 	if name == ADDON_NAME then
 		ProcessSettings()
 		NS:FireConfigLoaded()
-
-		if IsLoggedIn() then
-			OnEvent(eventFrame, "PLAYER_LOGIN")
-		else
-			eventFrame:RegisterEvent "PLAYER_LOGIN"
-		end
 	elseif name == "Blizzard_GuildBankUI" then
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	elseif name == "Blizzard_EncounterJournal" then
 		hooksecurefunc("EncounterJournal_SetLootButton", OnEncounterJournalSetLootButton)
 	elseif name == "Blizzard_BlackMarketUI" then
-		eventFrame:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
+		self:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
+	elseif name == "TradeSkillMaster" then
+		print("HOOKING TSM")
+		hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
+			print("Row: " .. row:GetField("auctionId"))
+		end)
 	end
 end
 
@@ -2254,22 +2273,7 @@ local function OnQuestInfoDisplay(template, parentFrame)
 	end
 end
 
-function eventFrame:PLAYER_LOGIN(...)
-	-- eventFrame:RegisterEvent "PLAYERBANKSLOTS_CHANGED"
-	eventFrame:RegisterEvent "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
-	eventFrame:RegisterEvent "AUCTION_HOUSE_SHOW"
-	eventFrame:RegisterEvent "BAG_OPEN"
-	eventFrame:RegisterEvent "BAG_UPDATE"
-	eventFrame:RegisterEvent "BAG_UPDATE_DELAYED"
-	eventFrame:RegisterEvent "BANKFRAME_OPENED"
-	eventFrame:RegisterEvent "GET_ITEM_INFO_RECEIVED"
-	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-	-- eventFrame:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
-	eventFrame:RegisterEvent "EQUIPMENT_SETS_CHANGED"
-	eventFrame:RegisterEvent "MERCHANT_UPDATE"
-	eventFrame:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
-	eventFrame:RegisterEvent "QUEST_DATA_LOAD_RESULT"
-
+function CaerdonWardrobeMixin:PLAYER_LOGIN(...)
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 
 	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
@@ -2281,19 +2285,19 @@ function eventFrame:PLAYER_LOGIN(...)
 	-- hooksecurefunc("QuestInfo_ShowRewards", OnQuestInfoShowRewards)
 end
 
-function eventFrame:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
+function CaerdonWardrobeMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
 	OnAuctionBrowseUpdate()
 end
 
 local hookAuction = true
-function eventFrame:AUCTION_HOUSE_SHOW()
+function CaerdonWardrobeMixin:AUCTION_HOUSE_SHOW()
 	if (hookAuction) then
 		hookAuction = false
 		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", OnAuctionBrowseUpdate)
 	end
 end
 
-function eventFrame:QUEST_DATA_LOAD_RESULT(questID, success)
+function CaerdonWardrobeMixin:QUEST_DATA_LOAD_RESULT(questID, success)
 	if success then
 		-- Total hack until Blizzard fixes quest rewards not loading
 		if questID == latestDataRequestQuestID then
@@ -2394,11 +2398,11 @@ hooksecurefunc("OpenBag", OnOpenBag)
 hooksecurefunc("OpenBackpack", OnOpenBackpack)
 hooksecurefunc("ToggleBag", OnOpenBag)
 
-function eventFrame:BAG_UPDATE(bagID)
+function CaerdonWardrobeMixin:BAG_UPDATE(bagID)
 	AddBagUpdateRequest(bagID)
 end
 
-function eventFrame:BAG_UPDATE_DELAYED()
+function CaerdonWardrobeMixin:BAG_UPDATE_DELAYED()
 	local count = 0
 	for _ in pairs(waitingOnBagUpdate) do 
 		count = count + 1
@@ -2411,7 +2415,7 @@ function eventFrame:BAG_UPDATE_DELAYED()
 	end
 end
 
-function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
+function CaerdonWardrobeMixin:GET_ITEM_INFO_RECEIVED(itemID)
 	local itemData = waitingOnItemData[tostring(itemID)]
 	if itemData then
         for bag, bagData in pairs(itemData) do
@@ -2436,7 +2440,7 @@ function eventFrame:GET_ITEM_INFO_RECEIVED(itemID)
 	end
 end
 
-function eventFrame:PLAYER_LOOT_SPEC_UPDATED()
+function CaerdonWardrobeMixin:PLAYER_LOOT_SPEC_UPDATED()
 	if EncounterJournal then
 		EncounterJournal_LootUpdate()
 	end
@@ -2486,34 +2490,34 @@ local function UpdateBlackMarketHotItem()
 	end
 end
 
-function eventFrame:BLACK_MARKET_ITEM_UPDATE()
+function CaerdonWardrobeMixin:BLACK_MARKET_ITEM_UPDATE()
 	UpdateBlackMarketItems()
 	UpdateBlackMarketHotItem()
 end
 
-function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
+function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	-- RefreshItems()
 end
 
-function eventFrame:TRANSMOG_COLLECTION_UPDATED()
+function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
 	RefreshItems()
 end
 
-function eventFrame:MERCHANT_UPDATE()
+function CaerdonWardrobeMixin:MERCHANT_UPDATE()
 	RefreshItems()
 end
 
-function eventFrame:EQUIPMENT_SETS_CHANGED()
+function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
 	RefreshItems()
 end
 
-function eventFrame:BANKFRAME_OPENED()
+function CaerdonWardrobeMixin:BANKFRAME_OPENED()
 	-- RefreshMainBank()
 end
 
 -- Turning this off for now as I made fixes for the container hook and don't
 -- need to do this twice.  Keeping around for a bit just in case.
--- function eventFrame:PLAYERBANKSLOTS_CHANGED(slot, arg2)
+-- function CaerdonWardrobeMixin:PLAYERBANKSLOTS_CHANGED(slot, arg2)
 -- 	if ( slot <= NUM_BANKGENERIC_SLOTS ) then
 -- 		OnBankItemUpdate(BankSlotsFrame["Item"..slot]);
 -- 	else
