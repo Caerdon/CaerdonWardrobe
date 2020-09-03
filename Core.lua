@@ -402,6 +402,9 @@ local function GetItemLinkLocal(bag, slot)
 		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 		isCraftingReagent = GetItemInfo(itemID)
 		return itemLink
+	elseif bag == "InboxFrame" then
+		local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(slot);
+		return firstItemLink
 	elseif bag == "BlackMarketScrollFrame" then
 		if (slot == "HotItem") then
 			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
@@ -439,7 +442,7 @@ local function GetItemKey(bag, slot, itemLink)
 		itemKey = itemLink .. bag
 	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
 		itemKey = itemLink
-	elseif bag == "OpenMailFrame" or bag == "SendMailFrame" then
+	elseif bag == "OpenMailFrame" or bag == "SendMailFrame" or bag == "InboxFrame" then
 		itemKey = itemLink .. slot
 	elseif bag == "BlackMarketScrollFrame" then
 		itemKey = itemLink .. slot
@@ -535,6 +538,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			tooltipSpeciesID = speciesID
 		elseif bag == "SendMailFrame" then
 			local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetSendMailItem(slot)
+			tooltipSpeciesID = speciesID
+		elseif bag == "InboxFrame" then
+			local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInboxItem(slot);
 			tooltipSpeciesID = speciesID
 		elseif bag == "BlackMarketScrollFrame" then
 			scanTip:SetHyperlink(itemLink)
@@ -881,6 +887,7 @@ local function IsBankOrBags(bag)
 	   bag ~= "GroupLootFrame" and
 	   bag ~= "OpenMailFrame" and
 	   bag ~= "SendMailFrame" and 
+	   bag ~= "InboxFrame" and
 	   bag ~= "BlackMarketScrollFrame" then
 		isBankOrBags = true
 	end
@@ -2548,6 +2555,31 @@ local function OnSendMailFrameUpdate()
 	end
 end
 
+local function OnInboxFrameUpdate()
+	local numItems, totalItems = GetInboxNumItems();
+
+	for i=1, INBOXITEMS_TO_DISPLAY do
+		local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
+		print("INBOXITEMS_TO_DISPLAY: " .. tostring(INBOXITEMS_TO_DISPLAY) .. ", numItems: " .. tostring(numItems) .. ", index: " .. tostring(index))
+
+		button = _G["MailItem"..i.."Button"];
+		if ( index <= numItems ) then
+			-- Setup mail item
+			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
+			local itemID = GetItemID(firstItemLink)
+			if itemID then
+				ProcessOrWaitItem(itemID, "InboxFrame", index, button, nil)
+			else
+				SetItemButtonMogStatus(button, nil)
+				SetItemButtonBindType(button, nil)		
+			end
+		else
+			SetItemButtonMogStatus(button, nil)
+			SetItemButtonBindType(button, nil)		
+		end
+	end
+end
+
 local function OnLootFrameUpdateButton(index)
 	local numLootItems = LootFrame.numLootItems;
 	local numLootToShow = LOOTFRAME_NUMBUTTONS;
@@ -2605,6 +2637,7 @@ hooksecurefunc("LootFrame_UpdateButton", OnLootFrameUpdateButton)
 hooksecurefunc("QuestInfo_Display", OnQuestInfoDisplay)
 hooksecurefunc("OpenMailFrame_UpdateButtonPositions", OnMailFrameUpdateButtonPositions)
 hooksecurefunc("SendMailFrame_Update", OnSendMailFrameUpdate)
+hooksecurefunc("InboxFrame_Update", OnInboxFrameUpdate)
 
 GroupLootFrame1:HookScript("OnShow", OnGroupLootFrameShow)
 GroupLootFrame2:HookScript("OnShow", OnGroupLootFrameShow)
