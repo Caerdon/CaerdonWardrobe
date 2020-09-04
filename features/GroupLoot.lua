@@ -1,4 +1,4 @@
-local GroupLootMixin = {}
+local GroupLootMixin, GroupLoot = {}
 
 function GroupLootMixin:OnLoad()
     GroupLootFrame1:HookScript("OnShow", function() GroupLoot:OnGroupLootFrameShow(self) end)
@@ -24,5 +24,5 @@ function GroupLootMixin:OnGroupLootFrameShow(frame)
 	end
 end
 
-local GroupLoot = CreateFromMixins(GroupLootMixin)
+GroupLoot = CreateFromMixins(GroupLootMixin)
 GroupLoot:OnLoad()

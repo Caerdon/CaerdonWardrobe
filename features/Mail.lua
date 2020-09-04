@@ -1,5 +1,4 @@
-local MailMixin = {}
-local Mail
+local MailMixin, Mail = {}
 
 function MailMixin:OnLoad()
     hooksecurefunc("OpenMailFrame_UpdateButtonPositions", function(...) Mail:OnMailFrameUpdateButtonPositions(...) end)

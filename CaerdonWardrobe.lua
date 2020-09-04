@@ -28,7 +28,6 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	self:RegisterEvent "MERCHANT_UPDATE"
 	self:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
-	self:RegisterEvent "QUEST_DATA_LOAD_RESULT"
 	self:RegisterEvent "PLAYER_LOGIN"
 
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
@@ -1958,8 +1957,6 @@ local BAGUPDATE_INTERVAL = 0.1
 local ITEMUPDATE_INTERVAL = 0.1
 local timeSinceLastItemUpdate = nil
 
-local latestDataRequestQuestID = nil
-
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	if self.itemUpdateCoroutine then
 		if coroutine.status(self.itemUpdateCoroutine) ~= "dead" then
@@ -2119,8 +2116,6 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	elseif name == "Blizzard_EncounterJournal" then
 		hooksecurefunc("EncounterJournal_SetLootButton", OnEncounterJournalSetLootButton)
-	elseif name == "Blizzard_BlackMarketUI" then
-		self:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
 	elseif name == "TradeSkillMaster" then
 		print("HOOKING TSM")
 		hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
@@ -2129,166 +2124,10 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 	end
 end
 
-function UpdatePin(pin)
-	local options = {
-		iconOffset = -5,
-		iconSize = 60,
-		overridePosition = "TOPRIGHT",
-		-- itemCountOffset = 10,
-		-- bindingScale = 0.9
-	}
-
-	if GetNumQuestLogRewards(pin.questID) > 0 then
-		local itemName, itemTexture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(1, pin.questID)
-		CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = pin.questID }, pin, options)
-	else
-		CaerdonWardrobe:ClearButton(pin)
-	end
-end
-
-local function QuestInfo_GetQuestID()
-	if ( QuestInfoFrame.questLog ) then
-		if (isShadowlands) then
-			return C_QuestLog.GetSelectedQuest();
-		else
-			return select(8, GetQuestLogTitle(GetQuestLogSelection()));
-		end
-	else
-		return GetQuestID();
-	end
-end
-
-local function OnQuestInfoShowRewards(template, parentFrame)
-	local numQuestRewards = 0;
-	local numQuestChoices = 0;
-	local rewardsFrame = QuestInfoFrame.rewardsFrame;
-	local questID = QuestInfo_GetQuestID()
-
-	if questID == 0 then return end -- quest abandoned
-
-	-- if ( template.canHaveSealMaterial ) then
-	-- 	local questFrame = parentFrame:GetParent():GetParent();
-	-- 	if ( template.questLog ) then
-	-- 		questID = questFrame.questID;
-	-- 	else
-	-- 		questID = GetQuestID();
-	-- 	end
-	-- end
-
-	local spellGetter;
-
-	if ( QuestInfoFrame.questLog ) then
-		if C_QuestLog.ShouldShowQuestRewards(questID) then
-			numQuestRewards = GetNumQuestLogRewards();
-			numQuestChoices = GetNumQuestLogChoices(questID, true);
-			-- playerTitle = GetQuestLogRewardTitle();
-			-- numSpellRewards = GetNumQuestLogRewardSpells();
-			-- spellGetter = GetQuestLogRewardSpell;
-		end
-	else
-		if ( QuestFrameRewardPanel:IsShown() or C_QuestLog.ShouldShowQuestRewards(questID) ) then
-			numQuestRewards = GetNumQuestRewards();
-			numQuestChoices = GetNumQuestChoices();
-			-- playerTitle = GetRewardTitle();
-			-- numSpellRewards = GetNumRewardSpells();
-			-- spellGetter = GetRewardSpell;
-		end
-	end
-
-	if not HaveQuestRewardData(questID) then
-		-- HACK: Force load and handle in QUEST_DATA_LOAD_RESULT
-		-- Not needed if Blizzard fixes showing of rewards in follow-up quests
-		latestDataRequestQuestID = questID
-		C_QuestLog.RequestLoadQuestByID(questID)
-		return
-	end
-
-	local options = {
-		iconOffset = 0,
-		iconSize = 40,
-		overridePosition = "TOPLEFT",
-		overrideBindingPosition = "TOPLEFT",
-		bindingOffsetX = -53,
-		bindingOffsetY = -16
-	}
-
-	local questItem, name, texture, quality, isUsable, numItems, itemID;
-	local rewardsCount = 0;
-	if ( numQuestChoices > 0 ) then
-		local index;
-		local itemLink;
-		local baseIndex = rewardsCount;
-		for i = 1, numQuestChoices do
-			index = i + baseIndex;
-			questItem = QuestInfo_GetRewardButton(rewardsFrame, index);
-			if ( QuestInfoFrame.questLog ) then
-				name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i);
-			else
-				name, texture, numItems, quality, isUsable = GetQuestItemInfo(questItem.type, i);
-				itemLink = GetQuestItemLink(questItem.type, i);
-				itemID = GetItemID(itemLink)
-			end
-			rewardsCount = rewardsCount + 1;
-
-			CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
-		end
-	end
-
-	if ( numQuestRewards > 0) then
-		local index;
-		local itemLink;
-		local baseIndex = rewardsCount;
-		local buttonIndex = 0;
-		for i = 1, numQuestRewards, 1 do
-			buttonIndex = buttonIndex + 1;
-			index = i + baseIndex;
-			questItem = QuestInfo_GetRewardButton(rewardsFrame, index);
-			questItem.type = "reward";
-			questItem.objectType = "item";
-			if ( QuestInfoFrame.questLog ) then
-				name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i);
-			else
-				name, texture, numItems, quality, isUsable = GetQuestItemInfo(questItem.type, i);
-				itemLink = GetQuestItemLink(questItem.type, i);
-				if itemLink ~= nil then
-					itemID = GetItemID(itemLink)
-				else
-					itemID = -1
-				end
-			end
-			rewardsCount = rewardsCount + 1;
-
-			if itemID ~= -1 then
-				CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
-			end
-		end
-	end
-end
-
-local function OnQuestInfoDisplay(template, parentFrame)
-	-- Hooking OnQuestInfoDisplay instead of OnQuestInfoShowRewards directly because it seems to work
-	-- and I was having some problems.  :)
-	local i = 1
-	while template.elements[i] do
-		if template.elements[i] == QuestInfo_ShowRewards then OnQuestInfoShowRewards(template, parentFrame) return end
-		i = i + 3
-	end
-end
-
 function CaerdonWardrobeMixin:PLAYER_LOGIN(...)
 	if DEBUG_ENABLED then
 		GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
 	end
-
-	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
-
-	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
-		if not IsModifiedClick("COMPAREITEMS") and not ShoppingTooltip1:IsShown() then
-			UpdatePin(self);
-		end
-	end)
-	-- hooksecurefunc("QuestInfo_GetRewardButton", OnQuestInfoGetRewardButton)
-	-- hooksecurefunc("QuestInfo_ShowRewards", OnQuestInfoShowRewards)
 end
 
 function CaerdonWardrobeMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
@@ -2300,20 +2139,6 @@ function CaerdonWardrobeMixin:AUCTION_HOUSE_SHOW()
 	if (hookAuction) then
 		hookAuction = false
 		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", OnAuctionBrowseUpdate)
-	end
-end
-
-function CaerdonWardrobeMixin:QUEST_DATA_LOAD_RESULT(questID, success)
-	if success then
-		-- Total hack until Blizzard fixes quest rewards not loading
-		if questID == latestDataRequestQuestID then
-			latestDataRequestQuestID = nil
-
-			if QuestFrameDetailPanel:IsShown() then
-				QuestFrameDetailPanel:Hide();
-				QuestFrameDetailPanel:Show();
-			end
-		end
 	end
 end
 
@@ -2452,55 +2277,6 @@ function CaerdonWardrobeMixin:PLAYER_LOOT_SPEC_UPDATED()
 	end
 end
 
-local function UpdateBlackMarketItems()
-	local numItems = C_BlackMarket.GetNumItems();
-	
-	if (not numItems) then
-		numItems = 0;
-	end
-	
-	local scrollFrame = BlackMarketScrollFrame;
-	local offset = HybridScrollFrame_GetOffset(scrollFrame);
-	local buttons = scrollFrame.buttons;
-	local numButtons = #buttons;
-
-	for i = 1, numButtons do
-		local button = buttons[i];
-		local index = offset + i; -- adjust index
-
-		if ( index <= numItems ) then
-			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
-			local itemID = GetItemID(link)
-			if ( itemID ) then
-				ProcessOrWaitItem(itemID, "BlackMarketScrollFrame", index, button, nil)
-			else
-				SetItemButtonMogStatus(button, nil)
-				SetItemButtonBindType(button, nil)		
-			end
-		else
-			SetItemButtonMogStatus(button, nil)
-			SetItemButtonBindType(button, nil)		
-		end
-	end
-end
-
-local function UpdateBlackMarketHotItem()
-	local button = BlackMarketFrame.HotDeal.Item
-	local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
-	local itemID = GetItemID(link)
-	if ( itemID ) then
-		ProcessOrWaitItem(itemID, "BlackMarketScrollFrame", "HotItem", button, nil)
-	else
-		SetItemButtonMogStatus(button, nil)
-		SetItemButtonBindType(button, nil)		
-	end
-end
-
-function CaerdonWardrobeMixin:BLACK_MARKET_ITEM_UPDATE()
-	UpdateBlackMarketItems()
-	UpdateBlackMarketHotItem()
-end
-
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	-- RefreshItems()
 end
@@ -2524,8 +2300,6 @@ end
 function CaerdonWardrobeMixin:BANKFRAME_OPENED()
 	-- RefreshMainBank()
 end
-
-hooksecurefunc("QuestInfo_Display", OnQuestInfoDisplay)
 
 local configFrame
 local isConfigLoaded = false

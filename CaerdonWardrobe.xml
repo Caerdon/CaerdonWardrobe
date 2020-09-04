@@ -5,6 +5,9 @@
 	<Script file="features\Loot.lua" />
 	<Script file="features\GroupLoot.lua" />
 	<Script file="features\Mail.lua" />
+	<Script file="features\Quest.lua" />
+	<Script file="features\WorldMap.lua" />
+	<Script file="features\BlackMarket.lua" />
     
 	<!-- This is a (mostly) direct copy of EmbeddedItemTooltip in GameTooltip.xml -->
 	<!-- The only custom change is the call to SetOwner in OnLoad -->

@@ -1,5 +1,4 @@
-local LootMixin = {}
-local Loot
+local LootMixin, Loot = {}
 
 function LootMixin:OnLoad()
     hooksecurefunc("LootFrame_UpdateButton", function(...) Loot:OnLootFrameUpdateButton(...) end)
