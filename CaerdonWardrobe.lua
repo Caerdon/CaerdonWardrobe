@@ -428,6 +428,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	-- transmog info during the scan
 	C_TransmogCollection.SetShowMissingSourceInItemTooltips(false)
 	SetCVar("missingTransmogSourceInItemTooltips", 0)
+	local originalAlwaysCompareItems = GetCVarBool("alwaysCompareItems")
+	SetCVar("alwaysCompareItems", 0)
 
 	local itemKey = GetItemKey(bag, slot, itemLink)
 
@@ -792,6 +794,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 		C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 		SetCVar("missingTransmogSourceInItemTooltips", 1)
+		SetCVar("alwaysCompareItems", originalAlwaysCompareItems)
 	end
 
 	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked
@@ -1439,9 +1442,8 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
    	if IsCollectibleLink(itemLink) then
    		shouldRetry = false
 	else
-		-- TODO: Review difference between retail and beta here - I think expansionID should be -1?
 		local expansionID = expacID
-		if expansionID and expansionID > 0 and expansionID < GetExpansionLevel() then 
+		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
 			if not hasUse then
 				-- TODO: May want to separate reagents from everything else?
 				-- mogStatus = "oldexpansion"
