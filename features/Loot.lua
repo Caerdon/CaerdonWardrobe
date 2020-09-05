@@ -16,26 +16,13 @@ function LootMixin:OnLootFrameUpdateButton(index)
 		numLootToShow = numLootToShow - 1
 	end
 
-	local isProcessing = false
-	
 	local button = _G["LootButton"..index];
 	local slot = (numLootToShow * (LootFrame.page - 1)) + index;
 	if slot <= numLootItems then
 		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
-			-- texture, item, quantity, quality, locked, isQuestItem, questId, isActive = GetLootSlotInfo(slot)
 			link = GetLootSlotLink(slot)
-			if link then
-				local itemID = CaerdonWardrobe:GetItemID(link)
-				if itemID then
-					isProcessing = true
-					CaerdonWardrobe:UpdateButton(itemID, "LootFrame", { index = slot, link = link }, button, nil)
-				end
-			end
+			CaerdonWardrobe:UpdateButtonLink(link, "LootFrame", { index = slot, link = link }, button, nil)
 		end
-	end
-
-    if not isProcessing then
-        CaerdonWardrobe:ClearButton(button)
 	end
 end
 

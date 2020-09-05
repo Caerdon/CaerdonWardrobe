@@ -18,10 +18,7 @@ function GroupLootMixin:OnGroupLootFrameShow(frame)
 		return
 	end
 
-	local itemID = CaerdonWardrobe:GetItemID(itemLink)
-	if itemID then
-		CaerdonWardrobe:UpdateButton(itemID, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
-	end
+	CaerdonWardrobe:UpdateButtonLink(itemLink, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
 end
 
 GroupLoot = CreateFromMixins(GroupLootMixin)

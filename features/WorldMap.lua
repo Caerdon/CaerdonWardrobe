@@ -17,12 +17,17 @@ function WorldMapMixin:UpdatePin(pin)
 		-- bindingScale = 0.9
 	}
 
+	local itemLink, itemName, itemTexture, numItems, quality, isUsable, itemID
+
 	if GetNumQuestLogRewards(pin.questID) > 0 then
-		local itemName, itemTexture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(1, pin.questID)
-		CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = pin.questID }, pin, options)
-	else
-		CaerdonWardrobe:ClearButton(pin)
+		itemName, itemTexture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(1, pin.questID)
+
+		if itemID then
+			_, itemLink = GetItemInfo(itemID)
+		end
 	end
+			
+	CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestButton", { itemID = itemID, questID = pin.questID }, pin, options)
 end
 
 WorldMap = CreateFromMixins(WorldMapMixin)

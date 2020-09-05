@@ -10,12 +10,9 @@ function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreate
 	for i=1, ATTACHMENTS_MAX_RECEIVE do
 		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
 		if HasInboxItem(InboxFrame.openMailID, i) then
-			local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
-			if itemID then
-				CaerdonWardrobe:UpdateButton(itemID, "OpenMailFrame", i, attachmentButton, nil)
-            else
-                CaerdonWardrobe:ClearButton(attachmentButton)
-			end
+			-- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
+			local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, "OpenMailFrame", i, attachmentButton, nil)
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -27,12 +24,8 @@ function MailMixin:OnSendMailFrameUpdate()
 		local attachmentButton = SendMailFrame.SendMailAttachments[i];
 
 		if HasSendMailItem(i) then
-			local itemName, itemID, itemTexture, stackCount, quality = GetSendMailItem(i);
-			if itemID then
-				CaerdonWardrobe:UpdateButton(itemID, "SendMailFrame", i, attachmentButton, nil)
-			else
-                CaerdonWardrobe:ClearButton(attachmentButton)
-			end
+			local itemLink = GetSendMailItemLink(i)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, "SendMailFrame", i, attachmentButton, nil)
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -49,12 +42,7 @@ function MailMixin:OnInboxFrameUpdate()
 		if ( index <= numItems ) then
 			-- Setup mail item
 			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
-			local itemID = CaerdonWardrobe:GetItemID(firstItemLink)
-			if itemID then
-				CaerdonWardrobe:UpdateButton(itemID, "InboxFrame", index, button, nil)
-			else
-                CaerdonWardrobe:ClearButton(button)
-			end
+			CaerdonWardrobe:UpdateButtonLink(firstItemLink, "InboxFrame", index, button, nil)
 		else
             CaerdonWardrobe:ClearButton(button)
 		end
