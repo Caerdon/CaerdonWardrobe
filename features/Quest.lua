@@ -107,7 +107,7 @@ function QuestMixin:OnQuestInfoShowRewards(template, parentFrame)
 			else
 				name, texture, numItems, quality, isUsable = GetQuestItemInfo(questItem.type, i);
 				itemLink = GetQuestItemLink(questItem.type, i);
-				itemID = GetItemID(itemLink)
+				itemID = CaerdonWardrobe:GetItemID(itemLink)
 			end
 			rewardsCount = rewardsCount + 1;
 
@@ -132,7 +132,7 @@ function QuestMixin:OnQuestInfoShowRewards(template, parentFrame)
 				name, texture, numItems, quality, isUsable = GetQuestItemInfo(questItem.type, i);
 				itemLink = GetQuestItemLink(questItem.type, i);
 				if itemLink ~= nil then
-					itemID = GetItemID(itemLink)
+					itemID = CaerdonWardrobe:GetItemID(itemLink)
 				else
 					itemID = -1
 				end
