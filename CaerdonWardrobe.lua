@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 12261
+-- local DEBUG_ITEM = 10320
 local ADDON_NAME, NS = ...
 local L = NS.L
 local isBagUpdate = false
@@ -19,19 +19,17 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "AUCTION_HOUSE_SHOW"
 	self:RegisterEvent "BAG_OPEN"
 	self:RegisterEvent "BAG_UPDATE"
-	self:RegisterEvent "BAG_UPDATE_COOLDOWN"
+	self:RegisterEvent "UNIT_SPELLCAST_SUCCEEDED"
 	self:RegisterEvent "BAG_UPDATE_DELAYED"
 	self:RegisterEvent "BANKFRAME_OPENED"
 	self:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	-- self:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
+	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
 	self:RegisterEvent "MERCHANT_UPDATE"
 	self:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
 	self:RegisterEvent "PLAYER_LOGIN"
-
-	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
-	SetCVar("missingTransmogSourceInItemTooltips", 1)
 end
 
 StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
@@ -78,13 +76,9 @@ local InventorySlots = {
     ['INVTYPE_TABARD'] = INVSLOT_TABARD
 }
 
-local cachedBinding = {}
-
 local model = CreateFrame('DressUpModel')
 
 local function GetItemID(itemLink)
-	-- local printable = gsub(itemLink, "\124", "\124\124");
-	-- print(printable)
 	if not itemLink then
 		return nil
 	end
@@ -119,25 +113,8 @@ local function IsPetLink(itemLink)
 			end
 		end
 	end
+
 	return false
-
-
--- 	local isPet = false
--- 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
--- itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
--- isCraftingReagent = GetItemInfo(itemLink)
-
--- 	local itemID = GetItemID(itemLink)
--- 	if itemID == 82800 then
--- 		isPet = true -- probably at the guild bank
--- 	elseif itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
--- 		isPet = true
--- 	elseif not itemClassID then
--- 		local link, name = string.match(itemLink, "|H(.-)|h(.-)|h")
--- 		isPet = strsub(link, 1, 9) == "battlepet"
--- 	end
-
--- 	return isPet
 end
 
 local function IsMountLink(itemLink)
@@ -180,7 +157,7 @@ end
 
 local function IsCollectibleLink(itemLink)
 	local itemID = GetItemID(itemLink)
-	local isDebugItem = itemID == DEBUG_ITEM
+	local isDebugItem = itemID and itemID == DEBUG_ITEM
 	if isDebugItem then
 		local isPet = IsPetLink(itemLink)
 		local isMount = IsMountLink(itemLink)
@@ -193,79 +170,57 @@ local function IsCollectibleLink(itemLink)
 	return IsPetLink(itemLink) or IsMountLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink)
 end
 
-local cachedIsDressable = {}
 local function IsDressableItemCheck(itemID, itemLink)
 	local isDressable = true
 	local shouldRetry = false
 	local slot
 
-	local dressableCache = cachedIsDressable[itemLink]
-	if dressableCache then
-		isDressable = dressableCache.isDressable
-		slot = dressableCache.slot
-	else
-	    local _, _, _, slotName = GetItemInfoInstant(itemID)
-	    if slotName and slotName ~= "" then -- make sure it's a supported slot
-		    slot = InventorySlots[slotName]
-		    if not slot then
-				isDressable = false
-		    elseif not IsDressableItem(itemLink) then
-		    	-- IsDressableItem can return false instead of true for
-		    	-- an item that is actually dressable (seems to happen
-		    	-- most often during item caching).  Adding some
-		    	-- retry tags to the cache if IsDressableItem says its
-		    	-- not but transmog says it can be a source
-				local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
-				isDressable = false
-				if canBeSource then
-					shouldRetry = true
-				end
-			end
-		else
+	local _, _, _, slotName = GetItemInfoInstant(itemID)
+	if slotName and slotName ~= "" then -- make sure it's a supported slot
+		slot = InventorySlots[slotName]
+		if not slot then
 			isDressable = false
+		elseif not IsDressableItem(itemLink) then
+			-- IsDressableItem can return false instead of true for
+			-- an item that is actually dressable (seems to happen
+			-- most often during item caching).  Adding some
+			-- retry tags to the cache if IsDressableItem says its
+			-- not but transmog says it can be a source
+			local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
+			isDressable = false
+			if canBeSource then
+				shouldRetry = true
+			end
 		end
-
-		if not shouldRetry then
-			cachedIsDressable[itemLink] = { isDressable = isDressable, slot = slot }
-		end
+	else
+		isDressable = false
 	end
-    return isDressable, shouldRetry, slot
+
+	return isDressable, shouldRetry, slot
 end
 
-local cachedItemSources = {}
 local function GetItemSource(itemID, itemLink)
-	local itemSources = cachedItemSources[itemLink]
-	local shouldRetry = false
-	local isDressable = false
-	if itemSources == "NONE" then
-		itemSources = nil
-	elseif not itemSources then
-		isDressable, shouldRetry, slot = IsDressableItemCheck(itemID, itemLink)
-		if not shouldRetry then
-			if not isDressable then
-		    	cachedItemSources[itemLink] = "NONE"
-			else
-				-- Looks like I can use this now.  Keeping the old code around for a bit just in case.
-				-- Actually, still seeing problems with this...try it first but fallback to model
-				local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
-				if sourceID then
-					itemSources = sourceID
-				else
-				    model:SetUnit('player')
-				    model:Undress()
-				    model:TryOn(itemLink, slot)
-				    itemSources = model:GetSlotTransmogSources(slot)
-				end
-
-			    if itemSources then
-					cachedItemSources[itemLink] = itemSources
-				else
-					cachedItemSources[itemLink] = "NONE"
-				end
-			end
+	local itemSources
+	local isDressable, shouldRetry, slot = IsDressableItemCheck(itemID, itemLink)
+	if not shouldRetry then
+		if isDressable then
+			-- Looks like I can use this now.  Keeping the old code around for a bit just in case.
+			-- Actually, still seeing problems with this...try it first but fallback to model
+			-- Trying once more - this sure seems to be working?
+			local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
+			-- if sourceID then
+				itemSources = sourceID
+			-- else
+			-- 	print("TRYING IT ON..." .. itemLink)
+			--     model:SetUnit('player')
+			--     model:Undress()
+			--     model:TryOn(itemLink, slot)
+			--     itemSources = model:GetSlotTransmogSources(slot)
+			-- end
 		end
 	end
-    return itemSources, shouldRetry
+
+	return itemSources, shouldRetry
 end
 
 local function GetItemAppearance(itemID, itemLink)
@@ -283,7 +238,7 @@ local function GetItemAppearance(itemID, itemLink)
 	 			sourceID = NO_TRANSMOG_SOURCE_ID
 			end
 		end
-    end
+	end
 
     return appearanceID, isCollected, sourceID, shouldRetry
 end
@@ -311,7 +266,7 @@ local function PlayerHasAppearance(appearanceID)
 end
  
 local function PlayerCanCollectAppearance(appearanceID, itemID, itemLink)
-	local isDebugItem = itemID == DEBUG_ITEM
+	local isDebugItem = itemID and itemID == DEBUG_ITEM
 	local _, _, quality, _, reqLevel, itemClass, itemSubClass, _, equipSlot, _, _, itemClassID, itemSubClassID = GetItemInfo(itemID)
 	local playerLevel = UnitLevel("player")
 	local canCollect = false
@@ -379,7 +334,7 @@ local function GetItemInfoLocal(itemID, bag, slot)
 	local name = GetItemInfo(itemID)
 	if name then
 		if bag == "AuctionFrame" then
-			name = GetAuctionItemInfo("list", slot)
+			name = GetAuctionItemInfo("list", slot.index)
 		elseif bag == "MerchantFrame" then
 			if MerchantFrame.selectedTab == 1 then
 				name = GetMerchantItemInfo(slot)
@@ -394,8 +349,7 @@ end
 
 local function GetItemLinkLocal(bag, slot)
 	if bag == "AuctionFrame" then
-		local browseResults = C_AuctionHouse.GetBrowseResults()
-		local _, itemLink = GetItemInfo(browseResults[slot].itemKey.itemID);
+		local _, itemLink = GetItemInfo(slot.itemKey.itemID);
 		return itemLink
 	elseif bag == "MerchantFrame" then
 		if MerchantFrame.selectedTab == 1 then
@@ -454,7 +408,9 @@ end
 
 local function GetItemKey(bag, slot, itemLink)
 	local itemKey
-	if bag == "AuctionFrame" or bag == "MerchantFrame" then
+	if bag == "AuctionFrame" then
+		itemKey = itemLink .. slot.index
+	elseif bag == "MerchantFrame" then
 		itemKey = itemLink
 	elseif bag == "GuildBankFrame" then
 		itemKey = itemLink .. slot.tab .. slot.index
@@ -478,14 +434,20 @@ end
 local equipLocations = {}
 
 local function GetBindingStatus(bag, slot, itemID, itemLink)
-	local isDebugItem = itemID == DEBUG_ITEM
+	local isDebugItem = itemID and itemID == DEBUG_ITEM
 
 	if isDebugItem then print ("GetBindingStatus (" .. itemLink .. "): bag = " .. bag .. ", slot = " .. tostring(slot)) end
 
 	local scanTip = CaerdonWardrobeFrameTooltip
+	scanTip:ClearLines()
+	-- Weird bug with scanning tooltips - have to disable showing
+	-- transmog info during the scan
+	C_TransmogCollection.SetShowMissingSourceInItemTooltips(false)
+	SetCVar("missingTransmogSourceInItemTooltips", 0)
+
 	local itemKey = GetItemKey(bag, slot, itemLink)
 
-	local binding = cachedBinding[itemKey]
+	local binding
 	local bindingText, needsItem, hasUse
 
     local isInEquipmentSet = false
@@ -498,7 +460,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	
 	local tooltipSpeciesID = 0
 
-    local isCollectionItem = IsCollectibleLink(itemLink)
+	local isCollectionItem = IsCollectibleLink(itemLink)
+	local isRecipe = IsRecipeLink(itemLink)
+	local isPetLink = IsPetLink(itemLink)
 
     local shouldCheckEquipmentSet = false
 
@@ -521,36 +485,31 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		playerLootSpecID = playerSpecID
 	end
 
-	if binding then
-		if isDebugItem then print("Using cached binding: " .. tostring(binding.bindingText)) end
-		bindingText = binding.bindingText
-		needsItem = binding.needsItem
-		hasUse = binding.hasUse
-		isInEquipmentSet = binding.isInEquipmentSet
-		isBindOnPickup = binding.isBindOnPickup
-		isCompletionistItem = binding.isCompletionistItem
-		unusableItem = binding.unusableItem
-		matchesLootSpec = binding.matchesLootSpec
-	elseif not shouldRetry then
+	if not shouldRetry then
 		if isDebugItem then print("Processing binding") end
 		needsItem = true
 		if isDebugItem then print("scanTip bag: " .. bag .. ", slot: " .. tostring(slot)) end
 		if bag == "AuctionFrame" then
-			local itemKey = C_AuctionHouse.MakeItemKey(itemID)
+			local itemKey = slot.itemKey
 			scanTip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+			tooltipSpeciesID = itemKey.battlePetSpeciesID
 		elseif bag == "MerchantFrame" then
 			if MerchantFrame.selectedTab == 1 then
-         scanTip:SetMerchantItem(slot)
+         		scanTip:SetMerchantItem(slot)
 			else
-         scanTip:SetBuybackItem(slot)
+         		scanTip:SetBuybackItem(slot)
 			end
 		elseif bag == BANK_CONTAINER then
-			scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
+			local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
+			tooltipSpeciesID = speciesID
 		   	if not isCollectionItem then
 				shouldCheckEquipmentSet = true
 			end
+		elseif bag == REAGENTBANK_CONTAINER then
+			local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", ReagentBankButtonIDToInvSlotID(slot))
 		elseif bag == "GuildBankFrame" then
-			scanTip:SetGuildBankItem(slot.tab, slot.index)
+			local speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetGuildBankItem(slot.tab, slot.index)
+			tooltipSpeciesID = speciesID
 		elseif bag == "LootFrame" then
 			scanTip:SetLootItem(slot.index)
 		elseif bag == "GroupLootFrame" then
@@ -601,18 +560,24 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 				scanTip = scanTip.ItemTooltip.Tooltip
 			end
 		else
-			scanTip:SetBagItem(bag, slot)
-		   	if not isCollectionItem then
+			local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetBagItem(bag, slot)
+			tooltipSpeciesID = speciesID
+			if not isCollectionItem then
 				shouldCheckEquipmentSet = true
 			end
 		end
 
+		local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+		isCraftingReagent = GetItemInfo(itemLink)
+
+		isBindOnPickup = bindType == 1
+		
 		if shouldCheckEquipmentSet then
-	 		local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
-			if isDebugItem then print("equipSlot: " .. tostring(equipSlot)) end
+			if isDebugItem then print("itemEquipLoc: " .. tostring(itemEquipLoc)) end
 
 		   -- Use equipment set for binding text if it's assigned to one
-			if equipSlot ~= "" and C_EquipmentSet.CanUseEquipmentSets() then
+			if itemEquipLoc ~= "" and C_EquipmentSet.CanUseEquipmentSets() then
 
 				-- Flag to ensure flagging multiple set membership
 				local isBindingTextDone = false
@@ -691,15 +656,18 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						isCompletionistItem = true
 					end
 				end
+			else
+				if isDebugItem then print("Has no source: " .. noSourceReason) end
+				needsItem = false
 			end
-		else
+		elseif not isCollectionItem then
 			if isDebugItem then print("Can't be source: " .. noSourceReason) end
 	    	needsItem = false
 	    end
 
 		local numLines = scanTip:NumLines()
+		local isPetKnown = false
 		local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
-		local needsCollectionItem = true
 
 		if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
 		if not isCollectionItem and not noSourceReason and numLines == 0 then
@@ -716,8 +684,16 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					-- TODO: Look at switching to GetItemSpell
 					if isDebugItem then print ("Tip: " .. lineText) end
 					if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect or belongs to a set
-						hasUse = true
-						-- break
+						if not isCollectionItem then
+							hasUse = true
+						end
+
+						-- TODO: Don't like matching this hard-coded string but not sure how else
+						-- to prevent the expensive books from showing as learnable when I don't
+						-- know how to tell if they have recipes you need.
+						if isRecipe and strmatch(lineText, "Use: Re%-learn .*") then
+							needsItem = false
+						end
 					end
 
 					if not bindingText then
@@ -727,7 +703,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					if lineText == RETRIEVING_ITEM_INFO then
 						shouldRetry = true
 						break
-					elseif lineText == ITEM_BIND_ON_PICKUP or lineText == ITEM_SOULBOUND then
+					elseif lineText == ITEM_SOULBOUND then
 						isBindOnPickup = true
 					elseif lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
 						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
@@ -740,75 +716,99 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
 							isCompletionistItem = true
 						end
-					elseif lineText == ITEM_SPELL_KNOWN or strmatch(lineText, PET_KNOWN) then
-						needsCollectionItem = false
+					elseif lineText == ITEM_SPELL_KNOWN then
+						needsItem = false
 					elseif lineText == LOCKED then
 						isLocked = true
-					end
+					elseif isPetLink and strmatch(lineText, PET_KNOWN) then
+						isPetKnown = true
+					end 
 
 					-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
 					local r, g, b = line:GetTextColor()
 					hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
 					if isDebugItem then print("Color: " .. hex) end
 					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
-					if hex == "fe1f1f" and (isBindOnPickup or IsRecipeLink(itemLink)) then
-						-- Assume BoE recipes can't be learned to avoid erroneous stars in AH / vendor
-						if isDebugItem then print("Red text in tooltip indicates item is soulbound and can't be used by this toon") end
-						unusableItem = true
-						if not bag == "EncounterJournal" then
-							needsItem = false
-							isCompletionistItem = false
+					-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
+					if hex == "fe1f1f" then
+						if isRecipe then
+							-- TODO: Cooking and fishing are not represented in trade skill lines right now
+							-- Assuming all toons have cooking for now.
+
+							-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
+							-- which toons could learn a recipe.
+
+							-- local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
+							local replaceSkill = "%w"
+							local skillCheck = string.gsub(ITEM_MIN_SKILL, "%%s", "%(.+%)")
+							skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+							if strmatch(lineText, skillCheck) then
+								local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+								local skillLines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
+								for skillLineIndex = 1, #skillLines do
+									local skillLineID = skillLines[skillLineIndex]
+									local name, rank, maxRank, modifier, parentSkillLineID = C_TradeSkillUI.GetTradeSkillLineInfoByID(skillLineID)
+									if requiredSkill == name then
+										if rank < tonumber(requiredRank) then
+											-- Toon either doesn't have profession or isn't high enough level.
+											unusableItem = true
+											if isBindOnPickup then
+												needsItem = false
+											end
+										else
+											break
+										end
+									end
+								end
+							end		
+						elseif isBindOnPickup then
+							if isDebugItem then print("Red text in tooltip indicates item is soulbound and can't be used by this toon") end
+							unusableItem = true
+							if not bag == "EncounterJournal" then
+								needsItem = false
+								isCompletionistItem = false
+							end
 						end
 					end
 				end
 			end
 		end
 
+		C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+		SetCVar("missingTransmogSourceInItemTooltips", 1)
+	
 		if not shouldRetry then
 			if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
 
 			if isCollectionItem and not unusableItem then
-				if numLines == 0 and IsPetLink(itemLink) then
+				if isPetLink then
 					local petID = GetItemID(itemLink)
 					if petID then
-						if petID ~= 82800 then -- generic pet cage
-							local numCollected = C_PetJournal.GetNumCollectedInfo(petID)
+						if tooltipSpeciesID and tooltipSpeciesID > 0 then
+							-- Pet cages have some magic info that comes back from tooltip setup
+							local numCollected = C_PetJournal.GetNumCollectedInfo(tooltipSpeciesID)
 							if numCollected == nil then
 								needsItem = false
-							elseif numCollected > 0 then				
+							elseif numCollected > 0 then
 								if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
 								needsItem = false
 							else
 								if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
 								needsItem = true
 							end
+						elseif isPetKnown then
+							needsItem = false
 						else
-							if tooltipSpeciesID > 0 then
-								-- Pet cages have some magic info that comes back from tooltip setup
-								local numCollected = C_PetJournal.GetNumCollectedInfo(tooltipSpeciesID)
-								if numCollected == nil then
-									needsItem = false
-								elseif numCollected > 0 then
-									if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
-									needsItem = false
-								else
-									if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
-									needsItem = true
-								end
-							else
-								needsItem = false
-							end
+							needsItem = true
 						end
 					end
-				elseif needsCollectionItem then
-					if isDebugItem then print("Collection Item Needed: " .. itemLink .. ", " .. tostring(owned) .. ", " .. tostring(numCollected)) end
-					needsItem = true
-				else
-					if isDebugItem then print("Not needed collection: " .. itemLink) end
+				end
+			elseif isCollectionItem then
+				if not isRecipe then
+					if isDebugItem then print("Not Usable Collection Item: " .. itemLink) end
+					needsItem = false
 				end
 			end
-
-			-- cachedBinding[itemKey] = {bindingText = bindingText, needsItem = needsItem, hasUse = hasUse, isDressable = isDressable, isInEquipmentSet = isInEquipmentSet, isBindOnPickup = isBindOnPickup, isCompletionistItem = isCompletionistItem, unusableItem = unusableItem, matchesLootSpec = matchesLootSpec }
 		end
 	end
 
@@ -1182,6 +1182,10 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	elseif status == "locked" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-key")
+	elseif status == "oldexpansion" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
+		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
+		alpha = 0.9
+		mogStatus:SetTexture("Interface\\Store\\category-icon-wow")
 	elseif status == "own" or status == "ownPlus" then
 		if not ShouldHideOwnIcon(bag) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
@@ -1437,34 +1441,38 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
-	-- print(itemLink .. ": " .. itemID)
-
- 		-- local printable = gsub(itemLink, "\124", "\124\124");
- 		-- print(printable)
-		-- local itemString = string.match(itemLink, "item[%-?%d:]+")
-		-- print(itemLink .. ": " .. itemID .. ", printable: " .. tostring(printable))
-
-	local isDebugItem = itemID == DEBUG_ITEM
+	local isDebugItem = itemID and itemID == DEBUG_ITEM
   	if isDebugItem then
-   		DebugItem(itemID, itemLink, bag, slot)
+		local printable = gsub(itemLink, "\124", "\124\124");
+		print(printable)
+		DebugItem(itemID, itemLink, bag, slot)
    	end
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, isLocked
-	if isDebugItem then
-		print ('Binding Status: ' .. tostring(bindingStatus) .. ', Needs Item: ' .. tostring(needsItem) .. ', HasUse: ' .. tostring(hasUse) .. ', Is Dressable: ' .. tostring(isDressable) .. ', Is In Equipment Set: ' .. tostring(isInEquipmentSet) .. ', Is BoP: ' .. tostring(isBindOnPickup) .. ', Is Completionist: ' .. tostring(isCompletionistItem) .. ', Should Retry: ' .. tostring(shouldRetry) .. ', Unusable: ' .. tostring(unusableItem) .. ', Matches Loot Spec: ' .. tostring(matchesLootSpec))
-	end
 
 	local appearanceID, isCollected, sourceID
 
-	bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
+	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
 		if isDebugItem then print("Retrying item: " .. itemLink) end
 		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
 		return
 	end
 
+	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
+	isCraftingReagent = GetItemInfo(itemLink)
+
    	if IsCollectibleLink(itemLink) then
    		shouldRetry = false
    	else
+		local expansionID = expacID - 1
+		if expacID > -1 and expacID < GetExpansionLevel() then 
+			if not hasUse then
+				-- TODO: May want to separate reagents from everything else?
+				
+				-- mogStatus = "oldexpansion"
+			end
+		end
+		
 		appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
 		if shouldRetry then
 			QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
@@ -1510,7 +1518,6 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 				if isDebugItem then print("=== Processing completionist item") end
 				-- You have this, but you want them all.  Why?  Because.
 
-				-- local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
 				-- local playerLevel = UnitLevel("player")
 
 				if canCollect then
@@ -1558,16 +1565,35 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		if isDebugItem then print("=== No appearance, Processing needsItem") end
 
 		if ((canBeSource and isDressable) or IsMountLink(itemLink)) and not shouldRetry then
-			local _, _, _, _, reqLevel, class, subclass, _, equipSlot = GetItemInfo(itemID)
 			local playerLevel = UnitLevel("player")
 
-			if not reqLevel or playerLevel >= reqLevel then
+			if not itemMinLevel or playerLevel >= itemMinLevel then
 				mogStatus = "own"
 			else
 				mogStatus = "other"
 			end
 		elseif IsPetLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink) then
-			mogStatus = "own"
+			if unusableItem then
+				-- Don't show these for now
+				-- mogStatus = "other"
+			else
+				mogStatus = "own"
+			end
+
+			-- Let's just ignore the Librams for now until I decide what to do about them
+			if itemID == 11732 or 
+			   itemID == 11733 or
+			   itemID == 11734 or 
+			   itemID == 11736 or 
+			   itemID == 11737 or
+			   itemID == 18332 or
+			   itemID == 18333 or
+			   itemID == 18334 or
+			   itemID == 21288 then
+				mogStatus = nil -- TODO: Maybe oldexpansion?
+			end
+	
+
 		end
 	else
 		if canBeSource then
@@ -1611,8 +1637,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 	end
 
 	if mogStatus == "collected" and 
-		ItemIsSellable(itemID, itemLink) and 
-		not isInEquipmentSet then
+		ItemIsSellable(itemID, itemLink) and not isInEquipmentSet then
        	-- Anything that reports as the player having should be safe to sell
        	-- unless it's in an equipment set or needs to be excluded for some
        	-- other reason
@@ -1651,6 +1676,7 @@ local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcess
 			SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, itemID)
 			waitBag[tostring(slot)] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed}
 		else
+			SetItemButtonMogStatus(button, nil)
 			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
 			ProcessItem(itemID, bag, slot, button, options, itemProcessed)
 		end
@@ -1735,6 +1761,14 @@ local function OnContainerUpdate(self, asyncUpdate)
 		local texture, itemCount, locked = GetContainerItemInfo(bagID, slot)
 
 		ProcessOrWaitItem(itemID, bagID, slot, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
+	end
+end
+
+local function ClearAuctionHouseQueue()
+	for itemKey, itemInfo in pairs(itemQueue) do
+		if itemInfo.bag == "AuctionFrame" then
+			itemQueue[itemKey] = nil
+		end
 	end
 end
 
@@ -1861,13 +1895,25 @@ local function OnGuildBankFrameUpdate()
 	isGuildBankFrameUpdateRequested = true
 end
 
+local auctionTimer
 local function OnAuctionBrowseUpdate()
 	-- Event pump since first load won't have UI ready
 	if not AuctionHouseFrame:IsVisible() then
 		return
 	end
 
-	C_Timer.After(0, function() 
+	if auctionTimer then
+		auctionTimer:Cancel()
+	end
+
+	ClearAuctionHouseQueue()
+	local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
+	for i, button in ipairs(buttons) do
+		CaerdonWardrobe:ClearButton(button)
+	end
+
+	auctionTimer = C_Timer.NewTimer(0.1, function() 
+		auctionTimer = nil
 		local browseResults = C_AuctionHouse.GetBrowseResults()
 		local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
 
@@ -1879,13 +1925,13 @@ local function OnAuctionBrowseUpdate()
 			local item = browseResults[slot]
 			local _, itemLink
 			if (item) then
-				_, itemLink = GetItemInfo(browseResults[slot].itemKey.itemID);
+				_, itemLink = GetItemInfo(item.itemKey.itemID);
 			end
 
 			if(itemLink) then
 				local itemID = GetItemID(itemLink)
 				if itemID and button then
-					ProcessOrWaitItem(itemID, bag, slot, button, 
+					ProcessOrWaitItem(itemID, bag, { index = slot, itemKey = item.itemKey }, button, 
 						{
 							iconOffset = 10,
 							iconSize = 30,				
@@ -1896,7 +1942,7 @@ local function OnAuctionBrowseUpdate()
 				end
 			end
 		end
-	end)
+	end, 1)
 end
 
 local function OnAuctionBrowseClick(self, buttonName, isDown)
@@ -1915,7 +1961,11 @@ local function OnMerchantUpdate()
 		local slot = index
 
 		local itemID = GetMerchantItemID(index)
-		ProcessOrWaitItem(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
+		if itemID then
+			CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
+		else
+			CaerdonWardrobe:ClearButton(button)
+		end
 	end
 end
 
@@ -2116,11 +2166,11 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	elseif name == "Blizzard_EncounterJournal" then
 		hooksecurefunc("EncounterJournal_SetLootButton", OnEncounterJournalSetLootButton)
-	elseif name == "TradeSkillMaster" then
-		print("HOOKING TSM")
-		hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
-			print("Row: " .. row:GetField("auctionId"))
-		end)
+	-- elseif name == "TradeSkillMaster" then
+	-- 	print("HOOKING TSM")
+	-- 	hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
+	-- 		print("Row: " .. row:GetField("auctionId"))
+	-- 	end)
 	end
 end
 
@@ -2128,6 +2178,12 @@ function CaerdonWardrobeMixin:PLAYER_LOGIN(...)
 	if DEBUG_ENABLED then
 		GameTooltip:HookScript("OnTooltipSetItem", addDebugInfo)
 	end
+
+	-- Show missing info in tooltips
+	-- NOTE: This causes a bug with tooltip scanning, so we disable
+	--   briefly and turn it back on with each scan.
+	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+	SetCVar("missingTransmogSourceInItemTooltips", 1)
 end
 
 function CaerdonWardrobeMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
@@ -2151,35 +2207,39 @@ function RefreshMainBank()
 	end
 end
 
+local refreshTimer
 local function RefreshItems()
-	-- TODO: Add debounce to prevent excessive refresh
-	if DEBUG_ENABLED then
-		print("=== Refreshing Transmog Items")
+	if refreshTimer then
+		refreshTimer:Cancel()
 	end
-	cachedBinding = {}
-	cachedIsDressable = {}
 
-	if MerchantFrame:IsShown() then 
-		if MerchantFrame.selectedTab == 1 then
-			OnMerchantUpdate()
-		else
-			OnBuybackUpdate()
+	refreshTimer = C_Timer.NewTimer(0.1, function ()
+		if DEBUG_ENABLED then
+			print("=== Refreshing Transmog Items")
 		end
-	end
 
-	if AuctionFrame and AuctionFrame:IsShown() then
-		OnAuctionBrowseUpdate()
-	end
+		if MerchantFrame:IsShown() then 
+			if MerchantFrame.selectedTab == 1 then
+				OnMerchantUpdate()
+			else
+				OnBuybackUpdate()
+			end
+		end
 
-	if BankFrame:IsShown() then
-		RefreshMainBank()
-	end
+		if AuctionFrame and AuctionFrame:IsShown() then
+			OnAuctionBrowseUpdate()
+		end
 
-	for i=1, NUM_CONTAINER_FRAMES, 1 do
-		local frame = _G["ContainerFrame"..i];
-		waitingOnBagUpdate[tostring(i)] = true
-		isBagUpdateRequested = true
-	end
+		if BankFrame:IsShown() then
+			RefreshMainBank()
+		end
+
+		for i=1, NUM_CONTAINER_FRAMES, 1 do
+			local frame = _G["ContainerFrame"..i];
+			waitingOnBagUpdate[tostring(i)] = true
+			isBagUpdateRequested = true
+		end
+	end, 1)
 end
 
 local function OnContainerFrameUpdateSearchResults(frame)
@@ -2281,8 +2341,14 @@ function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	-- RefreshItems()
 end
 
-function CaerdonWardrobeMixin:BAG_UPDATE_COOLDOWN()
-	RefreshItems()
+function CaerdonWardrobeMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
+	if unitTarget == "player" then
+		-- Tracking unlock spells to know to refresh
+		-- May have to add some other abilities but this is a good place to start.
+		if spellID == 1804 then
+			RefreshItems(true)
+		end
+	end
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
@@ -2294,6 +2360,11 @@ function CaerdonWardrobeMixin:MERCHANT_UPDATE()
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
+	RefreshItems()
+end
+
+function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
+	-- Can change while logged in!
 	RefreshItems()
 end
 

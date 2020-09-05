@@ -8,11 +8,11 @@ function CaerdonWardrobeConfigMixin:OnLoad()
 	-- self.default = PropagateErrors(self.OnResetToDefaults)
 	-- self.refresh = PropagateErrors(self.OnRefresh)
 
-	InterfaceOptions_AddCategory(self)
+	-- InterfaceOptions_AddCategory(self)
 end
 
 function CaerdonWardrobeConfigGeneralMixin:OnLoad()
     self.name = "General"
     self.parent = "Caerdon Wardrobe"
-	InterfaceOptions_AddCategory(self)
+	-- InterfaceOptions_AddCategory(self)
 end
