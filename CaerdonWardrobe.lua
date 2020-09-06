@@ -22,7 +22,7 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "UNIT_SPELLCAST_SUCCEEDED"
 	self:RegisterEvent "BAG_UPDATE_DELAYED"
 	self:RegisterEvent "BANKFRAME_OPENED"
-	self:RegisterEvent "GET_ITEM_INFO_RECEIVED"
+	-- self:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	-- self:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
@@ -705,17 +705,20 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						break
 					elseif lineText == ITEM_SOULBOUND then
 						isBindOnPickup = true
-					elseif lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
-						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-							isCompletionistItem = true
-						else
-							needsItem = false
-						end
-						break
-					elseif lineText == TRANSMOGRIFY_TOOLTIP_APPEARANCE_UNKNOWN then
-						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-							isCompletionistItem = true
-						end
+					-- TODO: Don't think we need these anymore?
+					-- elseif lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
+					-- 	if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+					-- 		isCompletionistItem = true
+					-- 		print("Completion 1: " .. itemLink .. lineText)
+					-- 	else
+					-- 		needsItem = false
+					-- 	end
+					-- 	break
+					-- elseif lineText == TRANSMOGRIFY_TOOLTIP_APPEARANCE_UNKNOWN then
+					-- 	if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+					-- 		isCompletionistItem = true
+					-- 		print("Completion 2: " .. itemLink .. lineText)
+					-- 	end
 					elseif lineText == ITEM_SPELL_KNOWN then
 						needsItem = false
 					elseif lineText == LOCKED then
@@ -1032,6 +1035,7 @@ end
 
 local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag, slot, itemID)
 	local button = originalButton.caerdonButton
+
 	if not button then
 		button = CreateFrame("Frame", nil, originalButton)
 		button:SetAllPoints()
@@ -1341,12 +1345,10 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 	bindsOnText:SetText(bindingText)
 end
 
-local itemQueue = {}
-local function QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
-	local itemKey = GetItemKey(bag, slot, itemLink)
-	itemQueue[itemKey] = { itemLink = itemLink, itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed }
-	SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, itemID)
-	isItemUpdateRequested = true
+local function QueueProcessItem(itemLink, bag, slot, button, options)
+	C_Timer.After(0.1, function()
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
+	end)
 end
 
 local function ItemIsSellable(itemID, itemLink)
@@ -1419,7 +1421,7 @@ local function GetBankContainer(button)
 	return containerID
 end
 
-local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, providedLink)
+local function ProcessItem(item, bag, slot, button, options)
 	local bindingText
 	local mogStatus = nil
 
@@ -1431,8 +1433,9 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
 	local showBindStatus = options.showBindStatus
 	local showSellables = options.showSellables
 
-	local itemLink = providedLink
-	if not itemLink then
+	local itemID = item:GetItemID()
+	local itemLink = item:GetItemLink()
+	if not itemLink or not itemID then
 		return
 	end
 
@@ -1450,7 +1453,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
 	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
 	if shouldRetry then
 		if isDebugItem then print("Retrying item: " .. itemLink) end
-		QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+		QueueProcessItem(itemLink, bag, slot, button, options)
 		return
 	end
 
@@ -1465,13 +1468,13 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
 		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
 			if not hasUse then
 				-- TODO: May want to separate reagents from everything else?
-				mogStatus = "oldexpansion"
+				-- mogStatus = "oldexpansion"
 			end
 		end
 		
 		appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
 		if shouldRetry then
-			QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+			QueueProcessItem(itemLink, bag, slot, button, options)
 			return
 		end
 	end
@@ -1480,7 +1483,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
 		if isDebugItem then print("=== Has appearance ID") end
 		local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(sourceID, appearanceID, itemID, itemLink)
 		if shouldRetry then
-			QueueProcessItem(itemLink, itemID, bag, slot, button, options, itemProcessed)
+			QueueProcessItem(itemLink, bag, slot, button, options)
 			return
 		end
 
@@ -1645,44 +1648,10 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
 		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, bag, slot, itemID)
 		SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag, itemID)
 	end
-
-	if itemProcessed then
-		itemProcessed(mogStatus, bindingStatus)
-	end
 end
 
-local function ProcessOrWaitItemLink(itemLink, bag, slot, button, options, itemProcessed)
-	CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options, itemProcessed)
-end
-
-local function ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
-	if itemID and GetItemInfoInstant(itemID) then
-		local waitItem = waitingOnItemData[tostring(itemID)]
-		if not waitItem then
-			waitItem = {}
-			waitingOnItemData[tostring(itemID)] = waitItem
-		end
-
-		local waitBag = waitItem[tostring(bag)]
-		if not waitBag then
-			waitBag = {}
-			waitItem[tostring(bag)] = waitBag
-		end
-
-		local itemLink = GetItemLinkLocal(bag, slot)
-		if itemLink == nil then
-			SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, itemID)
-			waitBag[tostring(slot)] = { itemID = itemID, bag = bag, slot = slot, button = button, options = options, itemProcessed = itemProcessed}
-		else
-			waitingOnItemData[tostring(itemID)][tostring(bag)][tostring(slot)] = nil
-
-			SetItemButtonMogStatus(button, nil)
-			ProcessItem(itemID, bag, slot, button, options, itemProcessed, itemLink)
-		end
-	else
-		SetItemButtonMogStatus(button, nil)
-		SetItemButtonBindType(button, nil)
-	end
+local function ProcessOrWaitItemLink(itemLink, bag, slot, button, options)
+	CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 end
 
 local registeredAddons = {}
@@ -1730,7 +1699,7 @@ function CaerdonWardrobe:ClearButton(button)
 	SetItemButtonBindType(button, nil)
 end
 
-function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options, itemProcessed)
+function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	if not itemLink then
 		CaerdonWardrobe:ClearButton(button)
 		return
@@ -1744,17 +1713,14 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options, 
 	-- but in cases of rapid data update (AH scroll), we don't want to update an old button
 	-- Look into ContinuableContainer
 	if item:IsItemEmpty() then -- not sure what this represents?  Seems to happen for caged pet - assuming item is ready.
-		ProcessItem(GetItemID(item:GetItemLink()), bag, slot, button, options, itemProcessed, item:GetItemLink())
+		SetItemButtonMogStatus(button, nil)
+		ProcessItem(item, bag, slot, button, options)
 	else
 		item:ContinueOnItemLoad(function ()
 			SetItemButtonMogStatus(button, nil)
-			ProcessItem(item:GetItemID(), bag, slot, button, options, itemProcessed, item:GetItemLink())
+			ProcessItem(item, bag, slot, button, options)
 		end)
 	end
-end
-
-function CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options, itemProcessed)
-	ProcessOrWaitItem(itemID, bag, slot, button, options, itemProcessed)
 end
 
 local function OnContainerUpdate(self, asyncUpdate)
@@ -1766,40 +1732,6 @@ local function OnContainerUpdate(self, asyncUpdate)
 
 		local itemLink = GetContainerItemLink(bagID, slot)
 		CaerdonWardrobe:UpdateButtonLink(itemLink, bagID, slot, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
-	end
-end
-
-local function ClearAuctionHouseQueue()
-	for itemKey, itemInfo in pairs(itemQueue) do
-		if itemInfo.bag == "AuctionFrame" then
-			itemQueue[itemKey] = nil
-		end
-	end
-end
-
-local function OnItemUpdate_Coroutine()
-	local processQueue = {}
-	local itemCount = 0
-
-	for itemKey, itemInfo in pairs(itemQueue) do
-		processQueue[itemKey] = itemInfo
-		itemQueue[itemKey] = nil
-	end
-
-	for itemKey, itemInfo in pairs(processQueue) do
-		itemCount = itemCount + 1
-
-		local isDebugItem = itemInfo.itemID and itemInfo.itemID == DEBUG_ITEM
-
-		if itemInfo.itemLink then
-			if isDebugItem then print("Processing " ..itemInfo.itemLink) end
-			CaerdonWardrobe:UpdateButtonLink(itemInfo.itemLink, itemInfo.bag, itemInfo.slot, itemInfo.button, itemInfo.options, itemInfo.itemProcessed)
-		else
-			ProcessOrWaitItem(itemInfo.itemID, itemInfo.bag, itemInfo.slot, itemInfo.button, itemInfo.options, itemInfo.itemProcessed)
-		end
-		if itemCount % 8 == 0 then
-			coroutine.yield()
-		end
 	end
 end
 
@@ -1894,6 +1826,8 @@ local function OnGuildBankFrameUpdate()
 end
 
 local auctionTimer
+local auctionContinuableContainer = ContinuableContainer:Create();
+
 local function OnAuctionBrowseUpdate()
 	-- Event pump since first load won't have UI ready
 	if not AuctionHouseFrame:IsVisible() then
@@ -1904,14 +1838,15 @@ local function OnAuctionBrowseUpdate()
 		auctionTimer:Cancel()
 	end
 
-	ClearAuctionHouseQueue()
+	-- TODO: Battle Pet scans are not clean, yet.
+	auctionContinuableContainer:Cancel()
+
 	local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
 	for i, button in ipairs(buttons) do
 		CaerdonWardrobe:ClearButton(button)
 	end
 
 	auctionTimer = C_Timer.NewTimer(0.1, function() 
-		auctionTimer = nil
 		local browseResults = C_AuctionHouse.GetBrowseResults()
 		local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
 
@@ -1920,28 +1855,56 @@ local function OnAuctionBrowseUpdate()
 			local bag = "AuctionFrame"
 			local slot = i + offset
 
-			local item = browseResults[slot]
 			local _, itemLink
-			if (item) then
-				local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(item.itemKey);
-				if itemKeyInfo and itemKeyInfo.battlePetLink then
-					itemLink = itemKeyInfo.battlePetLink
-				else
-					_, itemLink = GetItemInfo(item.itemKey.itemID);
-				end
-			end
 
-			if itemLink and button then
-				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, { index = slot, itemKey = item.itemKey }, button, 
-				{
-					iconOffset = 10,
-					iconSize = 30,				
-					showMogIcon=true, 
-					showBindStatus=false, 
-					showSellables=false
-				})
+			local browseResult = browseResults[slot]
+			if browseResult then
+				local item = Item:CreateFromItemID(browseResult.itemKey.itemID)
+				-- TODO: Do we need to check if slot has changed for buttons?  Could do something here...
+				-- item:ContinueOnItemLoad(function ()
+				-- 	print(item:GetItemLink())
+				-- end)
+				auctionContinuableContainer:AddContinuable(item)
 			end
 		end
+
+		auctionContinuableContainer:ContinueOnLoad(function()
+			local checkOffset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
+			-- TODO: Not sure if this is actually doing anything - hasn't been triggered, yet.
+			if checkOffset ~= offset then 
+				return
+			end
+
+			for i, button in ipairs(buttons) do
+				local bag = "AuctionFrame"
+				local slot = i + offset
+	
+				local _, itemLink
+	
+				local browseResult = browseResults[slot]
+				if browseResult then
+					local item = Item:CreateFromItemID(browseResult.itemKey.itemID)
+					local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
+	
+					if itemKeyInfo and itemKeyInfo.battlePetLink then
+						itemLink = itemKeyInfo.battlePetLink
+					else
+						itemLink = item:GetItemLink()
+					end
+	
+					if itemLink and button then
+						CaerdonWardrobe:UpdateButtonLink(itemLink, bag, { index = slot, itemKey = browseResult.itemKey }, button,  
+						{
+							iconOffset = 10,
+							iconSize = 30,				
+							showMogIcon=true, 
+							showBindStatus=false, 
+							showSellables=false
+						})
+					end
+				end
+			end
+		end)
 	end, 1)
 end
 
@@ -2001,7 +1964,6 @@ local timeSinceLastBagUpdate = nil
 local GUILDBANKFRAMEUPDATE_INTERVAL = 0.1
 local BAGUPDATE_INTERVAL = 0.1
 local ITEMUPDATE_INTERVAL = 0.1
-local timeSinceLastItemUpdate = nil
 
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	if self.itemUpdateCoroutine then
@@ -2054,13 +2016,6 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 		timeSinceLastBagUpdate = timeSinceLastBagUpdate + elapsed
 	end
 
-	if isItemUpdateRequested then
-		isItemUpdateRequested = false
-		timeSinceLastItemUpdate = 0
-	elseif timeSinceLastItemUpdate then
-		timeSinceLastItemUpdate = timeSinceLastItemUpdate + elapsed
-	end
-
 	if( timeSinceLastGuildBankUpdate ~= nil and (timeSinceLastGuildBankUpdate > GUILDBANKFRAMEUPDATE_INTERVAL) ) then
 		timeSinceLastGuildBankUpdate = nil
 		self.guildBankUpdateCoroutine = coroutine.create(OnGuildBankFrameUpdate_Coroutine)
@@ -2069,11 +2024,6 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	if( timeSinceLastBagUpdate ~= nil and (timeSinceLastBagUpdate > BAGUPDATE_INTERVAL) ) then
 		timeSinceLastBagUpdate = nil
 		self.bagUpdateCoroutine = coroutine.create(OnBagUpdate_Coroutine)
-	end
-
-	if( timeSinceLastItemUpdate ~= nil and (timeSinceLastItemUpdate > ITEMUPDATE_INTERVAL) ) then
-		timeSinceLastItemUpdate = nil
-		self.itemUpdateCoroutine = coroutine.create(OnItemUpdate_Coroutine)
 	end
 end
 
@@ -2297,25 +2247,6 @@ function CaerdonWardrobeMixin:BAG_UPDATE_DELAYED()
 		RefreshItems()
 	else
 		isBagUpdateRequested = true
-	end
-end
-
-function CaerdonWardrobeMixin:GET_ITEM_INFO_RECEIVED(itemID, success)
-	local itemData = waitingOnItemData[tostring(itemID)]
-	if itemData then
-        for bag, bagData in pairs(itemData) do
-        	for slot, slotData in pairs(bagData) do
-        		-- Checking item info before continuing.  In certain cases,
-        		-- the link is still nil here for some reason.
-        		-- I've seen it at merchants so far.  I'm assuming that
-        		-- these requests will ultimately result in yet another
-				-- GET_ITEM_INFO_RECEIVED event as that seems to be the case.
-				if success then
-					local itemLink = GetItemLinkLocal(slotData.bag, slotData.slot)
-					CaerdonWardrobe:UpdateButtonLink(itemID, slotData.bag, slotData.slot, slotData.button, slotData.options, slotData.itemProcessed)
-				end
-        	end
-        end
 	end
 end
 
