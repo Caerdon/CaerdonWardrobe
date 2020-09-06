@@ -27,33 +27,43 @@ if Version then
 
 	function UpdateBagSlot(event, bag, slot)
 		local button = Inventorian.bag.itemContainer.items[ToIndex(bag, slot)]
-        local itemID = GetContainerItemID(bag, slot)
-
-		local options = {
-			showMogIcon=true, 
-			showBindStatus=true,
-			showSellables=true,
-			iconPosition="TOPRIGHT" 
-		}
-
 		if button then
-			CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+			local itemLink = GetContainerItemLink(bag, slot)
+
+			local options = {
+				showMogIcon=true, 
+				showBindStatus=true,
+				showSellables=true,
+				iconPosition="TOPRIGHT" 
+			}
+
+			if Inventorian.bag:IsCached() then
+				-- TODO: Support cache?
+				CaerdonWardrobe:ClearButton(button)
+			else
+				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
+			end
 		end
 	end
 
 	function UpdateBankSlot(event, bag, slot)
 		local button = Inventorian.bank.itemContainer.items[ToIndex(bag, slot)]
-        local itemID = GetContainerItemID(bag, slot)
-
-		local options = {
-			showMogIcon=true, 
-			showBindStatus=true,
-			showSellables=true,
-			iconPosition="TOPRIGHT" 
-		}
-
 		if button then
-			CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+			local itemLink = GetContainerItemLink(bag, slot)
+
+			local options = {
+				showMogIcon=true, 
+				showBindStatus=true,
+				showSellables=true,
+				iconPosition="TOPRIGHT" 
+			}
+
+			if Inventorian.bank:IsCached() then
+				-- TODO: Support cache?
+				CaerdonWardrobe:ClearButton(button)
+			else
+				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
+			end
 		end
 	end
 

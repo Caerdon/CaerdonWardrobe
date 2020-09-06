@@ -45,7 +45,8 @@ if Version then
 			for k, rewardInfo in questInfo:IterateRewards() do
 				local rewardButton = button.Rewards.rewardFrames[k]
 				if rewardInfo.id and IsValidItem(rewardInfo.type) then
-					CaerdonWardrobe:UpdateButton(rewardInfo.id, "QuestButton", { itemID = rewardInfo.id, questID = button.questId }, rewardButton, options)
+					local item = Item:CreateFromItemID(rewardInfo.id)
+					CaerdonWardrobe:UpdateButtonLink(item:GetItemLink(), "QuestButton", { itemID = rewardInfo.id, questID = button.questId }, rewardButton, options)
 				else
 					CaerdonWardrobe:ClearButton(rewardButton)
 				end

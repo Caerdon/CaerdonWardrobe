@@ -14,63 +14,22 @@ end
 
 if Version then
 
-	local function OnBagUpdate_Coroutine()
-	    for bag, bagData in pairs(waitingOnBagUpdate) do
-	    	for slot, slotData in pairs(bagData) do
-	    		for itemID, itemData in pairs(slotData) do
-					CaerdonWardrobe:UpdateButton(itemData.itemID, itemData.bag, itemData.slot, itemData.button, { showMogIcon = true, showBindStatus = true, showSellables = true } )
-	    		end
-	    	end
-
-			waitingOnBagUpdate[bag] = nil
-	    end
-
-		waitingOnBagUpdate = {}
-	end
-
-	local function ScheduleItemUpdate(itemID, bag, slot, button)
-		local waitBag = waitingOnBagUpdate[tostring(bag)]
-		if not waitBag then
-			waitBag = {}
-			waitingOnBagUpdate[tostring(bag)] = waitBag
-		end
-
-		local waitSlot = waitBag[tostring(slot)]
-		if not waitSlot then
-			waitSlot = {}
-			waitBag[tostring(slot)] = waitSlot
-		end
-
-		waitSlot[tostring(itemID)] = { itemID = itemID, bag = bag, slot = slot, button = button }
-		isBagUpdateRequested = true
-	end
-
 	local function OnUpdateSlot(self)
-		-- if not self:IsCached() then
-			local bag, slot = self:GetBag(), self:GetID()
+		local bag, slot = self:GetBag(), self:GetID()
 
-			if bag ~= "vault" then
-				local tab = GetCurrentGuildBankTab()
-				if atGuild and tab == bag then
-					local itemLink = GetGuildBankItemLink(tab, slot)
-					if itemLink then
-						local itemID = tonumber(itemLink:match("item:(%d+)"))
-						bag = "GuildBankFrame"
-						slot = { tab = tab, index = slot }
-						ScheduleItemUpdate(itemID, bag, slot, self)
-					else
-						CaerdonWardrobe:ClearButton(self)
-					end
-				else
-					local itemID = GetContainerItemID(bag, slot)
-					if itemID then
-						ScheduleItemUpdate(itemID, bag, slot, self)
-					else
-						CaerdonWardrobe:ClearButton(self)
-					end
-				end
+		if bag ~= "vault" then
+			local tab = GetCurrentGuildBankTab()
+			if atGuild and tab == bag then
+				local itemLink = GetGuildBankItemLink(tab, slot)
+				bag = "GuildBankFrame"
+				slot = { tab = tab, index = slot }
+				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				ScheduleItemUpdate(itemID, bag, slot, self)
+			else
+				local itemLink = GetContainerItemLink(bag, slot)
+				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			end
-		-- end
+		end
 	end
 
 	local function OnEvent(self, event, ...)
@@ -80,36 +39,6 @@ if Version then
 		end
 	end
 
-	local timeSinceLastBagUpdate = nil
-	local BAGUPDATE_INTERVAL = 0.3
-
-	local function OnUpdate(self, elapsed)
-		if(self.bagUpdateCoroutine) then
-			if coroutine.status(self.bagUpdateCoroutine) ~= "dead" then
-				local ok, result = coroutine.resume(self.bagUpdateCoroutine)
-				if not ok then
-					error(result)
-				end
-			else
-				self.bagUpdateCoroutine = nil
-			end
-			return
-		end
-
-		if isBagUpdateRequested then
-			isBagUpdateRequested = false
-			timeSinceLastBagUpdate = 0
-		elseif timeSinceLastBagUpdate then
-			timeSinceLastBagUpdate = timeSinceLastBagUpdate + elapsed
-		end
-
-		if( timeSinceLastBagUpdate ~= nil and (timeSinceLastBagUpdate > BAGUPDATE_INTERVAL) ) then
-			timeSinceLastBagUpdate = nil
-			self.bagUpdateCoroutine = coroutine.create(OnBagUpdate_Coroutine)
-		end
-	end
-
-
 	local function HookCombuctor()
 		hooksecurefunc(Combuctor.Item, "Update", OnUpdateSlot)
 	end
@@ -117,7 +46,6 @@ if Version then
 	local eventFrame = CreateFrame("FRAME")
 
 	eventFrame:SetScript("OnEvent", OnEvent)
-	eventFrame:SetScript("OnUpdate", OnUpdate)
 	-- eventFrame:RegisterEvent("TRANSMOG_COLLECTION_ITEM_UPDATE")
 
 	HookCombuctor()

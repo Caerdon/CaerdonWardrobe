@@ -13,23 +13,15 @@ end
 if Version then
 
     local function ProcessItem(bagId, slotId, button)
-        local bag = bagId
+        if bagId and slotId then
+            local itemLink = GetContainerItemLink(bagId, slotId)
+            local options = {
+                showMogIcon=true,
+                showBindStatus=true,
+                showSellables=true
+            }
 
-        if slotId then
-            local slot = slotId
-     
-            local itemId = GetContainerItemID(bagId, slotId)
-            if itemId then
-                local options = {
-                    showMogIcon=true,
-                    showBindStatus=true,
-                    showSellables=true
-                }
-
-                CaerdonWardrobe:UpdateButton(itemId, bag, slot, button, options)
-            else
-                CaerdonWardrobe:UpdateButton(nil, bag, slot, button, nil)
-            end 
+            CaerdonWardrobe:UpdateButtonLink(itemLink, bagId, slotId, button, options)
         end
     end
 

@@ -104,14 +104,17 @@ function QuestMixin:OnQuestInfoShowRewards(template, parentFrame)
 			questItem = QuestInfo_GetRewardButton(rewardsFrame, index);
 			if ( QuestInfoFrame.questLog ) then
 				name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i);
+
+				if itemID then
+					_, itemLink = GetItemInfo(itemID)
+				end
 			else
 				name, texture, numItems, quality, isUsable = GetQuestItemInfo(questItem.type, i);
 				itemLink = GetQuestItemLink(questItem.type, i);
-				itemID = CaerdonWardrobe:GetItemID(itemLink)
 			end
 			rewardsCount = rewardsCount + 1;
 
-			CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
 		end
 	end
 
@@ -128,20 +131,16 @@ function QuestMixin:OnQuestInfoShowRewards(template, parentFrame)
 			questItem.objectType = "item";
 			if ( QuestInfoFrame.questLog ) then
 				name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i);
+				if itemID then
+					_, itemLink = GetItemInfo(itemID)
+				end
 			else
 				name, texture, numItems, quality, isUsable = GetQuestItemInfo(questItem.type, i);
 				itemLink = GetQuestItemLink(questItem.type, i);
-				if itemLink ~= nil then
-					itemID = CaerdonWardrobe:GetItemID(itemLink)
-				else
-					itemID = -1
-				end
 			end
 			rewardsCount = rewardsCount + 1;
 
-			if itemID ~= -1 then
-				CaerdonWardrobe:UpdateButton(itemID, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
-			end
+			CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestButton", { itemID = itemID, questID = questID, index = i, questItem = questItem }, questItem, options)
 		end
 	end
 end

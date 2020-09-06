@@ -51,11 +51,7 @@ if Version then
                 local reward = quest.rewards
                 local button = _G["ZGVWQLISTRow" .. WQ_RowNum .. "Icon"]
 
-                if reward.itemlink then -- item
-                    CaerdonWardrobe:UpdateButton(GetItemID(reward.itemlink), "QuestButton", { itemLink = reward.itemlink, questID = quest.questID }, button, options)
-                else
-                    CaerdonWardrobe:ClearButton(button)
-                end 
+                CaerdonWardrobe:UpdateButtonLink(reward.itemlink, "QuestButton", { itemLink = reward.itemlink, questID = quest.questID }, button, options)
             end
         end
     end

@@ -9,17 +9,7 @@ end
 
 function GroupLootMixin:OnGroupLootFrameShow(frame)
 	local itemLink = GetLootRollItemLink(frame.rollID)
-	if itemLink == nil then
-		CaerdonWardrobe:ClearButton(frame.IconFrame)
-		return
-	end
-
-	local itemID = CaerdonWardrobe:GetItemID(itemLink)
-	if itemID then
-		CaerdonWardrobe:UpdateButton(itemID, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
-	else
-		CaerdonWardrobe:ClearButton(frame.IconFrame)
-	end
+	CaerdonWardrobe:UpdateButtonLink(itemLink, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
 end
 
 GroupLoot = CreateFromMixins(GroupLootMixin)

@@ -21,7 +21,7 @@ if Version then
 	end
 
 	function mod:UpdateButton(event, button)
-		local itemID = button.itemId
+		local itemLink = button.itemLink
 		local bag = button.bag
 		local slot = button.slot
 
@@ -32,61 +32,8 @@ if Version then
 			iconPosition="TOPRIGHT" 
 		}
 
-		CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end
-
-	-- local canLearnFilter = AdiBags:RegisterFilter("CanLearn", 92, 'ABEvent-1.0')
-	-- canLearnFilter.uiName = L["Can Learn"]
-	-- canLearnFilter.uiDesc = L['Transmog appearances that can be unlocked by the current toon']
-
-	-- function canLearnFilter:OnInitialize()
-	--   self.db = AdiBags.db:RegisterNamespace('CanLearn', {
-	--     profile = { showBoE = true, showBoA = true },
-	--     char = {  },
-	--   })
-	-- end
-
-	-- function canLearnFilter:Filter(slotData)
-
-	-- 	for k, v in pairs( slotData ) do
-	-- 	   print(k, v)
-	-- 	end
-
-	-- 	print("--------------")
-
-	-- 	local bag, slot
-	-- 	local itemID = slotData.itemId
-
-	-- 	if slotData.bag == BANK_CONTAINER then
-	-- 		bag = "BankFrame"
-	-- 		slot = slotData.slot
-	-- 	else
-	-- 		bag = slotData.bag
-	-- 		slot = slotData.slot
-	-- 	end
-
-	-- 	local onItemProcessed = 
-	-- 		function(mogStatus, bindingText)
-	-- 			local section
-	-- 			if mogStatus == "own" then
-	-- 				section = L["Can Learn"]
-	-- 			elseif mogStatus == "other" then
-	-- 				section = L["Can Learn Other"]
-	-- 			end
-	-- 		end
-
-	-- 	CaerdonWardrobe:UpdateButton(itemID, bag, slot, true, true, nil, onItemProcessed)
-
-	-- 	-- for i = 1,6 do
-	-- 	-- 	local t = tooltip.leftside[i]:GetText()
-	-- 	-- 	if self.db.profile.enableBoE and t == ITEM_BIND_ON_EQUIP then
-	-- 	-- 		return L["BoE"]
-	-- 	-- 	elseif self.db.profile.enableBoA and (t == ITEM_ACCOUNTBOUND or t == ITEM_BIND_TO_BNETACCOUNT or t == ITEM_BNETACCOUNTBOUND) then
-	-- 	-- 		return L["BoA"]
-	-- 	-- 	end
-	-- 	-- end
-	-- 	-- tooltip:Hide()
-	-- end
 
 	local function OnEvent(self, event, ...)
 		local handler = self[event]
