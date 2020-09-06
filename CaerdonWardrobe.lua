@@ -1,5 +1,5 @@
 local DEBUG_ENABLED = false
--- local DEBUG_ITEM = 182420
+-- local DEBUG_ITEM = 82800
 local ADDON_NAME, NS = ...
 local L = NS.L
 local isBagUpdate = false
@@ -87,6 +87,10 @@ local function GetItemID(itemLink)
 end
 
 local function IsPetLink(itemLink)
+	-- TODO: This would be nice, but vendor pets don't seem to get recognized.
+	-- local isPet = LinkUtil.IsLinkType(itemLink, "battlepet")
+	-- return isPet
+	
 	local itemID = GetItemID(itemLink)
 	if itemID == 82800 then
 		return true -- It's showing up as [Pet Cage] for whatever reason
@@ -98,12 +102,22 @@ local function IsPetLink(itemLink)
 				return true;
 			end
 		elseif ( linkType == "battlepet" ) then
-			local speciesID, _, _, _, _, displayID, _, _, _, _, creatureID = C_PetJournal.GetPetInfoByPetID(battlePetID);
-			if ( speciesID == tonumber(linkID)) then
-				if (creatureID and displayID) then
-					return true;
-				end	
+			if battlePetID and battlePetID ~= "" and battlePetID ~= "0" then
+				local speciesID, _, _, _, _, displayID, _, _, _, _, creatureID = C_PetJournal.GetPetInfoByPetID(battlePetID);
+				if ( speciesID == tonumber(linkID)) then
+					if (creatureID and displayID) then
+						return true;
+					end	
+				else
+					speciesID = tonumber(linkID);
+					local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+					displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
+					if (creatureID and displayID) then
+						return true;
+					end	
+				end
 			else
+				-- Mostly in place as a hack for bad battlepet links from addons
 				speciesID = tonumber(linkID);
 				local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
 				displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
@@ -763,25 +777,30 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 			if isCollectionItem and not unusableItem then
 				if isPetLink then
-					local petID = GetItemID(itemLink)
-					if petID then
-						if tooltipSpeciesID and tooltipSpeciesID > 0 then
-							-- Pet cages have some magic info that comes back from tooltip setup
-							local numCollected = C_PetJournal.GetNumCollectedInfo(tooltipSpeciesID)
-							if numCollected == nil then
-								needsItem = false
-							elseif numCollected > 0 then
-								if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
-								needsItem = false
-							else
-								if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
-								needsItem = true
-							end
-						elseif isPetKnown then
+					if not tooltipSpeciesID then
+						-- Attempt to grab it from itemLink
+						local _, _, _, linkType, linkID, _, _, _, _, _, battlePetID, battlePetDisplayID = strsplit(":|H", itemLink)
+						if linkID then
+							tooltipSpeciesID = tonumber(linkID)
+						end
+					end
+
+					if tooltipSpeciesID and tooltipSpeciesID > 0 then
+						-- Pet cages have some magic info that comes back from tooltip setup
+						local numCollected = C_PetJournal.GetNumCollectedInfo(tooltipSpeciesID)
+						if numCollected == nil then
+							needsItem = false
+						elseif numCollected > 0 then
+							if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
 							needsItem = false
 						else
+							if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
 							needsItem = true
 						end
+					elseif isPetKnown then
+						needsItem = false
+					else
+						needsItem = true
 					end
 				end
 			elseif isCollectionItem then
@@ -1446,7 +1465,7 @@ local function ProcessItem(itemID, bag, slot, button, options, itemProcessed, pr
 		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
 			if not hasUse then
 				-- TODO: May want to separate reagents from everything else?
-				-- mogStatus = "oldexpansion"
+				mogStatus = "oldexpansion"
 			end
 		end
 		

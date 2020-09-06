@@ -38,7 +38,7 @@ if Version and cargBags then
 	local cbNivaya = cargBags:GetImplementation("Nivaya")
 
 	local function UpdateSlot(self, bagID, slotID)
-		local itemID = GetContainerItemID(bagID, slotID)
+		local itemLink = GetContainerItemLink(bagID, slotID)
 		local button = self:GetButton(bagID, slotID)
 		local options = {
 			showMogIcon=true, 
@@ -48,7 +48,7 @@ if Version and cargBags then
 		}
 
 		if button then
-			CaerdonWardrobe:UpdateButton(itemID, bagID, slotID, button, options)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, bagID, slotID, button, options)
 		end
 	end
 

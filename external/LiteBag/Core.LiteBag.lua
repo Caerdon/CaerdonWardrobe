@@ -14,7 +14,7 @@ if Version then
 	function UpdateButton(button)
 	    local bag = button:GetParent():GetID()
 	    local slot = button:GetID()
-	    local _, _, _, _, _, _, _, _, _, itemID = GetContainerItemInfo(bag, slot)
+	    local itemLink = GetContainerItemLink(bag, slot)
 
 		local options = {
 			showMogIcon=true, 
@@ -23,7 +23,7 @@ if Version then
 			iconPosition="TOPRIGHT" 
 		}
 
-		CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end
 
     LiteBagItemButton_RegisterHook('LiteBagItemButton_Update', UpdateButton)

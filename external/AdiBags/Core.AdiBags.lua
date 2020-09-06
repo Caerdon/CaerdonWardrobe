@@ -21,7 +21,7 @@ if Version then
 	end
 
 	function mod:UpdateButton(event, button)
-		local itemID = button.itemId
+		local itemLink = button.itemLink
 		local bag = button.bag
 		local slot = button.slot
 
@@ -32,7 +32,7 @@ if Version then
 			iconPosition="TOPRIGHT" 
 		}
 
-		CaerdonWardrobe:UpdateButton(itemID, bag, slot, button, options)
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end
 
 	-- local canLearnFilter = AdiBags:RegisterFilter("CanLearn", 92, 'ABEvent-1.0')
