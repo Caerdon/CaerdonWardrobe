@@ -17,17 +17,21 @@ if Version then
 	local function OnUpdateSlot(self)
 		local bag, slot = self:GetBag(), self:GetID()
 
-		if bag ~= "vault" then
-			local tab = GetCurrentGuildBankTab()
-			if atGuild and tab == bag then
-				local itemLink = GetGuildBankItemLink(tab, slot)
-				bag = "GuildBankFrame"
-				slot = { tab = tab, index = slot }
-				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
-				ScheduleItemUpdate(itemID, bag, slot, self)
-			else
-				local itemLink = GetContainerItemLink(bag, slot)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+		if self.info.cached then
+			CaerdonWardrobe:UpdateButtonLink(self.info.link, "ItemLink", nil, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+		else
+			if bag ~= "vault" then
+				local tab = GetCurrentGuildBankTab()
+				if atGuild and tab == bag then
+					local itemLink = GetGuildBankItemLink(tab, slot)
+					bag = "GuildBankFrame"
+					slot = { tab = tab, index = slot }
+					CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+					ScheduleItemUpdate(itemID, bag, slot, self)
+				else
+					local itemLink = GetContainerItemLink(bag, slot)
+					CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				end
 			end
 		end
 	end

@@ -345,65 +345,6 @@ local function PlayerCanCollectAppearance(sourceID, appearanceID, itemID, itemLi
     return canCollect, matchedSource, shouldRetry
 end
 
-local function GetItemLinkLocal(bag, slot)
-	if bag == "AuctionFrame" then
-		local _, itemLink = GetItemInfo(slot.itemKey.itemID);
-		return itemLink
-	elseif bag == "MerchantFrame" then
-		if MerchantFrame.selectedTab == 1 then
-			return GetMerchantItemLink(slot)
-		else
-			return GetBuybackItemLink(slot)
-		end
-	elseif bag == "BankFrame" then
-		return GetInventoryItemLink("player", slot)
-	elseif bag == "GuildBankFrame" then
-		return GetGuildBankItemLink(slot.tab, slot.index)
-	elseif bag == "EncounterJournal" then
-		-- local itemID, encounterID, name, icon, slotName, armorType, itemLink = EJ_GetLootInfoByIndex(slot)
-		return slot.link
-	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
-		return slot.link
-	elseif bag == "OpenMailFrame" then
-		local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, slot);
-		local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-		isCraftingReagent = GetItemInfo(itemID)
-		return itemLink
-	elseif bag == "SendMailFrame" then
-		local itemName, itemID, itemTexture, stackCount, quality = GetSendMailItem(slot);
-		local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-		itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-		isCraftingReagent = GetItemInfo(itemID)
-		return itemLink
-	elseif bag == "InboxFrame" then
-		local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(slot);
-		return firstItemLink
-	elseif bag == "BlackMarketScrollFrame" then
-		if (slot == "HotItem") then
-			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
-			return link
-		else
-			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(slot);
-			return link
-		end
-	elseif bag == "QuestButton" then
-		if slot.itemLink then
-			return slot.itemLink
-		else
-			local itemID = slot.itemID
-			local itemName, itemLink, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-			itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-			isCraftingReagent = GetItemInfo(itemID)
-			return itemLink
-		end
-	else
-	    if bag then
-	      return GetContainerItemLink(bag, slot)
-	    end
-	end
-end
-
 local function GetItemKey(bag, slot, itemLink)
 	local itemKey
 	if bag == "AuctionFrame" then
@@ -423,7 +364,7 @@ local function GetItemKey(bag, slot, itemLink)
 	elseif bag == "BlackMarketScrollFrame" then
 		itemKey = itemLink .. slot
 	else
-		itemKey = itemLink .. bag .. slot
+		itemKey = itemLink .. tostring(bag) .. tostring(slot)
 	end
 
 	return itemKey
@@ -499,6 +440,8 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			else
          		scanTip:SetBuybackItem(slot)
 			end
+		elseif bag == "ItemLink" then
+			scanTip:SetHyperlink(itemLink)
 		elseif bag == BANK_CONTAINER then
 			local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
 			tooltipSpeciesID = speciesID
@@ -916,6 +859,7 @@ local function IsBankOrBags(bag)
 	   bag ~= "OpenMailFrame" and
 	   bag ~= "SendMailFrame" and 
 	   bag ~= "InboxFrame" and
+	   bag ~= "ItemLink" and
 	   bag ~= "BlackMarketScrollFrame" then
 		isBankOrBags = true
 	end
