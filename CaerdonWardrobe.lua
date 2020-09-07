@@ -49,8 +49,8 @@ local bindTextTable = {
 	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
 	[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
 	[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"],
-	[ITEM_BIND_ON_EQUIP]       = L["BoE"],
-	[ITEM_BIND_ON_USE]         = L["BoE"]
+	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
+	-- [ITEM_BIND_ON_USE]         = L["BoE"]
 }
 
 local InventorySlots = {
@@ -392,10 +392,14 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	local bindingText, needsItem, hasUse
 
     local isInEquipmentSet = false
-    local isBindOnPickup = false
+	local isBindOnPickup = false
+	local isBindOnUse = false
+	local isSoulbound = false
 	local isCompletionistItem = false
 	local matchesLootSpec = true
 	local unusableItem = false
+	local skillTooLow = false
+	local foundRedRequirements = false
 	local isDressable, shouldRetry
 	local isLocked = false
 	
@@ -515,6 +519,16 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		isCraftingReagent = GetItemInfo(itemLink)
 
 		isBindOnPickup = bindType == 1
+		if bindType == 1 then -- BoP
+			isBindOnPickup = true
+		elseif bindType == 2 then -- BoE
+			bindingText = "BoE"
+		elseif bindType == 3 then -- BoU
+			isBindOnUse = true
+			bindingText = "BoE"
+		elseif bindType == 4 then -- Quest
+			bindingText = ""
+		end
 		
 		if shouldCheckEquipmentSet then
 			if isDebugItem then print("itemEquipLoc: " .. tostring(itemEquipLoc)) end
@@ -609,9 +623,6 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 	    end
 
 		local numLines = scanTip:NumLines()
-		local isPetKnown = false
-		local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
-
 		if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
 		if not isCollectionItem and not noSourceReason and numLines == 0 then
 			if isDebugItem then print("No scan lines... retrying") end
@@ -619,6 +630,10 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		end
 
 		if not shouldRetry then
+			local isPetKnown = false
+			local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
+			local foundTradeskillMatch = false
+
 			for lineIndex = 1, numLines do
 				local scanName = scanTip:GetName()
 				local line = _G[scanName .. "TextLeft" .. lineIndex]
@@ -640,6 +655,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					end
 
 					if not bindingText then
+						-- Check if account bound - TODO: Is there a non-scan way?
 						bindingText = bindTextTable[lineText]
 					end
 
@@ -647,6 +663,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						shouldRetry = true
 						break
 					elseif lineText == ITEM_SOULBOUND then
+						isSoulbound = true
 						isBindOnPickup = true
 					-- TODO: Don't think we need these anymore?
 					-- elseif lineText == TRANSMOGRIFY_TOOLTIP_ITEM_UNKNOWN_APPEARANCE_KNOWN then
@@ -666,6 +683,9 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						needsItem = false
 					elseif lineText == LOCKED then
 						isLocked = true
+					elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+						unusableItem = true
+						skillTooLow = true
 					elseif isPetLink and strmatch(lineText, PET_KNOWN) then
 						isPetKnown = true
 					end 
@@ -676,8 +696,11 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					-- if isDebugItem then print("Color: " .. hex) end
 					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
 					-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
-					if hex == "fe1f1f" then
 						if isRecipe then
+							if hex == "fe1f1f" then
+								foundRedRequirements = true
+							end
+
 							-- TODO: Cooking and fishing are not represented in trade skill lines right now
 							-- Assuming all toons have cooking for now.
 
@@ -695,10 +718,20 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 									local skillLineID = skillLines[skillLineIndex]
 									local name, rank, maxRank, modifier, parentSkillLineID = C_TradeSkillUI.GetTradeSkillLineInfoByID(skillLineID)
 									if requiredSkill == name then
-										if rank < tonumber(requiredRank) then
+										foundTradeskillMatch = true
+										if not rank or rank < tonumber(requiredRank) then
 											-- Toon either doesn't have profession or isn't high enough level.
 											unusableItem = true
 											if isBindOnPickup then
+												if not rank or rank == 0 then
+													needsItem = false
+												end
+											end
+
+											if rank and rank > 0 then -- has skill but isn't high enough
+												skillTooLow = true
+												needsItem = true -- still need this but need to rank up
+											else
 												needsItem = false
 											end
 										else
@@ -707,19 +740,37 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 									end
 								end
 							end		
-						elseif isBindOnPickup then
-							if isDebugItem then print("Red text in tooltip indicates item is soulbound and can't be used by this toon") end
-							unusableItem = true
-							if not bag == "EncounterJournal" then
-								needsItem = false
-								isCompletionistItem = false
-							end
+						-- elseif isBindOnPickup then
+						-- 	if isDebugItem then print("Red text in tooltip indicates item is soulbound and can't be used by this toon") end
+						-- 	unusableItem = true
+						-- 	if not bag == "EncounterJournal" then
+						-- 		needsItem = false
+						-- 		isCompletionistItem = false
+						-- 	end
 						end
-					end
+					-- end
 				end
 			end
 
+			if foundRedRequirements then
+				unusableItem = true
+				skillTooLow = true
+			end
+
+			-- TODO: Can we scan the embedded item tooltip? Probably need to do something like EmbeddedItemTooltip_SetItemByID
+			-- This may only matter for recipes, so I may have to use LibRecipes if I can't get the recipe info for the created item.
+
 			if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
+
+			if bindingText then
+				if isSoulbound and bindingText == "BoE" then
+					bindingText = ""
+				end
+			elseif isCollectionItem or isLocked or isOpenable then
+				if not isBindOnPickup then
+					bindingText = "BoE"
+				end
+			end
 
 			if isCollectionItem and not unusableItem then
 				if isPetLink then
@@ -762,7 +813,20 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		SetCVar("alwaysCompareItems", originalAlwaysCompareItems)
 	end
 
-	return bindingText, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked
+	return { 
+		bindingText = bindingText, 
+		needsItem = needsItem, 
+		hasUse = hasUse, 
+		isDressable = isDressable, 
+		isInEquipmentSet = isInEquipmentSet, 
+		isBindOnPickup = isBindOnPickup, 
+		isCompletionistItem = isCompletionistItem, 
+		shouldRetry = shouldRetry, 
+		unusableItem = unusableItem, 
+		matchesLootSpec = matchesLootSpec, 
+		isLocked = isLocked, 
+		skillTooLow = skillTooLow
+	}
 end
 
 local function addDebugInfo(tooltip)
@@ -812,10 +876,18 @@ local function IsGearSetStatus(status)
 	return status and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
-local function SetIconPositionAndSize(icon, startingPoint, offset, size, iconOffset)
+-- TODO: Fix this to make more flexible and consistent - getting crazy and wrong I'm sure
+local function SetIconPositionAndSize(icon, startingPoint, offset, size, iconOffset, scaleAdjustment)
+	scaleAdjustment = scaleAdjustment or 1
+	sizeAdjustment = size - (size * scaleAdjustment)
+	offset = offset - (sizeAdjustment / 2)
+	iconOffset = iconOffset + (sizeAdjustment / 2)
+
 	icon:ClearAllPoints()
 
-	local offsetSum = offset - iconOffset
+	icon:SetSize(size - sizeAdjustment, size - sizeAdjustment)
+
+	local offsetSum = (offset - iconOffset) * scaleAdjustment
 	if startingPoint == "TOPRIGHT" then
 		icon:SetPoint("TOPRIGHT", offsetSum, offsetSum)
 	elseif startingPoint == "TOPLEFT" then
@@ -824,9 +896,12 @@ local function SetIconPositionAndSize(icon, startingPoint, offset, size, iconOff
 		icon:SetPoint("BOTTOMRIGHT", offsetSum, offsetSum * -1)
 	elseif startingPoint == "BOTTOMLEFT" then
 		icon:SetPoint("BOTTOMLEFT", offsetSum * -1, offsetSum * -1)
+	elseif startingPoint == "RIGHT" then
+		icon:SetPoint("RIGHT", iconOffset, 0)
+	elseif startingPoint == "LEFT" then
+		icon:SetPoint("LEFT", iconOffset, 0)
 	end
 
-	icon:SetSize(size, size)
 end
 
 local function AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
@@ -941,6 +1016,26 @@ local function ShouldHideOtherIcon(bag)
 	return shouldHide
 end
 
+local function ShouldHideQuestIcon(bag)
+	local shouldHide = false
+
+	if bag == "AuctionFrame" then
+		shouldHide = true
+	end
+
+	return shouldHide
+end
+
+local function ShouldHideOldExpansionIcon(bag)
+	local shouldHide = false
+
+	if bag == "AuctionFrame" then
+		shouldHide = not CaerdonWardrobeConfig.Icon.ShowOldExpansion.Auction
+	end
+
+	return shouldHide
+end
+
 local function ShouldHideSellableIcon(bag)
 	local shouldHide = false
 
@@ -977,7 +1072,7 @@ local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	end
 end
 
-local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag, slot, itemID)
+local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag, slot)
 	local button = originalButton.caerdonButton
 
 	if not button then
@@ -1068,6 +1163,16 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	if status == "waiting" then
 		showAnim = true
 
+		if mogAnim and not button.isWaitingIcon then
+			if mogAnim:IsPlaying() then
+				mogAnim:Finish()
+			end
+
+			mogAnim = nil
+			button.mogAnim = nil
+			button.isWaitingIcon = false
+		end
+
 		if not mogAnim or not button.isWaitingIcon then
 			mogAnim = mogStatus:CreateAnimationGroup()
 
@@ -1124,17 +1229,24 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 
 	local alpha = 1
 	mogStatus:SetVertexColor(1, 1, 1)
-	if status == "refundable" and not ShouldHideSellableIcon(bag) then
+	-- TODO: Add options to hide these statuses
+	if status == "refundable" then
 		SetIconPositionAndSize(mogStatus, iconPosition, 3, 15, iconOffset)
 		alpha = 0.9
 		mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
-	elseif status == "openable" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
-			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
-			mogStatus:SetTexture("Interface\\Store\\category-icon-free")
-	elseif status == "locked" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
-			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
-			mogStatus:SetTexture("Interface\\Store\\category-icon-key")
-	elseif status == "oldexpansion" and not ShouldHideSellableIcon(bag) then -- TODO: Add separate option for showing
+	elseif status == "openable" then
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
+		mogStatus:SetTexture("Interface\\Store\\category-icon-free")
+	elseif status == "lowSkill" then
+		mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, 30, iconOffset, 0.6)
+		-- mogStatus:SetTexture("Interface\\QUESTFRAME\\SkillUp-BG")
+		-- mogStatus:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+		-- mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+	elseif status == "locked" then
+		SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
+		mogStatus:SetTexture("Interface\\Store\\category-icon-key")
+	elseif status == "oldexpansion" and not ShouldHideOldExpansionIcon(bag) then
 		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		alpha = 0.9
 		mogStatus:SetTexture("Interface\\Store\\category-icon-wow")
@@ -1168,6 +1280,9 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		else
 			mogStatus:SetTexture("")
 		end
+	elseif status == "quest" and not ShouldHideQuestIcon(bag) then
+		SetIconPositionAndSize(mogStatus, iconPosition, 2, 15, iconOffset)
+		mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
 	elseif status == "collected" then
 		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable and not ShouldHideSellableIcon(bag) then -- it's known and can be sold
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
@@ -1208,7 +1323,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 	end
 end
 
-local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag, itemID)
+local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
 	local bindsOnText = button.bindsOnText
 
 	if not bindingStatus and not bindsOnText then return end
@@ -1340,8 +1455,8 @@ local function DebugItem(itemID, itemLink, bag, slot)
 	end
 
 	print ( '---- Addon API')
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
-	print ('Binding Status: ' .. tostring(bindingStatus) .. ', Needs Item: ' .. tostring(needsItem) .. ', HasUse: ' .. tostring(hasUse) .. ', Is Dressable: ' .. tostring(isDressable) .. ', Is In Equipment Set: ' .. tostring(isInEquipmentSet) .. ', Is BoP: ' .. tostring(isBindOnPickup) .. ', Is Completionist: ' .. tostring(isCompletionistItem) .. ', Should Retry: ' .. tostring(shouldRetry) .. ', Unusable: ' .. tostring(unusableItem) .. ', Matches Loot Spec: ' .. tostring(matchesLootSpec) .. ', Is Locked: ' .. tostring(isLocked))
+	local bindingResult = GetBindingStatus(bag, slot, itemID, itemLink)
+	print ('Binding Status: ' .. tostring(bindingResult.bindingText) .. ', Needs Item: ' .. tostring(bindingResult.needsItem) .. ', HasUse: ' .. tostring(bindingResult.hasUse) .. ', Is Dressable: ' .. tostring(bindingResult.isDressable) .. ', Is In Equipment Set: ' .. tostring(bindingResult.isInEquipmentSet) .. ', Is BoP: ' .. tostring(bindingResult.isBindOnPickup) .. ', Is Completionist: ' .. tostring(bindingResult.isCompletionistItem) .. ', Should Retry: ' .. tostring(bindingResult.shouldRetry) .. ', Unusable: ' .. tostring(bindingResult.unusableItem) .. ', Matches Loot Spec: ' .. tostring(bindingResult.matchesLootSpec) .. ', Is Locked: ' .. tostring(bindingResult.isLocked))
 
 	local appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
 	print ('Appearance ID: ' .. tostring(appearanceID) .. ', Is Collected: ' .. tostring(isCollected) .. ', Source ID: ' .. tostring(sourceID) .. ', Should Retry: ' .. tostring(shouldRetry))
@@ -1377,9 +1492,14 @@ local function ProcessItem(item, bag, slot, button, options)
 	local showBindStatus = options.showBindStatus
 	local showSellables = options.showSellables
 
-	local itemID = item:GetItemID()
 	local itemLink = item:GetItemLink()
-	if not itemLink or not itemID then
+	if not itemLink then
+		-- Requiring an itemLink for now unless I find a reason not to
+		return
+	end
+
+	local itemID = item:GetItemID() or GetItemID(itemLink)
+	if not itemID then
 		return
 	end
 
@@ -1394,7 +1514,8 @@ local function ProcessItem(item, bag, slot, button, options)
 
 	local appearanceID, isCollected, sourceID
 
-	local bindingStatus, needsItem, hasUse, isDressable, isInEquipmentSet, isBindOnPickup, isCompletionistItem, shouldRetry, unusableItem, matchesLootSpec, isLocked = GetBindingStatus(bag, slot, itemID, itemLink)
+	local bindingResult = GetBindingStatus(bag, slot, itemID, itemLink)
+	local shouldRetry = bindingResult.shouldRetry
 	if shouldRetry then
 		if isDebugItem then print("Retrying item: " .. itemLink) end
 		QueueProcessItem(itemLink, bag, slot, button, options)
@@ -1410,9 +1531,20 @@ local function ProcessItem(item, bag, slot, button, options)
 	else
 		local expansionID = expacID
 		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
-			if not hasUse then
-				-- TODO: May want to separate reagents from everything else?
-				-- mogStatus = "oldexpansion"
+			local shouldShowExpansion = false
+
+			if expansionID > 0 or CaerdonWardrobeConfig.Icon.ShowOldExpansion.Unknown then
+				if isCraftingReagent and CaerdonWardrobeConfig.Icon.ShowOldExpansion.Reagents then
+					shouldShowExpansion = true
+				elseif bindingResult.hasUse and CaerdonWardrobeConfig.Icon.ShowOldExpansion.Usable then
+					shouldShowExpansion = true
+				elseif not isCraftingReagent and not bindingResult.hasUse and CaerdonWardrobeConfig.Icon.ShowOldExpansion.Other then
+					shouldShowExpansion = true
+				end
+			end
+
+			if shouldShowExpansion then
+				mogStatus = "oldexpansion"
 			end
 		end
 		
@@ -1423,6 +1555,11 @@ local function ProcessItem(item, bag, slot, button, options)
 		end
 	end
 
+	local isQuestItem = itemClassID == LE_ITEM_CLASS_QUESTITEM
+	if isQuestItem and CaerdonWardrobeConfig.Icon.ShowQuestItems then
+		mogStatus = "quest"
+	end
+
 	if appearanceID then
 		if isDebugItem then print("=== Has appearance ID") end
 		local canCollect, matchedSource, shouldRetry = PlayerCanCollectAppearance(sourceID, appearanceID, itemID, itemLink)
@@ -1431,33 +1568,33 @@ local function ProcessItem(item, bag, slot, button, options)
 			return
 		end
 
-		if isDebugItem then print("Needs Item: " .. tostring(needsItem)) end
+		if isDebugItem then print("Needs Item: " .. tostring(bindingResult.needsItem)) end
 		if isDebugItem then print("Is Collected: " .. tostring(isCollected)) end
 		if isDebugItem then print("Player Has Appearance: " .. tostring(PlayerHasAppearance(appearanceID))) end
 
-		if(needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
+		if(bindingResult.needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
 			if isDebugItem then print("=== Has appearance, Processing needsItem") end
-			if canCollect and not unusableItem then
+			if canCollect and not bindingResult.unusableItem then
 				mogStatus = "own"
 			else
-				if bindingStatus then
+				if bindingResult.bindingText then
 					mogStatus = "other"
 				elseif (bag == "EncounterJournal" or bag == "QuestButton") then
 					mogStatus = "other"
-				elseif (bag == "LootFrame" or bag == "GroupLootFrame") and not isBindOnPickup then
+				elseif (bag == "LootFrame" or bag == "GroupLootFrame") and not bindingResult.isBindOnPickup then
 					mogStatus = "other"
-				elseif unusableItem then
+				elseif bindingResult.unusableItem then
 					mogStatus = "collected"
 				end
 			end
 
-			if not matchesLootSpec and bag == "EncounterJournal" then
+			if not bindingResult.matchesLootSpec and bag == "EncounterJournal" then
 				mogStatus = "otherSpec"
 			end
 		else
-			if isDebugItem then print("Is Completionist Item: " .. tostring(isCompletionistItem)) end
+			if isDebugItem then print("Is Completionist Item: " .. tostring(bindingResult.isCompletionistItem)) end
 
-			if isCompletionistItem then
+			if bindingResult.isCompletionistItem then
 				if isDebugItem then print("=== Processing completionist item") end
 				-- You have this, but you want them all.  Why?  Because.
 
@@ -1469,12 +1606,12 @@ local function ProcessItem(item, bag, slot, button, options)
 					mogStatus = "otherPlus"
 				end
 
-				if not matchesLootSpec and bag == "EncounterJournal" then
+				if not bindingResult.matchesLootSpec and bag == "EncounterJournal" then
 					if isDebugItem then print("=== Doesn't match loot spec - flagging other") end
 					mogStatus = "otherSpecPlus"
 				end
 
-				if unusableItem then
+				if bindingResult.unusableItem then
 					if isDebugItem then print("=== Marked unusable for toon - flagging other") end
 					mogStatus = "otherPlus"
 				end
@@ -1482,14 +1619,14 @@ local function ProcessItem(item, bag, slot, button, options)
 			-- If an item isn't flagged as a source or has a usable effect,
 			-- then don't mark it as sellable right now to avoid accidents.
 			-- May need to expand this to account for other items, too, for now.
-			elseif canBeSource and not isInEquipmentSet then
-				if isDressable and not shouldRetry then -- don't flag items for sale that have use effects for now
+			elseif canBeSource and not bindingResult.isInEquipmentSet then
+				if bindingResult.isDressable and not shouldRetry then -- don't flag items for sale that have use effects for now
 					if isDebugItem then print("canBeSource and isDressable processed for " ..itemLink) end
 					if IsBankOrBags(bag) then
 					 	local money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped);
-						if hasUse and refundSec then
+						if bindingResult.hasUse and refundSec then
 							mogStatus = "refundable"
-						elseif not hasUse then
+						elseif not bindingResult.hasUse then
 							mogStatus = "collected"
 						end
 					else 
@@ -1505,10 +1642,10 @@ local function ProcessItem(item, bag, slot, button, options)
 			-- end
 
 		end
-	elseif needsItem then
+	elseif bindingResult.needsItem then
 		if isDebugItem then print("=== No appearance, Processing needsItem") end
 
-		if ((canBeSource and isDressable) or IsMountLink(itemLink)) and not shouldRetry then
+		if ((canBeSource and bindingResult.isDressable) or IsMountLink(itemLink)) and not shouldRetry then
 			local playerLevel = UnitLevel("player")
 
 			if not itemMinLevel or playerLevel >= itemMinLevel then
@@ -1516,8 +1653,17 @@ local function ProcessItem(item, bag, slot, button, options)
 			else
 				mogStatus = "other"
 			end
-		elseif IsPetLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink) then
-			if unusableItem then
+		elseif IsPetLink(itemLink) or IsToyLink(itemLink) then
+			if bindingResult.unusableItem then
+				mogStatus = "other"
+			else
+				mogStatus = "own"
+			end
+		elseif IsRecipeLink(itemLink) then
+			if bindingResult.unusableItem then
+				if bindingResult.skillTooLow then
+					mogStatus = "lowSkill"
+				end
 				-- Don't show these for now
 				-- mogStatus = "other"
 			else
@@ -1534,15 +1680,17 @@ local function ProcessItem(item, bag, slot, button, options)
 			   itemID == 18333 or
 			   itemID == 18334 or
 			   itemID == 21288 then
-				mogStatus = nil -- TODO: Maybe oldexpansion?
+				if CaerdonWardrobeConfig.Icon.ShowOldExpansion.Usable then
+					mogStatus = "oldexpansion"
+				else
+					mogStatus = nil
+				end
 			end
-	
-
 		end
 	else
 		if canBeSource then
 	        local hasTransmog = C_TransmogCollection.PlayerHasTransmog(itemID)
-	        if hasTransmog and not hasUse and isDressable then
+	        if hasTransmog and not bindingResult.hasUse and bindingResult.isDressable then
 	        	-- Tabards don't have an appearance ID and will end up here.
 	        	mogStatus = "collected"
 	        end
@@ -1558,7 +1706,7 @@ local function ProcessItem(item, bag, slot, button, options)
 				if duration > 0 and not isEnabled then
 					mogStatus = "refundable" -- Can't open yet... show timer
 				else
-					if isLocked then
+					if bindingResult.isLocked then
 						mogStatus = "locked"
 					else
 						mogStatus = "openable"
@@ -1581,7 +1729,7 @@ local function ProcessItem(item, bag, slot, button, options)
 	end
 
 	if mogStatus == "collected" and 
-		ItemIsSellable(itemID, itemLink) and not isInEquipmentSet then
+		ItemIsSellable(itemID, itemLink) and not bindingResult.isInEquipmentSet then
        	-- Anything that reports as the player having should be safe to sell
        	-- unless it's in an equipment set or needs to be excluded for some
        	-- other reason
@@ -1589,8 +1737,8 @@ local function ProcessItem(item, bag, slot, button, options)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus, bindingStatus, options, bag, slot, itemID)
-		SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag, itemID)
+		SetItemButtonMogStatus(button, mogStatus, bindingResult.bindingText, options, bag, slot)
+		SetItemButtonBindType(button, mogStatus, bindingResult.bindingText, options, bag)
 	end
 end
 
@@ -1650,7 +1798,7 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end
 
 	local item = Item:CreateFromItemLink(itemLink)
-	SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot, item:GetItemID())
+	SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot)
 
 	-- TODO: May have to look into cancelable continue to avoid timing issues
 	-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
@@ -1836,11 +1984,23 @@ local function OnAuctionBrowseUpdate()
 						itemLink = item:GetItemLink()
 					end
 	
+					-- From AuctionHouseTableBuilder
+					local PRICE_DISPLAY_WIDTH = 120;
+					local PRICE_DISPLAY_WITH_CHECKMARK_WIDTH = 140;
+					local PRICE_DISPLAY_PADDING = 0;
+					local BUYOUT_DISPLAY_PADDING = 0;
+					local STANDARD_PADDING = 10;
+
+					local iconSize = 30
+					-- From AuctionHouseTableBuilder.GetBrowseListLayout
+					local iconOffset = 
+						PRICE_DISPLAY_PADDING + 146 - (iconSize / 2)
 					if itemLink and button then
 						CaerdonWardrobe:UpdateButtonLink(itemLink, bag, { index = slot, itemKey = browseResult.itemKey }, button,  
 						{
-							iconOffset = 10,
-							iconSize = 30,				
+							overridePosition = "LEFT",
+							iconOffset = iconOffset,
+							iconSize = iconSize,				
 							showMogIcon=true, 
 							showBindStatus=false, 
 							showSellables=false
@@ -1993,7 +2153,7 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 7,
+		Version = 8,
 		Icon = {
 			EnableAnimation = true,
 			Position = "TOPLEFT",
@@ -2018,7 +2178,17 @@ function NS:GetDefaultConfig()
 			ShowSellable = {
 				BankAndBags = true,
 				GuildBank = false
-			}
+			},
+
+			ShowOldExpansion = {
+				Unknown = false,
+				Reagents = true,
+				Usable = false,
+				Other = false,
+				Auction = true
+			},
+
+			ShowQuestItems = true
 		},
 
 		Binding = {
@@ -2078,11 +2248,35 @@ function CaerdonWardrobeMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
 	OnAuctionBrowseUpdate()
 end
 
+local function OnSelectBrowseResult(self, browseResult)
+	local itemLink
+	local item = Item:CreateFromItemID(browseResult.itemKey.itemID)
+	local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
+
+	if itemKeyInfo and itemKeyInfo.battlePetLink then
+		itemLink = itemKeyInfo.battlePetLink
+	else
+		itemLink = item:GetItemLink()
+	end
+
+	CaerdonWardrobe:UpdateButtonLink(itemLink, "ItemLink", nil, AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton,  
+	{
+		overridePosition = "TOPLEFT",
+		iconOffset = -5,
+		iconSize = 50,				
+		showMogIcon=true, 
+		showBindStatus=false, 
+		showSellables=false
+	})
+end
+
+
 local hookAuction = true
 function CaerdonWardrobeMixin:AUCTION_HOUSE_SHOW()
 	if (hookAuction) then
 		hookAuction = false
 		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", OnAuctionBrowseUpdate)
+		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", OnSelectBrowseResult)
 	end
 end
 

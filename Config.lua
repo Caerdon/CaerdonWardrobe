@@ -17,18 +17,20 @@ end
 
 function configFrame:CreateComponents()
 	components = {}
-	components.title = self:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-	components.title:SetText("Caerdon Wardrobe")
-	components.title:SetPoint("TOPLEFT", 16, -16)
+	-- components.title = self:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+	-- components.title:SetText("Caerdon Wardrobe")
+	-- components.title:SetPoint("TOPLEFT", 16, -16)
 
-	components.titleSeparator = self:CreateTexture(nil, "ARTWORK")
-	components.titleSeparator:SetColorTexture(0.25, 0.25, 0.25)
-	components.titleSeparator:SetSize(600, 1)
-	components.titleSeparator:SetPoint("LEFT", self, "TOPLEFT", 10, -40)
+	-- components.titleSeparator = self:CreateTexture(nil, "ARTWORK")
+	-- components.titleSeparator:SetColorTexture(0.25, 0.25, 0.25)
+	-- components.titleSeparator:SetSize(600, 1)
+	-- components.titleSeparator:SetPoint("LEFT", self, "TOPLEFT", 10, -40)
 
 	components.bindingTextLabel = self:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	components.bindingTextLabel:SetText(L["Binding Text"])
-	components.bindingTextLabel:SetPoint("TOPLEFT", components.titleSeparator, "BOTTOMLEFT", 0, -10)
+	components.bindingTextLabel:SetPoint("TOPLEFT", 16, -16)
+
+	-- components.bindingTextLabel:SetPoint("TOPLEFT", components.titleSeparator, "BOTTOMLEFT", 0, -10)
 
 	components.bindingTextPositionLabel = self:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 	components.bindingTextPositionLabel:SetText(L["Text Position:"])
@@ -40,44 +42,44 @@ function configFrame:CreateComponents()
 	components.showStatusLabel:SetText(L["Show Status On:"])
 	components.showStatusLabel:SetPoint("TOPLEFT", components.bindingTextPositionLabel, "BOTTOMLEFT", 0, -15)
 
-	components.showBindingOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBindingOnBags", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showBindingOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBindingOnBags", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showBindingOnBags:SetPoint("TOPLEFT", components.showStatusLabel, "BOTTOMLEFT", 15, -5)
 	components.showBindingOnBagsLabel = _G[components.showBindingOnBags:GetName() .. "Text"]
 	components.showBindingOnBagsLabel:SetWidth(80)
 	components.showBindingOnBagsLabel:SetText(L["Bank & Bags"])
 
-	components.showBindingOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBindingOnGuildBank", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showBindingOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBindingOnGuildBank", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showBindingOnGuildBank:SetPoint("LEFT", components.showBindingOnBagsLabel, "RIGHT", 20, 0)
 	components.showBindingOnGuildBank:SetPoint("TOP", components.showBindingOnBags, "TOP", 0, 0)
 	components.showBindingOnGuildBankLabel = _G[components.showBindingOnGuildBank:GetName() .. "Text"]
 	components.showBindingOnGuildBankLabel:SetWidth(80)
 	components.showBindingOnGuildBankLabel:SetText(L["Guild Bank"])
 
-	components.showBindingOnMerchant = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBindingOnMerchant", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showBindingOnMerchant = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBindingOnMerchant", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showBindingOnMerchant:SetPoint("LEFT", components.showBindingOnGuildBankLabel, "RIGHT", 20, 0)
 	components.showBindingOnMerchant:SetPoint("TOP", components.showBindingOnGuildBank, "TOP", 0, 0)
 	components.showBindingOnMerchantLabel = _G[components.showBindingOnMerchant:GetName() .. "Text"]
 	components.showBindingOnMerchantLabel:SetWidth(80)
 	components.showBindingOnMerchantLabel:SetText(L["Merchant"])
 
-	components.showGearSets = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showGearSets", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showGearSets = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showGearSets", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showGearSets:SetPoint("TOPLEFT", components.showBindingOnBags, "BOTTOMLEFT", -20, -10)
 	components.showGearSetsLabel = _G[components.showGearSets:GetName() .. "Text"]
 	components.showGearSetsLabel:SetText(L["Show Gear Sets"])
 
-	components.showGearSetsAsIcon = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showGearSetsAsIcon", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showGearSetsAsIcon = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showGearSetsAsIcon", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showGearSetsAsIcon:SetPoint("TOPLEFT", components.showGearSets, "BOTTOMLEFT", 22, 8)
 	components.showGearSetsAsIconLabel = _G[components.showGearSetsAsIcon:GetName() .. "Text"]
 	components.showGearSetsAsIconLabel:SetText(L["As Icons"])
 
-	components.showBoA = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBoA", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showBoA = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBoA", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showBoA:SetPoint("LEFT", components.showGearSetsLabel, "RIGHT", 20, 0)
 	components.showBoA:SetPoint("TOP", components.showGearSets, "TOP", 0, 0)
 	components.showBoALabel = _G[components.showBoA:GetName() .. "Text"]
 	components.showBoALabel:SetWidth(140)
 	components.showBoALabel:SetText(L["Show Bind on Account"])
 
-	components.showBoE = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBoE", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showBoE = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showBoE", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showBoE:SetPoint("LEFT", components.showBoALabel, "RIGHT", 20, 0)
 	components.showBoE:SetPoint("TOP", components.showBoA, "TOP", 0, 0)
 	components.showBoELabel = _G[components.showBoE:GetName() .. "Text"]
@@ -99,27 +101,27 @@ function configFrame:CreateComponents()
 	components.showLearnableLabel:SetText(L["Show Learnable On:"])
 	components.showLearnableLabel:SetPoint("TOPLEFT", components.mogIconPositionLabel, "BOTTOMLEFT", 0, -20)
 
-	components.showLearnableOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnBags", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnBags", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOnBags:SetPoint("TOPLEFT", components.showLearnableLabel, "BOTTOMLEFT", 15, -5)
 	components.showLearnableOnBagsLabel = _G[components.showLearnableOnBags:GetName() .. "Text"]
 	components.showLearnableOnBagsLabel:SetWidth(80)
 	components.showLearnableOnBagsLabel:SetText(L["Bank & Bags"])
 
-	components.showLearnableOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnGuildBank", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnGuildBank", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOnGuildBank:SetPoint("LEFT", components.showLearnableOnBagsLabel, "RIGHT", 20, 0)
 	components.showLearnableOnGuildBank:SetPoint("TOP", components.showLearnableOnBags, "TOP", 0, 0)
 	components.showLearnableOnGuildBankLabel = _G[components.showLearnableOnGuildBank:GetName() .. "Text"]
 	components.showLearnableOnGuildBankLabel:SetWidth(80)
 	components.showLearnableOnGuildBankLabel:SetText(L["Guild Bank"])
 
-	components.showLearnableOnMerchant = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnMerchant", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOnMerchant = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnMerchant", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOnMerchant:SetPoint("LEFT", components.showLearnableOnGuildBankLabel, "RIGHT", 20, 0)
 	components.showLearnableOnMerchant:SetPoint("TOP", components.showLearnableOnGuildBank, "TOP", 0, 0)
 	components.showLearnableOnMerchantLabel = _G[components.showLearnableOnMerchant:GetName() .. "Text"]
 	components.showLearnableOnMerchantLabel:SetWidth(80)
 	components.showLearnableOnMerchantLabel:SetText(L["Merchant"])
 
-	components.showLearnableOnAuction = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnAuction", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOnAuction = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOnAuction", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOnAuction:SetPoint("LEFT", components.showLearnableOnMerchantLabel, "RIGHT", 20, 0)
 	components.showLearnableOnAuction:SetPoint("TOP", components.showLearnableOnMerchant, "TOP", 0, 0)
 	components.showLearnableOnAuctionLabel = _G[components.showLearnableOnAuction:GetName() .. "Text"]
@@ -131,27 +133,27 @@ function configFrame:CreateComponents()
 	components.showLearnableOtherLabel:SetText(L["Show Learnable By Another Toon On:"])
 	components.showLearnableOtherLabel:SetPoint("TOPLEFT", components.showLearnableOnBags, "BOTTOMLEFT", -15, -15)
 
-	components.showLearnableOtherOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnBags", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOtherOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnBags", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOtherOnBags:SetPoint("TOPLEFT", components.showLearnableOtherLabel, "BOTTOMLEFT", 15, -5)
 	components.showLearnableOtherOnBagsLabel = _G[components.showLearnableOtherOnBags:GetName() .. "Text"]
 	components.showLearnableOtherOnBagsLabel:SetWidth(80)
 	components.showLearnableOtherOnBagsLabel:SetText(L["Bank & Bags"])
 
-	components.showLearnableOtherOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnGuildBank", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOtherOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnGuildBank", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOtherOnGuildBank:SetPoint("LEFT", components.showLearnableOtherOnBagsLabel, "RIGHT", 20, 0)
 	components.showLearnableOtherOnGuildBank:SetPoint("TOP", components.showLearnableOtherOnBags, "TOP", 0, 0)
 	components.showLearnableOtherOnGuildBankLabel = _G[components.showLearnableOtherOnGuildBank:GetName() .. "Text"]
 	components.showLearnableOtherOnGuildBankLabel:SetWidth(80)
 	components.showLearnableOtherOnGuildBankLabel:SetText(L["Guild Bank"])
 
-	components.showLearnableOtherOnMerchant = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnMerchant", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOtherOnMerchant = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnMerchant", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOtherOnMerchant:SetPoint("LEFT", components.showLearnableOtherOnGuildBankLabel, "RIGHT", 20, 0)
 	components.showLearnableOtherOnMerchant:SetPoint("TOP", components.showLearnableOtherOnGuildBank, "TOP", 0, 0)
 	components.showLearnableOtherOnMerchantLabel = _G[components.showLearnableOtherOnMerchant:GetName() .. "Text"]
 	components.showLearnableOtherOnMerchantLabel:SetWidth(80)
 	components.showLearnableOtherOnMerchantLabel:SetText(L["Merchant"])
 
-	components.showLearnableOtherOnAuction = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnAuction", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showLearnableOtherOnAuction = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showLearnableOtherOnAuction", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showLearnableOtherOnAuction:SetPoint("LEFT", components.showLearnableOtherOnMerchantLabel, "RIGHT", 20, 0)
 	components.showLearnableOtherOnAuction:SetPoint("TOP", components.showLearnableOtherOnMerchant, "TOP", 0, 0)
 	components.showLearnableOtherOnAuctionLabel = _G[components.showLearnableOtherOnAuction:GetName() .. "Text"]
@@ -164,13 +166,13 @@ function configFrame:CreateComponents()
 	components.showSellableLabel:SetText(L["Show Sellable On:"])
 	components.showSellableLabel:SetPoint("TOPLEFT", components.showLearnableOtherOnBags, "BOTTOMLEFT", -15, -15)
 
-	components.showSellableOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showSellableOnBags", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showSellableOnBags = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showSellableOnBags", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showSellableOnBags:SetPoint("TOPLEFT", components.showSellableLabel, "BOTTOMLEFT", 15, -5)
 	components.showSellableOnBagsLabel = _G[components.showSellableOnBags:GetName() .. "Text"]
 	components.showSellableOnBagsLabel:SetWidth(80)
 	components.showSellableOnBagsLabel:SetText(L["Bank & Bags"])
 
-	components.showSellableOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showSellableOnGuildBank", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showSellableOnGuildBank = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showSellableOnGuildBank", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.showSellableOnGuildBank:SetPoint("LEFT", components.showSellableOnBagsLabel, "RIGHT", 20, 0)
 	components.showSellableOnGuildBank:SetPoint("TOP", components.showSellableOnBags, "TOP", 0, 0)
 	components.showSellableOnGuildBankLabel = _G[components.showSellableOnGuildBank:GetName() .. "Text"]
@@ -178,18 +180,56 @@ function configFrame:CreateComponents()
 	components.showSellableOnGuildBankLabel:SetText(L["Guild Bank"])
 
 
+	components.showOldLabel = self:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+	components.showOldLabel:SetText(L["Show Old Expansion Items:"])
+	components.showOldLabel:SetPoint("TOPLEFT", components.showSellableOnBags, "BOTTOMLEFT", -15, -15)
+
+	components.showOldReagents = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showOldReagents", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.showOldReagents:SetPoint("TOPLEFT", components.showOldLabel, "BOTTOMLEFT", 15, -5)
+	components.showOldReagentsLabel = _G[components.showOldReagents:GetName() .. "Text"]
+	components.showOldReagentsLabel:SetText(L["Reagents"])
+
+	components.showOldOther = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showOldOther", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.showOldOther:SetPoint("LEFT", components.showOldReagentsLabel, "RIGHT", 65, 0)
+	components.showOldOther:SetPoint("TOP", components.showOldReagents, "TOP", 0, 0)
+	components.showOldOtherLabel = _G[components.showOldOther:GetName() .. "Text"]
+	components.showOldOtherLabel:SetText(L["Other Items"])
+
+	components.showOldUsable = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showOldUsable", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.showOldUsable:SetPoint("LEFT", components.showOldOtherLabel, "RIGHT", 65, 0)
+	components.showOldUsable:SetPoint("TOP", components.showOldOther, "TOP", 0, 0)
+	components.showOldUsableLabel = _G[components.showOldUsable:GetName() .. "Text"]
+	components.showOldUsableLabel:SetText(L["Include Usable Items"])
+
+	components.showOldUnknown = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showOldUnknown", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.showOldUnknown:SetPoint("TOPLEFT", components.showOldReagents, "BOTTOMLEFT", 0, -5)
+	components.showOldUnknownLabel = _G[components.showOldUnknown:GetName() .. "Text"]
+	components.showOldUnknownLabel:SetText(L["Include Unknown Expansion"])
+
+	components.showOldAuctionHouse = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showOldAuctionHouse", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.showOldAuctionHouse:SetPoint("LEFT", components.showOldUnknownLabel, "RIGHT", 30, 0)
+	components.showOldAuctionHouse:SetPoint("TOP", components.showOldUnknown, "TOP", 0, 0)
+	components.showOldAuctionHouseLabel = _G[components.showOldAuctionHouse:GetName() .. "Text"]
+	components.showOldAuctionHouseLabel:SetText(L["Show in Auction House"])
 
 
 
 
 
 
-	components.mogIconShowAnimation = CreateFrame("CheckButton", "CaerdonWardrobeConfig_MogIconShowAnimation", self, "InterfaceOptionsCheckButtonTemplate")
-	components.mogIconShowAnimation:SetPoint("TOPLEFT", components.showSellableOnBags, "BOTTOMLEFT", -20, -15)
+
+	components.mogIconShowAnimation = CreateFrame("CheckButton", "CaerdonWardrobeConfig_MogIconShowAnimation", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.mogIconShowAnimation:SetPoint("TOPLEFT", components.showOldUnknown, "BOTTOMLEFT", -20, -15)
 	components.mogIconShowAnimationLabel = _G[components.mogIconShowAnimation:GetName() .. "Text"]
 	components.mogIconShowAnimationLabel:SetText(L["Show Icon Animation"])
 
-	components.mogIconShowSameLookDifferentItem = CreateFrame("CheckButton", "CaerdonWardrobeConfig_mogIconShowSameLookDifferentItem", self, "InterfaceOptionsCheckButtonTemplate")
+	components.showQuestItems = CreateFrame("CheckButton", "CaerdonWardrobeConfig_showQuestItems", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.showQuestItems:SetPoint("LEFT", components.mogIconShowAnimationLabel, "RIGHT", 20, 0)
+	components.showQuestItems:SetPoint("TOP", components.mogIconShowAnimation, "TOP", 0, 0)
+	components.showQuestItemsLabel = _G[components.showQuestItems:GetName() .. "Text"]
+	components.showQuestItemsLabel:SetText(L["Show Quest Items"])
+
+	components.mogIconShowSameLookDifferentItem = CreateFrame("CheckButton", "CaerdonWardrobeConfig_mogIconShowSameLookDifferentItem", self, "InterfaceOptionsSmallCheckButtonTemplate")
 	components.mogIconShowSameLookDifferentItem:SetPoint("TOPLEFT", components.mogIconShowAnimation, "BOTTOMLEFT", 0, -10)
 	components.mogIconShowSameLookDifferentItemLabel = _G[components.mogIconShowSameLookDifferentItem:GetName() .. "Text"]
 	components.mogIconShowSameLookDifferentItemLabel:SetText(L["Include different items / same look (you completionist, you)"])
@@ -269,7 +309,16 @@ function configFrame:RefreshComponents()
 	components.showSellableOnBags:SetChecked(config.Icon.ShowSellable.BankAndBags)
 	components.showSellableOnGuildBank:SetChecked(config.Icon.ShowSellable.GuildBank)
 
+	components.showOldReagents:SetChecked(config.Icon.ShowOldExpansion.Reagents)
+	components.showOldOther:SetChecked(config.Icon.ShowOldExpansion.Other)
+	components.showOldUnknown:SetChecked(config.Icon.ShowOldExpansion.Unknown)
+	components.showOldUsable:SetChecked(config.Icon.ShowOldExpansion.Usable)
+	components.showOldAuctionHouse:SetChecked(config.Icon.ShowOldExpansion.Auction)
+
 	components.mogIconShowAnimation:SetChecked(config.Icon.EnableAnimation)
+
+	components.showQuestItems:SetChecked(config.Icon.ShowQuestItems)
+
 	components.mogIconShowSameLookDifferentItem:SetChecked(config.Icon.ShowLearnable.SameLookDifferentItem)
 end
 
@@ -300,7 +349,14 @@ function configFrame:UpdatePendingValues()
 	config.Icon.ShowSellable.BankAndBags = components.showSellableOnBags:GetChecked()
 	config.Icon.ShowSellable.GuildBank = components.showSellableOnGuildBank:GetChecked()
 
+	config.Icon.ShowOldExpansion.Reagents = components.showOldReagents:GetChecked()
+	config.Icon.ShowOldExpansion.Other = components.showOldOther:GetChecked()
+	config.Icon.ShowOldExpansion.Unknown = components.showOldUnknown:GetChecked()
+	config.Icon.ShowOldExpansion.Usable = components.showOldUsable:GetChecked()
+	config.Icon.ShowOldExpansion.Auction = components.showOldAuctionHouse:GetChecked()
+
 	config.Icon.EnableAnimation = components.mogIconShowAnimation:GetChecked()
+	config.Icon.ShowQuestItems = components.showQuestItems:GetChecked()
 	config.Icon.ShowLearnable.SameLookDifferentItem = components.mogIconShowSameLookDifferentItem:GetChecked()
 end
 
