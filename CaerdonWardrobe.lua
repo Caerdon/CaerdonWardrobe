@@ -86,13 +86,17 @@ local function GetItemID(itemLink)
 	return tonumber(itemLink:match("item:(%d+)") or itemLink:match("battlepet:(%d+)"))
 end
 
+local function IsConduit(itemLink)
+	return isShadowlands and C_Soulbinds.IsItemConduitByItemInfo(itemLink)
+end
+
 local function IsPetLink(itemLink)
-	-- TODO: This would be nice, but vendor pets don't seem to get recognized.
-	-- local isPet = LinkUtil.IsLinkType(itemLink, "battlepet")
-	-- return isPet
-	
+	-- TODO: This would be nice to just use, but vendor pets don't seem to get recognized.
+	local isPet = LinkUtil.IsLinkType(itemLink, "battlepet")
 	local itemID = GetItemID(itemLink)
-	if itemID == 82800 then
+	if isPet then
+		return true
+	elseif itemID == 82800 then
 		return true -- It's showing up as [Pet Cage] for whatever reason
 	elseif( itemLink ) then 
 		local _, _, _, linkType, linkID, _, _, _, _, _, battlePetID, battlePetDisplayID = strsplit(":|H", itemLink);
@@ -132,6 +136,7 @@ local function IsPetLink(itemLink)
 end
 
 local function IsMountLink(itemLink)
+	-- TODO: Might just be able to do C_MountJournal.GetMountFromItem(itemID) returns mountID
 	local isMount = false
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
@@ -308,8 +313,8 @@ local function PlayerCanCollectAppearance(sourceID, appearanceID, itemID, itemLi
 		classArmor = LE_ITEM_ARMOR_MAIL
 	end
 
-	if playerLevel >= reqLevel then
-		if isDebugItem then print("Player is high enough level to collect") end
+	-- if playerLevel >= reqLevel then
+		-- if isDebugItem then print("Player is high enough level to collect") end
 		isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
 		matchedSource = source
 	    -- local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
@@ -329,7 +334,7 @@ local function PlayerCanCollectAppearance(sourceID, appearanceID, itemID, itemLi
 		-- else
 		-- 	if isDebugItem then print("No sources found for item: " .. itemLink .. ", Appearance ID: " .. tostring(appearanceID)) end
 		-- end
-	end
+	-- end
 
 	if equipSlot ~= "INVTYPE_CLOAK"
 		and itemClassID == LE_ITEM_CLASS_ARMOR and 
@@ -529,6 +534,35 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		elseif bindType == 4 then -- Quest
 			bindingText = ""
 		end
+
+		local isConduit = false
+		if IsConduit(itemLink) then
+			shouldCheckEquipmentSet = false
+
+			isConduit = true
+
+			local conduitTypes = { 
+				Enum.SoulbindConduitType.Potency,
+				Enum.SoulbindConduitType.Endurance,
+				Enum.SoulbindConduitType.Finesse
+			}
+
+			local conduitKnown = false
+			for conduitTypeIndex = 1, #conduitTypes do
+				local conduitCollection = C_Soulbinds.GetConduitCollection(conduitTypes[conduitTypeIndex])
+				for conduitCollectionIndex = 1, #conduitCollection do
+					local conduitData = conduitCollection[conduitCollectionIndex]
+					if conduitData.conduitItemID == itemID then
+						conduitKnown = true
+					end
+				end
+			end
+
+			if not conduitKnown then
+				-- TODO: May need to consider spec / class?  Not sure yet
+				needsItem = true
+			end
+		end
 		
 		if shouldCheckEquipmentSet then
 			if isDebugItem then print("itemEquipLoc: " .. tostring(itemEquipLoc)) end
@@ -598,7 +632,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 		end
 
 		local canBeChanged, noChangeReason, canBeSource, noSourceReason = C_Transmog.GetItemInfo(itemID)
-		if not isCollectionItem and canBeSource then
+		if not isCollectionItem and not isConduit and canBeSource then
 			if isDebugItem then print(itemLink .. " can be source") end
 			local appearanceID, isCollected, sourceID
 			appearanceID, isCollected, sourceID, shouldRetry = GetItemAppearance(itemID, itemLink)
@@ -617,7 +651,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 				if isDebugItem then print("Has no source: " .. tostring(noSourceReason)) end
 				needsItem = false
 			end
-		elseif not isCollectionItem then
+		elseif not isCollectionItem and not isConduit then
 			if isDebugItem then print("Can't be source: " .. tostring(noSourceReason)) end
 	    	needsItem = false
 	    end
@@ -634,6 +668,13 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 			local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
 			local foundTradeskillMatch = false
 
+			-- TODO: Maybe something here? Need the virtual item to pass to SetPendingItem somehow
+			-- SetCursorVirtualItem(itemID, Enum.UICursorType.Item);
+			-- C_ItemInteraction:SetPendingItem([itemgoeshereificangetit])
+			-- print(itemLink .. tostring(C_ItemInteraction:GetItemInteractionSpellId()))
+			-- C_ItemInteraction:ClearPendingItem()
+			-- ClearCursor()
+
 			for lineIndex = 1, numLines do
 				local scanName = scanTip:GetName()
 				local line = _G[scanName .. "TextLeft" .. lineIndex]
@@ -642,7 +683,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 					-- TODO: Look at switching to GetItemSpell
 					-- if isDebugItem then print ("Tip: " .. lineText) end
 					if strmatch(lineText, USE_COLON) or strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) or strmatch(lineText, string.format(ITEM_SET_BONUS, "")) then -- it's a recipe or has a "use" effect or belongs to a set
-						if not isCollectionItem then
+						if not isCollectionItem and not isConduit then
 							hasUse = true
 						end
 
@@ -688,7 +729,13 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 						skillTooLow = true
 					elseif isPetLink and strmatch(lineText, PET_KNOWN) then
 						isPetKnown = true
-					end 
+					-- elseif isConduit then
+					-- 	-- TODO: Not sure this saves much over doing it outside of scanTip above
+					-- 	if strmatch(lineText, CONDUIT_TYPE_ENDURANCE) then
+					-- 	elseif strmatch(lineText, CONDUIT_TYPE_POTENCY) then
+					-- 	elseif strmatch(lineText, CONDUIT_TYPE_FINESSE) then
+					-- 	end
+					end
 
 					-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
 					local r, g, b = line:GetTextColor()
@@ -706,6 +753,11 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 							-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
 							-- which toons could learn a recipe.
+
+							-- TODO: See if ItemInteraction API can help:
+							-- C_ItemInteraction:SetPendingItem(item)
+							-- C_ItemInteraction:GetItemInteractionSpellId()
+							-- C_ItemInteraction:ClearPendingItem()
 
 							-- local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
 							local replaceSkill = "%w"
@@ -776,9 +828,37 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 				if isPetLink then
 					if not tooltipSpeciesID then
 						-- Attempt to grab it from itemLink
-						local _, _, _, linkType, linkID, _, _, _, _, _, battlePetID, battlePetDisplayID = strsplit(":|H", itemLink)
-						if linkID then
-							tooltipSpeciesID = tonumber(linkID)
+						-- TODO: This is almost a complete copy of the logic in IsPetLink - clean up
+						local _, _, _, linkType, linkID, _, _, _, _, _, battlePetID, battlePetDisplayID = strsplit(":|H", itemLink);
+						if ( linkType == "item") then
+							local _, _, _, creatureID, _, _, _, _, _, _, _, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(tonumber(linkID));
+							if (creatureID and displayID) then
+								tooltipSpeciesID = tonumber(speciesID)
+							end
+						elseif ( linkType == "battlepet" ) then
+							if battlePetID and battlePetID ~= "" and battlePetID ~= "0" then
+								local speciesID, _, _, _, _, displayID, _, _, _, _, creatureID = C_PetJournal.GetPetInfoByPetID(battlePetID);
+								if ( speciesID == tonumber(linkID)) then
+									if (creatureID and displayID) then
+										tooltipSpeciesID = tonumber(speciesID)
+									end	
+								else
+									speciesID = tonumber(linkID);
+									local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+									displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
+									if (creatureID and displayID) then
+										tooltipSpeciesID = tonumber(speciesID)
+									end	
+								end
+							else
+								-- Mostly in place as a hack for bad battlepet links from addons
+								speciesID = tonumber(linkID);
+								local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+								displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
+								if (creatureID and displayID) then
+									tooltipSpeciesID = tonumber(speciesID)
+								end	
+							end
 						end
 					end
 
@@ -1031,6 +1111,9 @@ local function ShouldHideOldExpansionIcon(bag)
 
 	if bag == "AuctionFrame" then
 		shouldHide = not CaerdonWardrobeConfig.Icon.ShowOldExpansion.Auction
+	elseif
+		bag == "MerchantFrame" then -- distracting to show in merchant frame - maybe buyback?
+		shouldHide = true
 	end
 
 	return shouldHide
@@ -1526,7 +1609,9 @@ local function ProcessItem(item, bag, slot, button, options)
 	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 	isCraftingReagent = GetItemInfo(itemLink)
 
-   	if IsCollectibleLink(itemLink) then
+	local playerLevel = UnitLevel("player")
+
+	if IsCollectibleLink(itemLink) or IsConduit(itemLink) then
    		shouldRetry = false
 	else
 		local expansionID = expacID
@@ -1575,7 +1660,11 @@ local function ProcessItem(item, bag, slot, button, options)
 		if(bindingResult.needsItem and not isCollected and not PlayerHasAppearance(appearanceID)) then
 			if isDebugItem then print("=== Has appearance, Processing needsItem") end
 			if canCollect and not bindingResult.unusableItem then
-				mogStatus = "own"
+				if itemMinLevel and playerLevel < itemMinLevel then
+					mogStatus = "lowSkill"
+				else
+					mogStatus = "own"
+				end
 			else
 				if bindingResult.bindingText then
 					mogStatus = "other"
@@ -1592,16 +1681,16 @@ local function ProcessItem(item, bag, slot, button, options)
 				mogStatus = "otherSpec"
 			end
 		else
+			-- TODO: Gotta clean up all this logic, anyway, but is this "else" okay if just one of the if checks is false?
 			if isDebugItem then print("Is Completionist Item: " .. tostring(bindingResult.isCompletionistItem)) end
 
 			if bindingResult.isCompletionistItem then
 				if isDebugItem then print("=== Processing completionist item") end
 				-- You have this, but you want them all.  Why?  Because.
-
-				-- local playerLevel = UnitLevel("player")
-
 				if canCollect then
 					mogStatus = "ownPlus"
+				elseif bindingResult.isBindOnPickup then
+					mogStatus = "otherSpecPlus"
 				else
 					mogStatus = "otherPlus"
 				end
@@ -1646,8 +1735,6 @@ local function ProcessItem(item, bag, slot, button, options)
 		if isDebugItem then print("=== No appearance, Processing needsItem") end
 
 		if ((canBeSource and bindingResult.isDressable) or IsMountLink(itemLink)) and not shouldRetry then
-			local playerLevel = UnitLevel("player")
-
 			if not itemMinLevel or playerLevel >= itemMinLevel then
 				mogStatus = "own"
 			else
@@ -1686,6 +1773,8 @@ local function ProcessItem(item, bag, slot, button, options)
 					mogStatus = nil
 				end
 			end
+		elseif IsConduit(itemLink) then
+			mogStatus = "own"
 		end
 	else
 		if canBeSource then
@@ -1956,7 +2045,9 @@ local function OnAuctionBrowseUpdate()
 				-- item:ContinueOnItemLoad(function ()
 				-- 	print(item:GetItemLink())
 				-- end)
-				auctionContinuableContainer:AddContinuable(item)
+				if not item:IsItemEmpty() then
+					auctionContinuableContainer:AddContinuable(item)
+				end
 			end
 		end
 
@@ -2028,7 +2119,10 @@ local function OnMerchantUpdate()
 		local slot = index
 
 		local itemLink = GetMerchantItemLink(index)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, { 
+			showMogIcon=true, showBindStatus=true, showSellables=false, 
+			otherIconSize = 20, otherIconOffset = 10,	
+		})
 	end
 end
 
