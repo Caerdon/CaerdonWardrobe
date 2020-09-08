@@ -816,7 +816,7 @@ local function GetBindingStatus(bag, slot, itemID, itemLink)
 
 			if bindingText then
 				if isSoulbound and bindingText == "BoE" then
-					bindingText = ""
+					bindingText = nil
 				end
 			elseif isCollectionItem or isLocked or isOpenable then
 				if not isBindOnPickup then
@@ -952,7 +952,7 @@ end
 
 local waitingOnItemData = {}
 
-local function IsGearSetStatus(status)
+local function IsGearSetStatus(status, item)
 	return status and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
@@ -1155,7 +1155,7 @@ local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	end
 end
 
-local function SetItemButtonMogStatus(originalButton, status, bindingStatus, options, bag, slot)
+local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, status, bindingStatus)
 	local button = originalButton.caerdonButton
 
 	if not button then
@@ -1367,11 +1367,11 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		SetIconPositionAndSize(mogStatus, iconPosition, 2, 15, iconOffset)
 		mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
 	elseif status == "collected" then
-		if not IsGearSetStatus(bindingStatus) and showSellables and isSellable and not ShouldHideSellableIcon(bag) then -- it's known and can be sold
+		if not IsGearSetStatus(bindingStatus, item) and showSellables and isSellable and not ShouldHideSellableIcon(bag) then -- it's known and can be sold
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 			alpha = 0.9
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
-		elseif IsGearSetStatus(bindingStatus) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+		elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 		else
@@ -1381,7 +1381,7 @@ local function SetItemButtonMogStatus(originalButton, status, bindingStatus, opt
 		alpha = 0.5
 		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
-	elseif IsGearSetStatus(bindingStatus) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+	elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
 		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 	end
@@ -1826,7 +1826,7 @@ local function ProcessItem(item, bag, slot, button, options)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, mogStatus, bindingResult.bindingText, options, bag, slot)
+		SetItemButtonMogStatus(button, item, bag, slot, options, mogStatus, bindingResult.bindingText)
 		SetItemButtonBindType(button, mogStatus, bindingResult.bindingText, options, bag)
 	end
 end
@@ -1875,8 +1875,8 @@ function CaerdonWardrobe:RegisterAddon(name, addonOptions)
 	end
 end
 
-function CaerdonWardrobe:ClearButton(button)
-	SetItemButtonMogStatus(button, nil)
+function CaerdonWardrobe:ClearButton(button, item, bag, slot, options)
+	SetItemButtonMogStatus(button, item, bag, slot, options, nil)
 	SetItemButtonBindType(button, nil)
 end
 
@@ -1887,18 +1887,18 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end
 
 	local item = Item:CreateFromItemLink(itemLink)
-	SetItemButtonMogStatus(button, "waiting", nil, options, bag, slot)
+	SetItemButtonMogStatus(button, item, bag, slot, options, "waiting", nil)
 
 	-- TODO: May have to look into cancelable continue to avoid timing issues
 	-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
 	-- but in cases of rapid data update (AH scroll), we don't want to update an old button
 	-- Look into ContinuableContainer
 	if item:IsItemEmpty() then -- not sure what this represents?  Seems to happen for caged pet - assuming item is ready.
-		SetItemButtonMogStatus(button, nil)
+		SetItemButtonMogStatus(button, item, bag, slot, options, nil)
 		ProcessItem(item, bag, slot, button, options)
 	else
 		item:ContinueOnItemLoad(function ()
-			SetItemButtonMogStatus(button, nil)
+			SetItemButtonMogStatus(button, item, bag, slot, options, nil)
 			ProcessItem(item, bag, slot, button, options)
 		end)
 	end
