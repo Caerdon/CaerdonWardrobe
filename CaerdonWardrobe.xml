@@ -1,13 +1,32 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
 	<Script file="CaerdonWardrobe.lua" />
-
+	<Script file="CaerdonItem.lua" />
+	<Script file="CaerdonAPI.lua" />
+	
 	<Script file="features\Loot.lua" />
 	<Script file="features\GroupLoot.lua" />
 	<Script file="features\Mail.lua" />
 	<Script file="features\Quest.lua" />
 	<Script file="features\WorldMap.lua" />
 	<Script file="features\BlackMarket.lua" />
+	<Script file="features\Tooltip.lua" />
+
+	<Script file="types\BattlePetMixin.lua" />
+	<Script file="types\CompanionPetMixin.lua" />
+	<Script file="types\ConsumableMixin.lua" />
+	<Script file="types\EquipmentMixin.lua" />
+	<Script file="types\MountMixin.lua" />
+	<Script file="types\QuestMixin.lua" />
+	<Script file="types\RecipeMixin.lua" />
+
+	<Script file="tests\CaerdonItemTests.lua" />
+	<Script file="tests\ClothTests.lua" />
+	<Script file="tests\LeatherTests.lua" />
+	<Script file="tests\MailTests.lua" />
+	<Script file="tests\PlateTests.lua" />
+	<Script file="tests\WeaponTests.lua" />
+	<Script file="tests\SharedTests.lua" />
     
 	<!-- This is derived from GameTooltip in GameTooltip.xml -->
 	<GameTooltip name="CaerdonWardrobeFrameShoppingTooltip1" hidden="true" />	

@@ -1,0 +1,12 @@
+<Bindings>
+ <Binding name="COPYMOUSEOVERLINK" runOnUp="true" header="CAERDON" category="ADDONS" default="F11">
+    if keystate == "up" then
+        CaerdonAPI:CopyMouseoverLink()
+    end
+ </Binding>
+ <Binding name="PRINTMOUSEOVERLINKDETAILS" runOnUp="true" category="ADDONS" default="F12">
+    if keystate == "up" then
+        CaerdonAPI:DumpMouseoverLinkDetails()
+    end
+ </Binding>
+</Bindings>

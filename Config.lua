@@ -30,6 +30,11 @@ function configFrame:CreateComponents()
 	components.bindingTextLabel:SetText(L["Binding Text"])
 	components.bindingTextLabel:SetPoint("TOPLEFT", 16, -16)
 
+	components.enableDebug = CreateFrame("CheckButton", "CaerdonWardrobeConfig_enableDebug", self, "InterfaceOptionsSmallCheckButtonTemplate")
+	components.enableDebugLabel = _G[components.enableDebug:GetName() .. "Text"]
+	components.enableDebugLabel:SetText(L["Enable Debug"])
+	components.enableDebug:SetPoint("TOPRIGHT", -16 - (components.enableDebugLabel:GetWidth()), -16)
+
 	-- components.bindingTextLabel:SetPoint("TOPLEFT", components.titleSeparator, "BOTTOMLEFT", 0, -10)
 
 	components.bindingTextPositionLabel = self:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -286,6 +291,7 @@ function configFrame:RefreshComponents()
 	local config = pendingConfig
 
 	UIDropDownMenu_Initialize(components.bindingTextPosition, function() self:InitializeBindingTextPosition() end)
+	components.enableDebug:SetChecked(config.Debug.Enabled)
 	components.showBindingOnBags:SetChecked(config.Binding.ShowStatus.BankAndBags)
 	components.showBindingOnGuildBank:SetChecked(config.Binding.ShowStatus.GuildBank)
 	components.showBindingOnMerchant:SetChecked(config.Binding.ShowStatus.Merchant)
@@ -326,6 +332,7 @@ function configFrame:UpdatePendingValues()
 	local config = pendingConfig
 
 	config.Binding.Position = UIDropDownMenu_GetSelectedValue(components.bindingTextPosition)
+	config.Debug.Enabled = components.enableDebug:GetChecked()
 	config.Binding.ShowStatus.BankAndBags = components.showBindingOnBags:GetChecked()
 	config.Binding.ShowStatus.GuildBank = components.showBindingOnGuildBank:GetChecked()
 	config.Binding.ShowStatus.Merchant = components.showBindingOnMerchant:GetChecked()
