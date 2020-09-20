@@ -1,16 +1,22 @@
-local GroupLootMixin, GroupLoot = {}
+local GroupLootMixin = {}
+
+function GroupLootMixin:Init(frame)
+end
 
 function GroupLootMixin:OnLoad()
-    GroupLootFrame1:HookScript("OnShow", function(...) GroupLoot:OnGroupLootFrameShow(...) end)
-    GroupLootFrame2:HookScript("OnShow", function(...) GroupLoot:OnGroupLootFrameShow(...) end)
-    GroupLootFrame3:HookScript("OnShow", function(...) GroupLoot:OnGroupLootFrameShow(...) end)
-    GroupLootFrame4:HookScript("OnShow", function(...) GroupLoot:OnGroupLootFrameShow(...) end)
+    GroupLootFrame1:HookScript("OnShow", function(...) self:OnGroupLootFrameShow(...) end)
+    GroupLootFrame2:HookScript("OnShow", function(...) self:OnGroupLootFrameShow(...) end)
+    GroupLootFrame3:HookScript("OnShow", function(...) self:OnGroupLootFrameShow(...) end)
+    GroupLootFrame4:HookScript("OnShow", function(...) self:OnGroupLootFrameShow(...) end)
+end
+
+function GroupLootMixin:SetTooltipItem(tooltip, item, locationInfo)
+    tooltip:SetLootRollItem(locationInfo.index)
 end
 
 function GroupLootMixin:OnGroupLootFrameShow(frame)
 	local itemLink = GetLootRollItemLink(frame.rollID)
-	CaerdonWardrobe:UpdateButtonLink(itemLink, "GroupLootFrame", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
+	CaerdonWardrobe:UpdateButtonLink(itemLink, "GroupLoot", { index = frame.rollID, link = itemLink}, frame.IconFrame, nil)
 end
 
-GroupLoot = CreateFromMixins(GroupLootMixin)
-GroupLoot:OnLoad()
+CaerdonWardrobe:RegisterFeature("GroupLoot", GroupLootMixin)

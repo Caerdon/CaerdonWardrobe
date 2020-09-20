@@ -12,7 +12,8 @@ CaerdonItemType = {
     Equipment = "Equipment",
     Mount = "Mount",
     Recipe = "Recipe",
-    Quest = "Quest"
+    Quest = "Quest",
+    Toy = "Toy"
 }
 
 CaerdonItemBind = {
@@ -196,6 +197,8 @@ end
 function CaerdonItemMixin:GetIsCraftingReagent()  -- requires item data to be loaded
     if not self:IsItemEmpty() then
         return (select(17, GetItemInfo(self:GetStaticBackingItem())))
+    else
+        return false
     end
 end
 
@@ -205,14 +208,11 @@ function IsUnhandledType(typeID, subTypeID)
         typeID == LE_ITEM_CLASS_REAGENT or
         typeID == LE_ITEM_CLASS_PROJECTILE or
         typeID == LE_ITEM_CLASS_TRADEGOODS or
+        typeID == LE_ITEM_CLASS_ITEM_ENHANCEMENT or
         typeID == LE_ITEM_CLASS_QUIVER or 
         typeID == LE_ITEM_CLASS_KEY or
         typeID == LE_ITEM_CLASS_GLYPH or
-        typeID == LE_ITEM_CLASS_WOW_TOKEN or
-        (typeID == LE_ITEM_CLASS_MISCELLANEOUS and subTypeID == LE_ITEM_MISCELLANEOUS_JUNK) or
-        (typeID == LE_ITEM_CLASS_MISCELLANEOUS and subTypeID == LE_ITEM_MISCELLANEOUS_REAGENT) or
-        (typeID == LE_ITEM_CLASS_MISCELLANEOUS and subTypeID == LE_ITEM_MISCELLANEOUS_HOLIDAY) or
-        (typeID == LE_ITEM_CLASS_MISCELLANEOUS and subTypeID == LE_ITEM_MISCELLANEOUS_OTHER)
+        typeID == LE_ITEM_CLASS_WOW_TOKEN
 end
 
 function CaerdonItemMixin:GetCaerdonItemType()
@@ -233,14 +233,29 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == LE_ITEM_CLASS_BATTLEPET then
                 caerdonType = CaerdonItemType.BattlePet
             elseif typeID == LE_ITEM_CLASS_CONSUMABLE then
-                caerdonType = CaerdonItemType.Consumable
-            elseif typeID == LE_ITEM_CLASS_MISCELLANEOUS and subTypeID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
-                local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradeable, unique, obtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self:GetItemID());
-                if creatureID and displayID then
-                    caerdonType = CaerdonItemType.CompanionPet
+                -- TODO: I've seen toys in both consumable/other and misc/other but worried about holiday, etc - can I get more specific?
+                local itemIDInfo, toyName, icon = C_ToyBox.GetToyInfo(self:GetItemID())
+                if (itemIDInfo and toyName) then
+                    caerdonType = CaerdonItemType.Toy
+                else
+                    caerdonType = CaerdonItemType.Consumable
                 end
-            elseif typeID == LE_ITEM_CLASS_MISCELLANEOUS and (subTypeID == LE_ITEM_MISCELLANEOUS_MOUNT or subTypeID == LE_ITEM_MISCELLANEOUS_MOUNT_EQUIPMENT) then
-                caerdonType = CaerdonItemType.Mount
+            elseif typeID == LE_ITEM_CLASS_MISCELLANEOUS then
+                if subTypeID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
+                    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradeable, unique, obtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self:GetItemID());
+                    if creatureID and displayID then
+                        caerdonType = CaerdonItemType.CompanionPet
+                    end
+                elseif subTypeID == LE_ITEM_MISCELLANEOUS_MOUNT or subTypeID == LE_ITEM_MISCELLANEOUS_MOUNT_EQUIPMENT then
+                    caerdonType = CaerdonItemType.Mount
+                else
+                    local itemIDInfo, toyName, icon = C_ToyBox.GetToyInfo(self:GetItemID())
+                    if (itemIDInfo and toyName) then
+                        caerdonType = CaerdonItemType.Toy
+                    else
+                        caerdonType = CaerdonItemType.Unhandled
+                    end
+                end
             elseif typeID == LE_ITEM_CLASS_QUESTITEM then
                 caerdonType = CaerdonItemType.Quest
             elseif typeID == LE_ITEM_CLASS_RECIPE then
@@ -275,6 +290,8 @@ function CaerdonItemMixin:GetItemData()
             self.caerdonItemData = CaerdonQuest:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Recipe then
             self.caerdonItemData = CaerdonRecipe:CreateFromCaerdonItem(self)
+        elseif caerdonType == CaerdonItemType.Toy then
+            self.caerdonItemData = CaerdonToy:CreateFromCaerdonItem(self)
         end
     end
     

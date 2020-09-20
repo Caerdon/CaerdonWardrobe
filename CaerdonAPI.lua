@@ -28,10 +28,27 @@ function CaerdonAPIMixin:DumpLinkDetails(link)
         local originalValue = CaerdonWardrobeConfig.Debug.Enabled
         CaerdonWardrobeConfig.Debug.Enabled = true
     
-        SlashCmdList.DUMP(format("CaerdonItem:CreateFromItemLink(\"%s\"):GetItemData():GetTransmogInfo()", link))
+        SlashCmdList.DUMP(format("CaerdonAPI:GetItemDetails(CaerdonItem:CreateFromItemLink(\"%s\"))", link))
 
         CaerdonWardrobeConfig.Debug.Enabled = originalValue
     end
+end
+
+function CaerdonAPIMixin:GetItemDetails(item)
+    local itemData = item:GetItemData()
+    local itemResults
+    local caerdonType = item:GetCaerdonItemType()
+
+    if caerdonType == CaerdonItemType.Equipment then
+        itemResults = itemData:GetTransmogInfo()
+    elseif caerdonType == CaerdonItemType.CompanionPet then
+        itemResults = itemData:GetCompanionPetInfo()
+    end
+
+    return {
+        forDebugUse = item:GetForDebugUse(),
+        itemResults = itemResults
+    }
 end
 
 function CaerdonAPIMixin:DumpMouseoverLinkDetails()

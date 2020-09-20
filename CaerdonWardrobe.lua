@@ -7,6 +7,8 @@ BINDING_HEADER_CAERDON = L["Caerdon Addons"]
 BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
 BINDING_NAME_PRINTMOUSEOVERLINKDETAILS = L["Print Mouseover Link Details"]
 
+local registeredFeatures = {}
+
 local isBagUpdate = false
 local ignoreDefaultBags = false
 
@@ -35,6 +37,12 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "MERCHANT_UPDATE"
 	self:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
 	self:RegisterEvent "PLAYER_LOGIN"
+
+	local name, instance
+	for name, instance in pairs(registeredFeatures) do
+		instance:Init(self)
+		instance:OnLoad()
+	end
 end
 
 StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
@@ -58,173 +66,17 @@ local bindTextTable = {
 	-- [ITEM_BIND_ON_USE]         = L["BoE"]
 }
 
-local InventorySlots = {
-    ['INVTYPE_HEAD'] = INVSLOT_HEAD,
-    ['INVTYPE_SHOULDER'] = INVSLOT_SHOULDER,
-    ['INVTYPE_BODY'] = INVSLOT_BODY,
-    ['INVTYPE_CHEST'] = INVSLOT_CHEST,
-    ['INVTYPE_ROBE'] = INVSLOT_CHEST,
-    ['INVTYPE_WAIST'] = INVSLOT_WAIST,
-    ['INVTYPE_LEGS'] = INVSLOT_LEGS,
-    ['INVTYPE_FEET'] = INVSLOT_FEET,
-    ['INVTYPE_WRIST'] = INVSLOT_WRIST,
-    ['INVTYPE_HAND'] = INVSLOT_HAND,
-    ['INVTYPE_CLOAK'] = INVSLOT_BACK,
-    ['INVTYPE_WEAPON'] = INVSLOT_MAINHAND,
-    ['INVTYPE_SHIELD'] = INVSLOT_OFFHAND,
-    ['INVTYPE_2HWEAPON'] = INVSLOT_MAINHAND,
-    ['INVTYPE_WEAPONMAINHAND'] = INVSLOT_MAINHAND,
-    ['INVTYPE_RANGED'] = INVSLOT_MAINHAND,
-    ['INVTYPE_RANGEDRIGHT'] = INVSLOT_MAINHAND,
-    ['INVTYPE_WEAPONOFFHAND'] = INVSLOT_OFFHAND,
-    ['INVTYPE_HOLDABLE'] = INVSLOT_OFFHAND,
-    ['INVTYPE_TABARD'] = INVSLOT_TABARD
-}
-
-local model = CreateFrame('DressUpModel')
-
-local function GetItemID(itemLink)
-	if not itemLink then
-		return nil
-	end
-
-	return tonumber(itemLink:match("item:(%d+)") or itemLink:match("battlepet:(%d+)"))
-end
-
 local function IsConduit(itemLink)
 	return isShadowlands and C_Soulbinds.IsItemConduitByItemInfo(itemLink)
 end
 
-local function GetSpeciesID(itemLink)
-	local resultSpeciesID = nil
-	local _, _, _, linkType, linkID, _, _, _, _, _, battlePetID, battlePetDisplayID = strsplit(":|H", itemLink);
-
-	if ( linkType == "item") then
-		local _, _, _, creatureID, _, _, _, _, _, _, _, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(tonumber(linkID));
-		if (creatureID and displayID) then
-			resultSpeciesID = tonumber(speciesID)
-		end
-	elseif ( linkType == "battlepet" ) then
-		if battlePetID and battlePetID ~= "" and battlePetID ~= "0" then
-			local speciesID, _, _, _, _, displayID, _, _, _, _, creatureID = C_PetJournal.GetPetInfoByPetID(battlePetID);
-			if ( speciesID == tonumber(linkID)) then
-				if (creatureID and displayID) then
-					resultSpeciesID = tonumber(speciesID)
-				end	
-			else
-				speciesID = tonumber(linkID);
-				local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
-				displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
-				if (creatureID and displayID) then
-					resultSpeciesID = tonumber(speciesID)
-				end	
-			end
-		else
-			-- Mostly in place as a hack for bad battlepet links from addons
-			speciesID = tonumber(linkID);
-			local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
-			displayID = (battlePetDisplayID and battlePetDisplayID ~= "0") and battlePetDisplayID or displayID;
-			if (creatureID and displayID) then
-				resultSpeciesID = tonumber(speciesID)
-			end	
-		end
-	end
-
-	return resultSpeciesID
-end
-
-local function IsPetLink(itemLink)
-	-- TODO: This would be nice to just use, but vendor pets don't seem to get recognized.
-	local isPet = LinkUtil.IsLinkType(itemLink, "battlepet")
-	local itemID = GetItemID(itemLink)
-	if isPet then
-		return true
-	elseif itemID == 82800 then
-		return true -- It's showing up as [Pet Cage] for whatever reason
-	elseif itemLink and GetSpeciesID(itemLink) then 
-		return true
-	end
-
-	return false
-end
-
-local function IsMountLink(itemLink)
-	-- TODO: Might just be able to do C_MountJournal.GetMountFromItem(itemID) returns mountID
-	local isMount = false
-	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-isCraftingReagent = GetItemInfo(itemLink)
-	if itemClassID == LE_ITEM_CLASS_MISCELLANEOUS and itemSubClassID == LE_ITEM_MISCELLANEOUS_MOUNT then
-		isMount = true
-	end
-
-	return isMount
-end
-
-local function IsToyLink(itemLink)
-	local isToy = false
-	local itemID = GetItemID(itemLink)
-	if itemID then
-		local itemIDInfo, toyName, icon = C_ToyBox.GetToyInfo(itemID)
-	  	if (itemIDInfo and toyName) then
-			isToy = true
-		end
-	end
-
-	return isToy
-end
-
-local function IsRecipeLink(itemLink)
-	local isRecipe = false
-	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-isCraftingReagent = GetItemInfo(itemLink)
-
-	if itemClassID == LE_ITEM_CLASS_RECIPE then
-		isRecipe = true
-	end
-
-	return isRecipe
-end
-
-local function IsCollectibleLink(itemLink)
-	local itemID = GetItemID(itemLink)
-	local isDebugItem = itemID and itemID == DEBUG_ITEM
-	if isDebugItem then
-		local isPet = IsPetLink(itemLink)
-		local isMount = IsMountLink(itemLink)
-		local isToy = IsToyLink(itemLink)
-		local isRecipe = IsRecipeLink(itemLink)
-
-		print("isPet: " .. tostring(isPet) .. ", isMount: " .. tostring(isMount) .. ", isToy: " .. tostring(isToy) .. ", isRecipe: " .. tostring(isRecipe))
-	end
-
-	return IsPetLink(itemLink) or IsMountLink(itemLink) or IsToyLink(itemLink) or IsRecipeLink(itemLink)
-end
-
-local function GetItemKey(bag, slot, itemLink)
-	local itemKey
-	if bag == "AuctionFrame" then
-		itemKey = itemLink .. slot.index
-	elseif bag == "MerchantFrame" then
-		itemKey = itemLink .. slot
-	elseif bag == "GuildBankFrame" then
-		itemKey = itemLink .. slot.tab .. slot.index
-	elseif bag == "EncounterJournal" then
-		itemKey = itemLink .. bag .. slot.index
-	elseif bag == "QuestButton" then
-		itemKey = itemLink .. bag
-	elseif bag == "LootFrame" or bag == "GroupLootFrame" then
-		itemKey = itemLink
-	elseif bag == "OpenMailFrame" or bag == "SendMailFrame" or bag == "InboxFrame" then
-		itemKey = itemLink .. slot
-	elseif bag == "BlackMarketScrollFrame" then
-		itemKey = itemLink .. slot
-	else
-		itemKey = itemLink .. tostring(bag) .. tostring(slot)
-	end
-
-	return itemKey
+local function IsCollectibleLink(item)
+	local caerdonType = item:GetCaerdonItemType()
+	return caerdonType == CaerdonItemType.BattlePet or
+		caerdonType == CaerdonItemType.CompanionPet or
+		caerdonType == CaerdonItemType.Mount or
+		caerdonType == CaerdonItemType.Recipe or
+		caerdonType == CaerdonItemType.Toy
 end
 
 local equipLocations = {}
@@ -232,6 +84,8 @@ local equipLocations = {}
 local function GetBindingStatus(item, bag, slot, button, options)
 	local itemID = item:GetItemID()
 	local itemLink = item:GetItemLink()
+	local itemData = item:GetItemData()
+	local caerdonType = item:GetCaerdonItemType()
 
 	local isDebugItem = itemID and itemID == DEBUG_ITEM
 
@@ -243,8 +97,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	SetCVar("missingTransmogSourceInItemTooltips", 0)
 	local originalAlwaysCompareItems = GetCVarBool("alwaysCompareItems")
 	SetCVar("alwaysCompareItems", 0)
-
-	local itemKey = GetItemKey(bag, slot, itemLink)
 
 	local binding
 	local bindingText
@@ -262,11 +114,14 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	
 	local tooltipSpeciesID = 0
 
-	local isCollectionItem = IsCollectibleLink(itemLink)
-	local isRecipe = IsRecipeLink(itemLink)
-	local isPetLink = IsPetLink(itemLink)
+	local isCollectionItem = IsCollectibleLink(item)
+	local isRecipe = caerdonType == CaerdonItemType.Recipe
+	local isPetLink = caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet
 
-	if bag == "AuctionFrame" then
+	if registeredFeatures[bag] then
+		-- TODO: Move all to this and rename bag to feature and slot to locationInfo
+		registeredFeatures[bag]:SetTooltipItem(scanTip, item, slot)
+	elseif bag == "AuctionFrame" then
 		local itemKey = slot.itemKey
 		scanTip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
 		tooltipSpeciesID = itemKey.battlePetSpeciesID
@@ -288,19 +143,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 		tooltipSpeciesID = speciesID
 	elseif bag == "LootFrame" then
 		scanTip:SetLootItem(slot.index)
-	elseif bag == "GroupLootFrame" then
-		scanTip:SetLootRollItem(slot.index)
-	elseif bag == "OpenMailFrame" then
-		local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInboxItem(InboxFrame.openMailID, slot)
-		tooltipSpeciesID = speciesID
-	elseif bag == "SendMailFrame" then
-		local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetSendMailItem(slot)
-		tooltipSpeciesID = speciesID
-	elseif bag == "InboxFrame" then
-		local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInboxItem(slot);
-		tooltipSpeciesID = speciesID
-	elseif bag == "BlackMarketScrollFrame" then
-		scanTip:SetHyperlink(itemLink)
 	elseif bag == "EncounterJournal" then
 		scanTip:SetHyperlink(itemLink, classID, specID)
 	elseif bag == "QuestButton" then
@@ -372,184 +214,140 @@ local function GetBindingStatus(item, bag, slot, button, options)
 			end
 		end
 		
+		local foundTradeskillMatch = false
+
 		local numLines = scanTip:NumLines()
-		if isDebugItem then print('Scan Tip Lines: ' .. tostring(numLines)) end
-		if not isCollectionItem and numLines == 0 then
-			if isDebugItem then print("No scan lines... retrying") end
-			shouldRetry = true
-		end
-
-		if not shouldRetry then
-			local isPetKnown = false
-			local PET_KNOWN = strmatch(ITEM_PET_KNOWN, "[^%(]+")
-			local foundTradeskillMatch = false
-
-			-- TODO: Maybe something here? Need the virtual item to pass to SetPendingItem somehow
-			-- SetCursorVirtualItem(itemID, Enum.UICursorType.Item);
-			-- C_ItemInteraction:SetPendingItem([itemgoeshereificangetit])
-			-- C_ItemInteraction:GetItemInteractionSpellId()
-			-- C_ItemInteraction:ClearPendingItem()
-			-- ClearCursor()
-
-			for lineIndex = 1, numLines do
-				local scanName = scanTip:GetName()
-				local line = _G[scanName .. "TextLeft" .. lineIndex]
-				local lineText = line:GetText()
-				if lineText then
-					if isDebugItem then print ("Tip: " .. lineText) end
-					-- TODO: Find a way to identify Equip Effects without tooltip scanning
-					if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
-						hasEquipEffect = true
-					end
-
-					-- TODO: Don't like matching this hard-coded string but not sure how else
-					-- to prevent the expensive books from showing as learnable when I don't
-					-- know how to tell if they have recipes you need.
-					if isRecipe and strmatch(lineText, "Use: Re%-learn .*") then
-						needsItem = false
-					end
-
-					if not bindingText then
-						-- Check if account bound - TODO: Is there a non-scan way?
-						bindingText = bindTextTable[lineText]
-					end
-
-					if lineText == RETRIEVING_ITEM_INFO then
-						shouldRetry = true
-						break
-					elseif lineText == ITEM_SOULBOUND then
-						isSoulbound = true
-						isBindOnPickup = true
-					elseif lineText == ITEM_SPELL_KNOWN then
-						needsItem = false
-					elseif lineText == LOCKED then
-						isLocked = true
-					elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
-						unusableItem = true
-						skillTooLow = true
-					elseif isPetLink and strmatch(lineText, PET_KNOWN) then
-						isPetKnown = true
-					-- elseif isConduit then
-					-- 	-- TODO: Not sure this saves much over doing it outside of scanTip above
-					-- 	if strmatch(lineText, CONDUIT_TYPE_ENDURANCE) then
-					-- 	elseif strmatch(lineText, CONDUIT_TYPE_POTENCY) then
-					-- 	elseif strmatch(lineText, CONDUIT_TYPE_FINESSE) then
-					-- 	end
-					end
-
-					-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
-					local r, g, b = line:GetTextColor()
-					hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
-					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
-					-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
-						if isRecipe then
-							if hex == "fe1f1f" then
-								foundRedRequirements = true
-							end
-
-							-- TODO: Cooking and fishing are not represented in trade skill lines right now
-							-- Assuming all toons have cooking for now.
-
-							-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
-							-- which toons could learn a recipe.
-
-							-- TODO: See if ItemInteraction API can help:
-							-- C_ItemInteraction:SetPendingItem(item)
-							-- C_ItemInteraction:GetItemInteractionSpellId()
-							-- C_ItemInteraction:ClearPendingItem()
-
-							-- local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
-							local replaceSkill = "%w"
-							-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-							local skillCheck = string.gsub(ITEM_MIN_SKILL, "1$", "")
-							skillCheck = string.gsub(skillCheck, "2$", "")
-							skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-							skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-							if strmatch(lineText, skillCheck) then
-								local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
-								local skillLines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
-								for skillLineIndex = 1, #skillLines do
-									local skillLineID = skillLines[skillLineIndex]
-									local name, rank, maxRank, modifier, parentSkillLineID = C_TradeSkillUI.GetTradeSkillLineInfoByID(skillLineID)
-									if requiredSkill == name then
-										foundTradeskillMatch = true
-										if not rank or rank < tonumber(requiredRank) then
-											-- Toon either doesn't have profession or isn't high enough level.
-											unusableItem = true
-											if isBindOnPickup then
-												if not rank or rank == 0 then
-													needsItem = false
-												end
-											end
-
-											if rank and rank > 0 then -- has skill but isn't high enough
-												skillTooLow = true
-												needsItem = true -- still need this but need to rank up
-											else
-												needsItem = false
-											end
-										else
-											break
-										end
-									end
-								end
-							end		
-						end
-					-- end
+		for lineIndex = 1, numLines do
+			local scanName = scanTip:GetName()
+			local line = _G[scanName .. "TextLeft" .. lineIndex]
+			local lineText = line:GetText()
+			if lineText then
+				if isDebugItem then print ("Tip: " .. lineText) end
+				-- TODO: Find a way to identify Equip Effects without tooltip scanning
+				if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
+					hasEquipEffect = true
 				end
-			end
 
-			if foundRedRequirements then
-				unusableItem = true
-				skillTooLow = true
-			end
-
-			-- TODO: Can we scan the embedded item tooltip? Probably need to do something like EmbeddedItemTooltip_SetItemByID
-			-- This may only matter for recipes, so I may have to use LibRecipes if I can't get the recipe info for the created item.
-
-			if isDebugItem then print("Is Collection Item: " .. tostring(isCollectionItem)) end
-
-			if bindingText then
-				if isSoulbound and bindingText == "BoE" then
-					bindingText = nil
-				end
-			elseif isCollectionItem or isLocked or isOpenable then
-				if not isBindOnPickup then
-					bindingText = "BoE"
-				end
-			end
-
-			if isCollectionItem and not unusableItem then
-				if isPetLink then
-					if not tooltipSpeciesID then
-						tooltipSpeciesID = GetSpeciesID(itemLink)
-					end
-
-					if tooltipSpeciesID and tooltipSpeciesID > 0 then
-						-- Pet cages have some magic info that comes back from tooltip setup
-						local numCollected = C_PetJournal.GetNumCollectedInfo(tooltipSpeciesID)
-						if numCollected == nil then
-							needsItem = false
-						elseif numCollected > 0 then
-							if isDebugItem then print("Already have it: " .. itemLink .. "- " .. numCollected) end
-							needsItem = false
-						else
-							if isDebugItem then print("Need: " .. itemLink .. ", " .. tostring(numCollected)) end
-							needsItem = true
-						end
-					elseif isPetKnown then
-						needsItem = false
-					else
-						needsItem = true
-					end
-				end
-			elseif isCollectionItem then
-				if not isRecipe then
-					if isDebugItem then print("Not Usable Collection Item: " .. itemLink) end
+				-- TODO: Don't like matching this hard-coded string but not sure how else
+				-- to prevent the expensive books from showing as learnable when I don't
+				-- know how to tell if they have recipes you need.
+				if isRecipe and strmatch(lineText, "Use: Re%-learn .*") then
 					needsItem = false
 				end
+
+				if not bindingText then
+					-- Check if account bound - TODO: Is there a non-scan way?
+					bindingText = bindTextTable[lineText]
+				end
+
+				if lineText == RETRIEVING_ITEM_INFO then
+					shouldRetry = true
+					break
+				elseif lineText == ITEM_SOULBOUND then
+					isSoulbound = true
+					isBindOnPickup = true
+				elseif lineText == ITEM_SPELL_KNOWN then
+					needsItem = false
+				elseif lineText == LOCKED then
+					isLocked = true
+				elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+					unusableItem = true
+					skillTooLow = true
+				end
+
+				-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
+				local r, g, b = line:GetTextColor()
+				hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
+				-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
+				-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
+					if isRecipe then
+						if hex == "fe1f1f" then
+							foundRedRequirements = true
+						end
+
+						-- TODO: Cooking and fishing are not represented in trade skill lines right now
+						-- Assuming all toons have cooking for now.
+
+						-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
+						-- which toons could learn a recipe.
+
+						-- TODO: See if ItemInteraction API can help:
+						-- C_ItemInteraction:SetPendingItem(item)
+						-- C_ItemInteraction:GetItemInteractionSpellId()
+						-- C_ItemInteraction:ClearPendingItem()
+
+						-- local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
+						local replaceSkill = "%w"
+						-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+						local skillCheck = string.gsub(ITEM_MIN_SKILL, "1$", "")
+						skillCheck = string.gsub(skillCheck, "2$", "")
+						skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+						skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+						if strmatch(lineText, skillCheck) then
+							local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+							local skillLines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
+							for skillLineIndex = 1, #skillLines do
+								local skillLineID = skillLines[skillLineIndex]
+								local name, rank, maxRank, modifier, parentSkillLineID = C_TradeSkillUI.GetTradeSkillLineInfoByID(skillLineID)
+								if requiredSkill == name then
+									foundTradeskillMatch = true
+									if not rank or rank < tonumber(requiredRank) then
+										-- Toon either doesn't have profession or isn't high enough level.
+										unusableItem = true
+										if isBindOnPickup then
+											if not rank or rank == 0 then
+												needsItem = false
+											end
+										end
+
+										if rank and rank > 0 then -- has skill but isn't high enough
+											skillTooLow = true
+											needsItem = true -- still need this but need to rank up
+										else
+											needsItem = false
+										end
+									else
+										break
+									end
+								end
+							end
+						end		
+					end
+				-- end
 			end
 		end
+
+		if foundRedRequirements then
+			unusableItem = true
+			skillTooLow = true
+		end
+
+		-- TODO: Can we scan the embedded item tooltip? Probably need to do something like EmbeddedItemTooltip_SetItemByID
+		-- This may only matter for recipes, so I may have to use LibRecipes if I can't get the recipe info for the created item.
+		if bindingText then
+			if isSoulbound and bindingText == "BoE" then
+				bindingText = nil
+			end
+		elseif isCollectionItem or isLocked or isOpenable then
+			-- TODO: This can be useful on everything but needs to be configurable per type before doing so
+			if not isBindOnPickup then
+				bindingText = "BoE"
+			end
+		end
+
+		if caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
+			local petInfo = 
+				(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
+				(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
+			needsItem = petInfo.needsItem
+		end
+
+		-- Haven't seen a reason for this, yet, and should be handled in each type
+		-- if isCollectionItem and unusableItem then
+		-- 	if not isRecipe then
+		-- 		needsItem = false
+		-- 	end
+		-- end
 
 		C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 		SetCVar("missingTransmogSourceInItemTooltips", 1)
@@ -626,12 +424,10 @@ local function IsBankOrBags(bag)
 	   bag ~= "EncounterJournal" and
 	   bag ~= "QuestButton" and
 	   bag ~= "LootFrame" and
-	   bag ~= "GroupLootFrame" and
-	   bag ~= "OpenMailFrame" and
-	   bag ~= "SendMailFrame" and 
-	   bag ~= "InboxFrame" and
+	   bag ~= "GroupLoot" and
+	   bag ~= "Mail" and
 	   bag ~= "ItemLink" and
-	   bag ~= "BlackMarketScrollFrame" then
+	   bag ~= "BlackMarket" then
 		isBankOrBags = true
 	end
 
@@ -1049,7 +845,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 
 	if bindingPosition == "BOTTOM" then
 		bindsOnText:SetPoint("BOTTOMRIGHT", bindingOffset, 2)
-		if bindingStatus == L["BoA"] then
+		if bindingStatus == L["BoA"] or bindingStatus == L["BoE"] then
 			local offset = options.itemCountOffset or 15
 			if (button.count and button.count > 1) then
 				bindsOnText:SetPoint("BOTTOMRIGHT", 0, offset)
@@ -1113,7 +909,7 @@ local function QueueProcessItem(itemLink, bag, slot, button, options)
 end
 
 local function ItemIsSellable(itemID, itemLink)
-	local isSellable = true
+	local isSellable = itemID ~= nil
 	if itemID == 23192 then -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
 		isSellable = false
 	elseif itemID == 116916 then -- Gorepetal's Gentle Grasp allows faster herbalism in Draenor
@@ -1152,21 +948,16 @@ local function ProcessItem(item, bag, slot, button, options)
 	-- local printable = gsub(itemLink, "\124", "\124\124");
 	-- print(printable)
 
-	local itemID = item:GetItemID() or GetItemID(itemLink)
-	if not itemID then
-		return
-	end
-
+	local itemID = item:GetItemID()
+	local caerdonType = item:GetCaerdonItemType()
 	local itemData = item:GetItemData()
 	local transmogInfo = item:GetCaerdonItemType() == CaerdonItemType.Equipment and itemData:GetTransmogInfo()
-	local isDebugItem = itemID and itemID == DEBUG_ITEM
 
 	local bindingResult = GetBindingStatus(item, bag, slot, button, options)
 	local shouldRetry = bindingResult.shouldRetry
 	local bindingText = bindingResult.bindingText
 
 	if shouldRetry then
-		-- if CaerdonWardrobeConfig.Debug.Enabled then print("Retrying item:", itemLink, itemID) end
 		QueueProcessItem(itemLink, bag, slot, button, options)
 		return
 	end
@@ -1177,7 +968,7 @@ local function ProcessItem(item, bag, slot, button, options)
 
 	local playerLevel = UnitLevel("player")
 
-	if IsCollectibleLink(itemLink) or IsConduit(itemLink) then
+	if IsCollectibleLink(item) or IsConduit(itemLink) then
    		shouldRetry = false
 	else
 		local expansionID = expacID
@@ -1273,19 +1064,19 @@ local function ProcessItem(item, bag, slot, button, options)
 			end
 		end
 	elseif bindingResult.needsItem then
-		if IsMountLink(itemLink) and not shouldRetry then
+		if caerdonType == CaerdonItemType.Mount and not shouldRetry then
 			if not itemMinLevel or playerLevel >= itemMinLevel then
 				mogStatus = "own"
 			else
 				mogStatus = "other"
 			end
-		elseif IsPetLink(itemLink) or IsToyLink(itemLink) then
+		elseif caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.Toy then
 			if bindingResult.unusableItem then
 				mogStatus = "other"
 			else
 				mogStatus = "own"
 			end
-		elseif IsRecipeLink(itemLink) then
+		elseif caerdonType == CaerdonItemType.Recipe then
 			if bindingResult.unusableItem then
 				if bindingResult.skillTooLow then
 					mogStatus = "lowSkill"
@@ -1315,16 +1106,6 @@ local function ProcessItem(item, bag, slot, button, options)
 		elseif IsConduit(itemLink) then
 			mogStatus = "own"
 		end
-	else
-		-- if IsBankOrBags(bag) then
-		-- 	mogStatus = "collected"
-		-- end
-		-- TODO: Review
-		-- Hide anything that doesn't match
-		-- if button then
-		-- 	--button.IconBorder:SetVertexColor(100, 255, 50)
-		-- 	button.searchOverlay:Show()
-		-- end
 	end
 
 	if IsBankOrBags(bag) then
@@ -1356,8 +1137,8 @@ local function ProcessItem(item, bag, slot, button, options)
 	-- TODO: Clean up - if I break item handling out to individual plugins, they can decide if it's sellable
 	-- If every plugin says yes, then it is.
 	if mogStatus == "collected" and 
-	   ItemIsSellable(itemID, itemLink) and 
 	   item:GetCaerdonItemType() == CaerdonItemType.Equipment and
+	   ItemIsSellable(itemID, itemLink) and 
 	   not itemData:GetEquipmentSets() and
 	   not item:GetHasUse() and
 	   not item:GetSetID() and
@@ -1390,6 +1171,11 @@ local bagAddonCount = 0
 
 function CaerdonWardrobe:GetItemID(itemLink)
 	return GetItemID(itemLink)
+end
+
+function CaerdonWardrobe:RegisterFeature(name, mixin)
+	local instance = CreateFromMixins(mixin)
+	registeredFeatures[name] = instance
 end
 
 function CaerdonWardrobe:RegisterAddon(name, addonOptions)
@@ -1696,14 +1482,16 @@ hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
 hooksecurefunc("MerchantFrame_UpdateBuybackInfo", OnBuybackUpdate)
 
 function CaerdonWardrobeMixin:OnEvent(event, ...)
-	if DEBUG_ENABLED then
-		local arg1, arg2 = ...
-		-- print("Caerdon Wardrobe: " .. event .. ": " .. tostring(arg1) .. ", " .. tostring(arg2))
-	end
-
 	local handler = self[event]
 	if(handler) then
 		handler(self, ...)
+	end
+
+	for name, instance in pairs(registeredFeatures) do
+		handler = instance[event]
+		if(handler) then
+			handler(instance, ...)
+		end
 	end
 end
 

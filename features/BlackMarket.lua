@@ -1,17 +1,20 @@
-local BlackMarketMixin, BlackMarket = {}
+local BlackMarketMixin = {}
 
-local frame = CreateFrame("frame")
-frame:RegisterEvent "ADDON_LOADED"
-frame:SetScript("OnEvent", function(this, event, ...)
-    BlackMarket[event](Quest, ...)
-end)
+function BlackMarketMixin:Init(frame)
+	self.frame = frame
+end
 
 function BlackMarketMixin:OnLoad()
+	self.frame:RegisterEvent "ADDON_LOADED"
+end
+
+function BlackMarketMixin:SetTooltipItem(tooltip, item, locationInfo)
+	tooltip:SetHyperlink(item:GetItemLink())
 end
 
 function BlackMarketMixin:ADDON_LOADED(name)
 	if name == "Blizzard_BlackMarketUI" then
-		frame:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
+		self.frame:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
 	end
 end
 
@@ -33,7 +36,7 @@ function BlackMarketMixin:UpdateBlackMarketItems()
 
 		if ( index <= numItems ) then
 			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
-			CaerdonWardrobe:UpdateButtonLink(link, "BlackMarketScrollFrame", index, button, nil)
+			CaerdonWardrobe:UpdateButtonLink(link, "BlackMarket", index, button, nil)
 		else
             CaerdonWardrobe:ClearButton(button)
 		end
@@ -43,13 +46,12 @@ end
 function BlackMarketMixin:UpdateBlackMarketHotItem()
 	local button = BlackMarketFrame.HotDeal.Item
 	local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
-	CaerdonWardrobe:UpdateButtonLink(link, "BlackMarketScrollFrame", "HotItem", button, nil)
+	CaerdonWardrobe:UpdateButtonLink(link, "BlackMarket", "HotItem", button, nil)
 end
 
 function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
-	BlackMarket:UpdateBlackMarketItems()
-	BlackMarket:UpdateBlackMarketHotItem()
+	self:UpdateBlackMarketItems()
+	self:UpdateBlackMarketHotItem()
 end
 
-BlackMarket = CreateFromMixins(BlackMarketMixin)
-BlackMarket:OnLoad()
+CaerdonWardrobe:RegisterFeature("BlackMarket", BlackMarketMixin)

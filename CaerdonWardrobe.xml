@@ -19,6 +19,7 @@
 	<Script file="types\MountMixin.lua" />
 	<Script file="types\QuestMixin.lua" />
 	<Script file="types\RecipeMixin.lua" />
+	<Script file="types\ToyMixin.lua" />	
 
 	<Script file="tests\CaerdonItemTests.lua" />
 	<Script file="tests\ClothTests.lua" />
