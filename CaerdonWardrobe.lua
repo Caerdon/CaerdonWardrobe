@@ -222,7 +222,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 			local line = _G[scanName .. "TextLeft" .. lineIndex]
 			local lineText = line:GetText()
 			if lineText then
-				if isDebugItem then print ("Tip: " .. lineText) end
 				-- TODO: Find a way to identify Equip Effects without tooltip scanning
 				if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
 					hasEquipEffect = true

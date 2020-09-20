@@ -39,10 +39,14 @@ function CaerdonAPIMixin:GetItemDetails(item)
     local itemResults
     local caerdonType = item:GetCaerdonItemType()
 
-    if caerdonType == CaerdonItemType.Equipment then
-        itemResults = itemData:GetTransmogInfo()
+    if caerdonType == CaerdonItemType.BattlePet then
+        itemResults = itemData:GetBattlePetInfo()
     elseif caerdonType == CaerdonItemType.CompanionPet then
         itemResults = itemData:GetCompanionPetInfo()
+    elseif caerdonType == CaerdonItemType.Equipment then
+            itemResults = itemData:GetTransmogInfo()
+    elseif caerdonType == CaerdonItemType.Quest then
+        itemResults = itemData:GetQuestInfo()
     end
 
     return {
