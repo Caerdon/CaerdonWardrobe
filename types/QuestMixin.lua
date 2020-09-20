@@ -1,6 +1,9 @@
 CaerdonQuest = {}
 CaerdonQuestMixin = {}
 
+local version, build, date, tocversion = GetBuildInfo()
+local isShadowlands = tonumber(build) > 35700
+
 --[[static]] function CaerdonQuest:CreateFromCaerdonItem(caerdonItem)
 	if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
 		error("Usage: CaerdonQuest:CreateFromCaerdonItem(caerdonItem)", 2)
@@ -80,10 +83,27 @@ function CaerdonQuestMixin:GetQuestInfo()
     --     tooltip:AddLine(WAR_MODE_BONUS_PERCENTAGE_XP_FORMAT:format(C_PvP.GetWarModeRewardBonus()));
     -- end
 
-    local tagID, tagName, worldQuestType, rarity, isElite, tradeskillLineIndex, displayExpiration = GetQuestTagInfo(questID)
-    local tradeskillLineID = tradeskillLineIndex and select(7, GetProfessionInfo(tradeskillLineIndex))
-    local isWorldQuest = worldQuestType ~= nil
-    local isBonusObjective = IsQuestTask(questID) and not isWorldQuest
+    -- TODO: Review C_QuestLog in Shadowlands for more info to add
+    local tagInfo
+    local isWorldQuest
+    local isBonusObjective
+
+    print("BUILD", build, version, isShadowlands)
+
+    if isShadowlands then
+        tagInfo = C_QuestLog.GetQuestTagInfo(questID)
+        isWorldQuest = C_QuestLog.IsWorldQuest(questID)
+        isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
+    else
+        local tagID, tagName, worldQuestType, rarity, isElite, tradeskillLineIndex, displayExpiration = GetQuestTagInfo(questID)
+        tagInfo = { tagID = tagID, tagName = tagName, worldQuestType = worldQuestType, rarity = rarity,
+            isElite = isElite, tradeskillLineIndex = tradeSkillLineIndex, displayExpiration = displayExpiration
+        }
+        isWorldQuest = worldQuestType ~= nil
+        isBonusObjective = IsQuestTask(questID) and not isWorldQuest
+    end
+
+    local tradeskillLineID = tagInfo.tradeskillLineIndex and select(7, GetProfessionInfo(tagInfo.tradeskillLineIndex))
     local isRepeatable = C_QuestLog.IsQuestReplayable(questID)
     local isCurrentlyDisabled = C_QuestLog.IsQuestDisabledForSession(questID)
     
@@ -98,6 +118,7 @@ function CaerdonQuestMixin:GetQuestInfo()
         hasWarModeBonus = questHasWarModeBonus,
         rewardMoney = rewardMoney,
         currencyRewards = currencyRewards,
+        tagInfo = tagInfo,
         tagID = tagID,
         tagName = tagName,
         isWorldQuest = isWorldQuest,
@@ -105,6 +126,6 @@ function CaerdonQuestMixin:GetQuestInfo()
         isBonusObjective = isBonusObjective,
         isRepeatable = isRepeatable,
         isCurrentlyDisabled = isCurrentlyDisabled,
-        relatedTradeskill = tradeskillLineID
+        tradeskillLineID = tradeskillLineID
     }
 end
