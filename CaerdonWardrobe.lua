@@ -125,8 +125,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
 	elseif bag == REAGENTBANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", ReagentBankButtonIDToInvSlotID(slot))
-	elseif bag == "GuildBankFrame" then
-		local speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetGuildBankItem(slot.tab, slot.index)
 	else
 		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetBagItem(bag, slot)
 	end
@@ -389,7 +387,7 @@ local function IsBankOrBags(bag)
 
 	if bag ~= "Auction" and 
 	   bag ~= "Merchant" and 
-	   bag ~= "GuildBankFrame" and
+	   bag ~= "GuildBank" and
 	   bag ~= "EncounterJournal" and
 	   bag ~= "QuestLog" and
 	   bag ~= "WorldMap" and
@@ -415,7 +413,7 @@ local function ShouldHideBindingStatus(bag, bindingStatus)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank and bag == "GuildBankFrame" then
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank and bag == "GuildBank" then
 		shouldHide = true
 	end
 
@@ -441,7 +439,7 @@ local function ShouldHideOwnIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank and bag == "GuildBankFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank and bag == "GuildBank" then
 		shouldHide = true
 	end
 
@@ -463,7 +461,7 @@ local function ShouldHideOtherIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank and bag == "GuildBankFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank and bag == "GuildBank" then
 		shouldHide = true
 	end
 
@@ -508,7 +506,7 @@ local function ShouldHideSellableIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank and bag == "GuildBankFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank and bag == "GuildBank" then
 		shouldHide = true
 	end
 
@@ -1171,6 +1169,10 @@ function CaerdonWardrobeFeatureMixin:Refresh()
 	error("Caerdon Wardrobe: Must provide Refresh implementation")
 end
 
+function CaerdonWardrobeFeatureMixin:OnUpdate()
+	-- Called from the main frame's OnUpdate
+end
+
 function CaerdonWardrobe:RegisterFeature(mixin)
 	local instance = CreateFromMixins(CaerdonWardrobeFeatureMixin, mixin)
 	local name = instance:GetName()
@@ -1302,48 +1304,6 @@ end
 
 hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
 
-local isGuildBankFrameUpdateRequested = false
-
-local function OnGuildBankFrameUpdate_Coroutine()
-	if( GuildBankFrame.mode == "bank" ) then
-		local tab = GetCurrentGuildBankTab();
-		local button, index, column;
-		local texture, itemCount, locked, isFiltered, quality;
-
-		for i=1, MAX_GUILDBANK_SLOTS_PER_TAB do
-			index = mod(i, NUM_SLOTS_PER_GUILDBANK_GROUP);
-			if ( index == 0 ) then
-				index = NUM_SLOTS_PER_GUILDBANK_GROUP;
-
-				coroutine.yield()
-			end
-
-			if isGuildBankFrameUpdateRequested then
-				return
-			end
-
-			column = ceil((i-0.5)/NUM_SLOTS_PER_GUILDBANK_GROUP);
-			button = _G["GuildBankColumn"..column.."Button"..index];
-
-			local bag = "GuildBankFrame"
-			local slot = {tab = tab, index = i}
-
-			local options = {
-				showMogIcon = true,
-				showBindStatus = true,
-				showSellables = true
-			}
-
-			local itemLink = GetGuildBankItemLink(tab, i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
-		end
-	end
-end
-
-local function OnGuildBankFrameUpdate()
-	isGuildBankFrameUpdateRequested = true
-end
-
 function CaerdonWardrobeMixin:OnEvent(event, ...)
 	local handler = self[event]
 	if(handler) then
@@ -1358,9 +1318,7 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
 	end
 end
 
-local timeSinceLastGuildBankUpdate = nil
 local timeSinceLastBagUpdate = nil
-local GUILDBANKFRAMEUPDATE_INTERVAL = 0.1
 local BAGUPDATE_INTERVAL = 0.1
 local ITEMUPDATE_INTERVAL = 0.1
 
@@ -1389,35 +1347,11 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 		return
 	end
 
-	if(self.guildBankUpdateCoroutine) then
-		if coroutine.status(self.guildBankUpdateCoroutine) ~= "dead" then
-			local ok, result = coroutine.resume(self.guildBankUpdateCoroutine)
-			if not ok then
-				error(result)
-			end
-		else
-			self.guildBankUpdateCoroutine = nil
-		end
-		return
-	end
-
-	if isGuildBankFrameUpdateRequested then
-		isGuildBankFrameUpdateRequested = false
-		timeSinceLastGuildBankUpdate = 0
-	elseif timeSinceLastGuildBankUpdate then
-		timeSinceLastGuildBankUpdate = timeSinceLastGuildBankUpdate + elapsed
-	end
-
 	if isBagUpdateRequested then
 		isBagUpdateRequested = false
 		timeSinceLastBagUpdate = 0
 	elseif timeSinceLastBagUpdate then
 		timeSinceLastBagUpdate = timeSinceLastBagUpdate + elapsed
-	end
-
-	if( timeSinceLastGuildBankUpdate ~= nil and (timeSinceLastGuildBankUpdate > GUILDBANKFRAMEUPDATE_INTERVAL) ) then
-		timeSinceLastGuildBankUpdate = nil
-		self.guildBankUpdateCoroutine = coroutine.create(OnGuildBankFrameUpdate_Coroutine)
 	end
 
 	if( timeSinceLastBagUpdate ~= nil and (timeSinceLastBagUpdate > BAGUPDATE_INTERVAL) ) then
@@ -1499,8 +1433,6 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 	if name == ADDON_NAME then
 		ProcessSettings()
 		NS:FireConfigLoaded()
-	elseif name == "Blizzard_GuildBankUI" then
-		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
 	-- elseif name == "TradeSkillMaster" then
 	-- 	print("HOOKING TSM")
 	-- 	hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
@@ -1672,5 +1604,3 @@ function NS:FireConfigLoaded()
 end
 
 -- BAG_OPEN
--- GUILDBANKBAGSLOTS_CHANGED
--- GUILDBANKFRAME_OPENED
