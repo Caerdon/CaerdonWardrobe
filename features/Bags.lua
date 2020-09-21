@@ -1,20 +1,16 @@
 local BagMixin = {}
 
-function BagMixin:Init(frame)
-	self.frame = frame
+function BagMixin:GetName()
+	return "Bags"
 end
 
-function BagMixin:OnLoad()
-	self.frame:RegisterEvent "ADDON_LOADED"
+function BagMixin:Init()
 end
 
 function BagMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
-function BagMixin:ADDON_LOADED(name)
-	-- if name == "" then
-	-- 	self.frame:RegisterEvent ""
-	-- end
+function BagMixin:Refresh()
 end
 
-CaerdonWardrobe:RegisterFeature("Bags", BagMixin)
+CaerdonWardrobe:RegisterFeature(BagMixin)

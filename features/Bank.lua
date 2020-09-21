@@ -1,20 +1,16 @@
 local BankMixin = {}
 
-function BankMixin:Init(frame)
-	self.frame = frame
+function BankMixin:GetName()
+	return "Bank"
 end
 
-function BankMixin:OnLoad()
-	self.frame:RegisterEvent "ADDON_LOADED"
+function BankMixin:Init()
 end
 
 function BankMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
-function BankMixin:ADDON_LOADED(name)
-	-- if name == "" then
-	-- 	self.frame:RegisterEvent ""
-	-- end
+function BankMixin:Refresh()
 end
 
-CaerdonWardrobe:RegisterFeature("Bank", BankMixin)
+CaerdonWardrobe:RegisterFeature(BankMixin)

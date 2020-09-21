@@ -1,13 +1,14 @@
 local MerchantMixin = {}
 
-function MerchantMixin:Init(frame)
-	self.frame = frame
+function MerchantMixin:GetName()
+    return "Merchant"
 end
 
-function MerchantMixin:OnLoad()
-    self.frame:RegisterEvent "MERCHANT_UPDATE"
+function MerchantMixin:Init()
     hooksecurefunc("MerchantFrame_UpdateMerchantInfo", function(...) self:OnMerchantUpdate(...) end)
     hooksecurefunc("MerchantFrame_UpdateBuybackInfo", function(...) self:OnBuybackUpdate(...) end)
+
+    return { "MERCHANT_UPDATE" }
 end
 
 function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -22,10 +23,6 @@ function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)
     end
 end
 
-function MerchantMixin:MERCHANT_UPDATE()
-	self:Refresh()
-end
-
 function MerchantMixin:Refresh()
     if MerchantFrame:IsShown() then 
         if MerchantFrame.selectedTab == 1 then
@@ -36,8 +33,12 @@ function MerchantMixin:Refresh()
     end
 end
 
+function MerchantMixin:MERCHANT_UPDATE()
+	self:Refresh()
+end
+
 function MerchantMixin:OnMerchantUpdate()
-    local bag = "Merchant"
+    local bag = self:GetName()
     local options = { 
         showMogIcon=true, showBindStatus=true, showSellables=false, 
         otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
@@ -73,12 +74,11 @@ function MerchantMixin:OnBuybackUpdate()
 		if index <= numBuybackItems then
 			local button = _G["MerchantItem"..index.."ItemButton"];
 
-			local bag = "Merchant"
 			local slot = index
 
             local itemLink = GetBuybackItemLink(index)
             if itemLink then
-                CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
+                CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
             else
                 CaerdonWardrobe:ClearButton(button)
             end
@@ -86,4 +86,4 @@ function MerchantMixin:OnBuybackUpdate()
 	end
 end
 
-CaerdonWardrobe:RegisterFeature("Merchant", MerchantMixin)
+CaerdonWardrobe:RegisterFeature(MerchantMixin)

@@ -16,14 +16,11 @@ local version, build, date, tocversion = GetBuildInfo()
 local isShadowlands = tonumber(build) > 35700
 
 CaerdonWardrobe = {}
-
 CaerdonWardrobeMixin = {}
 
 function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "ADDON_LOADED"
 	self:RegisterEvent "PLAYER_LOGOUT"
-	self:RegisterEvent "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
-	self:RegisterEvent "AUCTION_HOUSE_SHOW"
 	self:RegisterEvent "BAG_OPEN"
 	self:RegisterEvent "BAG_UPDATE"
 	self:RegisterEvent "UNIT_SPELLCAST_SUCCEEDED"
@@ -38,8 +35,13 @@ function CaerdonWardrobeMixin:OnLoad()
 
 	local name, instance
 	for name, instance in pairs(registeredFeatures) do
-		instance:Init(self)
-		instance:OnLoad()
+		local instanceEvents = instance:Init(self)
+		if instanceEvents then
+			for i = 1, #instanceEvents do
+				-- TODO: Hook up to debugging
+				self:RegisterEvent(instanceEvents[i])
+			end
+		end
 	end
 end
 
@@ -117,9 +119,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	if registeredFeatures[bag] then
 		-- TODO: Move all to this and rename bag to feature and slot to locationInfo
 		registeredFeatures[bag]:SetTooltipItem(scanTip, item, slot)
-	elseif bag == "AuctionFrame" then
-		local itemKey = slot.itemKey
-		scanTip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
 	elseif bag == "ItemLink" then
 		scanTip:SetHyperlink(itemLink)
 	elseif bag == BANK_CONTAINER then
@@ -388,7 +387,7 @@ end
 local function IsBankOrBags(bag)
 	local isBankOrBags = false
 
-	if bag ~= "AuctionFrame" and 
+	if bag ~= "Auction" and 
 	   bag ~= "Merchant" and 
 	   bag ~= "GuildBankFrame" and
 	   bag ~= "EncounterJournal" and
@@ -408,7 +407,7 @@ end
 local function ShouldHideBindingStatus(bag, bindingStatus)
 	local shouldHide = false
 
-	if bag == "AuctionFrame" then
+	if bag == "Auction" then
 		shouldHide = true
 	end
 
@@ -450,7 +449,7 @@ local function ShouldHideOwnIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Auction and bag == "AuctionFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Auction and bag == "Auction" then
 		shouldHide = true
 	end
 
@@ -472,7 +471,7 @@ local function ShouldHideOtherIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction and bag == "AuctionFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction and bag == "Auction" then
 		shouldHide = true
 	end
 
@@ -482,7 +481,7 @@ end
 local function ShouldHideQuestIcon(bag)
 	local shouldHide = false
 
-	if bag == "AuctionFrame" then
+	if bag == "Auction" then
 		shouldHide = true
 	end
 
@@ -492,7 +491,7 @@ end
 local function ShouldHideOldExpansionIcon(bag)
 	local shouldHide = false
 
-	if bag == "AuctionFrame" then
+	if bag == "Auction" then
 		shouldHide = not CaerdonWardrobeConfig.Icon.ShowOldExpansion.Auction
 	elseif
 		bag == "Merchant" then -- distracting to show in merchant frame - maybe buyback?
@@ -517,7 +516,7 @@ local function ShouldHideSellableIcon(bag)
 		shouldHide = true
 	end
 
-	if bag == "AuctionFrame" then
+	if bag == "Auction" then
 		shouldHide = true
 	end
 
@@ -1005,11 +1004,21 @@ local function ProcessItem(item, bag, slot, button, options)
 			-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
 			if bag == "EncounterJournal" or bag == "Merchant" then
 				if transmogInfo.needsItem then
-					if not transmogInfo.matchesLootSpec then
+					if transmogInfo.matchesLootSpec then
+						if not transmogInfo.isCompletionistItem then
+							mogStatus = "own"
+						else
+							if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+								mogStatus = "ownPlus"
+							end
+						end
+					else
 						if not transmogInfo.isCompletionistItem then
 							mogStatus = "otherSpecPlus"
 						else
-							mogStatus = "otherSpec"
+							if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+								mogStatus = "otherSpec"
+							end
 						end
 					end
 				elseif transmogInfo.otherNeedsItem then
@@ -1141,13 +1150,35 @@ local registeredAddons = {}
 local registeredBagAddons = {}
 local bagAddonCount = 0
 
-function CaerdonWardrobe:GetItemID(itemLink)
-	return GetItemID(itemLink)
+CaerdonWardrobeFeatureMixin = {}
+function CaerdonWardrobeFeatureMixin:GetName()
+	-- Must be unique
+	error("Caerdon Wardrobe: Must provide a feature name")
 end
 
-function CaerdonWardrobe:RegisterFeature(name, mixin)
-	local instance = CreateFromMixins(mixin)
-	registeredFeatures[name] = instance
+function CaerdonWardrobeFeatureMixin:Init()
+	-- init and return array of frame events you'd like to receive
+	error("Caerdon Wardrobe: Must provide Init implementation")
+end
+
+function CaerdonWardrobeFeatureMixin:SetTooltipItem(tooltip, item, locationInfo)
+	error("Caerdon Wardrobe: Must provide SetTooltipItem implementation")
+end
+
+function CaerdonWardrobeFeatureMixin:Refresh()
+	-- TODO: Should these just be handled from each feature?  Probably.
+	-- Primarily used for global transmog refresh when appearances learned right now
+	error("Caerdon Wardrobe: Must provide Refresh implementation")
+end
+
+function CaerdonWardrobe:RegisterFeature(mixin)
+	local instance = CreateFromMixins(CaerdonWardrobeFeatureMixin, mixin)
+	local name = instance:GetName()
+	if not registeredFeatures[name] then
+		registeredFeatures[name] = instance
+	else
+		error(format("Caerdon Wardrobe: Feature name collision: %s already exists", name))
+	end
 end
 
 function CaerdonWardrobe:RegisterAddon(name, addonOptions)
@@ -1311,109 +1342,6 @@ end
 
 local function OnGuildBankFrameUpdate()
 	isGuildBankFrameUpdateRequested = true
-end
-
-local auctionTimer
-local auctionContinuableContainer = ContinuableContainer:Create();
-
-local function OnAuctionBrowseUpdate()
-	-- Event pump since first load won't have UI ready
-	if not AuctionHouseFrame:IsVisible() then
-		return
-	end
-
-	if auctionTimer then
-		auctionTimer:Cancel()
-	end
-
-	-- TODO: Battle Pet scans are not clean, yet.
-	auctionContinuableContainer:Cancel()
-
-	local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
-	for i, button in ipairs(buttons) do
-		CaerdonWardrobe:ClearButton(button)
-	end
-
-	auctionTimer = C_Timer.NewTimer(0.1, function() 
-		local browseResults = C_AuctionHouse.GetBrowseResults()
-		local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
-
-		local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
-		for i, button in ipairs(buttons) do
-			local bag = "AuctionFrame"
-			local slot = i + offset
-
-			local _, itemLink
-
-			local browseResult = browseResults[slot]
-			if browseResult then
-				local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID, bag, slot)
-				-- TODO: Do we need to check if slot has changed for buttons?  Could do something here...
-				-- item:ContinueOnItemLoad(function ()
-				-- 	print(item:GetItemLink())
-				-- end)
-				if not item:IsItemEmpty() then
-					auctionContinuableContainer:AddContinuable(item)
-				end
-			end
-		end
-
-		auctionContinuableContainer:ContinueOnLoad(function()
-			local checkOffset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
-			-- TODO: Not sure if this is actually doing anything - hasn't been triggered, yet.
-			if checkOffset ~= offset then 
-				return
-			end
-
-			for i, button in ipairs(buttons) do
-				local bag = "AuctionFrame"
-				local slot = i + offset
-	
-				local _, itemLink
-	
-				local browseResult = browseResults[slot]
-				if browseResult then
-					local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID, bag, slot)
-					local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
-	
-					if itemKeyInfo and itemKeyInfo.battlePetLink then
-						itemLink = itemKeyInfo.battlePetLink
-					else
-						itemLink = item:GetItemLink()
-					end
-	
-					-- From AuctionHouseTableBuilder
-					local PRICE_DISPLAY_WIDTH = 120;
-					local PRICE_DISPLAY_WITH_CHECKMARK_WIDTH = 140;
-					local PRICE_DISPLAY_PADDING = 0;
-					local BUYOUT_DISPLAY_PADDING = 0;
-					local STANDARD_PADDING = 10;
-
-					local iconSize = 30
-					-- From AuctionHouseTableBuilder.GetBrowseListLayout
-					local iconOffset = 
-						PRICE_DISPLAY_PADDING + 146 - (iconSize / 2)
-					if itemLink and button then
-						CaerdonWardrobe:UpdateButtonLink(itemLink, bag, { index = slot, itemKey = browseResult.itemKey }, button,  
-						{
-							overridePosition = "LEFT",
-							iconOffset = iconOffset,
-							iconSize = iconSize,				
-							showMogIcon=true, 
-							showBindStatus=false, 
-							showSellables=false
-						})
-					end
-				end
-			end
-		end)
-	end, 1)
-end
-
-local function OnAuctionBrowseClick(self, buttonName, isDown)
-	if (buttonName == "LeftButton" and isDown) then
-		OnAuctionBrowseUpdate()
-	end
 end
 
 function CaerdonWardrobeMixin:OnEvent(event, ...)
@@ -1587,42 +1515,6 @@ function CaerdonWardrobeMixin:PLAYER_LOGIN(...)
 	end
 end
 
-function CaerdonWardrobeMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
-	OnAuctionBrowseUpdate()
-end
-
-local function OnSelectBrowseResult(self, browseResult)
-	local itemLink
-	local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
-	local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
-
-	if itemKeyInfo and itemKeyInfo.battlePetLink then
-		itemLink = itemKeyInfo.battlePetLink
-	else
-		itemLink = item:GetItemLink()
-	end
-
-	CaerdonWardrobe:UpdateButtonLink(itemLink, "ItemLink", nil, AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton,  
-	{
-		overridePosition = "TOPLEFT",
-		iconOffset = -5,
-		iconSize = 50,				
-		showMogIcon=true, 
-		showBindStatus=false, 
-		showSellables=false
-	})
-end
-
-
-local hookAuction = true
-function CaerdonWardrobeMixin:AUCTION_HOUSE_SHOW()
-	if (hookAuction) then
-		hookAuction = false
-		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", OnAuctionBrowseUpdate)
-		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", OnSelectBrowseResult)
-	end
-end
-
 function RefreshMainBank()
 	if not ignoreDefaultBags then
 		for i=1, NUM_BANKGENERIC_SLOTS, 1 do
@@ -1641,10 +1533,6 @@ local function RefreshItems()
 	refreshTimer = C_Timer.NewTimer(0.1, function ()
 		if DEBUG_ENABLED then
 			print("=== Refreshing Transmog Items")
-		end
-
-		if AuctionFrame and AuctionFrame:IsShown() then
-			OnAuctionBrowseUpdate()
 		end
 
 		if BankFrame:IsShown() then
@@ -1754,6 +1642,12 @@ end
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 	-- Can change while logged in!
 	RefreshItems()
+
+	-- TODO: May need to add in refresh time from RefreshItems
+	local name, instance
+	for name, instance in pairs(registeredFeatures) do
+		instance:Refresh()
+	end
 end
 
 function CaerdonWardrobeMixin:BANKFRAME_OPENED()

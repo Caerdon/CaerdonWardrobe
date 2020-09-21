@@ -1,20 +1,16 @@
 local GuildBankMixin = {}
 
-function GuildBankMixin:Init(frame)
-	self.frame = frame
+function GuildBankMixin:GetName()
+	return "GuildBank"
 end
 
-function GuildBankMixin:OnLoad()
-	self.frame:RegisterEvent "ADDON_LOADED"
+function GuildBankMixin:Init()
 end
 
 function GuildBankMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
-function GuildBankMixin:ADDON_LOADED(name)
-	-- if name == "" then
-	-- 	self.frame:RegisterEvent ""
-	-- end
+function GuildBankMixin:Refresh()
 end
 
-CaerdonWardrobe:RegisterFeature("GuildBank", GuildBankMixin)
+CaerdonWardrobe:RegisterFeature(GuildBankMixin)

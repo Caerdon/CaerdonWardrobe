@@ -1,10 +1,10 @@
 local WorldMapMixin = {}
 
-function WorldMapMixin:Init(frame)
-	self.frame = frame
+function WorldMapMixin:GetName()
+	return "WorldMap"
 end
 
-function WorldMapMixin:OnLoad()
+function WorldMapMixin:Init()
 	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (...)
 		if not IsModifiedClick("COMPAREITEMS") and not ShoppingTooltip1:IsShown() then
 			self:UpdatePin(...);
@@ -23,6 +23,9 @@ function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
 	-- TODO: This was for scanning the embedded item, but I don't think I need it now.
 	-- Will need to handle somehow if I do.
 	-- scanTip = scanTip.ItemTooltip.Tooltip
+end
+
+function WorldMapMixin:Refresh()
 end
 
 function WorldMapMixin:UpdatePin(pin)
@@ -64,10 +67,10 @@ function WorldMapMixin:UpdatePin(pin)
 
 		if reward then
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "WorldMap", { questID = pin.questID }, pin, options)
+				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, self:GetName(), { questID = pin.questID }, pin, options)
 			elseif reward.itemID then
 				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, "WorldMap", { questID = pin.questID }, pin, options)
+				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { questID = pin.questID }, pin, options)
 			else
 				CaerdonWardrobe:ClearButton(pin)
 			end
@@ -77,4 +80,4 @@ function WorldMapMixin:UpdatePin(pin)
 	end)
 end
 
-CaerdonWardrobe:RegisterFeature("WorldMap", WorldMapMixin)
+CaerdonWardrobe:RegisterFeature(WorldMapMixin)

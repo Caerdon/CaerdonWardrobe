@@ -1,9 +1,10 @@
 local MailMixin = {}
 
-function MailMixin:Init(frame)
+function MailMixin:GetName()
+	return "Mail"
 end
 
-function MailMixin:OnLoad()
+function MailMixin:Init()
     hooksecurefunc("OpenMailFrame_UpdateButtonPositions", function(...) self:OnMailFrameUpdateButtonPositions(...) end)
     hooksecurefunc("SendMailFrame_Update", function(...) self:OnSendMailFrameUpdate(...) end)
     hooksecurefunc("InboxFrame_Update", function(...) self:OnInboxFrameUpdate(...) end)
@@ -21,13 +22,16 @@ function MailMixin:SetTooltipItem(tooltip, item, locationInfo)
 	end
 end
 
+function MailMixin:Refresh()
+end
+
 function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
 	for i=1, ATTACHMENTS_MAX_RECEIVE do
 		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
 		if HasInboxItem(InboxFrame.openMailID, i) then
 			-- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
 			local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, "Mail", { type="open", index = i }, attachmentButton, nil)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { type="open", index = i }, attachmentButton, nil)
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -40,7 +44,7 @@ function MailMixin:OnSendMailFrameUpdate()
 
 		if HasSendMailItem(i) then
 			local itemLink = GetSendMailItemLink(i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, "Mail", { type="send", index = i }, attachmentButton, nil)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { type="send", index = i }, attachmentButton, nil)
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -57,11 +61,11 @@ function MailMixin:OnInboxFrameUpdate()
 		if ( index <= numItems ) then
 			-- Setup mail item
 			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
-			CaerdonWardrobe:UpdateButtonLink(firstItemLink, "Mail", { type="inbox", index = index }, button, nil)
+			CaerdonWardrobe:UpdateButtonLink(firstItemLink, self:GetName(), { type="inbox", index = index }, button, nil)
 		else
             CaerdonWardrobe:ClearButton(button)
 		end
 	end
 end
 
-CaerdonWardrobe:RegisterFeature("Mail", MailMixin)
+CaerdonWardrobe:RegisterFeature(MailMixin)

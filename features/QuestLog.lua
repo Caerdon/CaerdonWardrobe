@@ -3,11 +3,11 @@ local QuestLogMixin = {}
 local version, build, date, tocversion = GetBuildInfo()
 local isShadowlands = tonumber(build) > 35700
 
-function QuestLogMixin:Init(frame)
-	self.frame = frame
+function QuestLogMixin:GetName()
+	return "QuestLog"
 end
 
-function QuestLogMixin:OnLoad()
+function QuestLogMixin:Init()
 	hooksecurefunc("QuestInfo_Display", function(...) self:OnQuestInfoDisplay(...) end)
 end
 
@@ -17,6 +17,9 @@ function QuestLogMixin:SetTooltipItem(tooltip, item, locationInfo)
 	else
 		tooltip:SetQuestItem(locationInfo.questItem.type, locationInfo.index, locationInfo.questID)
 	end
+end
+
+function QuestLogMixin:Refresh()
 end
 
 function QuestLogMixin:OnQuestInfoDisplay(template, parentFrame)
@@ -108,4 +111,4 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 	end)
 end
 
-CaerdonWardrobe:RegisterFeature("QuestLog", QuestLogMixin)
+CaerdonWardrobe:RegisterFeature(QuestLogMixin)
