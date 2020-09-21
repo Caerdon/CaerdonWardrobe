@@ -34,8 +34,6 @@ function CaerdonWardrobeMixin:OnLoad()
 	-- self:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
-	self:RegisterEvent "MERCHANT_UPDATE"
-	self:RegisterEvent "PLAYER_LOOT_SPEC_UPDATED"
 	self:RegisterEvent "PLAYER_LOGIN"
 
 	local name, instance
@@ -122,12 +120,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	elseif bag == "AuctionFrame" then
 		local itemKey = slot.itemKey
 		scanTip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
-	elseif bag == "MerchantFrame" then
-		if MerchantFrame.selectedTab == 1 then
-			scanTip:SetMerchantItem(slot)
-		else
-			scanTip:SetBuybackItem(slot)
-		end
 	elseif bag == "ItemLink" then
 		scanTip:SetHyperlink(itemLink)
 	elseif bag == BANK_CONTAINER then
@@ -136,10 +128,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", ReagentBankButtonIDToInvSlotID(slot))
 	elseif bag == "GuildBankFrame" then
 		local speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetGuildBankItem(slot.tab, slot.index)
-	elseif bag == "LootFrame" then
-		scanTip:SetLootItem(slot.index)
-	elseif bag == "EncounterJournal" then
-		scanTip:SetHyperlink(itemLink, classID, specID)
 	else
 		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetBagItem(bag, slot)
 	end
@@ -401,12 +389,12 @@ local function IsBankOrBags(bag)
 	local isBankOrBags = false
 
 	if bag ~= "AuctionFrame" and 
-	   bag ~= "MerchantFrame" and 
+	   bag ~= "Merchant" and 
 	   bag ~= "GuildBankFrame" and
 	   bag ~= "EncounterJournal" and
 	   bag ~= "QuestLog" and
 	   bag ~= "WorldMap" and
-	   bag ~= "LootFrame" and
+	   bag ~= "Loot" and
 	   bag ~= "GroupLoot" and
 	   bag ~= "Mail" and
 	   bag ~= "ItemLink" and
@@ -432,7 +420,7 @@ local function ShouldHideBindingStatus(bag, bindingStatus)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Binding.ShowStatus.Merchant and bag == "MerchantFrame" then
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.Merchant and bag == "Merchant" then
 		shouldHide = true
 	end
 
@@ -458,7 +446,7 @@ local function ShouldHideOwnIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and bag == "MerchantFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and bag == "Merchant" then
 		shouldHide = true
 	end
 
@@ -480,7 +468,7 @@ local function ShouldHideOtherIcon(bag)
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and bag == "MerchantFrame" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and bag == "Merchant" then
 		shouldHide = true
 	end
 
@@ -507,7 +495,7 @@ local function ShouldHideOldExpansionIcon(bag)
 	if bag == "AuctionFrame" then
 		shouldHide = not CaerdonWardrobeConfig.Icon.ShowOldExpansion.Auction
 	elseif
-		bag == "MerchantFrame" then -- distracting to show in merchant frame - maybe buyback?
+		bag == "Merchant" then -- distracting to show in merchant frame - maybe buyback?
 		shouldHide = true
 	end
 
@@ -525,7 +513,7 @@ local function ShouldHideSellableIcon(bag)
 		shouldHide = true
 	end
 
-	if bag == "MerchantFrame" then
+	if bag == "Merchant" then
 		shouldHide = true
 	end
 
@@ -1014,7 +1002,8 @@ local function ProcessItem(item, bag, slot, button, options)
 			end
 
 			-- TODO: Exceptions need to be broken out
-			if bag == "EncounterJournal" or bag == "MerchantFrame" then
+			-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
+			if bag == "EncounterJournal" or bag == "Merchant" then
 				if transmogInfo.needsItem then
 					if not transmogInfo.matchesLootSpec then
 						if not transmogInfo.isCompletionistItem then
@@ -1427,43 +1416,6 @@ local function OnAuctionBrowseClick(self, buttonName, isDown)
 	end
 end
 
-local function OnMerchantUpdate()
-	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
-		local index = (((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i)
-
-		local button = _G["MerchantItem"..i.."ItemButton"];
-
-		local bag = "MerchantFrame"
-		local slot = index
-
-		local itemLink = GetMerchantItemLink(index)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, { 
-			showMogIcon=true, showBindStatus=true, showSellables=false, 
-			otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
-			otherIconSize = 20, otherIconOffset = 10,	
-		})
-	end
-end
-
-local function OnBuybackUpdate()
-	local numBuybackItems = GetNumBuybackItems();
-
-	for index=1, BUYBACK_ITEMS_PER_PAGE, 1 do -- Only 1 actual page for buyback right now
-		if index <= numBuybackItems then
-			local button = _G["MerchantItem"..index.."ItemButton"];
-
-			local bag = "MerchantFrame"
-			local slot = index
-
-			local itemLink = GetBuybackItemLink(index)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
-		end
-	end
-end
-
-hooksecurefunc("MerchantFrame_UpdateMerchantInfo", OnMerchantUpdate)
-hooksecurefunc("MerchantFrame_UpdateBuybackInfo", OnBuybackUpdate)
-
 function CaerdonWardrobeMixin:OnEvent(event, ...)
 	local handler = self[event]
 	if(handler) then
@@ -1546,29 +1498,6 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	end
 end
 
-local function OnEncounterJournalSetLootButton(item)
-	local itemID, encounterID, name, icon, slot, armorType, itemLink;
-	if isShadowlands then
-		-- local itemInfo = C_EncounterJournal.GetLootInfoByIndex(item.index);
-		-- itemLink = itemInfo.link
-		-- itemLink = item.link
-		itemLink = select(2, GetItemInfo(item.itemID))
-	else
-		itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(item.index);
-	end
-	
-	local options = {
-		iconOffset = 7,
-		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
-		otherIconSize = 20,
-		otherIconOffset = 15,
-		overridePosition = "TOPLEFT",
-		overrideBindingPosition = "LEFT"
-	}
-
-	CaerdonWardrobe:UpdateButtonLink(itemLink, "EncounterJournal", item, item, options)
-end
-
 function NS:GetDefaultConfig()
 	return {
 		Version = 8,
@@ -1644,8 +1573,6 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 		NS:FireConfigLoaded()
 	elseif name == "Blizzard_GuildBankUI" then
 		hooksecurefunc("GuildBankFrame_Update", OnGuildBankFrameUpdate)
-	elseif name == "Blizzard_EncounterJournal" then
-		hooksecurefunc("EncounterJournal_SetLootButton", OnEncounterJournalSetLootButton)
 	-- elseif name == "TradeSkillMaster" then
 	-- 	print("HOOKING TSM")
 	-- 	hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
@@ -1714,14 +1641,6 @@ local function RefreshItems()
 	refreshTimer = C_Timer.NewTimer(0.1, function ()
 		if DEBUG_ENABLED then
 			print("=== Refreshing Transmog Items")
-		end
-
-		if MerchantFrame:IsShown() then 
-			if MerchantFrame.selectedTab == 1 then
-				OnMerchantUpdate()
-			else
-				OnBuybackUpdate()
-			end
 		end
 
 		if AuctionFrame and AuctionFrame:IsShown() then
@@ -1804,12 +1723,6 @@ function CaerdonWardrobeMixin:BAG_UPDATE_DELAYED()
 	end
 end
 
-function CaerdonWardrobeMixin:PLAYER_LOOT_SPEC_UPDATED()
-	if EncounterJournal then
-		EncounterJournal_LootUpdate()
-	end
-end
-
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	-- RefreshItems()
 end
@@ -1826,10 +1739,12 @@ end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
 	RefreshItems()
-end
 
-function CaerdonWardrobeMixin:MERCHANT_UPDATE()
-	RefreshItems()
+	-- TODO: May need to add in refresh time from RefreshItems
+	local name, instance
+	for name, instance in pairs(registeredFeatures) do
+		instance:Refresh()
+	end
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()

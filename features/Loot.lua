@@ -1,7 +1,15 @@
-local LootMixin, Loot = {}
+local LootMixin = {}
+
+function LootMixin:Init(frame)
+	self.frame = frame
+end
 
 function LootMixin:OnLoad()
-    hooksecurefunc("LootFrame_UpdateButton", function(...) Loot:OnLootFrameUpdateButton(...) end)
+    hooksecurefunc("LootFrame_UpdateButton", function(...) self:OnLootFrameUpdateButton(...) end)
+end
+
+function LootMixin:SetTooltipItem(tooltip, item, locationInfo)
+	tooltip:SetLootItem(locationInfo.index)
 end
 
 function LootMixin:OnLootFrameUpdateButton(index)
@@ -26,6 +34,4 @@ function LootMixin:OnLootFrameUpdateButton(index)
 	end
 end
 
-
-Loot = CreateFromMixins(LootMixin)
-Loot:OnLoad()
+CaerdonWardrobe:RegisterFeature("Loot", LootMixin)

@@ -4,12 +4,18 @@
 	<Script file="CaerdonItem.lua" />
 	<Script file="CaerdonAPI.lua" />
 	
-	<Script file="features\Loot.lua" />
+	<Script file="features\Auction.lua" />
+	<Script file="features\Bags.lua" />
+	<Script file="features\Bank.lua" />
+	<Script file="features\BlackMarket.lua" />
+	<Script file="features\EncounterJournal.lua" />
 	<Script file="features\GroupLoot.lua" />
+	<Script file="features\GuildBank.lua" />
+	<Script file="features\Loot.lua" />
 	<Script file="features\Mail.lua" />
+	<Script file="features\Merchant.lua" />
 	<Script file="features\QuestLog.lua" />
 	<Script file="features\WorldMap.lua" />
-	<Script file="features\BlackMarket.lua" />
 	<Script file="features\Tooltip.lua" />
 
 	<Script file="types\BattlePetMixin.lua" />
