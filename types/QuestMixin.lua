@@ -19,7 +19,13 @@ function CaerdonQuestMixin:GetQuestInfo()
     local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
     local questID = strsplit(":", linkOptions);
 
-    local questName = C_QuestLog.GetQuestInfo(questID)
+    local questName
+    if isShadowlands then
+        questName = C_QuestLog.GetTitleForQuestID(questID)
+    else
+        questName = C_QuestLog.GetQuestInfo(questID)
+    end
+
     local level = C_QuestLog.GetQuestDifficultyLevel(questID)
 
     local rewards = {}
@@ -27,33 +33,78 @@ function CaerdonQuestMixin:GetQuestInfo()
     local spellRewards = {}
     local currencyRewards = {}
 
-    local numQuestRewards = GetNumQuestLogRewards(questID);
-	for i = 1, numQuestRewards do
-        local itemName, itemTexture, quantity, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID);
+    local numQuestRewards
+    local numQuestChoices
+    local numQuestSpellRewards
+    local numQuestCurrencies
+    local totalXp, baseXp
+    local honorAmount
+    local rewardMoney
+
+    if QuestInfoFrame.questLog then
+        numQuestRewards = GetNumQuestLogRewards(questID)
+        numQuestChoices = GetNumQuestLogChoices(questID)
+        numQuestSpellRewards = GetNumQuestLogRewardSpells(questID)
+        numQuestCurrencies = GetNumQuestLogRewardCurrencies(questID)
+        totalXp, baseXp = GetQuestLogRewardXP(questID)
+        honorAmount = GetQuestLogRewardHonor(questID)
+        rewardMoney = GetQuestLogRewardMoney(questID)
+    else
+        numQuestRewards = GetNumQuestRewards()
+        numQuestChoices = GetNumQuestChoices()
+        numQuestSpellRewards = GetNumRewardSpells()
+        numQuestCurrencies = GetNumRewardCurrencies()
+        totalXp, baseXp = GetRewardXP()
+        honorAmount = GetRewardHonor()
+        rewardMoney = GetRewardMoney()
+    end
+
+    for i = 1, numQuestRewards do
+        local itemLink, name, texture, numItems, quality, isUsable, itemID
+        if ( QuestInfoFrame.questLog ) then
+            name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID)
+        else
+            name, texture, numItems, quality, isUsable = GetQuestItemInfo("reward", i)
+            itemLink = GetQuestItemLink("reward", i)
+        end
+
         rewards[i] = {
-            name = itemName,
-            quantity = quantity,
+            name = name,
+            quantity = numItems,
             quality = quality,
             isUsable = isUsable,
-            itemID = itemID
+            itemID = itemID,
+            itemLink = itemLink
         }
 	end
 
-    local numQuestChoices = GetNumQuestLogChoices(questID);
-	for i = 1, numQuestChoices do
-		local itemName, itemTexture, quantity, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID);
+    for i = 1, numQuestChoices do
+        local itemLink, name, texture, numItems, quality, isUsable, itemID
+        if ( QuestInfoFrame.questLog ) then
+            name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
+        else
+            name, texture, numItems, quality, isUsable = GetQuestItemInfo("choice", i)
+            itemLink = GetQuestItemLink("choice", i)
+        end
+
         choices[i] = {
-            name = itemName,
-            quantity = quantity,
+            name = name,
+            quantity = numItems,
             quality = quality,
             isUsable = isUsable,
-            itemID = itemID
+            itemID = itemID,
+            itemLink = itemLink
         }
     end
 
-    local numQuestSpellRewards = GetNumQuestLogRewardSpells(questID);
     for i = 1, numQuestSpellRewards do
-        local texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetQuestLogRewardSpell(i, questID)
+        local texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID
+        if ( QuestInfoFrame.questLog ) then
+            texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetQuestLogRewardSpell(i, questID)
+        else
+            texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetRewardSpell()
+        end
+
         spellRewards[i] = {
             name = name,
             isTradeskillSpell = isTradeskillSpell,
@@ -65,9 +116,15 @@ function CaerdonQuestMixin:GetQuestInfo()
         }
     end
 
-    local numQuestCurrencies = GetNumQuestLogRewardCurrencies(questID)
     for i = 1, numQuestCurrencies do
-        local name, texture, numItems, currencyID = GetQuestLogRewardCurrencyInfo(i, questID)
+        local name, texture, quality, amount, currencyID;
+        if ( QuestInfoFrame.questLog ) then
+            name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(i, questID)
+        else
+            name, texture, amount, quality = GetQuestCurrencyInfo("reward", i);
+            currencyID = GetQuestCurrencyID("reward", i);
+        end
+    
         currencyRewards[i] = {
             name = name,
             numItems = numItems,
@@ -76,10 +133,7 @@ function CaerdonQuestMixin:GetQuestInfo()
     end
 
     local isOnQuest = C_QuestLog.IsOnQuest(questID)
-    local totalXp, baseXp = GetQuestLogRewardXP(questID)
-    local honorAmount = GetQuestLogRewardHonor(questID)
     local questHasWarModeBonus = C_QuestLog.QuestCanHaveWarModeBonus(questID);
-    local rewardMoney = GetQuestLogRewardMoney(questID)
  
     -- local isWarModeDesired = C_PvP.IsWarModeDesired();
     -- if (isWarModeDesired and questHasWarModeBonus) then
@@ -104,7 +158,7 @@ function CaerdonQuestMixin:GetQuestInfo()
         isBonusObjective = IsQuestTask(questID) and not isWorldQuest
     end
 
-    local tradeskillLineID = tagInfo.tradeskillLineIndex and select(7, GetProfessionInfo(tagInfo.tradeskillLineIndex))
+    local tradeskillLineID = tagInfo and tagInfo.tradeskillLineIndex and select(7, GetProfessionInfo(tagInfo.tradeskillLineIndex))
     local isRepeatable = C_QuestLog.IsQuestReplayable(questID)
     local isCurrentlyDisabled = C_QuestLog.IsQuestDisabledForSession(questID)
     

@@ -7,7 +7,7 @@
 	<Script file="features\Loot.lua" />
 	<Script file="features\GroupLoot.lua" />
 	<Script file="features\Mail.lua" />
-	<Script file="features\Quest.lua" />
+	<Script file="features\QuestLog.lua" />
 	<Script file="features\WorldMap.lua" />
 	<Script file="features\BlackMarket.lua" />
 	<Script file="features\Tooltip.lua" />

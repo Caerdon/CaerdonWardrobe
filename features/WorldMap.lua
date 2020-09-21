@@ -20,7 +20,13 @@ function WorldMapMixin:UpdatePin(pin)
 
 		local questLink = GetQuestLink(pin.questID)
 		if not questLink then 
-			local questName = C_QuestLog.GetQuestInfo(questID)
+			local questName
+			if isShadowlands then
+				questName = C_QuestLog.GetTitleForQuestID(questID)
+			else
+				questName = C_QuestLog.GetQuestInfo(questID)
+			end
+
 			local questLevel = C_QuestLog.GetQuestDifficultyLevel(questID)
 			questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", questID, questLevel, questName)
 		end
@@ -38,9 +44,15 @@ function WorldMapMixin:UpdatePin(pin)
 			reward = questInfo.choices[bestIndex]
 		end
 
-		if reward and reward.itemID then
-			local _, itemLink = GetItemInfo(reward.itemID)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestButton", { itemID = reward.itemID, questID = pin.questID }, pin, options)
+		if reward then
+			if reward.itemLink then
+				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "QuestButton", { itemID = reward.itemID, questID = pin.questID }, pin, options)
+			elseif reward.itemID 
+				local _, itemLink = GetItemInfo(reward.itemID)
+				CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestButton", { itemID = reward.itemID, questID = pin.questID }, pin, options)
+			else
+				CaerdonWardrobe:ClearButton(pin)
+			end
 		else
 			CaerdonWardrobe:ClearButton(pin)
 		end
