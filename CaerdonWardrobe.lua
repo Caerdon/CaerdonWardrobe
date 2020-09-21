@@ -112,8 +112,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	local shouldRetry = false
 	local isLocked = false
 	
-	local tooltipSpeciesID = 0
-
 	local isCollectionItem = IsCollectibleLink(item)
 	local isRecipe = caerdonType == CaerdonItemType.Recipe
 	local isPetLink = caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet
@@ -124,7 +122,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	elseif bag == "AuctionFrame" then
 		local itemKey = slot.itemKey
 		scanTip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
-		tooltipSpeciesID = itemKey.battlePetSpeciesID
 	elseif bag == "MerchantFrame" then
 		if MerchantFrame.selectedTab == 1 then
 			scanTip:SetMerchantItem(slot)
@@ -135,19 +132,16 @@ local function GetBindingStatus(item, bag, slot, button, options)
 		scanTip:SetHyperlink(itemLink)
 	elseif bag == BANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
-		tooltipSpeciesID = speciesID
 	elseif bag == REAGENTBANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", ReagentBankButtonIDToInvSlotID(slot))
 	elseif bag == "GuildBankFrame" then
 		local speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetGuildBankItem(slot.tab, slot.index)
-		tooltipSpeciesID = speciesID
 	elseif bag == "LootFrame" then
 		scanTip:SetLootItem(slot.index)
 	elseif bag == "EncounterJournal" then
 		scanTip:SetHyperlink(itemLink, classID, specID)
 	else
 		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetBagItem(bag, slot)
-		tooltipSpeciesID = speciesID
 	end
 
 	-- TODO: This is lame, but tooltips end up not having all of their data
