@@ -276,6 +276,7 @@ end
 function CaerdonItemMixin:GetItemData()
     if not self.caerdonItemData then
         local caerdonType = self:GetCaerdonItemType()
+
         if caerdonType == CaerdonItemType.BattlePet then
             self.caerdonItemData = CaerdonBattlePet:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.CompanionPet then

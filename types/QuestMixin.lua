@@ -19,6 +19,9 @@ function CaerdonQuestMixin:GetQuestInfo()
     local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
     local questID = strsplit(":", linkOptions);
 
+    local questName = C_QuestLog.GetQuestInfo(questID)
+    local level = C_QuestLog.GetQuestDifficultyLevel(questID)
+
     local rewards = {}
     local choices = {}
     local spellRewards = {}
@@ -83,12 +86,10 @@ function CaerdonQuestMixin:GetQuestInfo()
     --     tooltip:AddLine(WAR_MODE_BONUS_PERCENTAGE_XP_FORMAT:format(C_PvP.GetWarModeRewardBonus()));
     -- end
 
-    -- TODO: Review C_QuestLog in Shadowlands for more info to add
+    -- TODO: Review C_QuestLog in Shadowlands for more info to add - also has QuestMixin
     local tagInfo
     local isWorldQuest
     local isBonusObjective
-
-    print("BUILD", build, version, isShadowlands)
 
     if isShadowlands then
         tagInfo = C_QuestLog.GetQuestTagInfo(questID)
@@ -108,7 +109,9 @@ function CaerdonQuestMixin:GetQuestInfo()
     local isCurrentlyDisabled = C_QuestLog.IsQuestDisabledForSession(questID)
     
     return {
+        name = questName,
         questID = questID,
+        level = level,
         rewards = rewards,
         choices = choices,
         spellRewards = spellRewards,
