@@ -41,7 +41,25 @@ function CaerdonQuestMixin:GetQuestInfo()
     local honorAmount
     local rewardMoney
 
-    if QuestInfoFrame.questLog then
+    local tagInfo
+    local isWorldQuest
+    local isBonusObjective
+
+    if isShadowlands then
+        tagInfo = C_QuestLog.GetQuestTagInfo(questID)
+        isWorldQuest = C_QuestLog.IsWorldQuest(questID)
+        isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
+    else
+        local tagID, tagName, worldQuestType, rarity, isElite, tradeskillLineIndex, displayExpiration = GetQuestTagInfo(questID)
+        tagInfo = { tagID = tagID, tagName = tagName, worldQuestType = worldQuestType, rarity = rarity,
+            isElite = isElite, tradeskillLineIndex = tradeSkillLineIndex, displayExpiration = displayExpiration
+        }
+        isWorldQuest = worldQuestType ~= nil
+        isBonusObjective = IsQuestTask(questID) and not isWorldQuest
+    end
+
+    local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
+    if isQuestLog then
         numQuestRewards = GetNumQuestLogRewards(questID)
         numQuestChoices = GetNumQuestLogChoices(questID)
         numQuestSpellRewards = GetNumQuestLogRewardSpells(questID)
@@ -61,7 +79,7 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     for i = 1, numQuestRewards do
         local itemLink, name, texture, numItems, quality, isUsable, itemID
-        if ( QuestInfoFrame.questLog ) then
+        if isQuestLog then
             name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID)
         else
             name, texture, numItems, quality, isUsable = GetQuestItemInfo("reward", i)
@@ -80,7 +98,7 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     for i = 1, numQuestChoices do
         local itemLink, name, texture, numItems, quality, isUsable, itemID
-        if ( QuestInfoFrame.questLog ) then
+        if isQuestLog then
             name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
         else
             name, texture, numItems, quality, isUsable = GetQuestItemInfo("choice", i)
@@ -99,7 +117,7 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     for i = 1, numQuestSpellRewards do
         local texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID
-        if ( QuestInfoFrame.questLog ) then
+        if isQuestLog then
             texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetQuestLogRewardSpell(i, questID)
         else
             texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetRewardSpell()
@@ -118,7 +136,7 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     for i = 1, numQuestCurrencies do
         local name, texture, quality, amount, currencyID;
-        if ( QuestInfoFrame.questLog ) then
+        if isQuestLog then
             name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(i, questID)
         else
             name, texture, amount, quality = GetQuestCurrencyInfo("reward", i);
@@ -141,23 +159,6 @@ function CaerdonQuestMixin:GetQuestInfo()
     -- end
 
     -- TODO: Review C_QuestLog in Shadowlands for more info to add - also has QuestMixin
-    local tagInfo
-    local isWorldQuest
-    local isBonusObjective
-
-    if isShadowlands then
-        tagInfo = C_QuestLog.GetQuestTagInfo(questID)
-        isWorldQuest = C_QuestLog.IsWorldQuest(questID)
-        isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
-    else
-        local tagID, tagName, worldQuestType, rarity, isElite, tradeskillLineIndex, displayExpiration = GetQuestTagInfo(questID)
-        tagInfo = { tagID = tagID, tagName = tagName, worldQuestType = worldQuestType, rarity = rarity,
-            isElite = isElite, tradeskillLineIndex = tradeSkillLineIndex, displayExpiration = displayExpiration
-        }
-        isWorldQuest = worldQuestType ~= nil
-        isBonusObjective = IsQuestTask(questID) and not isWorldQuest
-    end
-
     local tradeskillLineID = tagInfo and tagInfo.tradeskillLineIndex and select(7, GetProfessionInfo(tagInfo.tradeskillLineIndex))
     local isRepeatable = C_QuestLog.IsQuestReplayable(questID)
     local isCurrentlyDisabled = C_QuestLog.IsQuestDisabledForSession(questID)

@@ -1,11 +1,28 @@
-local WorldMapMixin, WorldMap = {}
+local WorldMapMixin = {}
+
+function WorldMapMixin:Init(frame)
+	self.frame = frame
+end
 
 function WorldMapMixin:OnLoad()
-	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (self)
+	hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (...)
 		if not IsModifiedClick("COMPAREITEMS") and not ShoppingTooltip1:IsShown() then
-			WorldMap:UpdatePin(self);
+			self:UpdatePin(...);
 		end
 	end)
+end
+
+function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
+	tooltip:SetHyperlink(item:GetItemLink())
+
+	-- TODO: Ignoring the WorldMap tooltip itself for now since it's the item I care about
+	-- May need to revisit if I care about the quest itself
+
+	-- GameTooltip_AddQuestRewardsToTooltip(tooltip, locationInfo.questID)
+	
+	-- TODO: This was for scanning the embedded item, but I don't think I need it now.
+	-- Will need to handle somehow if I do.
+	-- scanTip = scanTip.ItemTooltip.Tooltip
 end
 
 function WorldMapMixin:UpdatePin(pin)
@@ -15,7 +32,8 @@ function WorldMapMixin:UpdatePin(pin)
 			iconSize = 60,
 			overridePosition = "TOPRIGHT",
 			-- itemCountOffset = 10,
-			-- bindingScale = 0.9
+			-- TODO: Make text bigger?
+			-- bindingScale = 1.5
 		}
 
 		local questLink = GetQuestLink(pin.questID)
@@ -46,10 +64,10 @@ function WorldMapMixin:UpdatePin(pin)
 
 		if reward then
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "QuestButton", { itemID = reward.itemID, questID = pin.questID }, pin, options)
-			elseif reward.itemID 
+				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "WorldMap", { questID = pin.questID }, pin, options)
+			elseif reward.itemID then
 				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestButton", { itemID = reward.itemID, questID = pin.questID }, pin, options)
+				CaerdonWardrobe:UpdateButtonLink(itemLink, "WorldMap", { questID = pin.questID }, pin, options)
 			else
 				CaerdonWardrobe:ClearButton(pin)
 			end
@@ -59,5 +77,4 @@ function WorldMapMixin:UpdatePin(pin)
 	end)
 end
 
-WorldMap = CreateFromMixins(WorldMapMixin)
-WorldMap:OnLoad()
+CaerdonWardrobe:RegisterFeature("WorldMap", WorldMapMixin)

@@ -145,9 +145,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 		scanTip:SetLootItem(slot.index)
 	elseif bag == "EncounterJournal" then
 		scanTip:SetHyperlink(itemLink, classID, specID)
-	elseif bag == "QuestButton" then
-		GameTooltip_AddQuestRewardsToTooltip(scanTip, slot.questID)
-		scanTip = scanTip.ItemTooltip.Tooltip
 	else
 		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetBagItem(bag, slot)
 		tooltipSpeciesID = speciesID
@@ -414,7 +411,7 @@ local function IsBankOrBags(bag)
 	   bag ~= "GuildBankFrame" and
 	   bag ~= "EncounterJournal" and
 	   bag ~= "QuestLog" and
-	   bag ~= "QuestButton" and
+	   bag ~= "WorldMap" and
 	   bag ~= "LootFrame" and
 	   bag ~= "GroupLoot" and
 	   bag ~= "Mail" and
