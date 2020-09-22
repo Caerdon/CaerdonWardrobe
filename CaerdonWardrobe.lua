@@ -1358,6 +1358,11 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 		timeSinceLastBagUpdate = nil
 		self.bagUpdateCoroutine = coroutine.create(OnBagUpdate_Coroutine)
 	end
+
+	local name, instance
+	for name, instance in pairs(registeredFeatures) do
+		instance:OnUpdate(elapsed)
+	end
 end
 
 function NS:GetDefaultConfig()
