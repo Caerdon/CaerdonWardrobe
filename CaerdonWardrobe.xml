@@ -15,6 +15,7 @@
 	<Script file="features\Mail.lua" />
 	<Script file="features\Merchant.lua" />
 	<Script file="features\QuestLog.lua" />
+	<Script file="features\ReagentBank.lua" />
 	<Script file="features\WorldMap.lua" />
 	<Script file="features\Tooltip.lua" />
 

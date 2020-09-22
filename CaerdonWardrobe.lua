@@ -21,11 +21,7 @@ CaerdonWardrobeMixin = {}
 function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "ADDON_LOADED"
 	self:RegisterEvent "PLAYER_LOGOUT"
-	self:RegisterEvent "BAG_OPEN"
-	self:RegisterEvent "BAG_UPDATE"
 	self:RegisterEvent "UNIT_SPELLCAST_SUCCEEDED"
-	self:RegisterEvent "BAG_UPDATE_DELAYED"
-	self:RegisterEvent "BANKFRAME_OPENED"
 	-- self:RegisterEvent "GET_ITEM_INFO_RECEIVED"
 	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	-- self:RegisterEvent "TRANSMOG_COLLECTION_ITEM_UPDATE"
@@ -121,12 +117,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 		registeredFeatures[bag]:SetTooltipItem(scanTip, item, slot)
 	elseif bag == "ItemLink" then
 		scanTip:SetHyperlink(itemLink)
-	elseif bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
-	elseif bag == REAGENTBANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetInventoryItem("player", ReagentBankButtonIDToInvSlotID(slot))
-	else
-		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = scanTip:SetBagItem(bag, slot)
 	end
 
 	-- TODO: This is lame, but tooltips end up not having all of their data
@@ -871,7 +861,7 @@ local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, 
 end
 
 local function QueueProcessItem(itemLink, bag, slot, button, options)
-	C_Timer.After(0.1, function()
+	C_Timer.After(0, function()
 		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end)
 end
@@ -886,17 +876,7 @@ local function ItemIsSellable(itemID, itemLink)
 	return isSellable
 end
 
-local function GetBankContainer(button)
-	local containerID = button:GetParent():GetID();
-	if( button.isBag ) then
-		containerID = -ITEM_INVENTORY_BANK_BAG_OFFSET;
-		return
-	end
-
-	return containerID
-end
-
-local function ProcessItem(item, bag, slot, button, options)
+local function ProcessItem(item, feature, locationInfo, button, options)
 	local mogStatus = nil
 
    	if not options then
@@ -921,12 +901,12 @@ local function ProcessItem(item, bag, slot, button, options)
 	local itemData = item:GetItemData()
 	local transmogInfo = item:GetCaerdonItemType() == CaerdonItemType.Equipment and itemData:GetTransmogInfo()
 
-	local bindingResult = GetBindingStatus(item, bag, slot, button, options)
+	local bindingResult = GetBindingStatus(item, feature, locationInfo, button, options)
 	local shouldRetry = bindingResult.shouldRetry
 	local bindingText = bindingResult.bindingText
 
 	if shouldRetry then
-		QueueProcessItem(itemLink, bag, slot, button, options)
+		QueueProcessItem(itemLink, feature, locationInfo, button, options)
 		return
 	end
 
@@ -1000,7 +980,7 @@ local function ProcessItem(item, bag, slot, button, options)
 
 			-- TODO: Exceptions need to be broken out
 			-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
-			if bag == "EncounterJournal" or bag == "Merchant" then
+			if feature == "EncounterJournal" or feature == "Merchant" then
 				if transmogInfo.needsItem then
 					if transmogInfo.matchesLootSpec then
 						if not transmogInfo.isCompletionistItem then
@@ -1087,7 +1067,11 @@ local function ProcessItem(item, bag, slot, button, options)
 		end
 	end
 
-	if IsBankOrBags(bag) then
+	if IsBankOrBags(feature) then
+		-- TODO: This is very specific to bank and bags features and addons (locationInfo) and needs pushed into those
+		local bag = locationInfo.bag
+		local slot = locationInfo.slot
+		
 		local containerID = bag
 		local containerSlot = slot
 
@@ -1135,8 +1119,8 @@ local function ProcessItem(item, bag, slot, button, options)
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, item, bag, slot, options, mogStatus, bindingText)
-		SetItemButtonBindType(button, mogStatus, bindingText, options, bag)
+		SetItemButtonMogStatus(button, item, feature, locationInfo, options, mogStatus, bindingText)
+		SetItemButtonBindType(button, mogStatus, bindingText, options, feature)
 	end
 end
 
@@ -1244,66 +1228,6 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	end
 end
 
-local function OnContainerUpdate(self, asyncUpdate)
-	local bagID = self:GetID()
-
-	for buttonIndex = 1, self.size do
-		local button = _G[self:GetName() .. "Item" .. buttonIndex]
-		local slot = button:GetID()
-
-		local itemLink = GetContainerItemLink(bagID, slot)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bagID, slot, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
-	end
-end
-
-local waitingOnBagUpdate = {}
-local function OnBagUpdate_Coroutine()
-    local processQueue = {}
-    for frameID, shouldUpdate in pairs(waitingOnBagUpdate) do
-      processQueue[frameID] = shouldUpdate
-      waitingOnBagUpdate[frameID] = nil
-    end
-
-    for frameID, shouldUpdate in pairs(processQueue) do
-      local frame = _G["ContainerFrame".. frameID]
-
-      if frame:IsShown() then
-        OnContainerUpdate(frame, true)
-      end
-      coroutine.yield()
-    end
-
-	-- waitingOnBagUpdate = {}
-end
-
-local function AddBagUpdateRequest(bagID)
-	local foundBag = false
-	for i=1, NUM_CONTAINER_FRAMES, 1 do
-		local frame = _G["ContainerFrame"..i];
-		if ( frame:GetID() == bagID ) then
-			waitingOnBagUpdate[tostring(i)] = true
-			foundBag = true
-		end
-	end
-end
-
-local function ScheduleContainerUpdate(frame)
-	local bagID = frame:GetID()
-	AddBagUpdateRequest(bagID)
-end
-
-local function OnBankItemUpdate(button)
-	local bag = GetBankContainer(button)
-	local slot = button:GetID()
-
-	if bag and slot then
-		local itemLink = GetContainerItemLink(bag, slot)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
-	end
-end
-
-hooksecurefunc("BankFrameItemButton_Update", OnBankItemUpdate)
-
 function CaerdonWardrobeMixin:OnEvent(event, ...)
 	local handler = self[event]
 	if(handler) then
@@ -1318,47 +1242,7 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
 	end
 end
 
-local timeSinceLastBagUpdate = nil
-local BAGUPDATE_INTERVAL = 0.1
-local ITEMUPDATE_INTERVAL = 0.1
-
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
-	if self.itemUpdateCoroutine then
-		if coroutine.status(self.itemUpdateCoroutine) ~= "dead" then
-			local ok, result = coroutine.resume(self.itemUpdateCoroutine)
-			if not ok then
-				error(result)
-			end
-		else
-			self.itemUpdateCoroutine = nil
-		end
-		return
-	end
-
-	if(self.bagUpdateCoroutine) then
-		if coroutine.status(self.bagUpdateCoroutine) ~= "dead" then
-			local ok, result = coroutine.resume(self.bagUpdateCoroutine)
-			if not ok then
-				error(result)
-			end
-		else
-			self.bagUpdateCoroutine = nil
-		end
-		return
-	end
-
-	if isBagUpdateRequested then
-		isBagUpdateRequested = false
-		timeSinceLastBagUpdate = 0
-	elseif timeSinceLastBagUpdate then
-		timeSinceLastBagUpdate = timeSinceLastBagUpdate + elapsed
-	end
-
-	if( timeSinceLastBagUpdate ~= nil and (timeSinceLastBagUpdate > BAGUPDATE_INTERVAL) ) then
-		timeSinceLastBagUpdate = nil
-		self.bagUpdateCoroutine = coroutine.create(OnBagUpdate_Coroutine)
-	end
-
 	local name, instance
 	for name, instance in pairs(registeredFeatures) do
 		instance:OnUpdate(elapsed)
@@ -1452,15 +1336,6 @@ function CaerdonWardrobeMixin:PLAYER_LOGIN(...)
 	end
 end
 
-function RefreshMainBank()
-	if not ignoreDefaultBags then
-		for i=1, NUM_BANKGENERIC_SLOTS, 1 do
-			button = BankSlotsFrame["Item"..i];
-			OnBankItemUpdate(button);
-		end
-	end
-end
-
 local refreshTimer
 local function RefreshItems()
 	if refreshTimer then
@@ -1468,18 +1343,9 @@ local function RefreshItems()
 	end
 
 	refreshTimer = C_Timer.NewTimer(0.1, function ()
-		if DEBUG_ENABLED then
-			print("=== Refreshing Transmog Items")
-		end
-
-		if BankFrame:IsShown() then
-			RefreshMainBank()
-		end
-
-		for i=1, NUM_CONTAINER_FRAMES, 1 do
-			local frame = _G["ContainerFrame"..i];
-			waitingOnBagUpdate[tostring(i)] = true
-			isBagUpdateRequested = true
+		local name, instance
+		for name, instance in pairs(registeredFeatures) do
+			instance:Refresh()
 		end
 	end, 1)
 end
@@ -1508,46 +1374,6 @@ end
 
 hooksecurefunc("EquipPendingItem", OnEquipPendingItem)
 
-local function OnOpenBag(bagID)
-	if not ignoreDefaultBags then
-		for i=1, NUM_CONTAINER_FRAMES, 1 do
-			local frame = _G["ContainerFrame"..i];
-			if ( frame:IsShown() and frame:GetID() == bagID ) then
-				waitingOnBagUpdate[tostring(i)] = true
-				isBagUpdateRequested = true
-				break
-			end
-		end
-	end
-end
-
-local function OnOpenBackpack()
-	if not ignoreDefaultBags then
-		isBagUpdateRequested = true
-	end
-end
-
-hooksecurefunc("OpenBag", OnOpenBag)
-hooksecurefunc("OpenBackpack", OnOpenBackpack)
-hooksecurefunc("ToggleBag", OnOpenBag)
-
-function CaerdonWardrobeMixin:BAG_UPDATE(bagID)
-	AddBagUpdateRequest(bagID)
-end
-
-function CaerdonWardrobeMixin:BAG_UPDATE_DELAYED()
-	local count = 0
-	for _ in pairs(waitingOnBagUpdate) do 
-		count = count + 1
-	end
-
-	if count == 0 then
-		RefreshItems()
-	else
-		isBagUpdateRequested = true
-	end
-end
-
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_ITEM_UPDATE()
 	-- RefreshItems()
 end
@@ -1564,12 +1390,6 @@ end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
 	RefreshItems()
-
-	-- TODO: May need to add in refresh time from RefreshItems
-	local name, instance
-	for name, instance in pairs(registeredFeatures) do
-		instance:Refresh()
-	end
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
@@ -1579,16 +1399,6 @@ end
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 	-- Can change while logged in!
 	RefreshItems()
-
-	-- TODO: May need to add in refresh time from RefreshItems
-	local name, instance
-	for name, instance in pairs(registeredFeatures) do
-		instance:Refresh()
-	end
-end
-
-function CaerdonWardrobeMixin:BANKFRAME_OPENED()
-	-- RefreshMainBank()
 end
 
 local configFrame
@@ -1607,5 +1417,3 @@ function NS:FireConfigLoaded()
 		configFrame:OnConfigLoaded()
 	end
 end
-
--- BAG_OPEN
