@@ -11,6 +11,16 @@ function EncounterJournalMixin:Init()
 	return { "ADDON_LOADED", "PLAYER_LOOT_SPEC_UPDATED" }
 end
 
+function EncounterJournalMixin:ADDON_LOADED(name)
+	if name == "Blizzard_EncounterJournal" then
+		hooksecurefunc("EncounterJournal_SetLootButton", function (...) self:OnEncounterJournalSetLootButton(...) end)
+	end
+end
+
+function EncounterJournalMixin:PLAYER_LOOT_SPEC_UPDATED()
+	self:Refresh()
+end
+
 function EncounterJournalMixin:SetTooltipItem(tooltip, item, locationInfo)
 	local classID, specID = EJ_GetLootFilter();
 
@@ -30,16 +40,6 @@ function EncounterJournalMixin:Refresh()
 	if EncounterJournal and EncounterJournal:IsShown() then
 		EncounterJournal_LootUpdate()
 	end
-end
-
-function EncounterJournalMixin:ADDON_LOADED(name)
-	if name == "Blizzard_EncounterJournal" then
-		hooksecurefunc("EncounterJournal_SetLootButton", function (...) self:OnEncounterJournalSetLootButton(...) end)
-	end
-end
-
-function EncounterJournalMixin:PLAYER_LOOT_SPEC_UPDATED()
-	self:Refresh()
 end
 
 function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)

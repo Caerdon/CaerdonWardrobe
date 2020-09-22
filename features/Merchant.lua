@@ -11,6 +11,10 @@ function MerchantMixin:Init()
     return { "MERCHANT_UPDATE" }
 end
 
+function MerchantMixin:MERCHANT_UPDATE()
+	self:Refresh()
+end
+
 function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)
     if MerchantFrame.selectedTab == 1 then
         if locationInfo == "buybackbutton" then
@@ -31,10 +35,6 @@ function MerchantMixin:Refresh()
             self:OnBuybackUpdate()
         end
     end
-end
-
-function MerchantMixin:MERCHANT_UPDATE()
-	self:Refresh()
 end
 
 function MerchantMixin:OnMerchantUpdate()

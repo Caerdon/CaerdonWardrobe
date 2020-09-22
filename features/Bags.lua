@@ -7,11 +7,20 @@ function BagsMixin:GetName()
 end
 
 function BagsMixin:Init()
-	self.timeSinceLastBagUpdate = nil
 	self.waitingOnBagUpdate = {}
 	self.waitingOnBagUpdate[tostring(BACKPACK_CONTAINER)] = true -- backpack doesn't fire BAG_UPDATE initially
 
 	return { "BAG_UPDATE", "BAG_UPDATE_DELAYED" }
+end
+
+function BagsMixin:BAG_UPDATE(bagID)
+	if bagID >= 0 and bagID <= NUM_BAG_SLOTS then
+		self:AddBagUpdateRequest(bagID)
+	end
+end
+
+function BagsMixin:BAG_UPDATE_DELAYED()
+	self.isBagUpdateRequested = true
 end
 
 function BagsMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -95,16 +104,5 @@ function BagsMixin:OnContainerUpdate(frame, asyncUpdate)
 		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
 	end
 end
-
-function BagsMixin:BAG_UPDATE(bagID)
-	if bagID >= 0 and bagID <= NUM_BAG_SLOTS then
-		self:AddBagUpdateRequest(bagID)
-	end
-end
-
-function BagsMixin:BAG_UPDATE_DELAYED()
-	self.isBagUpdateRequested = true
-end
-
 
 CaerdonWardrobe:RegisterFeature(BagsMixin)

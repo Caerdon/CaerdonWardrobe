@@ -13,6 +13,12 @@ function GuildBankMixin:Init()
 	return { "ADDON_LOADED" }
 end
 
+function GuildBankMixin:ADDON_LOADED(name)
+	if name == "Blizzard_GuildBankUI" then
+		hooksecurefunc("GuildBankFrame_Update", function(...) self:OnGuildBankFrameUpdate(...) end)
+	end
+end
+
 function GuildBankMixin:SetTooltipItem(tooltip, item, locationInfo)
 	local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
@@ -43,12 +49,6 @@ function GuildBankMixin:OnUpdate(elapsed)
 	if( self.timeSinceLastGuildBankUpdate ~= nil and (self.timeSinceLastGuildBankUpdate > GUILDBANKFRAMEUPDATE_INTERVAL) ) then
 		self.timeSinceLastGuildBankUpdate = nil
 		self.guildBankUpdateCoroutine = coroutine.create(function () self:OnGuildBankFrameUpdate_Coroutine() end)
-	end
-end
-
-function GuildBankMixin:ADDON_LOADED(name)
-	if name == "Blizzard_GuildBankUI" then
-		hooksecurefunc("GuildBankFrame_Update", function(...) self:OnGuildBankFrameUpdate(...) end)
 	end
 end
 

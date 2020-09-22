@@ -14,17 +14,6 @@ function AuctionMixin:Init(frame)
 	}
 end
 
-function AuctionMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local itemKey = locationInfo.itemKey
-	tooltip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
-end
-
-function AuctionMixin:Refresh()
-	if AuctionFrame and AuctionFrame:IsShown() then
-		self:OnAuctionBrowseUpdate()
-	end
-end
-
 function AuctionMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
 	self:OnAuctionBrowseUpdate()
 end
@@ -34,6 +23,17 @@ function AuctionMixin:AUCTION_HOUSE_SHOW()
 		self.shouldHookAuction = false
 		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", function(...) self:OnAuctionBrowseUpdate(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
+	end
+end
+
+function AuctionMixin:SetTooltipItem(tooltip, item, locationInfo)
+	local itemKey = locationInfo.itemKey
+	tooltip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+end
+
+function AuctionMixin:Refresh()
+	if AuctionFrame and AuctionFrame:IsShown() then
+		self:OnAuctionBrowseUpdate()
 	end
 end
 

@@ -8,18 +8,18 @@ function BlackMarketMixin:Init()
 	return { "BLACK_MARKET_ITEM_UPDATE" }
 end
 
-function BlackMarketMixin:SetTooltipItem(tooltip, item, locationInfo)
-	tooltip:SetHyperlink(item:GetItemLink())
-end
-
-function BlackMarketMixin:Refresh()
-end
-
 function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
 	if BlackMarketScrollFrame:IsShown() then
 		self:UpdateBlackMarketItems()
 		self:UpdateBlackMarketHotItem()
 	end
+end
+
+function BlackMarketMixin:SetTooltipItem(tooltip, item, locationInfo)
+	tooltip:SetHyperlink(item:GetItemLink())
+end
+
+function BlackMarketMixin:Refresh()
 end
 
 function BlackMarketMixin:UpdateBlackMarketItems()
