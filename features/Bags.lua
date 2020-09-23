@@ -101,7 +101,7 @@ function BagsMixin:OnContainerUpdate(frame, asyncUpdate)
 		local slot = button:GetID()
 
 		local itemLink = GetContainerItemLink(bag, slot)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
+		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
 	end
 end
 

@@ -73,8 +73,6 @@ function GuildBankMixin:OnGuildBankFrameUpdate_Coroutine()
 			column = ceil((i-0.5)/NUM_SLOTS_PER_GUILDBANK_GROUP);
 			button = _G["GuildBankColumn"..column.."Button"..index];
 
-			local slot = {tab = tab, index = i}
-
 			local options = {
 				showMogIcon = true,
 				showBindStatus = true,
@@ -82,7 +80,7 @@ function GuildBankMixin:OnGuildBankFrameUpdate_Coroutine()
 			}
 
 			local itemLink = GetGuildBankItemLink(tab, i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), slot, button, options)
+			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), {tab = tab, index = i}, button, options)
 		end
 	end
 end

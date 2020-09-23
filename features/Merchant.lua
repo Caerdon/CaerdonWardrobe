@@ -17,13 +17,13 @@ end
 
 function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)
     if MerchantFrame.selectedTab == 1 then
-        if locationInfo == "buybackbutton" then
+        if locationInfo.slot == "buybackbutton" then
             tooltip:SetBuybackItem(GetNumBuybackItems())
         else
-            tooltip:SetMerchantItem(locationInfo)
+            tooltip:SetMerchantItem(locationInfo.slot)
         end
     else
-        tooltip:SetBuybackItem(locationInfo)
+        tooltip:SetBuybackItem(locationInfo.slot)
     end
 end
 
@@ -53,7 +53,7 @@ function MerchantMixin:OnMerchantUpdate()
 		local slot = index
 
 		local itemLink = GetMerchantItemLink(index)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, { slot = slot }, button, options)
     end
     
     local numBuybackItems = GetNumBuybackItems()
@@ -61,7 +61,7 @@ function MerchantMixin:OnMerchantUpdate()
     if buybackName then
         local itemLink = GetBuybackItemLink(numBuybackItems)
         local slot = "buybackbutton"
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, MerchantBuyBackItemItemButton, options)
+		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, { slot = slot }, MerchantBuyBackItemItemButton, options)
     else
         CaerdonWardrobe:ClearButton(MerchantBuyBackItemItemButton)
     end
@@ -78,7 +78,7 @@ function MerchantMixin:OnBuybackUpdate()
 
             local itemLink = GetBuybackItemLink(index)
             if itemLink then
-                CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), slot, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
+                CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { slot = slot }, button, { showMogIcon=true, showBindStatus=true, showSellables=false})
             else
                 CaerdonWardrobe:ClearButton(button)
             end

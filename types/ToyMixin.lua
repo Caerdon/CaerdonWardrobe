@@ -10,3 +10,12 @@ CaerdonToyMixin = {}
     itemType.item = caerdonItem
     return itemType
 end
+
+function CaerdonToy:GetToyInfo()
+    -- TODO: Can I get unknown somehow?
+    local itemID, toyName, icon, isFavorite, hasFanfare = C_ToyBox.GetToyInfo(self.item:GetItemID());
+    return {
+        name = toyName,
+        isFavorite = isFavorite
+    }
+end

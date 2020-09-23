@@ -1,26 +1,24 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-local addonName = 'AdiBags'
-local Version = nil
-if select(4, GetAddOnInfo(addonName)) then
-	if IsAddOnLoaded(addonName) then
-		Version = GetAddOnMetadata(addonName, 'Version')
-		CaerdonWardrobe:RegisterAddon(addonName)
-	end
+local addonName = "AdiBags"
+local AdiBagsMixin = {}
+
+function AdiBagsMixin:GetName()
+    return addonName
 end
 
-if Version then
+function AdiBagsMixin:Init()
 	local AdiBags = LibStub('AceAddon-3.0'):GetAddon('AdiBags')
-	local mod = AdiBags:NewModule("CaerdonWardrobeAdiBagsUpdate", "ABEvent-1.0")
-	mod.uiName = L["Caerdon Wardrobe"]
-	mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
+	self.mod = AdiBags:NewModule("CaerdonWardrobeAdiBagsUpdate", "ABEvent-1.0")
+	self.mod.uiName = L["Caerdon Wardrobe"]
+	self.mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
 
-	function mod:OnEnable()
-		self:RegisterMessage('AdiBags_UpdateButton', 'UpdateButton')
+	self.mod.OnEnable = function(mod)
+		mod:RegisterMessage('AdiBags_UpdateButton', 'UpdateButton')
 	end
 
-	function mod:UpdateButton(event, button)
+	self.mod.UpdateButton = function(mod, event, button)
 		local itemLink = button.itemLink
 		local bag = button.bag
 		local slot = button.slot
@@ -32,30 +30,26 @@ if Version then
 			iconPosition="TOPRIGHT" 
 		}
 
-		CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
-	end
-
-	local function OnEvent(self, event, ...)
-		local handler = self[event]
-		if(handler) then
-			handler(self, ...)
-		end
-	end
-
-	local eventFrame = CreateFrame("FRAME")
-	eventFrame:RegisterEvent "ADDON_LOADED"
-	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-	eventFrame:SetScript("OnEvent", OnEvent)
-
-	local function RefreshItems()
-		mod:SendMessage('AdiBags_FiltersChanged')
-	end
-
-	function eventFrame:ADDON_LOADED(name)
-	end
-
-	function eventFrame:TRANSMOG_COLLECTION_UPDATED()
-		RefreshItems()
+		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, options)
 	end
 end
 
+function AdiBagsMixin:SetTooltipItem(tooltip, item, locationInfo)
+	if locationInfo.bag == BANK_CONTAINER then
+		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+	else
+		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+	end
+end
+
+function AdiBagsMixin:Refresh()
+	self.mod:SendMessage('AdiBags_FiltersChanged')
+end
+
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+	if IsAddOnLoaded(addonName) then
+		Version = GetAddOnMetadata(addonName, 'Version')
+		CaerdonWardrobe:RegisterFeature(AdiBagsMixin)
+	end
+end

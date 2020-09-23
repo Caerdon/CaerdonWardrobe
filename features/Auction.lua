@@ -148,7 +148,7 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 		itemLink = item:GetItemLink()
 	end
 
-	CaerdonWardrobe:UpdateButtonLink(itemLink, "ItemLink", nil, AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton,  
+	CaerdonWardrobe:UpdateButtonLink(itemLink, "ItemLink", {}, AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton,  
 	{
 		overridePosition = "TOPLEFT",
 		iconOffset = -5,

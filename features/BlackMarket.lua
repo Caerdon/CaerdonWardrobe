@@ -8,18 +8,18 @@ function BlackMarketMixin:Init()
 	return { "BLACK_MARKET_ITEM_UPDATE" }
 end
 
-function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
-	if BlackMarketScrollFrame:IsShown() then
-		self:UpdateBlackMarketItems()
-		self:UpdateBlackMarketHotItem()
-	end
-end
-
 function BlackMarketMixin:SetTooltipItem(tooltip, item, locationInfo)
 	tooltip:SetHyperlink(item:GetItemLink())
 end
 
 function BlackMarketMixin:Refresh()
+end
+
+function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
+	if BlackMarketScrollFrame:IsShown() then
+		self:UpdateBlackMarketItems()
+		self:UpdateBlackMarketHotItem()
+	end
 end
 
 function BlackMarketMixin:UpdateBlackMarketItems()
@@ -42,7 +42,7 @@ function BlackMarketMixin:UpdateBlackMarketItems()
 
 			if ( index <= numItems ) then
 				local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
-				CaerdonWardrobe:UpdateButtonLink(link, self:GetName(), index, button, nil)
+				CaerdonWardrobe:UpdateButtonLink(link, self:GetName(), { type="listItem", index = index }, button, nil)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end
@@ -53,7 +53,7 @@ end
 function BlackMarketMixin:UpdateBlackMarketHotItem()
 	local button = BlackMarketFrame.HotDeal.Item
 	local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
-	CaerdonWardrobe:UpdateButtonLink(link, self:GetName(), "HotItem", button, nil)
+	CaerdonWardrobe:UpdateButtonLink(link, self:GetName(), { type="hotItem" }, button, nil)
 end
 
 CaerdonWardrobe:RegisterFeature(BlackMarketMixin)

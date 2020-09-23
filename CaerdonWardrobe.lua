@@ -7,10 +7,8 @@ BINDING_HEADER_CAERDON = L["Caerdon Addons"]
 BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
 BINDING_NAME_PRINTMOUSEOVERLINKDETAILS = L["Print Mouseover Link Details"]
 
+local availableFeatures = {}
 local registeredFeatures = {}
-
-local isBagUpdate = false
-local ignoreDefaultBags = false
 
 local version, build, date, tocversion = GetBuildInfo()
 local isShadowlands = tonumber(build) > 35700
@@ -28,17 +26,6 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
 	self:RegisterEvent "PLAYER_LOGIN"
-
-	local name, instance
-	for name, instance in pairs(registeredFeatures) do
-		local instanceEvents = instance:Init(self)
-		if instanceEvents then
-			for i = 1, #instanceEvents do
-				-- TODO: Hook up to debugging
-				self:RegisterEvent(instanceEvents[i])
-			end
-		end
-	end
 end
 
 StaticPopupDialogs["CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS"] = {
@@ -82,8 +69,6 @@ local function GetBindingStatus(item, bag, slot, button, options)
 	local itemLink = item:GetItemLink()
 	local itemData = item:GetItemData()
 	local caerdonType = item:GetCaerdonItemType()
-
-	local isDebugItem = itemID and itemID == DEBUG_ITEM
 
 	local scanTip = CaerdonWardrobeFrameTooltip
 	scanTip:ClearLines()
@@ -372,42 +357,22 @@ local function AddRotation(group, order, degrees, duration, smoothing, startDela
 	end
 end
 
-local function IsBankOrBags(bag)
-	local isBankOrBags = false
-
-	if bag ~= "Auction" and 
-	   bag ~= "Merchant" and 
-	   bag ~= "GuildBank" and
-	   bag ~= "EncounterJournal" and
-	   bag ~= "QuestLog" and
-	   bag ~= "WorldMap" and
-	   bag ~= "Loot" and
-	   bag ~= "GroupLoot" and
-	   bag ~= "Mail" and
-	   bag ~= "ItemLink" and
-	   bag ~= "BlackMarket" then
-		isBankOrBags = true
-	end
-
-	return isBankOrBags
-end
-
-local function ShouldHideBindingStatus(bag, bindingStatus)
+local function ShouldHideBindingStatus(feature, bindingStatus, locationInfo)
 	local shouldHide = false
 
-	if bag == "Auction" then
+	if feature == "Auction" then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags and IsBankOrBags(bag) then
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags and locationInfo.isBankOrBags then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank and bag == "GuildBank" then
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank and feature == "GuildBank" then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Binding.ShowStatus.Merchant and bag == "Merchant" then
+	if not CaerdonWardrobeConfig.Binding.ShowStatus.Merchant and feature == "Merchant" then
 		shouldHide = true
 	end
 
@@ -422,44 +387,44 @@ local function ShouldHideBindingStatus(bag, bindingStatus)
 	return shouldHide
 end
 
-local function ShouldHideOwnIcon(bag)
+local function ShouldHideOwnIcon(feature, locationInfo)
 	local shouldHide = false
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags and IsBankOrBags(bag) then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags and locationInfo.isBankOrBags then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank and bag == "GuildBank" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank and feature == "GuildBank" then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and bag == "Merchant" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and feature == "Merchant" then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Auction and bag == "Auction" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnable.Auction and feature == "Auction" then
 		shouldHide = true
 	end
 
 	return shouldHide
 end
 
-local function ShouldHideOtherIcon(bag)
+local function ShouldHideOtherIcon(feature, locationInfo)
 	local shouldHide = false
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags and IsBankOrBags(bag) then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags and locationInfo.isBankOrBags then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank and bag == "GuildBank" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank and feature == "GuildBank" then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and bag == "Merchant" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and feature == "Merchant" then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction and bag == "Auction" then
+	if not CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction and feature == "Auction" then
 		shouldHide = true
 	end
 
@@ -489,22 +454,22 @@ local function ShouldHideOldExpansionIcon(bag)
 	return shouldHide
 end
 
-local function ShouldHideSellableIcon(bag)
+local function ShouldHideSellableIcon(feature, locationInfo)
 	local shouldHide = false
 
-	if not CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags and IsBankOrBags(bag) then
+	if not CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags and locationInfo.isBankOrBags then
 		shouldHide = true
 	end
 
-	if not CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank and bag == "GuildBank" then
+	if not CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank and feature == "GuildBank" then
 		shouldHide = true
 	end
 
-	if bag == "Merchant" then
+	if feature == "Merchant" then
 		shouldHide = true
 	end
 
-	if bag == "Auction" then
+	if feature == "Auction" then
 		shouldHide = true
 	end
 
@@ -525,7 +490,7 @@ local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	end
 end
 
-local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, status, bindingStatus)
+local function SetItemButtonMogStatus(originalButton, item, feature, locationInfo, options, status, bindingStatus)
 	local button = originalButton.caerdonButton
 
 	if not button then
@@ -702,12 +667,12 @@ local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, 
 	elseif status == "locked" then
 		SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-key")
-	elseif status == "oldexpansion" and not ShouldHideOldExpansionIcon(bag) then
+	elseif status == "oldexpansion" and not ShouldHideOldExpansionIcon(feature) then
 		SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 		alpha = 0.9
 		mogStatus:SetTexture("Interface\\Store\\category-icon-wow")
 	elseif status == "own" or status == "ownPlus" then
-		if not ShouldHideOwnIcon(bag) then
+		if not ShouldHideOwnIcon(feature, locationInfo) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, iconSize, iconOffset)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 			if status == "ownPlus" then
@@ -717,7 +682,7 @@ local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, 
 			mogStatus:SetTexture("")
 		end
 	elseif status == "other" or status == "otherPlus" then
-		if not ShouldHideOtherIcon(bag) then
+		if not ShouldHideOtherIcon(feature, locationInfo) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
 			mogStatus:SetTexture(otherIcon)
 			if status == "otherPlus" then
@@ -727,7 +692,7 @@ local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, 
 			mogStatus:SetTexture("")
 		end
 	elseif status == "otherSpec" or status == "otherSpecPlus" then
-		if not ShouldHideOtherIcon(bag) then
+		if not ShouldHideOtherIcon(feature, locationInfo) then
 			SetIconPositionAndSize(mogStatus, iconPosition, 15, otherIconSize, otherIconOffset)
 			mogStatus:SetTexture("Interface\\COMMON\\icon-noloot")
 			if status == "otherSpecPlus" then
@@ -736,11 +701,11 @@ local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, 
 		else
 			mogStatus:SetTexture("")
 		end
-	elseif status == "quest" and not ShouldHideQuestIcon(bag) then
+	elseif status == "quest" and not ShouldHideQuestIcon(feature) then
 		SetIconPositionAndSize(mogStatus, iconPosition, 2, 15, iconOffset)
 		mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
 	elseif status == "collected" then
-		if not IsGearSetStatus(bindingStatus, item) and showSellables and isSellable and not ShouldHideSellableIcon(bag) then -- it's known and can be sold
+		if not IsGearSetStatus(bindingStatus, item) and showSellables and isSellable and not ShouldHideSellableIcon(feature) then -- it's known and can be sold
 			SetIconPositionAndSize(mogStatus, iconPosition, 10, 30, iconOffset)
 			alpha = 0.9
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
@@ -779,11 +744,11 @@ local function SetItemButtonMogStatus(originalButton, item, bag, slot, options, 
 	end
 end
 
-local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, bag)
+local function SetItemButtonBindType(button, mogStatus, bindingStatus, options, feature, locationInfo)
 	local bindsOnText = button.bindsOnText
 
 	if not bindingStatus and not bindsOnText then return end
-	if not bindingStatus or ShouldHideBindingStatus(bag, bindingStatus) then
+	if not bindingStatus or ShouldHideBindingStatus(feature, bindingStatus, locationInfo) then
 		if bindsOnText then
 			bindsOnText:SetText("")
 		end
@@ -1067,7 +1032,7 @@ local function ProcessItem(item, feature, locationInfo, button, options)
 		end
 	end
 
-	if IsBankOrBags(feature) then
+	if locationInfo.isBankOrBags then
 		-- TODO: This is very specific to bank and bags features and addons (locationInfo) and needs pushed into those
 		local bag = locationInfo.bag
 		local slot = locationInfo.slot
@@ -1120,7 +1085,7 @@ local function ProcessItem(item, feature, locationInfo, button, options)
 
 	if button then
 		SetItemButtonMogStatus(button, item, feature, locationInfo, options, mogStatus, bindingText)
-		SetItemButtonBindType(button, mogStatus, bindingText, options, feature)
+		SetItemButtonBindType(button, mogStatus, bindingText, options, feature, locationInfo)
 	end
 end
 
@@ -1160,8 +1125,8 @@ end
 function CaerdonWardrobe:RegisterFeature(mixin)
 	local instance = CreateFromMixins(CaerdonWardrobeFeatureMixin, mixin)
 	local name = instance:GetName()
-	if not registeredFeatures[name] then
-		registeredFeatures[name] = instance
+	if not availableFeatures[name] then
+		availableFeatures[name] = instance
 	else
 		error(format("Caerdon Wardrobe: Feature name collision: %s already exists", name))
 	end
@@ -1192,9 +1157,6 @@ function CaerdonWardrobe:RegisterAddon(name, addonOptions)
 				end	
 			end
 			StaticPopup_Show("CAERDON_WARDROBE_MULTIPLE_BAG_ADDONS", addonList)
-		end
-		if not options.hookDefaultBags then
-			ignoreDefaultBags = true
 		end
 	end
 end
@@ -1320,6 +1282,18 @@ end
 
 function CaerdonWardrobeMixin:ADDON_LOADED(name)
 	if name == ADDON_NAME then
+		local name, instance
+		for name, instance in pairs(availableFeatures) do
+			registeredFeatures[name] = instance
+			local instanceEvents = instance:Init(self)
+			if instanceEvents then
+				for i = 1, #instanceEvents do
+					-- TODO: Hook up to debugging
+					self:RegisterEvent(instanceEvents[i])
+				end
+			end
+		end
+	
 		ProcessSettings()
 		NS:FireConfigLoaded()
 	-- elseif name == "TradeSkillMaster" then

@@ -36,8 +36,6 @@ end
 
 function BankMixin:Refresh()
 	if BankFrame:IsShown() then
-		-- TODO: Handle this
-	-- 	if not ignoreDefaultBags then
 		for i=1, NUM_BANKGENERIC_SLOTS, 1 do
 			button = BankSlotsFrame["Item"..i];
 			self:OnBankItemUpdate(button);
@@ -47,7 +45,6 @@ function BankMixin:Refresh()
 			self.waitingOnBagUpdate[tostring(i)] = true
 			self.isBagUpdateRequested = true
 		end	
-	-- 	end
 	end
 end
 
@@ -115,7 +112,7 @@ function BankMixin:OnContainerUpdate(frame, asyncUpdate)
 		local slot = button:GetID()
 
 		local itemLink = GetContainerItemLink(bag, slot)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
+		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
 	end
 end
 
@@ -130,7 +127,7 @@ function BankMixin:OnBankItemUpdate(button)
 	local item = Item:CreateFromBagAndSlot(bag, slot)
 	local itemLink = item:GetItemLink()
 	if itemLink then
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot }, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
+		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
 	else
 		CaerdonWardrobe:ClearButton(button)
 	end

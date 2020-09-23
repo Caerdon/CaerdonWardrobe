@@ -63,7 +63,7 @@ function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)
 	}
 
 	if itemLink then
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), item, item, options)
+		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { item = item }, item, options)
 	else
 		CaerdonWardrobe:ClearButton(item)
 	end
