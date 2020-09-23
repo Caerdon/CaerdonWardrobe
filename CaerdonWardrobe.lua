@@ -1179,7 +1179,7 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
 	-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
 	-- but in cases of rapid data update (AH scroll), we don't want to update an old button
 	-- Look into ContinuableContainer
-	if item:IsItemEmpty() then -- not sure what this represents?  Seems to happen for caged pet - assuming item is ready.
+	if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
 		SetItemButtonMogStatus(button, item, bag, slot, options, nil)
 		ProcessItem(item, bag, slot, button, options)
 	else
