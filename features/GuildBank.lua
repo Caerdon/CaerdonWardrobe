@@ -48,8 +48,6 @@ function GuildBankMixin:OnGuildBankFrameUpdate()
 			index = mod(i, NUM_SLOTS_PER_GUILDBANK_GROUP);
 			if ( index == 0 ) then
 				index = NUM_SLOTS_PER_GUILDBANK_GROUP;
-
-				-- coroutine.yield()
 			end
 
 			if self.isGuildBankFrameUpdateRequested then
