@@ -58,8 +58,9 @@ function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)
 		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
 		otherIconSize = 20,
 		otherIconOffset = 15,
-		overridePosition = "TOPLEFT",
-		overrideBindingPosition = "LEFT"
+		overrideWidth = item.icon:GetWidth(),
+		bindingOffsetX = 3,
+		bindingOffsetY = 4
 	}
 
 	if itemLink then

@@ -40,9 +40,14 @@ function BlackMarketMixin:UpdateBlackMarketItems()
 			local button = buttons[i];
 			local index = offset + i; -- adjust index
 
+			local options = {
+				bindingOffsetY = 7,
+				overrideWidth = button.Item:GetWidth()
+			}
+				
 			if ( index <= numItems ) then
 				local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
-				CaerdonWardrobe:UpdateButtonLink(link, self:GetName(), { type="listItem", index = index }, button, nil)
+				CaerdonWardrobe:UpdateButtonLink(link, self:GetName(), { type="listItem", index = index }, button, options)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end

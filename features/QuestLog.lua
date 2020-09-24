@@ -51,15 +51,6 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 	if questID == 0 then return end -- quest abandoned
 
 	QuestEventListener:AddCallback(questID, function()
-		local options = {
-			iconOffset = 0,
-			iconSize = 40,
-			overridePosition = "TOPLEFT",
-			overrideBindingPosition = "TOPLEFT",
-			bindingOffsetX = -53,
-			bindingOffsetY = -16
-		}
-
 		local questLink = GetQuestLink(questID)
 		if not questLink then 
 			local questName
@@ -82,6 +73,13 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local questLogIndex = i
 			local reward = questInfo.choices[i]
 			local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
+
+			local options = {
+				iconOffset = 0,
+				iconSize = 40,
+				overridePosition = "TOPLEFT",
+				overrideWidth = questItem.Icon:GetWidth()
+			}	
 
 			if reward.itemLink then
 				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "QuestLog", { questID = questID, index = questLogIndex, questItem = questItem }, questItem, options)

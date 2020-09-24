@@ -263,7 +263,14 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 
 	if not button then
 		button = CreateFrame("Frame", nil, originalButton)
-		button:SetAllPoints()
+		button:SetPoint("TOPLEFT")
+		button:SetPoint("BOTTOM")
+
+		if options and options.overrideWidth then
+			button:SetWidth(options.overrideWidth)
+		else
+			button:SetWidth(originalButton:GetWidth())
+		end
 		button.searchOverlay = originalButton.searchOverlay
 		originalButton.caerdonButton = button
 	end
@@ -520,7 +527,9 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 end
 
 local function SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	local bindsOnText = button.bindsOnText
+	local caerdonButton = button.caerdonButton
+
+	local bindsOnText = caerdonButton and caerdonButton.bindsOnText
 	if bindsOnText then
 		bindsOnText:SetText("")
 	end
@@ -531,43 +540,15 @@ local function SetItemButtonBindType(button, item, feature, locationInfo, option
 	local displayInfo = featureInstance:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 
 	if not bindingStatus or not displayInfo.bindingStatus.shouldShow then
-		if bindsOnText then
-			bindsOnText:SetText("")
-		end
 		return
 	end
 
 	if not bindsOnText then
-		bindsOnText = button:CreateFontString(nil, "BORDER", "SystemFont_Outline_Small") 
-		button.bindsOnText = bindsOnText
+		bindsOnText = caerdonButton:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") 
+		caerdonButton.bindsOnText = bindsOnText
 	end
 
-	bindsOnText:ClearAllPoints()
-	bindsOnText:SetWidth(button:GetWidth())
-
-	local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
-	local bindingOffset = options.bindingOffset or 2
-
-	if bindingPosition == "BOTTOM" then
-		bindsOnText:SetPoint("BOTTOMRIGHT", bindingOffset, 2)
-		if bindingStatus == L["BoA"] or bindingStatus == L["BoE"] then
-			local offset = options.itemCountOffset or 15
-			if (button.count and button.count > 1) then
-				bindsOnText:SetPoint("BOTTOMRIGHT", 0, offset)
-			end
-		end
-	elseif bindingPosition == "CENTER" then
-		bindsOnText:SetPoint("CENTER", 0, 0)
-	elseif bindingPosition == "TOP" then
-		bindsOnText:SetPoint("TOPRIGHT", 0, -2)
-	else
-		bindsOnText:SetPoint(bindingPosition, options.bindingOffsetX or 2, options.bindingOffsetY or 2)
-	end
-	if(options.bindingScale) then
-		bindsOnText:SetScale(options.bindingScale)
-	end
-
-	local bindingText
+	local bindingText = ""
 	if IsGearSetStatus(bindingStatus) then -- is gear set
 		if CaerdonWardrobeConfig.Binding.ShowGearSets and not CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
 			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
@@ -578,7 +559,7 @@ local function SetItemButtonBindType(button, item, feature, locationInfo, option
 				local color = BAG_ITEM_QUALITY_COLORS[Enum.ItemQuality.Heirloom]
 				bindsOnText:SetTextColor(color.r, color.g, color.b, 1)
 				bindingText = bindingStatus
-			else
+			elseif bindingStatus then
 				bindingText = "|cFF00FF00" .. bindingStatus .. "|r"
 			end
 		elseif mogStatus == "other" then
@@ -598,13 +579,64 @@ local function SetItemButtonBindType(button, item, feature, locationInfo, option
 				local color = BAG_ITEM_QUALITY_COLORS[Enum.ItemQuality.Heirloom]
 				bindsOnText:SetTextColor(color.r, color.g, color.b, 1)
 				bindingText = bindingStatus
-			else
+			elseif bindingStatus then
 				bindingText = "|cFF00FF00" .. bindingStatus .. "|r"
 			end
 		end
 	end
 
 	bindsOnText:SetText(bindingText)
+
+	-- Measure text and resize accordingly
+	bindsOnText:ClearAllPoints()
+	bindsOnText:SetSize(0,0)
+	bindsOnText:SetPoint("LEFT")
+	bindsOnText:SetPoint("RIGHT")
+
+	local newWidth = bindsOnText:GetStringWidth()
+	if newWidth > button:GetWidth() then
+		newWidth = button:GetWidth()
+	end
+	local newHeight = bindsOnText:GetHeight()
+
+	bindsOnText:ClearAllPoints()
+	bindsOnText:SetSize(newWidth, newHeight)
+
+	local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
+	local xOffset = options.bindingOffsetX or options.bindingOffset or 0
+	local yOffset = options.bindingOffsetY or xOffset
+
+	if string.find(bindingPosition, "BOTTOM") then
+		if (button.count and button.count > 1) then
+			yOffset = options.itemCountOffset or 15
+		elseif yOffset == 0 then
+			yOffset = 2
+		end
+	end
+
+	if string.find(bindingPosition, "TOP") then
+		if yOffset == 0 then
+			yOffset = -3
+		end
+	end
+
+	if string.find(bindingPosition, "LEFT") then
+		if xOffset == 0 then
+			xOffset = 3
+		end
+	end
+
+	if string.find(bindingPosition, "RIGHT") then
+		if xOffset == 0 then
+			xOffset = -3
+		end
+	end
+
+	bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
+
+	if(options.bindingScale) then
+		bindsOnText:SetScale(options.bindingScale)
+	end
 end
 
 local function QueueProcessItem(itemLink, feature, locationInfo, button, options)
