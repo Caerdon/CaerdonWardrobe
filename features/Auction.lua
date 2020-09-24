@@ -28,13 +28,40 @@ end
 
 function AuctionMixin:SetTooltipItem(tooltip, item, locationInfo)
 	local itemKey = locationInfo.itemKey
-	tooltip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+	if itemKey then
+		tooltip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+	else
+		tooltip:SetHyperlink(item:GetItemLink())
+	end
 end
 
 function AuctionMixin:Refresh()
 	if AuctionFrame and AuctionFrame:IsShown() then
 		self:OnAuctionBrowseUpdate()
 	end
+end
+
+function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = false
+		},
+		ownIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Auction
+		},
+		otherIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction
+		},
+		questIcon = {
+			shouldShow = false
+		},
+		oldExpansionIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowOldExpansion.Auction
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
 end
 
 function AuctionMixin:OnAuctionBrowseUpdate()
@@ -148,7 +175,7 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 		itemLink = item:GetItemLink()
 	end
 
-	CaerdonWardrobe:UpdateButtonLink(itemLink, "ItemLink", {}, AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton,  
+	CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { itemKey = itemKeyInfo }, AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton,  
 	{
 		overridePosition = "TOPLEFT",
 		iconOffset = -5,

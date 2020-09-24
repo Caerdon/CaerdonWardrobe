@@ -70,6 +70,7 @@ end
 
 function CaerdonAPIMixin:MergeTable(destination, source)
     for k,v in pairs(source) do destination[k] = v end
+    return destination
 end
 
 -- Leveraging canEquip for now

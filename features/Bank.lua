@@ -35,17 +35,10 @@ function BankMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function BankMixin:Refresh()
-	if BankFrame:IsShown() then
-		for i=1, NUM_BANKGENERIC_SLOTS, 1 do
-			button = BankSlotsFrame["Item"..i];
-			self:OnBankItemUpdate(button);
-		end
-
-		for i=NUM_BAG_SLOTS + 1, NUM_BAG_SLOTS + NUM_BANKBAGSLOTS do
-			self.waitingOnBagUpdate[tostring(i)] = true
-			self.isBagUpdateRequested = true
-		end	
-	end
+	for i=NUM_BAG_SLOTS + 1, NUM_BAG_SLOTS + NUM_BANKBAGSLOTS do
+		self.waitingOnBagUpdate[tostring(i)] = true
+		self.isBagUpdateRequested = true
+	end	
 end
 
 function BankMixin:OnUpdate(elapsed)
@@ -112,7 +105,11 @@ function BankMixin:OnContainerUpdate(frame, asyncUpdate)
 		local slot = button:GetID()
 
 		local itemLink = GetContainerItemLink(bag, slot)
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
+		if itemLink then
+			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
+		else
+			CaerdonWardrobe:ClearButton(button)
+		end
 	end
 end
 

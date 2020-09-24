@@ -1,15 +1,10 @@
 local GuildBankMixin = {}
-local GUILDBANKFRAMEUPDATE_INTERVAL = 0.1
 
 function GuildBankMixin:GetName()
 	return "GuildBank"
 end
 
 function GuildBankMixin:Init()
-	self.isGuildBankFrameUpdateRequested = false
-	self.timeSinceLastGuildBankUpdate = nil
-	self.guildBankUpdateCoroutine = nil
-
 	return { "ADDON_LOADED" }
 end
 
@@ -26,33 +21,24 @@ end
 function GuildBankMixin:Refresh()
 end
 
-function GuildBankMixin:OnUpdate(elapsed)
-	if self.guildBankUpdateCoroutine then
-		if coroutine.status(self.guildBankUpdateCoroutine) ~= "dead" then
-			local ok, result = coroutine.resume(self.guildBankUpdateCoroutine)
-			if not ok then
-				error(result)
-			end
-		else
-			self.guildBankUpdateCoroutine = nil
-		end
-		return
-	end
-
-	if self.isGuildBankFrameUpdateRequested then
-		self.isGuildBankFrameUpdateRequested = false
-		self.timeSinceLastGuildBankUpdate = 0
-	elseif self.timeSinceLastGuildBankUpdate then
-		self.timeSinceLastGuildBankUpdate = self.timeSinceLastGuildBankUpdate + elapsed
-	end
-
-	if( self.timeSinceLastGuildBankUpdate ~= nil and (self.timeSinceLastGuildBankUpdate > GUILDBANKFRAMEUPDATE_INTERVAL) ) then
-		self.timeSinceLastGuildBankUpdate = nil
-		self.guildBankUpdateCoroutine = coroutine.create(function () self:OnGuildBankFrameUpdate_Coroutine() end)
-	end
+function GuildBankMixin:GetDisplayInfo()
+	return {
+		bindingStatus = {
+			shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
+		},
+		ownIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
+		},
+		otherIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
+		},
+		sellableIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
+		}
+	}
 end
 
-function GuildBankMixin:OnGuildBankFrameUpdate_Coroutine()
+function GuildBankMixin:OnGuildBankFrameUpdate()
 	if( GuildBankFrame.mode == "bank" ) then
 		local tab = GetCurrentGuildBankTab();
 		local button, index, column;
@@ -63,7 +49,7 @@ function GuildBankMixin:OnGuildBankFrameUpdate_Coroutine()
 			if ( index == 0 ) then
 				index = NUM_SLOTS_PER_GUILDBANK_GROUP;
 
-				coroutine.yield()
+				-- coroutine.yield()
 			end
 
 			if self.isGuildBankFrameUpdateRequested then
@@ -80,13 +66,13 @@ function GuildBankMixin:OnGuildBankFrameUpdate_Coroutine()
 			}
 
 			local itemLink = GetGuildBankItemLink(tab, i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), {tab = tab, index = i}, button, options)
+			if itemLink then
+				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), {tab = tab, index = i}, button, options)
+			else
+				CaerdonWardrobe:ClearButton(button)
+			end
 		end
 	end
-end
-
-function GuildBankMixin:OnGuildBankFrameUpdate()
-	self.isGuildBankFrameUpdateRequested = true
 end
 
 CaerdonWardrobe:RegisterFeature(GuildBankMixin)

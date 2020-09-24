@@ -37,6 +37,26 @@ function MerchantMixin:Refresh()
     end
 end
 
+function MerchantMixin:GetDisplayInfo()
+	return {
+		bindingStatus = {
+			shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.Merchant
+        },
+        ownIcon = {
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant
+        },
+        otherIcon = {
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant
+        },
+        oldExpansionIcon = {
+            shouldShow = false
+        },
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function MerchantMixin:OnMerchantUpdate()
     local bag = self:GetName()
     local options = { 
