@@ -1081,28 +1081,46 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, feature, locationInfo, butto
 		registeredFeatures[feature]:SetTooltipItem(scanTip, item, locationInfo)
 	end
 
-	local tooltipInfo = GetTooltipInfo(item)
-
-	-- This is lame, but tooltips end up not having all of their data
-	-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
-	-- Specifically, the Equip: line was missing on a fishing pole (and other items)
-	-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
-	-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
-	if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
-		button.isCaerdonRetry = true
-		QueueProcessItem(itemLink, feature, locationInfo, button, options)
-		return
-	end
-
 	-- TODO: May have to look into cancelable continue to avoid timing issues
 	-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
 	-- but in cases of rapid data update (AH scroll), we don't want to update an old button
 	-- Look into ContinuableContainer
 	if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
+		local tooltipInfo = GetTooltipInfo(item)
+
+		-- This is lame, but tooltips end up not having all of their data
+		-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
+		-- Specifically, the Equip: line was missing on a fishing pole (and other items)
+		-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
+		-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
+
+		-- Trying without the retry if possible...
+		-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
+		-- 	button.isCaerdonRetry = true
+		-- 	QueueProcessItem(itemLink, feature, locationInfo, button, options)
+		-- 	return
+		-- end	
+		if tooltipInfo.isRetrieving then
+			QueueProcessItem(itemLink, feature, locationInfo, button, options)
+			return
+		end	
+	
 		SetItemButtonMogStatus(button)
 		ProcessItem(item, feature, locationInfo, button, options, tooltipInfo)
 	else
 		item:ContinueOnItemLoad(function ()
+			local tooltipInfo = GetTooltipInfo(item)
+			-- Trying without the retry if possible...
+			-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
+			-- 	button.isCaerdonRetry = true
+			-- 	QueueProcessItem(itemLink, feature, locationInfo, button, options)
+			-- 	return
+			-- end	
+			if tooltipInfo.isRetrieving then
+				QueueProcessItem(itemLink, feature, locationInfo, button, options)
+				return
+			end	
+	
 			SetItemButtonMogStatus(button)
 			ProcessItem(item, feature, locationInfo, button, options, tooltipInfo)
 		end)

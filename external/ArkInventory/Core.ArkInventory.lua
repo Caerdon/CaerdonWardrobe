@@ -31,53 +31,96 @@ function ArkInventoryMixin:Refresh()
 	ArkInventory.Frame_Main_Generate( nil, ArkInventory.Const.Window.Draw.Recalculate )
 end
 
-function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
-	local bag = ArkInventory.API.InternalIdToBlizzardBagId(loc_id, bag_id)
-	local slot = slot_id
+function ArkInventoryMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	if locationInfo.isOffline then
+		local showBindingStatus = CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
+		local showOwnIcon = CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
+		local showOtherIcon = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
+		local showSellableIcon = CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
 	
-	if not ArkInventory.API.LocationIsOffline(loc_id) then
-		local itemDB = ArkInventory.API.ItemFrameItemTableGet(frame)
-		local itemLink = itemDB and itemDB.h
+		return {
+			bindingStatus = {
+				shouldShow = showBindingStatus
+			},
+			ownIcon = {
+				shouldShow = showOwnIcon
+			},
+			otherIcon = {
+				shouldShow = showOtherIcon
+			},
+			sellableIcon = {
+				shouldShow = showSellableIcon
+			}
+		}
+	elseif not locationInfo.isBankOrBags then
+		return {
+			bindingStatus = {
+				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
+			},
+			ownIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
+			},
+			otherIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
+			},
+			sellableIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
+			}
+		}
+	else
+		return {}
+	end
+end
 
-		-- ArkInventory creates invalid hyperlinks for caged battle pets - fix 'em up for now
-		if ( itemLink and strfind(itemLink, "battlepet:") ) then
-			local _, speciesID, level, quality, health, power, speed, battlePetID = strsplit(":", itemLink);
-			local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradable, unique, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
+	C_Timer.After(0.2, function () -- ArkInventory is slow compared to some - doing this until I find a better way - may need tweaked higher
+		local bag = ArkInventory.API.InternalIdToBlizzardBagId(loc_id, bag_id)
+		local slot = slot_id
 
-			if battlePetID == name then
-				battlePetID = "0"
+		local options = {
+			showMogIcon=true, 
+			showBindStatus=true,
+			showSellables=true
+		}
+		
+		if not ArkInventory.API.LocationIsOffline(loc_id) then
+			local itemDB = ArkInventory.API.ItemFrameItemTableGet(frame)
+			local itemLink = itemDB and itemDB.h
+
+			-- ArkInventory creates invalid hyperlinks for caged battle pets - fix 'em up for now
+			if ( itemLink and strfind(itemLink, "battlepet:") ) then
+				local _, speciesID, level, quality, health, power, speed, battlePetID = strsplit(":", itemLink);
+				local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradable, unique, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+
+				if battlePetID == name then
+					battlePetID = "0"
+				end
+
+				itemLink = string.format("%s|Hbattlepet:%s:%s:%s:%s:%s:%s:%s|h[%s]|h|r", YELLOW_FONT_COLOR_CODE, speciesID, level, quality, health, power, speed, battlePetID, name)
 			end
 
-			itemLink = string.format("%s|Hbattlepet:%s:%s:%s:%s:%s:%s:%s|h[%s]|h|r", YELLOW_FONT_COLOR_CODE, speciesID, level, quality, health, power, speed, battlePetID, name)
-		end
-
-		if not itemLink then
-			CaerdonWardrobe:ClearButton(frame)
-		elseif loc_id == ArkInventory.Const.Location.Vault then
-			local tab = ArkInventory.Global.Location[loc_id].view_tab
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), {tab = tab, index = slot, isBankorBags = false}, frame, options)
+			if not itemLink then
+				CaerdonWardrobe:ClearButton(frame)
+			elseif loc_id == ArkInventory.Const.Location.Vault then
+				local tab = ArkInventory.Global.Location[loc_id].view_tab
+				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), {tab = tab, index = slot, isBankorBags = false}, frame, options)
+			else
+				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, frame, options)
+			end
 		else
-			local options = {
-				showMogIcon=true, 
-				showBindStatus=true,
-				showSellables=true
-			}
+			local itemLink
+			local i = ArkInventory.API.ItemFrameItemTableGet( frame )
+			if i and i.h then
+				itemLink = i.h
+			end
 
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, frame, options)
+			if itemLink then
+				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { isOffline=true, isBankOrBags = false }, frame, options)
+			else
+				CaerdonWardrobe:ClearButton(frame)
+			end
 		end
-	else
-		local itemLink
-		local i = ArkInventory.API.ItemFrameItemTableGet( frame )
-		if i and i.h then
-			itemLink = i.h
-		end
-
-		if itemLink then
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { isOffline=true, isBankOrBags = false }, frame, options)
-		else
-			CaerdonWardrobe:ClearButton(frame)
-		end
-	end
+	end)
 end
 
 

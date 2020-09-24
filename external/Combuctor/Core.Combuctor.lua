@@ -24,8 +24,47 @@ function CombuctorMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function CombuctorMixin:Refresh()
-	if Combuctor.sets then
-		Combuctor:UpdateFrames()
+	Combuctor.Frames:Update()
+end
+
+function CombuctorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	if locationInfo.isOffline then
+		local showBindingStatus = CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
+		local showOwnIcon = CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
+		local showOtherIcon = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
+		local showSellableIcon = CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
+	
+		return {
+			bindingStatus = {
+				shouldShow = showBindingStatus
+			},
+			ownIcon = {
+				shouldShow = showOwnIcon
+			},
+			otherIcon = {
+				shouldShow = showOtherIcon
+			},
+			sellableIcon = {
+				shouldShow = showSellableIcon
+			}
+		}
+	elseif not locationInfo.isBankOrBags then
+		return {
+			bindingStatus = {
+				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
+			},
+			ownIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
+			},
+			otherIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
+			},
+			sellableIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
+			}
+		}
+	else
+		return {}
 	end
 end
 

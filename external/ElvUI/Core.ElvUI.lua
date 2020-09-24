@@ -19,8 +19,6 @@ function ElvUIMixin:SetTooltipItem(tooltip, item, locationInfo)
 		if not item:IsItemEmpty() then
 			tooltip:SetHyperlink(item:GetItemLink())
 		end
-	elseif not locationInfo.isBankOrBags then
-		local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
 	elseif locationInfo.bag == BANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
