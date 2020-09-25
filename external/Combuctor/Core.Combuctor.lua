@@ -71,16 +71,16 @@ end
 function CombuctorMixin:OnUpdateSlot(button)
 	local bag, slot = button:GetBag(), button:GetID()
 	if button.info.cached then
-		CaerdonWardrobe:UpdateButtonLink(button.info.link, self:GetName(), { isOffline = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+		CaerdonWardrobe:UpdateButtonLink(button, button.info.link, self:GetName(), { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 	else
 		if bag ~= "vault" then
 			local tab = GetCurrentGuildBankTab()
 			if Combuctor:InGuild() and tab == bag then
 				local itemLink = GetGuildBankItemLink(tab, slot)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { tab = tab, index = slot }, button, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { tab = tab, index = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			else
 				local itemLink = GetContainerItemLink(bag, slot)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			end
 		end
 	end

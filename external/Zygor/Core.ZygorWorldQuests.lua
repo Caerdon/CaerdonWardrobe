@@ -32,16 +32,6 @@ function ZygorMixin:RefreshButtons()
     local QuestList = self.WorldQuests.QuestList
     local ROW_COUNT = QuestList:CountRows()
 
-    local options = {
-		iconOffset = 0,
-		iconSize = 30,
-		overridePosition = "TOPRIGHT",
-        itemCountOffset = 0,
-        bindingOffset = 67, -- Bit of a hack, but it works for now
-        overrideBindingPosition = "BOTTOM",
-		bindingScale = 0.9
-	}
-
     WQ_RowOff=self.WorldQuests.QuestsOffset
     for ii,questItem in ipairs(sh_display_quests) do 
         WQ_RowNum = ii-WQ_RowOff
@@ -49,9 +39,18 @@ function ZygorMixin:RefreshButtons()
             local row = QuestList.rows[WQ_RowNum]
             local quest = row.quest
             local reward = quest.rewards
-            local button = _G["ZGVWQLISTRow" .. WQ_RowNum .. "Icon"]
+            local button =  _G["ZGVWQLISTRow" .. WQ_RowNum .. "Icon"]
 
-            CaerdonWardrobe:UpdateButtonLink(reward.itemlink, self:GetName(), { questID = quest.questID }, button, options)
+            local options = {
+                iconOffset = 0,
+                iconSize = 30,
+                itemCountOffset = 0,
+                relativeFrame = row.rewardicon,
+                bindingScale = 0.9,
+                bindingOffsetY = -3
+            }
+        
+            CaerdonWardrobe:UpdateButtonLink(button, reward.itemlink, self:GetName(), { questID = quest.questID }, options)
         end
     end
 end

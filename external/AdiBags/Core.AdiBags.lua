@@ -30,7 +30,7 @@ function AdiBagsMixin:Init()
 			iconPosition="TOPRIGHT" 
 		}
 
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, options)
+		CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, options)
 	end
 end
 

@@ -263,16 +263,17 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 
 	if not button then
 		button = CreateFrame("Frame", nil, originalButton)
-		button:SetPoint("TOPLEFT")
-		button:SetPoint("BOTTOM")
-
-		if options and options.overrideWidth then
-			button:SetWidth(options.overrideWidth)
-		else
-			button:SetWidth(originalButton:GetWidth())
-		end
 		button.searchOverlay = originalButton.searchOverlay
 		originalButton.caerdonButton = button
+	end
+
+	button:ClearAllPoints()
+	button:SetSize(0,0)
+
+	if options and options.relativeFrame then
+		button:SetAllPoints(options.relativeFrame)
+	else
+		button:SetAllPoints(originalButton.IconBorder or originalButton)
 	end
 
 	-- Had some addons messing with frame level resulting in this getting covered by the parent button.
@@ -317,7 +318,7 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 		options = {}
 	end
 
-	if options.overridePosition then -- for Encounter Journal so far
+	if options.overridePosition then
 		iconPosition = options.overridePosition
 	else
 		iconPosition = CaerdonWardrobeConfig.Icon.Position
@@ -602,36 +603,35 @@ local function SetItemButtonBindType(button, item, feature, locationInfo, option
 	bindsOnText:ClearAllPoints()
 	bindsOnText:SetSize(newWidth, newHeight)
 
+	local bindingScale = options.bindingScale or 1
 	local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
-	local xOffset = options.bindingOffsetX or options.bindingOffset or 0
-	local yOffset = options.bindingOffsetY or xOffset
+	local xOffset = 1
+	if options.bindingOffsetX ~= nil then
+		xOffset = options.bindingOffsetX
+	end
 
+	local yOffset = 2
+	if options.bindingOffsetY ~= nil then
+		yOffset = options.bindingOffsetY
+	end
+
+	local hasCount = (button.count and button.count > 1) or options.hasCount
+	
 	if string.find(bindingPosition, "BOTTOM") then
-		if (button.count and button.count > 1) then
-			yOffset = options.itemCountOffset or 15
-		elseif yOffset == 0 then
-			yOffset = 2
+		if hasCount then
+			yOffset = options.itemCountOffset or (bindingScale * 15)
 		end
 	end
 
 	if string.find(bindingPosition, "TOP") then
-		if yOffset == 0 then
-			yOffset = -3
-		end
-	end
-
-	if string.find(bindingPosition, "LEFT") then
-		if xOffset == 0 then
-			xOffset = 3
-		end
+		yOffset = yOffset * -1
 	end
 
 	if string.find(bindingPosition, "RIGHT") then
-		if xOffset == 0 then
-			xOffset = -3
-		end
+		xOffset = xOffset * -1
 	end
 
+	-- print(item:GetItemLink(), xOffset, yOffset, bindingPosition, options.hasCount)
 	bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
 
 	if(options.bindingScale) then
@@ -639,9 +639,9 @@ local function SetItemButtonBindType(button, item, feature, locationInfo, option
 	end
 end
 
-local function QueueProcessItem(itemLink, feature, locationInfo, button, options)
+local function QueueProcessItem(button, itemLink, feature, locationInfo, options)
 	C_Timer.After(0, function()
-		CaerdonWardrobe:UpdateButtonLink(itemLink, feature, locationInfo, button, options)
+		CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
 	end)
 end
 
@@ -655,7 +655,7 @@ local function ItemIsSellable(itemID, itemLink)
 	return isSellable
 end
 
-local function ProcessItem(item, feature, locationInfo, button, options, tooltipInfo)
+local function ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 	local mogStatus = nil
 
    	if not options then
@@ -895,10 +895,6 @@ local function ProcessItem(item, feature, locationInfo, button, options, tooltip
 	end
 end
 
-local function ProcessOrWaitItemLink(itemLink, feature, locationInfo, button, options)
-	CaerdonWardrobe:UpdateButtonLink(itemLink, feature, locationInfo, button, options)
-end
-
 CaerdonWardrobeFeatureMixin = {}
 function CaerdonWardrobeFeatureMixin:GetName()
 	-- Must be unique
@@ -1098,7 +1094,7 @@ function CaerdonWardrobe:ClearButton(button)
 	SetItemButtonBindType(button)
 end
 
-function CaerdonWardrobe:UpdateButtonLink(itemLink, feature, locationInfo, button, options)
+function CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
 	if not itemLink then
 		CaerdonWardrobe:ClearButton(button)
 		return
@@ -1129,32 +1125,32 @@ function CaerdonWardrobe:UpdateButtonLink(itemLink, feature, locationInfo, butto
 		-- Trying without the retry if possible...
 		-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
 		-- 	button.isCaerdonRetry = true
-		-- 	QueueProcessItem(itemLink, feature, locationInfo, button, options)
+		-- 	QueueProcessItem(button, itemLink, feature, locationInfo, options)
 		-- 	return
 		-- end	
 		if tooltipInfo.isRetrieving then
-			QueueProcessItem(itemLink, feature, locationInfo, button, options)
+			QueueProcessItem(button, itemLink, feature, locationInfo, options)
 			return
 		end	
 	
 		SetItemButtonMogStatus(button)
-		ProcessItem(item, feature, locationInfo, button, options, tooltipInfo)
+		ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 	else
 		item:ContinueOnItemLoad(function ()
 			local tooltipInfo = GetTooltipInfo(item)
 			-- Trying without the retry if possible...
 			-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
 			-- 	button.isCaerdonRetry = true
-			-- 	QueueProcessItem(itemLink, feature, locationInfo, button, options)
+			-- 	QueueProcessItem(button, itemLink, feature, locationInfo, options)
 			-- 	return
 			-- end	
 			if tooltipInfo.isRetrieving then
-				QueueProcessItem(itemLink, feature, locationInfo, button, options)
+				QueueProcessItem(button, itemLink, feature, locationInfo, options)
 				return
 			end	
 	
 			SetItemButtonMogStatus(button)
-			ProcessItem(item, feature, locationInfo, button, options, tooltipInfo)
+			ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 		end)
 	end
 end

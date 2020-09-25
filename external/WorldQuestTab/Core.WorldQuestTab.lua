@@ -20,7 +20,9 @@ function WorldQuestTabMixin:Refresh()
 	local buttons = WQT_WorldQuestFrame.ScrollFrame.buttons;
 	for i = 1, #buttons do
 		local button = buttons[i]
-		self:UpdateButton(button)
+		for rewardIndex = 1, #button.Rewards do
+			self:UpdateButton(button.Rewards[rewardIndex])
+		end
 	end
 end
 
@@ -34,20 +36,18 @@ end
 
 function WorldQuestTabMixin:UpdateButton(button)
 	local questInfo = button.questInfo
-	local options = {
-		iconOffset = 4,
-		iconSize = 30,
-		overridePosition = "TOPLEFT",
-		overrideBindingPosition = "CENTER",
-		bindingScale = 0.8
-	}
 
 	if questInfo and questInfo.isValid then
 		for k, rewardInfo in questInfo:IterateRewards() do
 			local rewardButton = button.Rewards.rewardFrames[k]
 			if rewardInfo.id and self:IsValidItem(rewardInfo.type) then
+				local options = {
+					hasCount = rewardInfo.amount > 0,
+					bindingScale = 0.8
+				}
+				
 				local item = Item:CreateFromItemID(rewardInfo.id)
-				CaerdonWardrobe:UpdateButtonLink(item:GetItemLink(), self:GetName(), { reward = rewardInfo, questID = button.questId }, rewardButton, options)
+				CaerdonWardrobe:UpdateButtonLink(rewardButton, item:GetItemLink(), self:GetName(), { reward = rewardInfo, questID = button.questId }, options)
 			else
 				CaerdonWardrobe:ClearButton(rewardButton)
 			end

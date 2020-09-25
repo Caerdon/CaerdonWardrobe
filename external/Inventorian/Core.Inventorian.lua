@@ -62,9 +62,9 @@ function InventorianMixin:UpdateSlot(button, bag, slot)
 			}
 
 			if button:IsCached() then
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { isOffline = true }, button, options)
+				CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { isOffline = true }, options)
 			else
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, options)
+				CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, options)
 			end
 		else
 			CaerdonWardrobe:ClearButton(button)

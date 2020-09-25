@@ -106,7 +106,7 @@ function BankMixin:OnContainerUpdate(frame, asyncUpdate)
 
 		local itemLink = GetContainerItemLink(bag, slot)
 		if itemLink then
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon = true, showBindStatus = true, showSellables = true })
+			CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true })
 		else
 			CaerdonWardrobe:ClearButton(button)
 		end
@@ -124,7 +124,7 @@ function BankMixin:OnBankItemUpdate(button)
 	local item = Item:CreateFromBagAndSlot(bag, slot)
 	local itemLink = item:GetItemLink()
 	if itemLink then
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
+		CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon=true, showBindStatus=true, showSellables=true })
 	else
 		CaerdonWardrobe:ClearButton(button)
 	end

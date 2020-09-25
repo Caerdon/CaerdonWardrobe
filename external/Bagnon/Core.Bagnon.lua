@@ -71,16 +71,16 @@ end
 function BagnonMixin:OnUpdateSlot(bagnonItem)
 	local bag, slot = bagnonItem:GetBag(), bagnonItem:GetID()
 	if bagnonItem.info.cached then
-		CaerdonWardrobe:UpdateButtonLink(bagnonItem.info.link, self:GetName(), { isOffline = true }, bagnonItem, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+		CaerdonWardrobe:UpdateButtonLink(bagnonItem, bagnonItem.info.link, self:GetName(), { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 	else
 		if bag ~= "vault" then
 			local tab = GetCurrentGuildBankTab()
 			if Bagnon:InGuild() and tab == bag then
 				local itemLink = GetGuildBankItemLink(tab, slot)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { tab = tab, index = slot }, bagnonItem, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				CaerdonWardrobe:UpdateButtonLink(bagnonItem, itemLink, self:GetName(), { tab = tab, index = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			else
 				local itemLink = GetContainerItemLink(bag, slot)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, bagnonItem, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				CaerdonWardrobe:UpdateButtonLink(bagnonItem, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			end
 		end
 	end

@@ -44,7 +44,7 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 	-- local iconSize = isBank and self.ElvUIBags.db.bankSize or self.ElvUIBags.db.bagSize
 	-- local uiScale = ElvUI[1].global.general.UIScale
 	local iconSize = self.ElvUIBags.db.bagSize
-	CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bagID, slot = slotID, isBankOrBags = true }, button, {
+	CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bagID, slot = slotID, isBankOrBags = true }, {
 		showMogIcon = true,
 		showBindStatus = true,
 		showSellables = true,

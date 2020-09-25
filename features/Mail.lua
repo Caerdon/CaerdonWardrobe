@@ -31,7 +31,7 @@ function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreate
 		if HasInboxItem(InboxFrame.openMailID, i) then
 			-- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
 			local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { type="open", index = i }, attachmentButton, nil)
+			CaerdonWardrobe:UpdateButtonLink(attachmentButton, itemLink, self:GetName(), { type="open", index = i }, nil)
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -44,7 +44,7 @@ function MailMixin:OnSendMailFrameUpdate()
 
 		if HasSendMailItem(i) then
 			local itemLink = GetSendMailItemLink(i)
-			CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { type="send", index = i }, attachmentButton, nil)
+			CaerdonWardrobe:UpdateButtonLink(attachmentButton, itemLink, self:GetName(), { type="send", index = i }, nil)
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -61,7 +61,7 @@ function MailMixin:OnInboxFrameUpdate()
 		if ( index <= numItems ) then
 			-- Setup mail item
 			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
-			CaerdonWardrobe:UpdateButtonLink(firstItemLink, self:GetName(), { type="inbox", index = index }, button, nil)
+			CaerdonWardrobe:UpdateButtonLink(button, firstItemLink, self:GetName(), { type="inbox", index = index }, nil)
 		else
             CaerdonWardrobe:ClearButton(button)
 		end

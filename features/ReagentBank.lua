@@ -26,7 +26,7 @@ function ReagentBankMixin:OnBankItemUpdate(button)
     local item = Item:CreateFromBagAndSlot(bag, slot)
     local itemLink = item:GetItemLink()
     if itemLink then
-        CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bag, slot = slot }, button, { showMogIcon=true, showBindStatus=true, showSellables=true })
+        CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bag, slot = slot }, { showMogIcon=true, showBindStatus=true, showSellables=true })
     else
         CaerdonWardrobe:ClearButton(button)
     end

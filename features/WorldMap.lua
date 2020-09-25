@@ -67,10 +67,10 @@ function WorldMapMixin:UpdatePin(pin)
 
 		if reward then
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, self:GetName(), { questID = pin.questID }, pin, options)
+				CaerdonWardrobe:UpdateButtonLink(pin, reward.itemLink, self:GetName(), { questID = pin.questID }, options)
 			elseif reward.itemID then
 				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { questID = pin.questID }, pin, options)
+				CaerdonWardrobe:UpdateButtonLink(pin, itemLink, self:GetName(), { questID = pin.questID }, options)
 			else
 				CaerdonWardrobe:ClearButton(pin)
 			end

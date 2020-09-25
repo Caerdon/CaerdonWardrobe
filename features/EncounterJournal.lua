@@ -58,13 +58,11 @@ function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)
 		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
 		otherIconSize = 20,
 		otherIconOffset = 15,
-		overrideWidth = item.icon:GetWidth(),
-		bindingOffsetX = 3,
-		bindingOffsetY = 4
+		relativeFrame = item.icon
 	}
 
 	if itemLink then
-		CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { item = item }, item, options)
+		CaerdonWardrobe:UpdateButtonLink(item, itemLink, self:GetName(), { item = item }, options)
 	else
 		CaerdonWardrobe:ClearButton(item)
 	end

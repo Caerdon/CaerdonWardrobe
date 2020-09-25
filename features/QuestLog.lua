@@ -77,16 +77,15 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local options = {
 				iconOffset = 0,
 				iconSize = 40,
-				overridePosition = "TOPLEFT",
-				overrideWidth = questItem.Icon:GetWidth()
+				relativeFrame = questItem.Icon
 			}	
 
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "QuestLog", { questID = questID, index = questLogIndex, questItem = questItem }, questItem, options)
+				CaerdonWardrobe:UpdateButtonLink(questItem, reward.itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			elseif reward.itemID then
 				-- TODO: Do I need to load the data here first?  Keep an eye out
 				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestLog", { questID = questID, index = questLogIndex, questItem = questItem }, questItem, options)
+				CaerdonWardrobe:UpdateButtonLink(questItem, itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
 			end
@@ -97,11 +96,17 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local reward = questInfo.rewards[i]
 			local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
+			local options = {
+				iconOffset = 0,
+				iconSize = 40,
+				relativeFrame = questItem.Icon
+			}	
+
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(reward.itemLink, "QuestLog", { questID = questID, index = questLogIndex, questItem = questItem }, questItem, options)
+				CaerdonWardrobe:UpdateButtonLink(questItem, reward.itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			elseif reward.itemID then
 				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(itemLink, "QuestLog", { questID = questID, index = questLogIndex, questItem = questItem }, questItem, options)
+				CaerdonWardrobe:UpdateButtonLink(questItem, itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
 			end

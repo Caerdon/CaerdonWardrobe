@@ -34,7 +34,7 @@ function BaudBagMixin:ProcessItem(bagId, slotId, button)
             local bagCache = BaudBag.Cache:GetBagCache(bagId)
             local slotCache = bagCache[slotId]
             if slotCache then
-                CaerdonWardrobe:UpdateButtonLink(slotCache.Link, self:GetName(), { isOffline=true, isBankOrBags = false }, button, options)
+                CaerdonWardrobe:UpdateButtonLink(button, slotCache.Link, self:GetName(), { isOffline=true, isBankOrBags = false }, options)
             else
                 CaerdonWardrobe:ClearButton(button)
             end
@@ -47,7 +47,7 @@ function BaudBagMixin:ProcessItem(bagId, slotId, button)
             }
 
             if itemLink then
-                CaerdonWardrobe:UpdateButtonLink(itemLink, self:GetName(), { bag = bagId, slot = slotId, isBankOrBags = true }, button, options)
+                CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bagId, slot = slotId, isBankOrBags = true }, options)
             else
                 CaerdonWardrobe:ClearButton(button)
             end
