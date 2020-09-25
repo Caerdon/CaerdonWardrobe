@@ -28,15 +28,24 @@ end
 function WorldMapMixin:Refresh()
 end
 
+function WorldMapMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function WorldMapMixin:UpdatePin(pin)
 	QuestEventListener:AddCallback(pin.questID, function()
 		local options = {
-			iconOffset = -5,
-			iconSize = 60,
-			overridePosition = "TOPRIGHT",
-			-- itemCountOffset = 10,
-			-- TODO: Make text bigger?
-			-- bindingScale = 1.5
+			statusProminentSize = 30
 		}
 
 		local questLink = GetQuestLink(pin.questID)

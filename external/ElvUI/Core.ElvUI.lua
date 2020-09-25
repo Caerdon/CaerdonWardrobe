@@ -40,19 +40,31 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 
 	local itemLink = GetContainerItemLink(bagID, slotID)
 
-	-- TODO: Add support for separate bank and bag sizes
-	-- local iconSize = isBank and self.ElvUIBags.db.bankSize or self.ElvUIBags.db.bagSize
 	-- local uiScale = ElvUI[1].global.general.UIScale
-	local iconSize = self.ElvUIBags.db.bagSize
+	local isBank = bagID == BANK_CONTAINER or (bagID > NUM_BAG_SLOTS and bagID <= NUM_BAG_SLOTS + NUM_BANKBAGSLOTS)
+	local iconSize = ((isBank and self.ElvUIBags.db.bankSize) or (self.ElvUIBags.db.bagSize)) * 0.5
+	local bindingScale = iconSize / 17 -- made things look decent at size 34 so use that as base
+
+	local hasCount
+	local numberFontSize = 0
+
+	if button.Count and button.Count:GetText() then
+		hasCount = true
+		numberFontSize = ElvUI[1].db.bags.countFontSize
+	elseif button.itemLevel and button.itemLevel:GetText() then
+		hasCount = true
+		numberFontSize = ElvUI[1].db.bags.itemLevelFontSize
+	end
+
 	CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bagID, slot = slotID, isBankOrBags = true }, {
+		hasCount = hasCount,
+		relativeFrame = button.icon,
 		showMogIcon = true,
 		showBindStatus = true,
 		showSellables = true,
-		iconSize = iconSize,
-		otherIconSize = iconSize,
-		-- TODO: These aren't correct but hopefully work for now
-		iconOffset = math.abs(40 - iconSize) / 2,
-		otherIconOffset = math.abs(40 - iconSize) / 2
+		statusProminentSize = iconSize,
+		bindingScale = bindingScale, 
+		itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
 	})
 end
 

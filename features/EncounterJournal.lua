@@ -54,10 +54,6 @@ function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)
 	end
 	
 	local options = {
-		iconOffset = 7,
-		unableToLootOther = true,
-		otherIconSize = 20,
-		otherIconOffset = 15,
 		relativeFrame = item.icon
 	}
 

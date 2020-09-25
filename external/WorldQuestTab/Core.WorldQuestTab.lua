@@ -26,6 +26,20 @@ function WorldQuestTabMixin:Refresh()
 	end
 end
 
+function WorldQuestTabMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function WorldQuestTabMixin:IsValidItem(type)
   return
   type == WQT_REWARDTYPE.weapon or
@@ -43,7 +57,8 @@ function WorldQuestTabMixin:UpdateButton(button)
 			if rewardInfo.id and self:IsValidItem(rewardInfo.type) then
 				local options = {
 					hasCount = rewardInfo.amount > 0,
-					bindingScale = 0.8
+					statusProminentSize = 16,
+					itemCountOffset = 9
 				}
 				
 				local item = Item:CreateFromItemID(rewardInfo.id)

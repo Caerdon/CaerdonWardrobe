@@ -201,25 +201,35 @@ local function IsGearSetStatus(status, item)
 	return status and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
+local ICON_PROMINENT_SIZE = 20
+local ICON_SIZE_DIFFERENTIAL = 0.8
+
 function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	if not item then return end
+
+	-- Scaling values if the icon is different than prominent-sized
+	local iconWidth, iconHeight = icon:GetSize()
+	local xAdjust = iconWidth / ICON_PROMINENT_SIZE
+	local yAdjust = iconHeight / ICON_PROMINENT_SIZE
+
 	local statusScale = options.statusScale or 1
 	local statusPosition = options.overrideStatusPosition or CaerdonWardrobeConfig.Icon.Position
-	local xOffset = 4
+	local xOffset =  4 * xAdjust
+	if statusPosition == "TOP" or statusPosition == "BOTTOM" then
+		xOffset = 0
+	end
+
 	if options.statusOffsetX ~= nil then
 		xOffset = options.statusOffsetX
 	end
 
-	local yOffset = 4
-	if options.statusOffsetY ~= nil then
-		yOffset = options.statusOffsetY
+	local yOffset = 4 * yAdjust
+	if statusPosition == "LEFT" or statusPosition == "RIGHT" then
+		yOffset = 0
 	end
 
-	local hasCount = (button.count and button.count > 1) or options.hasCount
-	
-	if string.find(statusPosition, "BOTTOMRIGHT") then
-		if hasCount then
-			yOffset = options.itemCountOffset or (statusScale * 15)
-		end
+	if options.statusOffsetY ~= nil then
+		yOffset = options.statusOffsetY
 	end
 
 	if string.find(statusPosition, "TOP") then
@@ -231,7 +241,7 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 	end
 
 	icon:ClearAllPoints()
-	icon:SetPoint("CENTER", button, statusPosition, xOffset, yOffset)
+	icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
 end
 
 function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
@@ -262,6 +272,15 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
 				mogStatus:SetAlpha(mogStatus.assignedAlpha)
 			end
 		end
+
+		local bindsOnText = button.bindsOnText
+		if bindsOnText then
+			if isFiltered then
+				bindsOnText:SetAlpha(0.3)
+			else
+				bindsOnText:SetAlpha(1.0)
+			end
+		end
 	end
 end
 
@@ -272,6 +291,21 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		button = CreateFrame("Frame", nil, originalButton)
 		button.searchOverlay = originalButton.searchOverlay
 		originalButton.caerdonButton = button
+	end
+
+	-- Make sure it's sitting in front of the frame it's going to overlay
+	local levelCheckFrame = button
+	if options and options.relativeFrame then
+		if options.relativeFrame:GetObjectType() == "Texture" then
+			levelCheckFrame = options.relativeFrame:GetParent()
+		else
+			levelCheckFrame = options.relativeFrame
+		end
+	end
+
+	if levelCheckFrame then
+		button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
+		button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
 	end
 
 	button:ClearAllPoints()
@@ -286,12 +320,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	-- Had some addons messing with frame level resulting in this getting covered by the parent button.
 	-- Haven't seen any negative issues with bumping it up, yet, but keep an eye on it if
 	-- the status icon overlaps something it shouldn't.
-	button:SetFrameLevel(originalButton:GetFrameLevel() + 100)
+	-- NOTE: Added logic above that hopefully addresses this more sanely...
+	-- button:SetFrameLevel(originalButton:GetFrameLevel() + 100)
 
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
 	local iconPosition, showSellables, isSellable
-	local iconSize = 40
 	local otherIconSize = 40
 	local otherIconOffset = 0
 	local iconOffset = 0
@@ -299,9 +333,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	if options then 
 		showSellables = options.showSellables
 		isSellable = options.isSellable
-		if options.iconSize then
-			iconSize = options.iconSize
-		end
 		if options.iconOffset then
 			iconOffset = options.iconOffset
 			otherIconOffset = iconOffset
@@ -320,12 +351,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		options = {}
 	end
 
-	if options.overridePosition then
-		iconPosition = options.overridePosition
-	else
-		iconPosition = CaerdonWardrobeConfig.Icon.Position
-	end
-
 	if not status then
 		if mogAnim and mogAnim:IsPlaying() then
 			mogAnim:Stop()
@@ -333,12 +358,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	if not mogStatus then
-		mogStatus = button:CreateTexture(nil, "OVERLAY", nil, 2)
+		mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 1)
 		button.mogStatus = mogStatus
 	end
-	-- mogStatus:SetSize(iconSize, iconSize)
-	mogStatus:SetSize(20, 20)
-	self:SetStatusIconPosition(mogStatus, button, item, feature, locationInfo, options, status, bindingStatus)
 
 	-- local mogFlash = button.mogFlash
 	-- if not mogFlash then
@@ -431,6 +453,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	mogStatus:SetTexture("")
 	mogStatus:SetTexCoord(0, 1, 1, 0)
 
+	local isProminent = false
+
 	-- TODO: Possible gear set indicators
 	-- MINIMAP / TempleofKotmogu_ball_cyan.PNG
 	-- TempleofKotmogu_ball_green.PNG
@@ -443,6 +467,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		alpha = 0.9
 		mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
 	elseif status == "openable" then
+		isProminent = true
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-free")
 	elseif status == "lowSkill" or status == "lowSkillPlus" then
@@ -455,6 +480,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		-- mogStatus:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
 		-- mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
 	elseif status == "locked" then
+		isProminent = true
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-key")
 	elseif status == "oldexpansion" and displayInfo and displayInfo.oldExpansionIcon.shouldShow then
@@ -462,6 +488,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-wow")
 	elseif status == "own" or status == "ownPlus" then
+		isProminent = true
 		if displayInfo and displayInfo.ownIcon.shouldShow then
 			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
@@ -470,20 +497,23 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			end
 		end
 	elseif status == "other" or status == "otherPlus" then
+		isProminent = true
 		if displayInfo and displayInfo.otherIcon.shouldShow then
-			local otherIcon = "Interface\\Store\\category-icon-placeholder"
-			if options.unableToLootOther then
-				otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
-			else
-				mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
+			if status == "otherPlus" then
+				mogStatus:SetVertexColor(0.4, 1, 0)
 			end
-		
-			mogStatus:SetTexture(otherIcon)
+		end
+	elseif status == "otherNoLoot" or status == "otherPlusNoLoot" then
+		if displayInfo and displayInfo.otherIcon.shouldShow then
+			mogStatus:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
 			if status == "otherPlus" then
 				mogStatus:SetVertexColor(0.4, 1, 0)
 			end
 		end
 	elseif status == "otherSpec" or status == "otherSpecPlus" then
+		isProminent = true
 		if displayInfo and displayInfo.otherIcon.shouldShow then
 			mogStatus:SetTexture("Interface\\COMMON\\icon-noloot")
 			if status == "otherSpecPlus" then
@@ -510,6 +540,20 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 	end
+
+	local iconSize = ICON_PROMINENT_SIZE
+	if options.statusProminentSize then
+		iconSize = options.statusProminentSize
+	end
+
+	if isProminent then
+		mogStatus:SetSize(iconSize, iconSize)
+	else
+		iconSize = iconSize * ICON_SIZE_DIFFERENTIAL
+		mogStatus:SetSize(iconSize, iconSize)
+	end
+
+	self:SetStatusIconPosition(mogStatus, originalButton, item, feature, locationInfo, options, status, bindingStatus)
 
 	mogStatus:SetAlpha(alpha)
 	mogStatus.assignedAlpha = alpha
@@ -623,7 +667,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	
 	if string.find(bindingPosition, "BOTTOM") then
 		if hasCount then
-			yOffset = options.itemCountOffset or (bindingScale * 15)
+			yOffset = options.itemCountOffset or 15
 		end
 	end
 
@@ -635,7 +679,6 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 		xOffset = xOffset * -1
 	end
 
-	-- print(item:GetItemLink(), xOffset, yOffset, bindingPosition, options.hasCount)
 	bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
 
 	if(options.bindingScale) then
@@ -776,11 +819,10 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 					end
 				elseif transmogInfo.otherNeedsItem then
 					if transmogInfo.isBindOnPickup then
-						-- TODO: This leverages otherIcon.  Clean up.
 						if not transmogInfo.isCompletionistItem then
-							mogStatus = "other"
+							mogStatus = "otherNoLoot"
 						else
-							mogStatus = "otherPlus"
+							mogStatus = "otherPlusNoLoot"
 						end
 					end
 				end

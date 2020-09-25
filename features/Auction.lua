@@ -137,19 +137,14 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 					local BUYOUT_DISPLAY_PADDING = 0;
 					local STANDARD_PADDING = 10;
 
-					local iconSize = 30
-					-- From AuctionHouseTableBuilder.GetBrowseListLayout
-					local iconOffset = 
-						PRICE_DISPLAY_PADDING + 146 - (iconSize / 2)
-
 					local cell = AuctionHouseFrame.BrowseResultsFrame.ItemList.tableBuilder:GetCellByIndex(i, 2)
 			
 					if itemLink and button then
 						CaerdonWardrobe:UpdateButtonLink(button, itemLink, bag, { index = slot, itemKey = browseResult.itemKey },  
 						{
-							overridePosition = "LEFT",
-							iconOffset = -25,
-							iconSize = iconSize,
+							overrideStatusPosition = "LEFT",
+							statusOffsetX = -10,
+							statusOffsetY = 0,
 							showMogIcon=true, 
 							showBindStatus=false,
 							showSellables=false,
@@ -182,7 +177,9 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 	local button = AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton
 	CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { itemKey = itemKeyInfo },  
 	{
-		iconSize = 50,				
+		statusProminentSize = 30,
+		statusOffsetX = 15,
+		statusOffsetY = 15,
 		showMogIcon=true, 
 		showBindStatus=false, 
 		showSellables=false

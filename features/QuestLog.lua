@@ -75,8 +75,6 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
 			local options = {
-				iconOffset = 0,
-				iconSize = 40,
 				relativeFrame = questItem.Icon
 			}	
 
@@ -97,8 +95,6 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
 			local options = {
-				iconOffset = 0,
-				iconSize = 40,
 				relativeFrame = questItem.Icon
 			}	
 

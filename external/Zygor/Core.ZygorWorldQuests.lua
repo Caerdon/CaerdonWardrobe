@@ -21,6 +21,20 @@ function ZygorMixin:Refresh()
     self:RefreshButtons()
 end
 
+function ZygorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function ZygorMixin:RefreshButtons()
     if not ZygorGuidesViewer.db.profile.worldquestenable then return end
     -- if not WorldQuests.needToUpdate then return end
@@ -42,9 +56,7 @@ function ZygorMixin:RefreshButtons()
             local button =  _G["ZGVWQLISTRow" .. WQ_RowNum .. "Icon"]
 
             local options = {
-                iconOffset = 0,
-                iconSize = 30,
-                itemCountOffset = 0,
+                statusProminentSize = 14,
                 relativeFrame = row.rewardicon,
                 bindingScale = 0.9,
                 bindingOffsetY = -3

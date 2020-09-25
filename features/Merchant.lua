@@ -60,9 +60,7 @@ end
 function MerchantMixin:OnMerchantUpdate()
     local bag = self:GetName()
     local options = { 
-        showMogIcon=true, showBindStatus=true, showSellables=false, 
-        otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
-        otherIconSize = 20, otherIconOffset = 10,	
+        showMogIcon=true, showBindStatus=true, showSellables=false
     }
 
 	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
