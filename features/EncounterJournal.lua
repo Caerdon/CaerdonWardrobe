@@ -55,7 +55,7 @@ function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)
 	
 	local options = {
 		iconOffset = 7,
-		otherIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
+		unableToLootOther = true,
 		otherIconSize = 20,
 		otherIconOffset = 15,
 		relativeFrame = item.icon
