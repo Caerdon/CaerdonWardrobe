@@ -1,41 +1,8 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
+	<Script file="FeatureMixin.lua" />
 	<Script file="CaerdonWardrobe.lua" />
-	<Script file="CaerdonItem.lua" />
-	<Script file="CaerdonAPI.lua" />
-	
-	<Script file="features\Auction.lua" />
-	<Script file="features\Bags.lua" />
-	<Script file="features\Bank.lua" />
-	<Script file="features\BlackMarket.lua" />
-	<Script file="features\EncounterJournal.lua" />
-	<Script file="features\GroupLoot.lua" />
-	<Script file="features\GuildBank.lua" />
-	<Script file="features\Loot.lua" />
-	<Script file="features\Mail.lua" />
-	<Script file="features\Merchant.lua" />
-	<Script file="features\QuestLog.lua" />
-	<Script file="features\ReagentBank.lua" />
-	<Script file="features\WorldMap.lua" />
-	<Script file="features\Tooltip.lua" />
 
-	<Script file="types\BattlePetMixin.lua" />
-	<Script file="types\CompanionPetMixin.lua" />
-	<Script file="types\ConsumableMixin.lua" />
-	<Script file="types\EquipmentMixin.lua" />
-	<Script file="types\MountMixin.lua" />
-	<Script file="types\QuestMixin.lua" />
-	<Script file="types\RecipeMixin.lua" />
-	<Script file="types\ToyMixin.lua" />	
-
-	<Script file="tests\CaerdonItemTests.lua" />
-	<Script file="tests\ClothTests.lua" />
-	<Script file="tests\LeatherTests.lua" />
-	<Script file="tests\MailTests.lua" />
-	<Script file="tests\PlateTests.lua" />
-	<Script file="tests\WeaponTests.lua" />
-	<Script file="tests\SharedTests.lua" />
-    
 	<!-- This is derived from GameTooltip in GameTooltip.xml -->
 	<GameTooltip name="CaerdonWardrobeFrameShoppingTooltip1" hidden="true" />	
 	<GameTooltip name="CaerdonWardrobeFrameShoppingTooltip2" hidden="true" />
@@ -58,11 +25,58 @@
 		</Scripts>
 	</GameTooltip>
 
-    <Frame name="CaerdonWardrobeFrame" secureMixin="CaerdonWardrobeMixin">
+	<Frame name="CaerdonWardrobe" secureMixin="CaerdonWardrobeMixin">
 		<Scripts>
 			<OnLoad method="OnLoad"/>
 			<OnEvent method="OnEvent"/>
             <OnUpdate method="OnUpdate"/>
 		</Scripts>
     </Frame>
+
+	<Script file="CaerdonItem.lua" />
+	<Script file="CaerdonAPI.lua" />
+	
+	<Script file="features\Auction.lua" />
+	<Script file="features\Bags.lua" />
+	<Script file="features\Bank.lua" />
+	<Script file="features\BlackMarket.lua" />
+	<Script file="features\EncounterJournal.lua" />
+	<Script file="features\GroupLoot.lua" />
+	<Script file="features\GuildBank.lua" />
+	<Script file="features\Loot.lua" />
+	<Script file="features\Mail.lua" />
+	<Script file="features\Merchant.lua" />
+	<Script file="features\QuestLog.lua" />
+	<Script file="features\ReagentBank.lua" />
+	<Script file="features\WorldMap.lua" />
+	<Script file="features\Tooltip.lua" />
+
+	<Script file="external\AdiBags\Core.AdiBags.lua" />
+	<Script file="external\ArkInventory\Core.ArkInventory.lua" />
+	<Script file="external\Bagnon\Core.Bagnon.lua" />
+	<Script file="external\BaudBag\Core.BaudBag.lua" />
+	<Script file="external\CargBags\Core.CargBags.lua" />
+	<Script file="external\Combuctor\Core.Combuctor.lua" />
+	<Script file="external\ElvUI\Core.ElvUI.lua" />
+	<Script file="external\Inventorian\Core.Inventorian.lua" />
+	<Script file="external\LiteBag\Core.LiteBag.lua" />
+	<Script file="external\WorldQuestTab\Core.WorldQuestTab.lua" />
+	<Script file="external\Zygor\Core.ZygorWorldQuests.lua" />
+
+	<Script file="types\BattlePetMixin.lua" />
+	<Script file="types\CompanionPetMixin.lua" />
+	<Script file="types\ConsumableMixin.lua" />
+	<Script file="types\EquipmentMixin.lua" />
+	<Script file="types\MountMixin.lua" />
+	<Script file="types\QuestMixin.lua" />
+	<Script file="types\RecipeMixin.lua" />
+	<Script file="types\ToyMixin.lua" />	
+
+	<Script file="tests\CaerdonItemTests.lua" />
+	<Script file="tests\ClothTests.lua" />
+	<Script file="tests\LeatherTests.lua" />
+	<Script file="tests\MailTests.lua" />
+	<Script file="tests\PlateTests.lua" />
+	<Script file="tests\WeaponTests.lua" />
+	<Script file="tests\SharedTests.lua" />
 </Ui>

@@ -13,7 +13,6 @@ local registeredFeatures = {}
 local version, build, date, tocversion = GetBuildInfo()
 local isShadowlands = tonumber(build) > 35700
 
-CaerdonWardrobe = {}
 CaerdonWardrobeMixin = {}
 
 function CaerdonWardrobeMixin:OnLoad()
@@ -23,6 +22,9 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
+
+	hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
+	hooksecurefunc("ContainerFrame_UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
 end
 
 local bindTextTable = {
@@ -49,7 +51,7 @@ end
 
 local equipLocations = {}
 
-local function GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
+function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
 	local itemID = item:GetItemID()
 	local itemLink = item:GetItemLink()
 	local itemData = item:GetItemData()
@@ -227,7 +229,7 @@ local function SetIconPositionAndSize(icon, startingPoint, offset, size, iconOff
 
 end
 
-local function AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
+function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
 	local anim = group:CreateAnimation("Rotation")
 	group["anim" .. order] = anim
 	anim:SetDegrees(degrees)
@@ -244,7 +246,7 @@ local function AddRotation(group, order, degrees, duration, smoothing, startDela
 	end
 end
 
-local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
+function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	local button = originalButton.caerdonButton
 	if button then
 		local mogStatus = button.mogStatus
@@ -258,7 +260,7 @@ local function SetItemButtonMogStatusFilter(originalButton, isFiltered)
 	end
 end
 
-local function SetItemButtonMogStatus(originalButton, item, feature, locationInfo, options, status, bindingStatus)
+function CaerdonWardrobeMixin:SetItemButtonMogStatus(originalButton, item, feature, locationInfo, options, status, bindingStatus)
 	local button = originalButton.caerdonButton
 
 	if not button then
@@ -370,7 +372,7 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 		if not mogAnim or not button.isWaitingIcon then
 			mogAnim = mogStatus:CreateAnimationGroup()
 
-			AddRotation(mogAnim, 1, 360, 0.5, "IN_OUT")
+			self:AddRotation(mogAnim, 1, 360, 0.5, "IN_OUT")
 
 		    mogAnim:SetLooping("REPEAT")
 			button.mogAnim = mogAnim
@@ -393,10 +395,10 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 			if not mogAnim then
 				mogAnim = mogStatus:CreateAnimationGroup()
 
-				AddRotation(mogAnim, 1, 110, 0.2, "OUT")
-				AddRotation(mogAnim, 2, -155, 0.2, "OUT")
-				AddRotation(mogAnim, 3, 60, 0.2, "OUT")
-				AddRotation(mogAnim, 4, -15, 0.1, "OUT", 0, 2)
+				self:AddRotation(mogAnim, 1, 110, 0.2, "OUT")
+				self:AddRotation(mogAnim, 2, -155, 0.2, "OUT")
+				self:AddRotation(mogAnim, 3, 60, 0.2, "OUT")
+				self:AddRotation(mogAnim, 4, -15, 0.1, "OUT", 0, 2)
 
 			    mogAnim:SetLooping("REPEAT")
 				button.mogAnim = mogAnim
@@ -527,7 +529,7 @@ local function SetItemButtonMogStatus(originalButton, item, feature, locationInf
 	end
 end
 
-local function SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	local caerdonButton = button.caerdonButton
 
 	local bindsOnText = caerdonButton and caerdonButton.bindsOnText
@@ -639,13 +641,13 @@ local function SetItemButtonBindType(button, item, feature, locationInfo, option
 	end
 end
 
-local function QueueProcessItem(button, itemLink, feature, locationInfo, options)
+function CaerdonWardrobeMixin:QueueProcessItem(button, itemLink, feature, locationInfo, options)
 	C_Timer.After(0, function()
-		CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
+		self:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
 	end)
 end
 
-local function ItemIsSellable(itemID, itemLink)
+function CaerdonWardrobeMixin:ItemIsSellable(itemID, itemLink)
 	local isSellable = itemID ~= nil
 	if itemID == 23192 then -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
 		isSellable = false
@@ -655,7 +657,7 @@ local function ItemIsSellable(itemID, itemLink)
 	return isSellable
 end
 
-local function ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 	local mogStatus = nil
 
    	if not options then
@@ -680,7 +682,7 @@ local function ProcessItem(button, item, feature, locationInfo, options, tooltip
 	local itemData = item:GetItemData()
 	local transmogInfo = item:GetCaerdonItemType() == CaerdonItemType.Equipment and itemData:GetTransmogInfo()
 
-	local bindingResult = GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
+	local bindingResult = self:GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
 	local bindingStatus = bindingResult.bindingStatus
 
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
@@ -872,7 +874,7 @@ local function ProcessItem(button, item, feature, locationInfo, options, tooltip
 	-- If every plugin says yes, then it is.
 	if mogStatus == "collected" and 
 	   item:GetCaerdonItemType() == CaerdonItemType.Equipment and
-	   ItemIsSellable(itemID, itemLink) and 
+	   self:ItemIsSellable(itemID, itemLink) and 
 	   not itemData:GetEquipmentSets() and
 	   not item:GetHasUse() and
 	   not item:GetSetID() and
@@ -890,82 +892,12 @@ local function ProcessItem(button, item, feature, locationInfo, options, tooltip
 	end
 
 	if button then
-		SetItemButtonMogStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-		SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+		self:SetItemButtonMogStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+		self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	end
 end
 
-CaerdonWardrobeFeatureMixin = {}
-function CaerdonWardrobeFeatureMixin:GetName()
-	-- Must be unique
-	error("Caerdon Wardrobe: Must provide a feature name")
-end
-
-function CaerdonWardrobeFeatureMixin:Init()
-	-- init and return array of frame events you'd like to receive
-	error("Caerdon Wardrobe: Must provide Init implementation")
-end
-
-function CaerdonWardrobeFeatureMixin:SetTooltipItem(tooltip, item, locationInfo)
-	error("Caerdon Wardrobe: Must provide SetTooltipItem implementation")
-end
-
-function CaerdonWardrobeFeatureMixin:Refresh()
-	-- Primarily used for global transmog refresh when appearances learned right now
-	error("Caerdon Wardrobe: Must provide Refresh implementation")
-end
-
-function CaerdonWardrobeFeatureMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {}
-end
-
-function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	-- TODO: Temporary for merging - revisit after pushing everything into Mixins
-	local showBindingStatus = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
-	local showOwnIcon = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
-	local showOtherIcon = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
-	local showSellableIcon = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
-
-	local displayInfo = {
-		bindingStatus = {
-			shouldShow = showBindingStatus -- true
-		},
-		ownIcon = {
-			shouldShow = showOwnIcon
-		},
-		otherIcon = {
-			shouldShow = showOtherIcon
-		},
-		questIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-		},
-		oldExpansionIcon = {
-			shouldShow = true
-		},
-		sellableIcon = {
-			shouldShow = showSellableIcon
-		}
-	}
-
-	CaerdonAPI:MergeTable(displayInfo, self:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus))
-
-	-- TODO: BoA and BoE settings should be per feature
-	if not CaerdonWardrobeConfig.Binding.ShowBoA and bindingStatus == L["BoA"] then
-		displayInfo.bindingStatus.shouldShow = false
-	end
-
-	if not CaerdonWardrobeConfig.Binding.ShowBoE and bindingStatus == L["BoE"] then
-		displayInfo.bindingStatus.shouldShow = false
-	end
-
-	return displayInfo
-end
-
-function CaerdonWardrobeFeatureMixin:OnUpdate()
-	-- Called from the main frame's OnUpdate
-end
-
-function CaerdonWardrobe:RegisterFeature(mixin)
+function CaerdonWardrobeMixin:RegisterFeature(mixin)
 	local instance = CreateFromMixins(CaerdonWardrobeFeatureMixin, mixin)
 	local name = instance:GetName()
 	if not availableFeatures[name] then
@@ -975,7 +907,7 @@ function CaerdonWardrobe:RegisterFeature(mixin)
 	end
 end
 
-local function GetTooltipInfo(item)
+function CaerdonWardrobeMixin:GetTooltipInfo(item)
 	local tooltipInfo = {
 		hasEquipEffect = false,
 		isRelearn = false,
@@ -1089,19 +1021,19 @@ local function GetTooltipInfo(item)
 	return tooltipInfo
 end
 
-function CaerdonWardrobe:ClearButton(button)
-	SetItemButtonMogStatus(button)
-	SetItemButtonBindType(button)
+function CaerdonWardrobeMixin:ClearButton(button)
+	self:SetItemButtonMogStatus(button)
+	self:SetItemButtonBindType(button)
 end
 
-function CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
+function CaerdonWardrobeMixin:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
 	if not itemLink then
-		CaerdonWardrobe:ClearButton(button)
+		self:ClearButton(button)
 		return
 	end
 
 	local item = CaerdonItem:CreateFromItemLink(itemLink)
-	SetItemButtonMogStatus(button, item, feature, locationInfo, options, "waiting", nil)
+	self:SetItemButtonMogStatus(button, item, feature, locationInfo, options, "waiting", nil)
 
 	local scanTip = CaerdonWardrobeFrameTooltip
 	scanTip:ClearLines()
@@ -1114,7 +1046,7 @@ function CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInf
 	-- but in cases of rapid data update (AH scroll), we don't want to update an old button
 	-- Look into ContinuableContainer
 	if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-		local tooltipInfo = GetTooltipInfo(item)
+		local tooltipInfo = self:GetTooltipInfo(item)
 
 		-- This is lame, but tooltips end up not having all of their data
 		-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
@@ -1129,15 +1061,15 @@ function CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInf
 		-- 	return
 		-- end	
 		if tooltipInfo.isRetrieving then
-			QueueProcessItem(button, itemLink, feature, locationInfo, options)
+			self:QueueProcessItem(button, itemLink, feature, locationInfo, options)
 			return
 		end	
 	
-		SetItemButtonMogStatus(button)
-		ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+		self:SetItemButtonMogStatus(button)
+		self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 	else
 		item:ContinueOnItemLoad(function ()
-			local tooltipInfo = GetTooltipInfo(item)
+			local tooltipInfo = self:GetTooltipInfo(item)
 			-- Trying without the retry if possible...
 			-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
 			-- 	button.isCaerdonRetry = true
@@ -1145,12 +1077,12 @@ function CaerdonWardrobe:UpdateButtonLink(button, itemLink, feature, locationInf
 			-- 	return
 			-- end	
 			if tooltipInfo.isRetrieving then
-				QueueProcessItem(button, itemLink, feature, locationInfo, options)
+				self:QueueProcessItem(button, itemLink, feature, locationInfo, options)
 				return
 			end	
 	
-			SetItemButtonMogStatus(button)
-			ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+			self:SetItemButtonMogStatus(button)
+			self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 		end)
 	end
 end
@@ -1269,13 +1201,12 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 	end
 end
 
-local refreshTimer
-function CaerdonWardrobe:RefreshItems()
-	if refreshTimer then
+function CaerdonWardrobeMixin:RefreshItems()
+	if self.refreshTimer then
 		refreshTimer:Cancel()
 	end
 
-	refreshTimer = C_Timer.NewTimer(0.1, function ()
+	self.refreshTimer = C_Timer.NewTimer(0.1, function ()
 		local name, instance
 		for name, instance in pairs(registeredFeatures) do
 			instance:Refresh()
@@ -1283,7 +1214,7 @@ function CaerdonWardrobe:RefreshItems()
 	end, 1)
 end
 
-local function OnContainerFrameUpdateSearchResults(frame)
+function CaerdonWardrobeMixin:OnContainerFrameUpdateSearchResults(frame)
 	local id = frame:GetID();
 	local name = frame:GetName().."Item";
 	local itemButton;
@@ -1292,42 +1223,38 @@ local function OnContainerFrameUpdateSearchResults(frame)
 	for i=1, frame.size, 1 do
 		itemButton = _G[name..i] or frame["Item"..i];
 		_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(id, itemButton:GetID())
-		SetItemButtonMogStatusFilter(itemButton, isFiltered)
+		self:SetItemButtonMogStatusFilter(itemButton, isFiltered)
 	end
 end
 
-hooksecurefunc("ContainerFrame_UpdateSearchResults", OnContainerFrameUpdateSearchResults)
-
-local function OnEquipPendingItem()
+function CaerdonWardrobeMixin:OnEquipPendingItem()
 	-- TODO: Bit of a hack... wait a bit and then update...
 	--       Need to figure out a better way.  Otherwise,
 	--		 you end up with BoE markers on things you've put on.
-	C_Timer.After(1, function() CaerdonWardrobe:RefreshItems() end)
+	C_Timer.After(1, function() self:RefreshItems() end)
 end
-
-hooksecurefunc("EquipPendingItem", OnEquipPendingItem)
 
 function CaerdonWardrobeMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
 	if unitTarget == "player" then
 		-- Tracking unlock spells to know to refresh
 		-- May have to add some other abilities but this is a good place to start.
 		if spellID == 1804 then
-			CaerdonWardrobe:RefreshItems(true)
+			self:RefreshItems(true)
 		end
 	end
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
-	CaerdonWardrobe:RefreshItems()
+	self:RefreshItems()
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
-	CaerdonWardrobe:RefreshItems()
+	self:RefreshItems()
 end
 
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 	-- Can change while logged in!
-	CaerdonWardrobe:RefreshItems()
+	self:RefreshItems()
 end
 
 local configFrame
