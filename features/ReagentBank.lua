@@ -23,14 +23,8 @@ function ReagentBankMixin:OnBankItemUpdate(button)
         return
     end
 
-    local item = Item:CreateFromBagAndSlot(bag, slot)
-    local itemLink = item:GetItemLink()
-    if itemLink then
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-        CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon=true, showBindStatus=true, showSellables=true })
-    else
-        CaerdonWardrobe:ClearButton(button)
-    end
+    local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+    CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon=true, showBindStatus=true, showSellables=true })
 end
 
 CaerdonWardrobe:RegisterFeature(ReagentBankMixin)

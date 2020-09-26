@@ -28,7 +28,6 @@ end
 function LiteBagMixin:UpdateButton(button)
 	local bag = button:GetParent():GetID()
 	local slot = button:GetID()
-	local itemLink = GetContainerItemLink(bag, slot)
 
 	local options = {
 		showMogIcon=true, 
@@ -37,12 +36,8 @@ function LiteBagMixin:UpdateButton(button)
 		iconPosition="TOPRIGHT" 
 	}
 
-	if itemLink then
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, options)
-	else
-		CaerdonWardrobe:ClearButton(button)
-	end
+	local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+	CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
 end
 
 local Version = nil

@@ -24,10 +24,10 @@ end
 
 function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	-- TODO: Temporary for merging - revisit after pushing everything into Mixins
-	local showBindingStatus = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
-	local showOwnIcon = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
-	local showOtherIcon = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
-	local showSellableIcon = not locationInfo.isBankOrBags or CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
+	local showBindingStatus = not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
+	local showOwnIcon = not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
+	local showOtherIcon = not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
+	local showSellableIcon = not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
 
 	local displayInfo = {
 		bindingStatus = {

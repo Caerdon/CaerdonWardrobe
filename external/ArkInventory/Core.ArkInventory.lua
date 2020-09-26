@@ -17,7 +17,7 @@ function ArkInventoryMixin:SetTooltipItem(tooltip, item, locationInfo)
 		if not item:IsItemEmpty() then
 			tooltip:SetHyperlink(item:GetItemLink())
 		end
-	elseif not locationInfo.isBankOrBags then
+	elseif not item:HasItemLocationBankOrBags() then
 		local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
 	elseif locationInfo.bag == BANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
@@ -52,7 +52,7 @@ function ArkInventoryMixin:GetDisplayInfo(button, item, feature, locationInfo, o
 				shouldShow = showSellableIcon
 			}
 		}
-	elseif not locationInfo.isBankOrBags then
+	elseif not item:HasItemLocationBankOrBags() then
 		return {
 			bindingStatus = {
 				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
@@ -84,32 +84,32 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 		}
 		
 		if not ArkInventory.API.LocationIsOffline(loc_id) then
-			local itemDB = ArkInventory.API.ItemFrameItemTableGet(frame)
-			local itemLink = itemDB and itemDB.h
-
-			-- ArkInventory creates invalid hyperlinks for caged battle pets - fix 'em up for now
-			if ( itemLink and strfind(itemLink, "battlepet:") ) then
-				local _, speciesID, level, quality, health, power, speed, battlePetID = strsplit(":", itemLink);
-				local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradable, unique, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
-
-				if battlePetID == name then
-					battlePetID = "0"
+			if loc_id == ArkInventory.Const.Location.Vault then
+				local itemDB = ArkInventory.API.ItemFrameItemTableGet(frame)
+				local itemLink = itemDB and itemDB.h
+	
+				-- ArkInventory creates invalid hyperlinks for caged battle pets - fix 'em up for now
+				if ( itemLink and strfind(itemLink, "battlepet:") ) then
+					local _, speciesID, level, quality, health, power, speed, battlePetID = strsplit(":", itemLink);
+					local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradable, unique, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+	
+					if battlePetID == name then
+						battlePetID = "0"
+					end
+	
+					itemLink = string.format("%s|Hbattlepet:%s:%s:%s:%s:%s:%s:%s|h[%s]|h|r", YELLOW_FONT_COLOR_CODE, speciesID, level, quality, health, power, speed, battlePetID, name)
 				end
-
-				itemLink = string.format("%s|Hbattlepet:%s:%s:%s:%s:%s:%s:%s|h[%s]|h|r", YELLOW_FONT_COLOR_CODE, speciesID, level, quality, health, power, speed, battlePetID, name)
-			end
-
-			if not itemLink then
-				CaerdonWardrobe:ClearButton(frame)
-			else
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-
-				if loc_id == ArkInventory.Const.Location.Vault then
-					local tab = ArkInventory.Global.Location[loc_id].view_tab
-					CaerdonWardrobe:UpdateButton(frame, item, self, {tab = tab, index = slot, isBankorBags = false}, options)
+	
+				local tab = ArkInventory.Global.Location[loc_id].view_tab
+				if itemLink then
+					local item = CaerdonItem:CreateFromItemLink(itemLink)
+					CaerdonWardrobe:UpdateButton(frame, item, self, { tab = tab, index = slot }, options)
 				else
-					CaerdonWardrobe:UpdateButton(frame, item, self, { bag = bag, slot = slot, isBankOrBags = true }, options)
+					CaerdonWardrobe:ClearButton(frame)
 				end
+			else
+				local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+				CaerdonWardrobe:UpdateButton(frame, item, self, { bag = bag, slot = slot }, options)
 			end
 		else
 			local itemLink
@@ -119,8 +119,7 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 			end
 
 			if itemLink then
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(frame, item, self, { isOffline=true, isBankOrBags = false }, options)
+				CaerdonWardrobe:UpdateButton(frame, item, self, { isOffline=true }, options)
 			else
 				CaerdonWardrobe:ClearButton(frame)
 			end

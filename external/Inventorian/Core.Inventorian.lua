@@ -53,22 +53,23 @@ end
 function InventorianMixin:UpdateSlot(button, bag, slot)
 	if button then
 		local icon, count, locked, quality, readable, lootable, itemLink, noValue, itemID = button:GetInfo()
-		if itemLink then
-			local options = {
-				showMogIcon=true, 
-				showBindStatus=true,
-				showSellables=true,
-				iconPosition="TOPRIGHT" 
-			}
+		local options = {
+			showMogIcon=true, 
+			showBindStatus=true,
+			showSellables=true,
+			iconPosition="TOPRIGHT" 
+		}
 
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			if button:IsCached() then
+		if button:IsCached() then
+			if itemLink then
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
 				CaerdonWardrobe:UpdateButton(button, item, self, { isOffline = true }, options)
 			else
-				CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, options)
+				CaerdonWardrobe:ClearButton(button)
 			end
 		else
-			CaerdonWardrobe:ClearButton(button)
+			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
 		end
 	end
 end

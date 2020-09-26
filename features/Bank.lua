@@ -104,13 +104,8 @@ function BankMixin:OnContainerUpdate(frame, asyncUpdate)
 		local button = _G[frame:GetName() .. "Item" .. buttonIndex]
 		local slot = button:GetID()
 
-		local itemLink = GetContainerItemLink(bag, slot)
-		if itemLink then
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true })
-		else
-			CaerdonWardrobe:ClearButton(button)
-		end
+		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true })
 	end
 end
 
@@ -122,14 +117,8 @@ function BankMixin:OnBankItemUpdate(button)
         return
 	end
 
-	local item = Item:CreateFromBagAndSlot(bag, slot)
-	local itemLink = item:GetItemLink()
-	if itemLink then
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon=true, showBindStatus=true, showSellables=true })
-	else
-		CaerdonWardrobe:ClearButton(button)
-	end
+	local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+	CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon=true, showBindStatus=true, showSellables=true })
 end
 
 CaerdonWardrobe:RegisterFeature(BankMixin)

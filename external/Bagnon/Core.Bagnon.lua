@@ -14,7 +14,7 @@ function BagnonMixin:SetTooltipItem(tooltip, item, locationInfo)
 		if not item:IsItemEmpty() then
 			tooltip:SetHyperlink(item:GetItemLink())
 		end
-	elseif not locationInfo.isBankOrBags then
+	elseif not item:HasItemLocationBankOrBags() then
 		local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
 	elseif locationInfo.bag == BANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
@@ -48,7 +48,7 @@ function BagnonMixin:GetDisplayInfo(button, item, feature, locationInfo, options
 				shouldShow = showSellableIcon
 			}
 		}
-	elseif not locationInfo.isBankOrBags then
+	elseif not item:HasItemLocationBankOrBags() then
 		return {
 			bindingStatus = {
 				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
@@ -71,7 +71,7 @@ end
 function BagnonMixin:OnUpdateSlot(bagnonItem)
 	local bag, slot = bagnonItem:GetBag(), bagnonItem:GetID()
 	if bagnonItem.info.cached then
-		if bagnon.info.link then
+		if bagnonItem.info.link then
 			local item = CaerdonItem:CreateFromItemLink(bagnonItem.info.link)
 			CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 		else
@@ -89,13 +89,8 @@ function BagnonMixin:OnUpdateSlot(bagnonItem)
 					CaerdonWardrobe:ClearButton(bagnonItem)
 				end
 			else
-				local itemLink = GetContainerItemLink(bag, slot)
-				if itemLink then
-					local item = CaerdonItem:CreateFromItemLink(itemLink)
-					CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
-				else
-					CaerdonWardrobe:ClearButton(bagnonItem)
-				end
+				local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+				CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			end
 		end
 	end

@@ -117,22 +117,16 @@ function BagsMixin:OnContainerUpdate(frame)
 		local button = _G[frame:GetName() .. "Item" .. buttonIndex]
 		local slot = button:GetID()
 
-		local itemLink = GetContainerItemLink(bag, slot)
-		if itemLink then
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(button, item, self, {
-				bag = bag, 
-				slot = slot, 
-				locationKey = format("bag%d-slot%d", bag, slot),
-				isBankOrBags = true 
-			}, { 
-				showMogIcon = true, 
-				showBindStatus = true, 
-				showSellables = true
-			})
-		else
-			CaerdonWardrobe:ClearButton(button)
-		end
+		-- local itemLink = GetContainerItemLink(bag, slot)
+		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			bag = bag, 
+			slot = slot
+		}, { 
+			showMogIcon = true, 
+			showBindStatus = true, 
+			showSellables = true
+		})
 	end
 end
 

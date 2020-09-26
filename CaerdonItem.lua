@@ -56,7 +56,7 @@ end
 	if type(itemLocation) ~= "table" or type(itemLocation.HasAnyLocation) ~= "function" or not itemLocation:HasAnyLocation() then
 		error("Usage: Item:CreateFromItemLocation(notEmptyItemLocation)", 2);
 	end
-	local item = CreateFromMixins(ItemMixin);
+	local item = CreateItem()
 	item:SetItemLocation(itemLocation);
 	return item;
 end
@@ -65,7 +65,7 @@ end
 	if type(bagID) ~= "number" or type(slotIndex) ~= "number" then
 		error("Usage: Item:CreateFromBagAndSlot(bagID, slotIndex)", 2);
 	end
-	local item = CreateFromMixins(ItemMixin);
+	local item = CreateItem()
 	item:SetItemLocation(ItemLocation:CreateFromBagAndSlot(bagID, slotIndex));
 	return item;
 end
@@ -74,7 +74,7 @@ end
 	if type(equipmentSlotIndex) ~= "number" then
 		error("Usage: Item:CreateFromEquipmentSlot(equipmentSlotIndex)", 2);
 	end
-	local item = CreateFromMixins(ItemMixin);
+	local item = CreateItem()
 	item:SetItemLocation(ItemLocation:CreateFromEquipmentSlot(equipmentSlotIndex));
 	return item;
 end
@@ -133,24 +133,21 @@ end
 -- local itemID, itemType, itemSubType, itemEquipLoc, icon, itemTypeID, itemSubClassID = GetItemInfoInstant(self:GetStaticBackingItem())
 
 -- TODO: Find lint rule - always need parens around select to reduce to single value
-
--- TODO: May need to fix to not call GetStaticBackingItem (or fix it) in the case of
--- itemLink instead of itemID - not sure if it works correctly... need to test.
 function CaerdonItemMixin:GetItemType()
     if not self:IsItemEmpty() then
-        return (select(2, GetItemInfoInstant(self:GetStaticBackingItem())))
+        return (select(2, GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetItemSubType()
     if not self:IsItemEmpty() then
-        return (select(3, GetItemInfoInstant(self:GetStaticBackingItem())))
+        return (select(3, GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetEquipLocation()
     if not self:IsItemEmpty() then
-        local equipLocation = (select(4, GetItemInfoInstant(self:GetStaticBackingItem())))
+        local equipLocation = (select(4, GetItemInfoInstant(self:GetItemID())))
         if equipLocation == "" then
             return nil
         end
@@ -162,35 +159,35 @@ end
 
 function CaerdonItemMixin:GetItemTypeID()
     if not self:IsItemEmpty() then
-        return (select(6, GetItemInfoInstant(self:GetStaticBackingItem())))
+        return (select(6, GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetItemSubTypeID()
     if not self:IsItemEmpty() then
-        return (select(7, GetItemInfoInstant(self:GetStaticBackingItem())))
+        return (select(7, GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetHasUse() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        local spellName, spellID = GetItemSpell(self:GetStaticBackingItem())
+        local spellName, spellID = GetItemSpell(self:GetItemID())
         return spellID ~= nil
     end
 end
 
 -- local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 -- itemEquipLoc, iconFileDataID, itemSellPrice, itemTypeID, itemSubTypeID, bindType, expacID, itemSetID, 
--- isCraftingReagent = GetItemInfo(self:GetStaticBackingItem())
+-- isCraftingReagent = GetItemInfo(self:GetItemLink())
 function CaerdonItemMixin:GetMinLevel() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        return (select(5, GetItemInfo(self:GetStaticBackingItem())))
+        return (select(5, GetItemInfo(self:GetItemLink())))
     end
 end
 
 function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        local bindType = (select(14, GetItemInfo(self:GetStaticBackingItem())))
+        local bindType = (select(14, GetItemInfo(self:GetItemLink())))
 
         local binding = CaerdonItemBind.Unknown
         if bindType == 0 then
@@ -209,21 +206,38 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
     end
 end
 
+function CaerdonItemMixin:HasItemLocationBankOrBags()
+    local itemLocation = self:GetItemLocation()
+    if itemLocation and itemLocation:IsBagAndSlot() then
+        return true
+    else
+        return false
+    end
+end
+
+function CaerdonItemMixin:IsSoulbound()
+    if self:IsItemInPlayersControl() then
+        return C_Item.IsBound(self:GetItemLocation())
+    else
+        return false
+    end
+end
+
 function CaerdonItemMixin:GetExpansionID() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        return (select(15, GetItemInfo(self:GetStaticBackingItem())))
+        return (select(15, GetItemInfo(self:GetItemLink())))
     end
 end
 
 function CaerdonItemMixin:GetSetID()
     if not self:IsItemEmpty() then
-        return (select(16, GetItemInfo(self:GetStaticBackingItem())))
+        return (select(16, GetItemInfo(self:GetItemLink())))
     end
 end
 
 function CaerdonItemMixin:GetIsCraftingReagent()  -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        return (select(17, GetItemInfo(self:GetStaticBackingItem())))
+        return (select(17, GetItemInfo(self:GetItemLink())))
     else
         return false
     end
@@ -243,13 +257,27 @@ function IsUnhandledType(typeID, subTypeID)
 end
 
 function CaerdonItemMixin:GetCaerdonItemType()
+    local itemLink = self:GetItemLink()
+    if not itemLink then
+        return CaerdonItemType.Empty
+    end
+
+    -- TODO: Keep an eye on this - caching type now that I'm handling ItemLocation may not be a good idea
+    -- if I want to support swapping the item out
     if not self.caerdonItemType then
-        local linkType, linkOptions, displayText = LinkUtil.ExtractLink(self:GetItemLink())
         local caerdonType = CaerdonItemType.Unknown
+        local linkType, linkOptions, displayText = LinkUtil.ExtractLink(itemLink)
         local typeID = self:GetItemTypeID()
         local subTypeID = self:GetItemSubTypeID()
 
-        if linkType == "item" then
+        local toylink
+        if typeID then
+            toylink = C_ToyBox.GetToyLink(self:GetItemID())
+        end
+
+        if toylink then
+            caerdonType = CaerdonItemType.Toy
+        elseif linkType == "item" then
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)
             -- Keep an eye on this
@@ -260,28 +288,19 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == LE_ITEM_CLASS_BATTLEPET then
                 caerdonType = CaerdonItemType.BattlePet
             elseif typeID == LE_ITEM_CLASS_CONSUMABLE then
-                -- TODO: I've seen toys in both consumable/other and misc/other but worried about holiday, etc - can I get more specific?
-                local itemIDInfo, toyName, icon = C_ToyBox.GetToyInfo(self:GetItemID())
-                if (itemIDInfo and toyName) then
-                    caerdonType = CaerdonItemType.Toy
-                else
-                    caerdonType = CaerdonItemType.Consumable
-                end
+                caerdonType = CaerdonItemType.Consumable
             elseif typeID == LE_ITEM_CLASS_MISCELLANEOUS then
                 if subTypeID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
                     local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradeable, unique, obtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self:GetItemID());
                     if creatureID and displayID then
                         caerdonType = CaerdonItemType.CompanionPet
+                    else
+                        caerdonType = CaerdonItemType.Unhandled
                     end
                 elseif subTypeID == LE_ITEM_MISCELLANEOUS_MOUNT or subTypeID == LE_ITEM_MISCELLANEOUS_MOUNT_EQUIPMENT then
                     caerdonType = CaerdonItemType.Mount
                 else
-                    local itemIDInfo, toyName, icon = C_ToyBox.GetToyInfo(self:GetItemID())
-                    if (itemIDInfo and toyName) then
-                        caerdonType = CaerdonItemType.Toy
-                    else
-                        caerdonType = CaerdonItemType.Unhandled
-                    end
+                    caerdonType = CaerdonItemType.Unhandled
                 end
             elseif typeID == LE_ITEM_CLASS_QUESTITEM then
                 caerdonType = CaerdonItemType.Quest

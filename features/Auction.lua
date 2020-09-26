@@ -114,20 +114,8 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 
 			for i, button in ipairs(buttons) do
 				local slot = i + offset
-	
-				local _, itemLink
-	
 				local browseResult = browseResults[slot]
 				if browseResult then
-					local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
-					local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
-	
-					if itemKeyInfo and itemKeyInfo.battlePetLink then
-						itemLink = itemKeyInfo.battlePetLink
-					else
-						itemLink = item:GetItemLink()
-					end
-	
 					-- From AuctionHouseTableBuilder
 					local PRICE_DISPLAY_WIDTH = 120;
 					local PRICE_DISPLAY_WITH_CHECKMARK_WIDTH = 140;
@@ -137,8 +125,16 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 
 					local cell = AuctionHouseFrame.BrowseResultsFrame.ItemList.tableBuilder:GetCellByIndex(i, 2)
 			
-					if itemLink and button then
-						local item = CaerdonItem:CreateFromItemLink(itemLink)
+					if button then
+						local item
+						local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
+		
+						if itemKeyInfo and itemKeyInfo.battlePetLink then
+							item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
+						else
+							item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
+						end
+		
 						CaerdonWardrobe:UpdateButton(button, item, self, { index = slot, itemKey = browseResult.itemKey },  
 						{
 							overrideStatusPosition = "LEFT",

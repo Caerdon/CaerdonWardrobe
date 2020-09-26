@@ -89,6 +89,11 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 		bindingStatus = ""
 	end
 
+	if item:IsSoulbound() then
+		isBindOnPickup = true
+		bindingStatus = nil
+	end
+
 	local isConduit = false
 	if IsConduit(itemLink) then
 		isConduit = true
@@ -143,16 +148,8 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 			skillTooLow = true
 		end
 
-		if tooltipInfo.isSoulbound then
-			isBindOnPickup = true
-		end
-
 		-- TODO: Can we scan the embedded item tooltip? Probably need to do something like EmbeddedItemTooltip_SetItemByID
 		-- This may only matter for recipes, so I may have to use LibRecipes if I can't get the recipe info for the created item.
-		if tooltipInfo.isSoulbound and bindingStatus == "BoE" then  -- Equipment set binding status should go through still
-			bindingStatus = nil
-		end
-
 		if tooltipInfo.requiredTradeSkillMissingOrUnleveled then
 			unusableItem = true
 			-- if isBindOnPickup then -- assume all unknown not needed for now
@@ -315,7 +312,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	if options and options.relativeFrame then
 		button:SetAllPoints(options.relativeFrame)
 	else
-		button:SetAllPoints(originalButton.IconBorder or originalButton)
+		button:SetAllPoints(originalButton)
 	end
 
 	-- Had some addons messing with frame level resulting in this getting covered by the parent button.
@@ -860,6 +857,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				mogStatus = "other"
 			end
 		end
+	elseif caerdonType == CaerdonItemType.Toy then
+		local toyInfo = itemData:GetToyInfo()
+		if toyInfo.needsItem then
+			mogStatus = "own"
+		end
 	elseif bindingResult.needsItem then
 		if caerdonType == CaerdonItemType.Recipe then
 			if bindingResult.unusableItem then
@@ -893,10 +895,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		end
 	end
 
-	if locationInfo.isBankOrBags then
-		-- TODO: This is very specific to bank and bags features and addons (locationInfo) and needs pushed into those
-		local bag = locationInfo.bag
-		local slot = locationInfo.slot
+	if item:HasItemLocationBankOrBags() then
+		local itemLocation = item:GetItemLocation()
+		local bag, slot = itemLocation:GetBagAndSlot()
 		
 		local containerID = bag
 		local containerSlot = slot
@@ -1080,7 +1081,7 @@ function CaerdonWardrobeMixin:ClearButton(button)
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
-	if not item or not item:GetStaticBackingItem() then
+	if not item or (item:IsItemEmpty() and item:GetCaerdonItemType() == CaerdonItemType.Empty) then
 		self:ClearButton(button)
 		return
 	end
@@ -1089,8 +1090,16 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 		self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil)
 	end
 
-	if locationInfo.locationKey then -- opt-in to coroutine-based update
-		self.waitingToProcess[format("%s-%s", feature:GetName(), locationInfo.locationKey)] = {
+	local locationKey = locationInfo.locationKey
+
+	if item:HasItemLocationBankOrBags() then
+		local itemLocation = item:GetItemLocation()
+		local bag, slot = itemLocation:GetBagAndSlot()
+		locationKey = format("bag%d-slot%d", bag, slot)
+	end
+
+	if locationKey then -- opt-in to coroutine-based update
+		self.waitingToProcess[format("%s-%s", feature:GetName(), locationKey)] = {
 			button = button,
 			item = item,
 			feature = feature,

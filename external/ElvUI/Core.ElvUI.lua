@@ -38,8 +38,6 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 	local button = frame.Bags[bagID][slotID]
 	local bagType = frame.Bags[bagID].type
 
-	local itemLink = GetContainerItemLink(bagID, slotID)
-
 	-- local uiScale = ElvUI[1].global.general.UIScale
 	local isBank = bagID == BANK_CONTAINER or (bagID > NUM_BAG_SLOTS and bagID <= NUM_BAG_SLOTS + NUM_BANKBAGSLOTS)
 	local iconSize = ((isBank and self.ElvUIBags.db.bankSize) or (self.ElvUIBags.db.bagSize)) * 0.5
@@ -56,26 +54,20 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 		numberFontSize = ElvUI[1].db.bags.itemLevelFontSize
 	end
 
-	if itemLink then
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, { 
-				bag = bagID, 
-				slot = slotID, 
-				isBankOrBags = true,
-				locationKey = format("bag%d-slot%d", bagID, slotID)
-			}, {
-				hasCount = hasCount,
-				relativeFrame = button.icon,
-				showMogIcon = true,
-				showBindStatus = true,
-				showSellables = true,
-				statusProminentSize = iconSize,
-				bindingScale = bindingScale, 
-				itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
-		})
-	else
-		CaerdonWardrobe:ClearButton(button)
-	end
+	local item = CaerdonItem:CreateFromBagAndSlot(bagID, slotID)
+	CaerdonWardrobe:UpdateButton(button, item, self, { 
+			bag = bagID, 
+			slot = slotID, 
+		}, {
+			hasCount = hasCount,
+			relativeFrame = button.icon,
+			showMogIcon = true,
+			showBindStatus = true,
+			showSellables = true,
+			statusProminentSize = iconSize,
+			bindingScale = bindingScale, 
+			itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
+	})
 end
 
 if select(4, GetAddOnInfo(addonName)) then

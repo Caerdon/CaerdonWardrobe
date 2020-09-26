@@ -27,7 +27,6 @@ function CargBagsMixin:Refresh()
 end
 
 function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
-	local itemLink = GetContainerItemLink(bagID, slotID)
 	local button = frame:GetButton(bagID, slotID)
 	local options = {
 		showMogIcon=true, 
@@ -37,12 +36,8 @@ function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
 	}
 
 	if button then
-		if itemLink then
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bagID, slot = slotID, isBankOrBags = true }, options)
-		else
-			CaerdonWardrobe:ClearButton(button)
-		end
+		local item = CaerdonItem:CreateFromBagAndSlot(bagID, slotID)
+		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bagID, slot = slotID }, options)
 	end
 end
 

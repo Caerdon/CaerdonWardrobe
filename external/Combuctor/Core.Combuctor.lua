@@ -14,7 +14,7 @@ function CombuctorMixin:SetTooltipItem(tooltip, item, locationInfo)
 		if not item:IsItemEmpty() then
 			tooltip:SetHyperlink(item:GetItemLink())
 		end
-	elseif not locationInfo.isBankOrBags then
+	elseif not item:HasItemLocationBankOrBags() then
 		local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
 	elseif locationInfo.bag == BANK_CONTAINER then
 		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
@@ -48,7 +48,7 @@ function CombuctorMixin:GetDisplayInfo(button, item, feature, locationInfo, opti
 				shouldShow = showSellableIcon
 			}
 		}
-	elseif not locationInfo.isBankOrBags then
+	elseif not item:HasItemLocationBankOrBags() then
 		return {
 			bindingStatus = {
 				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
@@ -89,13 +89,8 @@ function CombuctorMixin:OnUpdateSlot(button)
 					CaerdonWardrobe:ClearButton(button)
 				end
 			else
-				local itemLink = GetContainerItemLink(bag, slot)
-				if itemLink then
-					local item = CaerdonItem:CreateFromItemLink(itemLink)
-					CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
-				else
-					CaerdonWardrobe:ClearButton(button)
-				end
+				local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+				CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			end
 		end
 	end

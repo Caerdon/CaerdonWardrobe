@@ -19,7 +19,6 @@ function AdiBagsMixin:Init()
 	end
 
 	self.mod.UpdateButton = function(mod, event, button)
-		local itemLink = button.itemLink
 		local bag = button.bag
 		local slot = button.slot
 
@@ -30,12 +29,8 @@ function AdiBagsMixin:Init()
 			iconPosition="TOPRIGHT" 
 		}
 
-		if itemLink then
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, options)
-		else
-			CaerdonWardrobe:ClearButton()
-		end
+		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
 	end
 end
 
