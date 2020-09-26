@@ -58,15 +58,20 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 
 	if itemLink then
 		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bagID, slot = slotID, isBankOrBags = true }, {
-			hasCount = hasCount,
-			relativeFrame = button.icon,
-			showMogIcon = true,
-			showBindStatus = true,
-			showSellables = true,
-			statusProminentSize = iconSize,
-			bindingScale = bindingScale, 
-			itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
+		CaerdonWardrobe:UpdateButton(button, item, self, { 
+				bag = bagID, 
+				slot = slotID, 
+				isBankOrBags = true,
+				locationKey = format("bag%d-slot%d", bagID, slotID)
+			}, {
+				hasCount = hasCount,
+				relativeFrame = button.icon,
+				showMogIcon = true,
+				showBindStatus = true,
+				showSellables = true,
+				statusProminentSize = iconSize,
+				bindingScale = bindingScale, 
+				itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
 		})
 	else
 		CaerdonWardrobe:ClearButton(button)

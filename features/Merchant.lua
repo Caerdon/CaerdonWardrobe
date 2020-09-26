@@ -69,9 +69,13 @@ function MerchantMixin:OnMerchantUpdate()
 
 		local slot = index
 
-		local itemLink = GetMerchantItemLink(index)
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, { slot = slot }, options)
+        local itemLink = GetMerchantItemLink(index)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            CaerdonWardrobe:UpdateButton(button, item, self, { slot = slot }, options)
+        else
+            CaerdonWardrobe:ClearButton(button)
+        end
     end
     
     local numBuybackItems = GetNumBuybackItems()
@@ -79,8 +83,12 @@ function MerchantMixin:OnMerchantUpdate()
     if buybackName then
         local itemLink = GetBuybackItemLink(numBuybackItems)
         local slot = "buybackbutton"
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(MerchantBuyBackItemItemButton, item, self, { slot = slot }, options)
+        if itemLink then
+    		local item = CaerdonItem:CreateFromItemLink(itemLink)
+            CaerdonWardrobe:UpdateButton(MerchantBuyBackItemItemButton, item, self, { slot = slot }, options)
+        else
+            CaerdonWardrobe:ClearButton(MerchantBuyBackItemItemButton)
+        end
     else
         CaerdonWardrobe:ClearButton(MerchantBuyBackItemItemButton)
     end

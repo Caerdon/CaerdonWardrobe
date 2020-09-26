@@ -75,7 +75,7 @@ function BagsMixin:OnBagUpdate_Coroutine()
 				if frameID then
 					self.processQueue[bagID] = nil
 					local frame = _G["ContainerFrame".. frameID]
-					self:OnContainerUpdate(frame, true)
+					self:OnContainerUpdate(frame)
 					coroutine.yield()
 				else -- not open, reschedule
 					hasMore = true
@@ -92,7 +92,7 @@ function BagsMixin:AddBagUpdateRequest(bagID)
 	self.waitingOnBagUpdate[tostring(bagID)] = true
 end
 
-function BagsMixin:OnContainerUpdate(frame, asyncUpdate)
+function BagsMixin:OnContainerUpdate(frame)
 	local bag = frame:GetID()
 	local size = ContainerFrame_GetContainerNumSlots(bag)
 
@@ -103,7 +103,16 @@ function BagsMixin:OnContainerUpdate(frame, asyncUpdate)
 		local itemLink = GetContainerItemLink(bag, slot)
 		if itemLink then
 			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true })
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				bag = bag, 
+				slot = slot, 
+				locationKey = format("bag%d-slot%d", bag, slot),
+				isBankOrBags = true 
+			}, { 
+				showMogIcon = true, 
+				showBindStatus = true, 
+				showSellables = true
+			})
 		else
 			CaerdonWardrobe:ClearButton(button)
 		end

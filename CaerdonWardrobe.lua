@@ -16,6 +16,8 @@ local isShadowlands = tonumber(build) > 35700
 CaerdonWardrobeMixin = {}
 
 function CaerdonWardrobeMixin:OnLoad()
+	self.waitingToProcess = {}
+
 	self:RegisterEvent "ADDON_LOADED"
 	self:RegisterEvent "PLAYER_LOGOUT"
 	self:RegisterEvent "UNIT_SPELLCAST_SUCCEEDED"
@@ -1073,55 +1075,126 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 		return
 	end
 
-	self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil)
+	if not button.caerdonButton then
+		self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil)
+	end
+
+	if locationInfo.locationKey then -- opt-in to coroutine-based update
+		self.waitingToProcess[format("%s-%s", feature:GetName(), locationInfo.locationKey)] = {
+			button = button,
+			item = item,
+			feature = feature,
+			locationInfo = locationInfo,
+			options = options
+		}
+		return
+	end
 
 	local scanTip = CaerdonWardrobeFrameTooltip
 	scanTip:ClearLines()
 	feature:SetTooltipItem(scanTip, item, locationInfo)
 
-	-- TODO: May have to look into cancelable continue to avoid timing issues
-	-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
-	-- but in cases of rapid data update (AH scroll), we don't want to update an old button
-	-- Look into ContinuableContainer
 	if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
 		local tooltipInfo = self:GetTooltipInfo(item)
-
-		-- This is lame, but tooltips end up not having all of their data
-		-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
-		-- Specifically, the Equip: line was missing on a fishing pole (and other items)
-		-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
-		-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
-
-		-- Trying without the retry if possible...
-		-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
-		-- 	button.isCaerdonRetry = true
-		-- 	QueueProcessItem(button, item, feature, locationInfo, options)
-		-- 	return
-		-- end	
 		if tooltipInfo.isRetrieving then
 			self:QueueProcessItem(button, item, feature, locationInfo, options)
 			return
 		end	
 	
-		self:SetItemButtonStatus(button)
 		self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 	else
 		item:ContinueOnItemLoad(function ()
 			local tooltipInfo = self:GetTooltipInfo(item)
-			-- Trying without the retry if possible...
-			-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
-			-- 	button.isCaerdonRetry = true
-			-- 	QueueProcessItem(button, item, feature, locationInfo, options)
-			-- 	return
-			-- end	
 			if tooltipInfo.isRetrieving then
 				self:QueueProcessItem(button, item, feature, locationInfo, options)
 				return
 			end	
 	
-			self:SetItemButtonStatus(button)
 			self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 		end)
+	end
+end
+
+function CaerdonWardrobeMixin:ProcessItem_Coroutine()
+	if self.processQueue == nil then
+		self.processQueue = {}
+
+		local hasMore = true
+
+		while hasMore do
+			local isBatch = false
+			local itemCount = 0
+			for locationKey, processInfo in pairs(self.waitingToProcess) do
+				self.processQueue[locationKey] = processInfo
+				self.waitingToProcess[locationKey] = nil
+				itemCount = itemCount + 1
+				if itemCount > 12 then -- Process a small batch at a time
+					isBatch = true
+					break
+				end
+			end
+
+			hasMore = isBatch
+
+			for locationKey, processInfo in pairs(self.processQueue) do
+				-- TODO: May have to look into cancelable continue to avoid timing issues
+				-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
+				-- but in cases of rapid data update (AH scroll), we don't want to update an old button
+				-- Look into ContinuableContainer
+				local button = processInfo.button
+				local item = processInfo.item
+				local feature = processInfo.feature
+				local locationInfo = processInfo.locationInfo
+				local options = processInfo.options
+				
+				local scanTip = CaerdonWardrobeFrameTooltip
+				scanTip:ClearLines()
+				feature:SetTooltipItem(scanTip, item, locationInfo)
+						
+				if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
+					local tooltipInfo = self:GetTooltipInfo(item)
+
+					-- This is lame, but tooltips end up not having all of their data
+					-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
+					-- Specifically, the Equip: line was missing on a fishing pole (and other items)
+					-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
+					-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
+
+					-- Trying without the retry if possible...
+					-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
+					-- 	button.isCaerdonRetry = true
+					-- 	QueueProcessItem(button, item, feature, locationInfo, options)
+					-- 	return
+					-- end	
+					if tooltipInfo.isRetrieving then
+						self:UpdateButton(button, item, feature, locationInfo, options)
+					else
+						self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+					end
+				else
+					item:ContinueOnItemLoad(function ()
+						local tooltipInfo = self:GetTooltipInfo(item)
+						-- Trying without the retry if possible...
+						-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
+						-- 	button.isCaerdonRetry = true
+						-- 	QueueProcessItem(button, item, feature, locationInfo, options)
+						-- 	return
+						-- end	
+						if tooltipInfo.isRetrieving then
+							self:UpdateButton(button, item, feature, locationInfo, options)
+						else
+							self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+						end
+					end)
+				end
+
+				self.processQueue[locationKey] = nil
+			end
+
+			coroutine.yield()
+		end
+
+		self.processQueue = nil
 	end
 end
 
@@ -1139,7 +1212,28 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
 	end
 end
 
+local next = next -- faster lookup as a local apparently (haven't measured)
+
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
+	self.timeSinceLastUpdate = (self.timeSinceLastUpdate or 0) + elapsed
+	if (self.timeSinceLastUpdate > 0.01) then
+		if self.processItemCoroutine then
+			if coroutine.status(self.processItemCoroutine) ~= "dead" then
+				local ok, result = coroutine.resume(self.processItemCoroutine)
+				if not ok then
+					error(result)
+				end
+			else
+				self.processItemCoroutine = nil
+			end
+			return
+		elseif next(self.waitingToProcess) ~= nil then
+			self.processItemCoroutine = coroutine.create(function() self:ProcessItem_Coroutine() end)
+		end
+
+		self.timeSinceLastUpdate = 0
+	end
+
 	local name, instance
 	for name, instance in pairs(registeredFeatures) do
 		instance:OnUpdate(elapsed)
