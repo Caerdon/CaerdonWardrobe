@@ -65,7 +65,8 @@ function GuildBankMixin:OnGuildBankFrameUpdate()
 
 			local itemLink = GetGuildBankItemLink(tab, i)
 			if itemLink then
-				CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), {tab = tab, index = i}, options)
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+				CaerdonWardrobe:UpdateButton(button, item, self, {tab = tab, index = i}, options)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end

@@ -101,11 +101,15 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 
 			if not itemLink then
 				CaerdonWardrobe:ClearButton(frame)
-			elseif loc_id == ArkInventory.Const.Location.Vault then
-				local tab = ArkInventory.Global.Location[loc_id].view_tab
-				CaerdonWardrobe:UpdateButtonLink(frame, itemLink, self:GetName(), {tab = tab, index = slot, isBankorBags = false}, options)
 			else
-				CaerdonWardrobe:UpdateButtonLink(frame, itemLink, self:GetName(), { bag = bag, slot = slot, isBankOrBags = true }, options)
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+
+				if loc_id == ArkInventory.Const.Location.Vault then
+					local tab = ArkInventory.Global.Location[loc_id].view_tab
+					CaerdonWardrobe:UpdateButton(frame, item, self, {tab = tab, index = slot, isBankorBags = false}, options)
+				else
+					CaerdonWardrobe:UpdateButton(frame, item, self, { bag = bag, slot = slot, isBankOrBags = true }, options)
+				end
 			end
 		else
 			local itemLink
@@ -115,7 +119,8 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 			end
 
 			if itemLink then
-				CaerdonWardrobe:UpdateButtonLink(frame, itemLink, self:GetName(), { isOffline=true, isBankOrBags = false }, options)
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+				CaerdonWardrobe:UpdateButton(frame, item, self, { isOffline=true, isBankOrBags = false }, options)
 			else
 				CaerdonWardrobe:ClearButton(frame)
 			end

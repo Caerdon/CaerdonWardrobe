@@ -42,25 +42,28 @@ function EncounterJournalMixin:Refresh()
 	end
 end
 
-function EncounterJournalMixin:OnEncounterJournalSetLootButton(item)
+function EncounterJournalMixin:OnEncounterJournalSetLootButton(button)
 	local itemID, encounterID, name, icon, slot, armorType, itemLink;
 	if isShadowlands then
 		-- local itemInfo = C_EncounterJournal.GetLootInfoByIndex(item.index);
 		-- itemLink = itemInfo.link
 		-- itemLink = item.link
-		itemLink = select(2, GetItemInfo(item.itemID))
+		itemLink = select(2, GetItemInfo(button.itemID))
 	else
-		itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(item.index);
+		itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(button.index);
 	end
 	
 	local options = {
-		relativeFrame = item.icon
+		relativeFrame = button.icon,
+		statusOffsetX = 8,
+		statusOffsetY = 7
 	}
 
 	if itemLink then
-		CaerdonWardrobe:UpdateButtonLink(item, itemLink, self:GetName(), { item = item }, options)
+		local item = CaerdonItem:CreateFromItemLink(itemLink)
+		CaerdonWardrobe:UpdateButton(button, item, self, { }, options)
 	else
-		CaerdonWardrobe:ClearButton(item)
+		CaerdonWardrobe:ClearButton(button)
 	end
 end
 

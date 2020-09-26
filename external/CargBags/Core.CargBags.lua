@@ -37,7 +37,8 @@ function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
 	}
 
 	if button then
-		CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bagID, slot = slotID, isBankOrBags = true }, options)
+		local item = CaerdonItem:CreateFromItemLink(itemLink)
+		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bagID, slot = slotID, isBankOrBags = true }, options)
 	end
 end
 

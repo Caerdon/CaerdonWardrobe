@@ -88,7 +88,6 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 
 		local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
 		for i, button in ipairs(buttons) do
-			local bag = self:GetName()
 			local slot = i + offset
 
 			local _, itemLink
@@ -114,14 +113,13 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 			end
 
 			for i, button in ipairs(buttons) do
-				local bag = self:GetName()
 				local slot = i + offset
 	
 				local _, itemLink
 	
 				local browseResult = browseResults[slot]
 				if browseResult then
-					local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID, bag, slot)
+					local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
 					local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
 	
 					if itemKeyInfo and itemKeyInfo.battlePetLink then
@@ -140,7 +138,8 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 					local cell = AuctionHouseFrame.BrowseResultsFrame.ItemList.tableBuilder:GetCellByIndex(i, 2)
 			
 					if itemLink and button then
-						CaerdonWardrobe:UpdateButtonLink(button, itemLink, bag, { index = slot, itemKey = browseResult.itemKey },  
+						local item = CaerdonItem:CreateFromItemLink(itemLink)
+						CaerdonWardrobe:UpdateButton(button, item, self, { index = slot, itemKey = browseResult.itemKey },  
 						{
 							overrideStatusPosition = "LEFT",
 							statusOffsetX = -10,
@@ -164,18 +163,17 @@ function AuctionMixin:OnAuctionBrowseClick(frame, buttonName, isDown)
 end
 
 function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
-	local itemLink
-	local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
 	local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
 
+	local item
 	if itemKeyInfo and itemKeyInfo.battlePetLink then
-		itemLink = itemKeyInfo.battlePetLink
+		item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
 	else
-		itemLink = item:GetItemLink()
+		item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
 	end
 
 	local button = AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton
-	CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { itemKey = itemKeyInfo },  
+	CaerdonWardrobe:UpdateButton(button, item, self, { itemKey = itemKeyInfo },  
 	{
 		statusProminentSize = 30,
 		statusOffsetX = 15,

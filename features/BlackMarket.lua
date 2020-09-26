@@ -46,7 +46,8 @@ function BlackMarketMixin:UpdateBlackMarketItems()
 				
 			if ( index <= numItems ) then
 				local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
-				CaerdonWardrobe:UpdateButtonLink(button, link, self:GetName(), { type="listItem", index = index }, options)
+				local item = CaerdonItem:CreateFromItemLink(link)
+				CaerdonWardrobe:UpdateButton(button, item, self, { type="listItem", index = index }, options)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end
@@ -57,7 +58,8 @@ end
 function BlackMarketMixin:UpdateBlackMarketHotItem()
 	local button = BlackMarketFrame.HotDeal.Item
 	local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
-	CaerdonWardrobe:UpdateButtonLink(button, link, self:GetName(), { type="hotItem" }, nil)
+	local item = CaerdonItem:CreateFromItemLink(link)
+	CaerdonWardrobe:UpdateButton(button, item, self, { type="hotItem" }, nil)
 end
 
 CaerdonWardrobe:RegisterFeature(BlackMarketMixin)

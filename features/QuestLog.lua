@@ -79,11 +79,11 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			}	
 
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(questItem, reward.itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
+				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			elseif reward.itemID then
-				-- TODO: Do I need to load the data here first?  Keep an eye out
-				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(questItem, itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				local item = CaerdonItem:CreateFromItemID(reward.itemID)
+				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
 			end
@@ -99,10 +99,11 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			}	
 
 			if reward.itemLink then
-				CaerdonWardrobe:UpdateButtonLink(questItem, reward.itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
+				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			elseif reward.itemID then
-				local _, itemLink = GetItemInfo(reward.itemID)
-				CaerdonWardrobe:UpdateButtonLink(questItem, itemLink, self:GetName(), { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				local item = CaerdonItem:CreateFromItemID(reward.itemID)
+				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
 			end

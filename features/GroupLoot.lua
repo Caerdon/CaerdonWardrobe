@@ -20,7 +20,8 @@ end
 
 function GroupLootMixin:OnGroupLootFrameShow(frame)
 	local itemLink = GetLootRollItemLink(frame.rollID)
-	CaerdonWardrobe:UpdateButtonLink(frame.IconFrame, itemLink, self:GetName(), { index = frame.rollID, link = itemLink}, nil)
+    local item = CaerdonItem:CreateFromItemLink(itemLink)
+	CaerdonWardrobe:UpdateButton(frame.IconFrame, item, self, { index = frame.rollID, link = itemLink}, nil)
 end
 
 CaerdonWardrobe:RegisterFeature(GroupLootMixin)

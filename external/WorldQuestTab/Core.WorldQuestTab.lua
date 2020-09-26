@@ -62,7 +62,7 @@ function WorldQuestTabMixin:UpdateButton(button)
 				}
 				
 				local item = Item:CreateFromItemID(rewardInfo.id)
-				CaerdonWardrobe:UpdateButtonLink(rewardButton, item:GetItemLink(), self:GetName(), { reward = rewardInfo, questID = button.questId }, options)
+				CaerdonWardrobe:UpdateButton(rewardButton, item, self, { reward = rewardInfo, questID = button.questId }, options)
 			else
 				CaerdonWardrobe:ClearButton(rewardButton)
 			end

@@ -441,11 +441,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	-- 		button.mogAnim = mogAnim
 	-- 	end
 
-	local featureInstance
 	local displayInfo
 	if feature then
-		featureInstance = registeredFeatures[feature]
-		displayInfo = featureInstance:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+		displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	end
 
 	local alpha = 1
@@ -585,8 +583,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 
 	if not feature then return end
 
-	local featureInstance = registeredFeatures[feature]
-	local displayInfo = featureInstance:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	local displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 
 	if not bindingStatus or not displayInfo.bindingStatus.shouldShow then
 		return
@@ -686,9 +683,9 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 end
 
-function CaerdonWardrobeMixin:QueueProcessItem(button, itemLink, feature, locationInfo, options)
+function CaerdonWardrobeMixin:QueueProcessItem(button, item, feature, locationInfo, options)
 	C_Timer.After(0, function()
-		self:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
+		self:UpdateButton(button, item, feature, locationInfo, options)
 	end)
 end
 
@@ -798,7 +795,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 
 			-- TODO: Exceptions need to be broken out
 			-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
-			if feature == "EncounterJournal" or feature == "Merchant" then
+			if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" then
 				if transmogInfo.needsItem then
 					if transmogInfo.matchesLootSpec then
 						if not transmogInfo.isCompletionistItem then
@@ -1070,20 +1067,17 @@ function CaerdonWardrobeMixin:ClearButton(button)
 	self:SetItemButtonBindType(button)
 end
 
-function CaerdonWardrobeMixin:UpdateButtonLink(button, itemLink, feature, locationInfo, options)
-	if not itemLink then
+function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
+	if not item or not item:GetStaticBackingItem() then
 		self:ClearButton(button)
 		return
 	end
 
-	local item = CaerdonItem:CreateFromItemLink(itemLink)
 	self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil)
 
 	local scanTip = CaerdonWardrobeFrameTooltip
 	scanTip:ClearLines()
-	if registeredFeatures[feature] then
-		registeredFeatures[feature]:SetTooltipItem(scanTip, item, locationInfo)
-	end
+	feature:SetTooltipItem(scanTip, item, locationInfo)
 
 	-- TODO: May have to look into cancelable continue to avoid timing issues
 	-- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
@@ -1101,11 +1095,11 @@ function CaerdonWardrobeMixin:UpdateButtonLink(button, itemLink, feature, locati
 		-- Trying without the retry if possible...
 		-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
 		-- 	button.isCaerdonRetry = true
-		-- 	QueueProcessItem(button, itemLink, feature, locationInfo, options)
+		-- 	QueueProcessItem(button, item, feature, locationInfo, options)
 		-- 	return
 		-- end	
 		if tooltipInfo.isRetrieving then
-			self:QueueProcessItem(button, itemLink, feature, locationInfo, options)
+			self:QueueProcessItem(button, item, feature, locationInfo, options)
 			return
 		end	
 	
@@ -1117,11 +1111,11 @@ function CaerdonWardrobeMixin:UpdateButtonLink(button, itemLink, feature, locati
 			-- Trying without the retry if possible...
 			-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
 			-- 	button.isCaerdonRetry = true
-			-- 	QueueProcessItem(button, itemLink, feature, locationInfo, options)
+			-- 	QueueProcessItem(button, item, feature, locationInfo, options)
 			-- 	return
 			-- end	
 			if tooltipInfo.isRetrieving then
-				self:QueueProcessItem(button, itemLink, feature, locationInfo, options)
+				self:QueueProcessItem(button, item, feature, locationInfo, options)
 				return
 			end	
 	

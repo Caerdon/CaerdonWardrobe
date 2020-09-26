@@ -56,16 +56,21 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 		numberFontSize = ElvUI[1].db.bags.itemLevelFontSize
 	end
 
-	CaerdonWardrobe:UpdateButtonLink(button, itemLink, self:GetName(), { bag = bagID, slot = slotID, isBankOrBags = true }, {
-		hasCount = hasCount,
-		relativeFrame = button.icon,
-		showMogIcon = true,
-		showBindStatus = true,
-		showSellables = true,
-		statusProminentSize = iconSize,
-		bindingScale = bindingScale, 
-		itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
-	})
+	if itemLink then
+		local item = CaerdonItem:CreateFromItemLink(itemLink)
+		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bagID, slot = slotID, isBankOrBags = true }, {
+			hasCount = hasCount,
+			relativeFrame = button.icon,
+			showMogIcon = true,
+			showBindStatus = true,
+			showSellables = true,
+			statusProminentSize = iconSize,
+			bindingScale = bindingScale, 
+			itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale
+		})
+	else
+		CaerdonWardrobe:ClearButton(button)
+	end
 end
 
 if select(4, GetAddOnInfo(addonName)) then
