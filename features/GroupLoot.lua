@@ -19,9 +19,13 @@ function GroupLootMixin:Refresh()
 end
 
 function GroupLootMixin:OnGroupLootFrameShow(frame)
-	local itemLink = GetLootRollItemLink(frame.rollID)
-    local item = CaerdonItem:CreateFromItemLink(itemLink)
-	CaerdonWardrobe:UpdateButton(frame.IconFrame, item, self, { index = frame.rollID, link = itemLink}, nil)
+    local itemLink = GetLootRollItemLink(frame.rollID)
+    if itemLink then
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        CaerdonWardrobe:UpdateButton(frame.IconFrame, item, self, { index = frame.rollID, link = itemLink}, nil)
+    else
+        CaerdonWardrobe:ClearButton(frame.IconFrame)
+    end
 end
 
 CaerdonWardrobe:RegisterFeature(GroupLootMixin)

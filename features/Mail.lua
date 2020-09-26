@@ -31,8 +31,12 @@ function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreate
 		if HasInboxItem(InboxFrame.openMailID, i) then
 			-- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
 			local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(attachmentButton, item, self, { type="open", index = i }, nil)
+			if itemLink then
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, { type="open", index = i }, nil)
+			else
+				CaerdonWardrobe:ClearButton(attachmentButton)
+			end
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -45,8 +49,12 @@ function MailMixin:OnSendMailFrameUpdate()
 
 		if HasSendMailItem(i) then
 			local itemLink = GetSendMailItemLink(i)
-			local item = CaerdonItem:CreateFromItemLink(itemLink)
-			CaerdonWardrobe:UpdateButton(attachmentButton, item, self, { type="send", index = i }, nil)
+			if itemLink then
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, { type="send", index = i }, nil)
+			else
+				CaerdonWardrobe:ClearButton(attachmentButton)
+			end
 		else
             CaerdonWardrobe:ClearButton(attachmentButton)
 		end
@@ -63,8 +71,12 @@ function MailMixin:OnInboxFrameUpdate()
 		if ( index <= numItems ) then
 			-- Setup mail item
 			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
-			local item = CaerdonItem:CreateFromItemLink(firstItemLink)
-			CaerdonWardrobe:UpdateButton(button, item, self, { type="inbox", index = index }, nil)
+			if firstItemLink then
+				local item = CaerdonItem:CreateFromItemLink(firstItemLink)
+				CaerdonWardrobe:UpdateButton(button, item, self, { type="inbox", index = index }, nil)
+			else
+				CaerdonWardrobe:ClearButton(button)
+			end
 		else
             CaerdonWardrobe:ClearButton(button)
 		end

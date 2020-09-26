@@ -10,7 +10,8 @@ function BagsMixin:Init()
 	self.waitingOnBagUpdate = {}
 	self.waitingOnBagUpdate[tostring(BACKPACK_CONTAINER)] = true -- backpack doesn't fire BAG_UPDATE initially
 
-	return { "BAG_UPDATE", "BAG_UPDATE_DELAYED" }
+	hooksecurefunc("ToggleBag", function(...) self:OnToggleBag(...) end)
+	return { "BAG_UPDATE", "BAG_UPDATE_DELAYED", "UNIT_SPELLCAST_SUCCEEDED" }
 end
 
 function BagsMixin:BAG_UPDATE(bagID)
@@ -21,6 +22,18 @@ end
 
 function BagsMixin:BAG_UPDATE_DELAYED()
 	self.isBagUpdateRequested = true
+end
+
+function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
+	if unitTarget == "player" then
+		-- Tracking unlock spells to know to refresh
+		-- May have to add some other abilities but this is a good place to start.
+		if spellID == 1804 then
+			C_Timer.After(0.1, function()
+				self:Refresh()
+			end)
+		end
+	end
 end
 
 function BagsMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -88,6 +101,11 @@ function BagsMixin:OnBagUpdate_Coroutine()
 	end
 end
 
+function BagsMixin:OnToggleBag(bagID)
+	self.waitingOnBagUpdate[tostring(bagID)] = true
+	self.isBagUpdateRequested = true
+end
+
 function BagsMixin:AddBagUpdateRequest(bagID)
 	self.waitingOnBagUpdate[tostring(bagID)] = true
 end
@@ -95,7 +113,6 @@ end
 function BagsMixin:OnContainerUpdate(frame)
 	local bag = frame:GetID()
 	local size = ContainerFrame_GetContainerNumSlots(bag)
-
 	for buttonIndex = 1, size do
 		local button = _G[frame:GetName() .. "Item" .. buttonIndex]
 		local slot = button:GetID()

@@ -71,19 +71,31 @@ end
 function CombuctorMixin:OnUpdateSlot(button)
 	local bag, slot = button:GetBag(), button:GetID()
 	if button.info.cached then
-		local item = CaerdonItem:CreateFromItemLink(button.info.link)
-		CaerdonWardrobe:UpdateButton(button, item, self, { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+		if button.info.link then
+			local item = CaerdonItem:CreateFromItemLink(button.info.link)
+			CaerdonWardrobe:UpdateButton(button, item, self, { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+		else
+			CaerdonWardrobe:ClearButton(button)
+		end
 	else
 		if bag ~= "vault" then
 			local tab = GetCurrentGuildBankTab()
 			if Combuctor:InGuild() and tab == bag then
 				local itemLink = GetGuildBankItemLink(tab, slot)
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(button, item, self, { tab = tab, index = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				if itemLink then
+					local item = CaerdonItem:CreateFromItemLink(itemLink)
+					CaerdonWardrobe:UpdateButton(button, item, self, { tab = tab, index = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				else
+					CaerdonWardrobe:ClearButton(button)
+				end
 			else
 				local itemLink = GetContainerItemLink(bag, slot)
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				if itemLink then
+					local item = CaerdonItem:CreateFromItemLink(itemLink)
+					CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot, isBankOrBags = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				else
+					CaerdonWardrobe:ClearButton(button)
+				end
 			end
 		end
 	end

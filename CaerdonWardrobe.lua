@@ -20,7 +20,6 @@ function CaerdonWardrobeMixin:OnLoad()
 
 	self:RegisterEvent "ADDON_LOADED"
 	self:RegisterEvent "PLAYER_LOGOUT"
-	self:RegisterEvent "UNIT_SPELLCAST_SUCCEEDED"
 	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
@@ -838,20 +837,31 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				bindingStatus = equipmentSets[1]
 			end
 		end
-	elseif bindingResult.needsItem then
-		if caerdonType == CaerdonItemType.Mount then
-			if not itemMinLevel or playerLevel >= itemMinLevel then
-				mogStatus = "own"
-			else
-				mogStatus = "other"
-			end
-		elseif caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.Toy then
+	elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
+		local petInfo = 
+			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
+			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
+		if petInfo.needsItem then
 			if bindingResult.unusableItem then
 				mogStatus = "other"
 			else
 				mogStatus = "own"
 			end
-		elseif caerdonType == CaerdonItemType.Recipe then
+		end
+	elseif caerdonType == CaerdonItemType.Mount then
+		local mountInfo = itemData:GetMountInfo()
+		if mountInfo.needsItem then
+			local factionGroup = PLAYER_FACTION_GROUP[factionID];
+			local playerFactionGroup = UnitFactionGroup("player");
+	
+			if (not itemMinLevel or playerLevel >= itemMinLevel) and (not mountInfo.isFactionSpecific or factionGroup == playerFactionGroup) then
+				mogStatus = "own"
+			else
+				mogStatus = "other"
+			end
+		end
+	elseif bindingResult.needsItem then
+		if caerdonType == CaerdonItemType.Recipe then
 			if bindingResult.unusableItem then
 				if bindingResult.skillTooLow then
 					mogStatus = "lowSkill"
@@ -1364,16 +1374,6 @@ function CaerdonWardrobeMixin:OnEquipPendingItem()
 	--       Need to figure out a better way.  Otherwise,
 	--		 you end up with BoE markers on things you've put on.
 	C_Timer.After(1, function() self:RefreshItems() end)
-end
-
-function CaerdonWardrobeMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
-	if unitTarget == "player" then
-		-- Tracking unlock spells to know to refresh
-		-- May have to add some other abilities but this is a good place to start.
-		if spellID == 1804 then
-			self:RefreshItems(true)
-		end
-	end
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()

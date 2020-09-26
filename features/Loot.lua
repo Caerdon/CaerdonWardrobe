@@ -32,8 +32,12 @@ function LootMixin:OnLootFrameUpdateButton(index)
 	if slot <= numLootItems then
 		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
 			local link = GetLootSlotLink(slot)
-			local item = CaerdonItem:CreateFromItemLink(link)
-			CaerdonWardrobe:UpdateButton(button, item, self, { index = slot }, nil)
+			if link then
+				local item = CaerdonItem:CreateFromItemLink(link)
+				CaerdonWardrobe:UpdateButton(button, item, self, { index = slot }, nil)
+			else
+				CaerdonWardrobe:ClearButton(button)
+			end
 		end
 	end
 end

@@ -179,7 +179,7 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 		statusOffsetX = 15,
 		statusOffsetY = 15,
 		showMogIcon=true, 
-		showBindStatus=false, 
+		showBindStatus=false,
 		showSellables=false
 	})
 end

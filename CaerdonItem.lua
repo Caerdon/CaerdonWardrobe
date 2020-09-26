@@ -52,6 +52,33 @@ end
     return item;
 end
 
+--[[static]] function CaerdonItem:CreateFromItemLocation(itemLocation)
+	if type(itemLocation) ~= "table" or type(itemLocation.HasAnyLocation) ~= "function" or not itemLocation:HasAnyLocation() then
+		error("Usage: Item:CreateFromItemLocation(notEmptyItemLocation)", 2);
+	end
+	local item = CreateFromMixins(ItemMixin);
+	item:SetItemLocation(itemLocation);
+	return item;
+end
+
+--[[static]] function CaerdonItem:CreateFromBagAndSlot(bagID, slotIndex)
+	if type(bagID) ~= "number" or type(slotIndex) ~= "number" then
+		error("Usage: Item:CreateFromBagAndSlot(bagID, slotIndex)", 2);
+	end
+	local item = CreateFromMixins(ItemMixin);
+	item:SetItemLocation(ItemLocation:CreateFromBagAndSlot(bagID, slotIndex));
+	return item;
+end
+
+--[[static]] function CaerdonItem:CreateFromEquipmentSlot(equipmentSlotIndex)
+	if type(equipmentSlotIndex) ~= "number" then
+		error("Usage: Item:CreateFromEquipmentSlot(equipmentSlotIndex)", 2);
+	end
+	local item = CreateFromMixins(ItemMixin);
+	item:SetItemLocation(ItemLocation:CreateFromEquipmentSlot(equipmentSlotIndex));
+	return item;
+end
+
 --[[static]] function CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, name, petID)
     -- TODO: This is a terrible hack until Blizzard gives me more to work with (mostly for tooltips where I don't have an itemLink).
 	if type(speciesID) ~= "number" then
