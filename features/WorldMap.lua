@@ -17,7 +17,7 @@ function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
 	if itemLink then
 		tooltip:SetHyperlink(itemLink)
 	else
-		print("NOPE", locationInfo.questID)
+		tooltip:SetItemByID(item:GetItemID())
 	end
 
 	-- TODO: Ignoring the WorldMap tooltip itself for now since it's the item I care about
