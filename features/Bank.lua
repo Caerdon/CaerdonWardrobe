@@ -5,25 +5,8 @@ function BankMixin:GetName()
 end
 
 function BankMixin:Init()
-	self.waitingOnBagUpdate = {}
-
 	hooksecurefunc("BankFrameItemButton_Update", function(...) self:OnBankItemUpdate(...) end)
-	return { "BANKFRAME_OPENED", "BAG_UPDATE", "BAG_UPDATE_DELAYED" }
-end
-
-function BankMixin:BANKFRAME_OPENED()
-	-- TODO: Review if needed
-	-- self:Refresh()
-end
-
-function BankMixin:BAG_UPDATE(bagID)
-	if bagID > NUM_BAG_SLOTS and bagID <= NUM_BAG_SLOTS + NUM_BANKBAGSLOTS then
-		self:AddBagUpdateRequest(bagID)
-	end
-end
-
-function BankMixin:BAG_UPDATE_DELAYED()
-	self.isBagUpdateRequested = true
+	hooksecurefunc("ContainerFrame_Update", function(...) self:OnContainerFrame_Update(...) end)
 end
 
 function BankMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -35,77 +18,30 @@ function BankMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function BankMixin:Refresh()
-	for i=NUM_BAG_SLOTS + 1, NUM_BAG_SLOTS + NUM_BANKBAGSLOTS do
-		self.waitingOnBagUpdate[tostring(i)] = true
-		self.isBagUpdateRequested = true
-	end	
-end
-
-function BankMixin:OnUpdate(elapsed)
-	if self.bagUpdateCoroutine then
-		if coroutine.status(self.bagUpdateCoroutine) ~= "dead" then
-			local ok, result = coroutine.resume(self.bagUpdateCoroutine)
-			if not ok then
-				error(result)
-			end
-		else
-			self.bagUpdateCoroutine = nil
+	for i = 1, NUM_CONTAINER_FRAMES, 1 do
+		local frame = _G["ContainerFrame"..i]
+		if ( frame:IsShown() ) then
+			self:OnContainerFrame_Update(frame)
 		end
-		return
-	elseif self.isBagUpdateRequested then
-		self.isBagUpdateRequested = false
-		self.bagUpdateCoroutine = coroutine.create(function() self:OnBagUpdate_Coroutine() end)
+	end
+
+	if BankFrame:IsShown() then
+		BankFrame_UpdateItems(BankFrame);
 	end
 end
 
-function BankMixin:OnBagUpdate_Coroutine()
-	if self.processQueue == nil then
-		self.processQueue = {}
-
-		local hasMore = true
-
-		while hasMore do
-			coroutine.yield()
-
-			for bagID, shouldUpdate in pairs(self.waitingOnBagUpdate) do
-				self.processQueue[bagID] = shouldUpdate
-				self.waitingOnBagUpdate[bagID] = nil
-			end
-
-			hasMore = false
-
-			for bagID, shouldUpdate in pairs(self.processQueue) do
-				local frameID = IsBagOpen(tonumber(bagID))
-				if frameID then
-					self.processQueue[bagID] = nil
-					local frame = _G["ContainerFrame".. frameID]
-					self:OnContainerUpdate(frame, true)
-					coroutine.yield()
-				else -- not open, reschedule
-					hasMore = true
-					self.waitingOnBagUpdate[bagID] = true
-				end
-			end
-		end
-
-		self.processQueue = nil
-	end
-end
-
-function BankMixin:AddBagUpdateRequest(bagID)
-	self.waitingOnBagUpdate[tostring(bagID)] = true
-end
-
-function BankMixin:OnContainerUpdate(frame, asyncUpdate)
+function BankMixin:OnContainerFrame_Update(frame)
 	local bag = frame:GetID()
-	local size = ContainerFrame_GetContainerNumSlots(bag)
+	if bag > NUM_BAG_SLOTS and bag <= NUM_BAG_SLOTS + NUM_BANKBAGSLOTS then
+		local size = ContainerFrame_GetContainerNumSlots(bag)
 
-	for buttonIndex = 1, size do
-		local button = _G[frame:GetName() .. "Item" .. buttonIndex]
-		local slot = button:GetID()
+		for buttonIndex = 1, size do
+			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
+			local slot = button:GetID()
 
-		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true })
+			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true })
+		end
 	end
 end
 

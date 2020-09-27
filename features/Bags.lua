@@ -26,27 +26,32 @@ function BagsMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function BagsMixin:Refresh()
-	if ( IsAnyBagOpen() ) then
-		ContainerFrame_UpdateAll();
+	for i = 1, NUM_CONTAINER_FRAMES, 1 do
+		local frame = _G["ContainerFrame"..i]
+		if ( frame:IsShown() ) then
+			self:OnContainerFrame_Update(frame)
+		end
 	end
 end
 
 function BagsMixin:OnContainerFrame_Update(frame)
 	local bag = frame:GetID()
-	local size = ContainerFrame_GetContainerNumSlots(bag)
-	for buttonIndex = 1, size do
-		local button = _G[frame:GetName() .. "Item" .. buttonIndex]
-		local slot = button:GetID()
+	if bag >= BACKPACK_CONTAINER and bag <= NUM_BAG_SLOTS then
+		local size = ContainerFrame_GetContainerNumSlots(bag)
+		for buttonIndex = 1, size do
+			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
+			local slot = button:GetID()
 
-		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		CaerdonWardrobe:UpdateButton(button, item, self, {
-			bag = bag, 
-			slot = slot
-		}, { 
-			showMogIcon = true, 
-			showBindStatus = true, 
-			showSellables = true
-		})
+			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				bag = bag, 
+				slot = slot
+			}, { 
+				showMogIcon = true, 
+				showBindStatus = true, 
+				showSellables = true
+			})
+		end
 	end
 end
 
