@@ -720,7 +720,6 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 	local itemID = item:GetItemID()
 	local caerdonType = item:GetCaerdonItemType()
 	local itemData = item:GetItemData()
-	local transmogInfo = item:GetCaerdonItemType() == CaerdonItemType.Equipment and itemData:GetTransmogInfo()
 
 	local bindingResult = self:GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
 	local bindingStatus = bindingResult.bindingStatus
@@ -757,81 +756,84 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		mogStatus = "quest"
 	end
 
-	if transmogInfo then
-		if transmogInfo.isTransmog then
-			if transmogInfo.needsItem then
-				if not transmogInfo.isCompletionistItem then
-					if transmogInfo.hasMetRequirements then
-						mogStatus = "own"
-					else
-						mogStatus = "lowSkill"
-					end
-				else
-					if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-						if transmogInfo.hasMetRequirements then
-							mogStatus = "ownPlus"
-						else
-							mogStatus = "lowSkillPlus"
-						end
-					end
-				end
-			elseif transmogInfo.otherNeedsItem then
-				if not transmogInfo.isBindOnPickup then
-					if not transmogInfo.isCompletionistItem then
-						mogStatus = "other"
-					else
-						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-							mogStatus = "otherPlus"
-						end
-					end
-				else
-					mogStatus = "collected"
-				end
-			else
-				mogStatus = "collected"
-			end
-
-			-- TODO: Exceptions need to be broken out
-			-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
-			if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" then
+	if caerdonType == CaerdonItemType.Equipment then
+		local transmogInfo = itemData:GetTransmogInfo()
+		if transmogInfo then
+			if transmogInfo.isTransmog then
 				if transmogInfo.needsItem then
-					if transmogInfo.matchesLootSpec then
-						if not transmogInfo.isCompletionistItem then
+					if not transmogInfo.isCompletionistItem then
+						if transmogInfo.hasMetRequirements then
 							mogStatus = "own"
 						else
-							if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-								mogStatus = "ownPlus"
-							end
+							mogStatus = "lowSkill"
 						end
 					else
-						if not transmogInfo.isCompletionistItem then
-							mogStatus = "otherSpecPlus"
-						else
-							if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-								mogStatus = "otherSpec"
+						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+							if transmogInfo.hasMetRequirements then
+								mogStatus = "ownPlus"
+							else
+								mogStatus = "lowSkillPlus"
 							end
 						end
 					end
 				elseif transmogInfo.otherNeedsItem then
-					if transmogInfo.isBindOnPickup then
+					if not transmogInfo.isBindOnPickup then
 						if not transmogInfo.isCompletionistItem then
-							mogStatus = "otherNoLoot"
+							mogStatus = "other"
 						else
-							mogStatus = "otherPlusNoLoot"
+							if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+								mogStatus = "otherPlus"
+							end
+						end
+					else
+						mogStatus = "collected"
+					end
+				else
+					mogStatus = "collected"
+				end
+
+				-- TODO: Exceptions need to be broken out
+				-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
+				if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" then
+					if transmogInfo.needsItem then
+						if transmogInfo.matchesLootSpec then
+							if not transmogInfo.isCompletionistItem then
+								mogStatus = "own"
+							else
+								if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+									mogStatus = "ownPlus"
+								end
+							end
+						else
+							if not transmogInfo.isCompletionistItem then
+								mogStatus = "otherSpecPlus"
+							else
+								if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+									mogStatus = "otherSpec"
+								end
+							end
+						end
+					elseif transmogInfo.otherNeedsItem then
+						if transmogInfo.isBindOnPickup then
+							if not transmogInfo.isCompletionistItem then
+								mogStatus = "otherNoLoot"
+							else
+								mogStatus = "otherPlusNoLoot"
+							end
 						end
 					end
 				end
+			-- else
+			-- 	mogStatus = "collected"
 			end
-		-- else
-		-- 	mogStatus = "collected"
-		end
 
-		local equipmentSets = itemData:GetEquipmentSets()
-		if equipmentSets then
-			if #equipmentSets > 1 then
-				bindingStatus = "*" .. equipmentSets[1]
-			else
-				bindingStatus = equipmentSets[1]
+			local equipmentSets = itemData:GetEquipmentSets()
+			if equipmentSets then
+				if #equipmentSets > 1 then
+					bindingStatus = "*" .. equipmentSets[1]
+				else
+					bindingStatus = equipmentSets[1]
+				end
 			end
 		end
 	elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
