@@ -834,6 +834,19 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				else
 					bindingStatus = equipmentSets[1]
 				end
+			else
+				if mogStatus == "collected" and 
+				self:ItemIsSellable(itemID, itemLink) and 
+				not item:GetHasUse() and
+				not item:GetSetID() and
+				not bindingResult.hasEquipEffect then
+					-- Set up new options, so we don't change the shared one
+					-- TODO: Should probably come up with a new way to pass in calculated data
+					local newOptions = {}
+					CaerdonAPI:MergeTable(newOptions, options)
+					options = newOptions
+					options.isSellable = true
+				end
 			end
 		end
 	elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
@@ -850,10 +863,14 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 	elseif caerdonType == CaerdonItemType.Mount then
 		local mountInfo = itemData:GetMountInfo()
 		if mountInfo.needsItem then
-			local factionGroup = PLAYER_FACTION_GROUP[factionID];
-			local playerFactionGroup = UnitFactionGroup("player");
-	
-			if (not itemMinLevel or playerLevel >= itemMinLevel) and (not mountInfo.isFactionSpecific or factionGroup == playerFactionGroup) then
+			local factionGroup = nil
+			local playerFactionGroup = nil
+			if mountInfo.isFactionSpecific then
+				factionGroup = PLAYER_FACTION_GROUP[mountInfo.factionID]
+				playerFactionGroup = UnitFactionGroup("player")
+			end
+
+			if (not itemMinLevel or playerLevel >= itemMinLevel) and (factionGroup == playerFactionGroup) then
 				mogStatus = "own"
 			else
 				mogStatus = "other"
@@ -920,31 +937,8 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 			local money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped);
 			if refundSec then
 				mogStatus = "refundable"
-			-- elseif not bindingResult.needsItem and not transmogInfo then
-			-- 	mogStatus = "collected"
 			end
 		end
-	end
-
-	-- TODO: Clean up - if I break item handling out to individual plugins, they can decide if it's sellable
-	-- If every plugin says yes, then it is.
-	if mogStatus == "collected" and 
-	   item:GetCaerdonItemType() == CaerdonItemType.Equipment and
-	   self:ItemIsSellable(itemID, itemLink) and 
-	   not itemData:GetEquipmentSets() and
-	   not item:GetHasUse() and
-	   not item:GetSetID() and
-	   not bindingResult.hasEquipEffect then
-       	-- Anything that reports as the player having should be safe to sell
-       	-- unless it's in an equipment set or needs to be excluded for some
-		-- other reason
-
-		-- Set up new options, so we don't change the shared one
-		-- TODO: Should probably come up with a new way to pass in calculated data
-		local newOptions = {}
-		CaerdonAPI:MergeTable(newOptions, options)
-		options = newOptions
-		options.isSellable = true
 	end
 
 	if button then
@@ -1356,7 +1350,7 @@ end
 
 function CaerdonWardrobeMixin:RefreshItems()
 	if self.refreshTimer then
-		refreshTimer:Cancel()
+		self.refreshTimer:Cancel()
 	end
 
 	self.refreshTimer = C_Timer.NewTimer(0.1, function ()

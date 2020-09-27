@@ -43,28 +43,39 @@ function EncounterJournalMixin:Refresh()
 end
 
 function EncounterJournalMixin:OnEncounterJournalSetLootButton(button)
-	local itemID, encounterID, name, icon, slot, armorType, itemLink;
-	if isShadowlands then
-		-- local itemInfo = C_EncounterJournal.GetLootInfoByIndex(item.index);
-		-- itemLink = itemInfo.link
-		-- itemLink = item.link
-		itemLink = select(2, GetItemInfo(button.itemID))
-	else
-		itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(button.index);
-	end
-	
-	local options = {
-		relativeFrame = button.icon,
-		statusOffsetX = 8,
-		statusOffsetY = 7
-	}
+	C_Timer.After(0, function ()
+		local itemID, encounterID, name, icon, slot, armorType, itemLink;
+		if isShadowlands then
+			local itemInfo = C_EncounterJournal.GetLootInfoByIndex(button.index)
+			if itemInfo and itemInfo.name then
+				-- TODO: There are a few more here if they matter once in Shadowlands
+				itemID = itemInfo.itemID
+				encounterID = itemInfo.encounterID
+				name = itemInfo.name
+				icon = itemInfo.icon
+				slot = itemInfo.slot
+				armorType = itemInfo.armorType
+				itemLink = itemInfo.link
+			end
+		else
+			itemID, encounterID, name, icon, slot, armorType, itemLink = EJ_GetLootInfoByIndex(button.index);
+		end
+		
+		local options = {
+			relativeFrame = button.icon,
+			statusOffsetX = 8,
+			statusOffsetY = 7
+		}
 
-	if itemLink then
-		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, { }, options)
-	else
-		CaerdonWardrobe:ClearButton(button)
-	end
+		if itemLink then
+			local item = CaerdonItem:CreateFromItemLink(itemLink)
+			CaerdonWardrobe:UpdateButton(button, item, self, { 
+				locationKey = format("%d", button.index)
+			}, options)
+		else
+			CaerdonWardrobe:ClearButton(button)
+		end
+	end)
 end
 
 CaerdonWardrobe:RegisterFeature(EncounterJournalMixin)

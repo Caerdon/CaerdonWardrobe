@@ -78,12 +78,20 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				relativeFrame = questItem.Icon
 			}	
 
+			local rewardItem
 			if reward.itemLink then
-				local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
-				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 			elseif reward.itemID then
-				local item = CaerdonItem:CreateFromItemID(reward.itemID)
-				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				rewardItem = CaerdonItem:CreateFromItemID(reward.itemID)
+			end
+			
+			if rewardItem then
+				CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, { 
+					locationKey = format("%s-index%d", questItem.type, questLogIndex),
+					questID = questID, 
+					index = questLogIndex, 
+					questItem = questItem 
+				}, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
 			end
@@ -98,12 +106,20 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				relativeFrame = questItem.Icon
 			}	
 
+			local rewardItem
 			if reward.itemLink then
-				local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
-				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 			elseif reward.itemID then
-				local item = CaerdonItem:CreateFromItemID(reward.itemID)
-				CaerdonWardrobe:UpdateButton(questItem, item, self, { questID = questID, index = questLogIndex, questItem = questItem }, options)
+				rewardItem = CaerdonItem:CreateFromItemID(reward.itemID)
+			end
+
+			if rewardItem then
+				CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
+					locationKey = format("%s-index%d", questItem.type, questLogIndex, questID),
+					questID = questID,
+					index = questLogIndex,
+					questItem = questItem
+				}, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
 			end

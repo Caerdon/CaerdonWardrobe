@@ -33,7 +33,11 @@ function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreate
 			local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
 			if itemLink then
 				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, { type="open", index = i }, nil)
+				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
+					locationKey = format("open-%d", i),
+					type="open",
+					index = i
+				}, nil)
 			else
 				CaerdonWardrobe:ClearButton(attachmentButton)
 			end
@@ -51,7 +55,11 @@ function MailMixin:OnSendMailFrameUpdate()
 			local itemLink = GetSendMailItemLink(i)
 			if itemLink then
 				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, { type="send", index = i }, nil)
+				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
+					locationKey = format("send-%d", i),
+					type="send",
+					index = i
+				}, nil)
 			else
 				CaerdonWardrobe:ClearButton(attachmentButton)
 			end
@@ -73,7 +81,11 @@ function MailMixin:OnInboxFrameUpdate()
 			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
 			if firstItemLink then
 				local item = CaerdonItem:CreateFromItemLink(firstItemLink)
-				CaerdonWardrobe:UpdateButton(button, item, self, { type="inbox", index = index }, nil)
+				CaerdonWardrobe:UpdateButton(button, item, self, {
+					locationKey = format("inbox-%d", index),
+					type="inbox",
+					index = index
+				}, nil)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end

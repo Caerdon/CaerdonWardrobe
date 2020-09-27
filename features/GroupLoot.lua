@@ -22,7 +22,11 @@ function GroupLootMixin:OnGroupLootFrameShow(frame)
     local itemLink = GetLootRollItemLink(frame.rollID)
     if itemLink then
         local item = CaerdonItem:CreateFromItemLink(itemLink)
-        CaerdonWardrobe:UpdateButton(frame.IconFrame, item, self, { index = frame.rollID, link = itemLink}, nil)
+        CaerdonWardrobe:UpdateButton(frame.IconFrame, item, self, {
+            locationKey = format("%d", frame.rollID),
+            index = frame.rollID,
+            link = itemLink
+        }, nil)
     else
         CaerdonWardrobe:ClearButton(frame.IconFrame)
     end

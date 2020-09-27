@@ -13,7 +13,12 @@ function WorldMapMixin:Init()
 end
 
 function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
-	tooltip:SetHyperlink(item:GetItemLink())
+	local itemLink = item:GetItemLink()
+	if itemLink then
+		tooltip:SetHyperlink(itemLink)
+	else
+		print("NOPE", locationInfo.questID)
+	end
 
 	-- TODO: Ignoring the WorldMap tooltip itself for now since it's the item I care about
 	-- May need to revisit if I care about the quest itself
@@ -77,10 +82,16 @@ function WorldMapMixin:UpdatePin(pin)
 		if reward then
 			if reward.itemLink then
 				local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
-				CaerdonWardrobe:UpdateButton(pin, item, self, { questID = pin.questID }, options)
+				CaerdonWardrobe:UpdateButton(pin, item, self, { 
+					locationKey = format("%d", pin.questID),
+					questID = pin.questID 
+				}, options)
 			elseif reward.itemID then
 				local item = CaerdonItem:CreateFromItemID(reward.itemID)
-				CaerdonWardrobe:UpdateButton(pin, item, self, { questID = pin.questID }, options)
+				CaerdonWardrobe:UpdateButton(pin, item, self, {
+					locationKey = format("%d", pin.questID),
+					questID = pin.questID
+				}, options)
 			else
 				CaerdonWardrobe:ClearButton(pin)
 			end

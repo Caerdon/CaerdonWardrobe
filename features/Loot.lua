@@ -34,7 +34,10 @@ function LootMixin:OnLootFrameUpdateButton(index)
 			local link = GetLootSlotLink(slot)
 			if link then
 				local item = CaerdonItem:CreateFromItemLink(link)
-				CaerdonWardrobe:UpdateButton(button, item, self, { index = slot }, nil)
+				CaerdonWardrobe:UpdateButton(button, item, self, {
+					locationKey = format("%d", slot),
+					index = slot
+				}, nil)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end
