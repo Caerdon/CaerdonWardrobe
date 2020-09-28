@@ -1196,7 +1196,7 @@ local next = next -- faster lookup as a local apparently (haven't measured)
 
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	self.timeSinceLastUpdate = (self.timeSinceLastUpdate or 0) + elapsed
-	if (self.timeSinceLastUpdate > 0.01) then
+	if (self.timeSinceLastUpdate > 0.1) then
 		if self.processItemCoroutine then
 			if coroutine.status(self.processItemCoroutine) ~= "dead" then
 				local ok, result = coroutine.resume(self.processItemCoroutine)
