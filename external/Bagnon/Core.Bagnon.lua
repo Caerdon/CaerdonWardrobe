@@ -73,7 +73,10 @@ function BagnonMixin:OnUpdateSlot(bagnonItem)
 	if bagnonItem.info.cached then
 		if bagnonItem.info.link then
 			local item = CaerdonItem:CreateFromItemLink(bagnonItem.info.link)
-			CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+			CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { 
+				locationKey = format("bag%d-slot%d", bag, slot),
+				isOffline = true
+			}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 		else
 			CaerdonWardrobe:ClearButton(bagnonItem)
 		end
@@ -84,7 +87,11 @@ function BagnonMixin:OnUpdateSlot(bagnonItem)
 				local itemLink = GetGuildBankItemLink(tab, slot)
 				if itemLink then
 					local item = CaerdonItem:CreateFromItemLink(itemLink)
-					CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { tab = tab, index = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+					CaerdonWardrobe:UpdateButton(bagnonItem, item, self, {
+						locationKey = format("tab%d-index%d", tab, slot),
+						tab = tab,
+						index = slot
+					}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 				else
 					CaerdonWardrobe:ClearButton(bagnonItem)
 				end

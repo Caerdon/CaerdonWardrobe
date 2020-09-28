@@ -64,7 +64,10 @@ function ZygorMixin:RefreshButtons()
         
             if reward.itemlink then
                 local item = CaerdonItem:CreateFromItemLink(reward.itemlink)
-                CaerdonWardrobe:UpdateButton(button, item, self, { questID = quest.questID }, options)
+                CaerdonWardrobe:UpdateButton(button, item, self, {
+                    locationKey = format("%d", WQ_RowNum),
+                    questID = quest.questID
+                }, options)
             else
                 CaerdonWardrobe:ClearButton(button)
             end

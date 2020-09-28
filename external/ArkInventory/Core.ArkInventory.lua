@@ -103,7 +103,11 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 				local tab = ArkInventory.Global.Location[loc_id].view_tab
 				if itemLink then
 					local item = CaerdonItem:CreateFromItemLink(itemLink)
-					CaerdonWardrobe:UpdateButton(frame, item, self, { tab = tab, index = slot }, options)
+					CaerdonWardrobe:UpdateButton(frame, item, self, {
+						locationKey = format("tab%d-index%d", tab, slot),
+						tab = tab,
+						index = slot
+					}, options)
 				else
 					CaerdonWardrobe:ClearButton(frame)
 				end
@@ -119,7 +123,11 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 			end
 
 			if itemLink then
-				CaerdonWardrobe:UpdateButton(frame, item, self, { isOffline=true }, options)
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+				CaerdonWardrobe:UpdateButton(frame, item, self, {
+					locationKey = format("bag%d-slot%d", bag, slot),
+					isOffline = true
+				}, options)
 			else
 				CaerdonWardrobe:ClearButton(frame)
 			end

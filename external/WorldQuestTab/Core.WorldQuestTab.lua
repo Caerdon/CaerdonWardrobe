@@ -13,7 +13,12 @@ function WorldQuestTabMixin:Init()
 end
 
 function WorldQuestTabMixin:SetTooltipItem(tooltip, item, locationInfo)
-	tooltip:SetHyperlink(item:GetItemLink())
+	local itemLink = item:GetItemLink()
+	if itemLink then
+		tooltip:SetHyperlink(itemLink)
+	else
+		tooltip:SetItemByID(item:GetItemID())
+	end
 end
 
 function WorldQuestTabMixin:Refresh()
@@ -61,8 +66,12 @@ function WorldQuestTabMixin:UpdateButton(button)
 					itemCountOffset = 9
 				}
 				
-				local item = Item:CreateFromItemID(rewardInfo.id)
-				CaerdonWardrobe:UpdateButton(rewardButton, item, self, { reward = rewardInfo, questID = button.questId }, options)
+				local item = CaerdonItem:CreateFromItemID(rewardInfo.id)
+				CaerdonWardrobe:UpdateButton(rewardButton, item, self, {
+					locationKey = format("%s-index%d", button:GetName(), k),
+					reward = rewardInfo,
+					questID = button.questId
+				}, options)
 			else
 				CaerdonWardrobe:ClearButton(rewardButton)
 			end

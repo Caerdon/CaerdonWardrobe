@@ -28,31 +28,29 @@ function BaudBagMixin:Refresh()
     BaudUpdateJoinedBags()
 end
 
-function BaudBagMixin:ProcessItem(bagId, slotId, button)
-    if bagId and slotId then
-        if BaudBag.Cache:UsesCache(bagId) then
-            local bagCache = BaudBag.Cache:GetBagCache(bagId)
-            local slotCache = bagCache[slotId]
+function BaudBagMixin:ProcessItem(bag, slot, button)
+    if bag and slot then
+        if BaudBag.Cache:UsesCache(bag) then
+            local bagCache = BaudBag.Cache:GetBagCache(bag)
+            local slotCache = bagCache[slot]
             if slotCache and slotCache.Link then
                 local item = CaerdonItem:CreateFromItemLink(slotCache.Link)
-                CaerdonWardrobe:UpdateButton(button, item, self, { isOffline=true }, options)
+                CaerdonWardrobe:UpdateButton(button, item, self, { 
+                    locationKey = format("bag%d-slot%d", bag, slot),
+                    isOffline=true
+                }, options)
             else
                 CaerdonWardrobe:ClearButton(button)
             end
         else
-            local itemLink = GetContainerItemLink(bagId, slotId)
             local options = {
                 showMogIcon=true,
                 showBindStatus=true,
                 showSellables=true
             }
 
-            if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
-                CaerdonWardrobe:UpdateButton(button, item, self, { bag = bagId, slot = slotId }, options)
-            else
-                CaerdonWardrobe:ClearButton(button)
-            end
+            local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+            CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
         end
     end
 end

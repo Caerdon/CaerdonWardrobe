@@ -63,7 +63,10 @@ function InventorianMixin:UpdateSlot(button, bag, slot)
 		if button:IsCached() then
 			if itemLink then
 				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(button, item, self, { isOffline = true }, options)
+				CaerdonWardrobe:UpdateButton(button, item, self, {
+					locationKey = format("bag%d-slot%d", bag, slot),
+					isOffline = true
+				}, options)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end

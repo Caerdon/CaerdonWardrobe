@@ -73,7 +73,10 @@ function CombuctorMixin:OnUpdateSlot(button)
 	if button.info.cached then
 		if button.info.link then
 			local item = CaerdonItem:CreateFromItemLink(button.info.link)
-			CaerdonWardrobe:UpdateButton(button, item, self, { isOffline = true }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				locationKey = format("bag%d-slot%d", bag, slot),
+				isOffline = true
+			}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 		else
 			CaerdonWardrobe:ClearButton(button)
 		end
@@ -84,7 +87,11 @@ function CombuctorMixin:OnUpdateSlot(button)
 				local itemLink = GetGuildBankItemLink(tab, slot)
 				if itemLink then
 					local item = CaerdonItem:CreateFromItemLink(itemLink)
-					CaerdonWardrobe:UpdateButton(button, item, self, { tab = tab, index = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+					CaerdonWardrobe:UpdateButton(button, item, self, {
+						locationKey = format("tab%d-index%d", tab, slot),
+						tab = tab,
+						index = slot
+					}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 				else
 					CaerdonWardrobe:ClearButton(button)
 				end

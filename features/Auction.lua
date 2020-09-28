@@ -135,7 +135,11 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 							item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
 						end
 		
-						CaerdonWardrobe:UpdateButton(button, item, self, { index = slot, itemKey = browseResult.itemKey },  
+						CaerdonWardrobe:UpdateButton(button, item, self, {
+							locationKey = format("%d", i),
+							index = slot,
+							itemKey = browseResult.itemKey
+						},  
 						{
 							overrideStatusPosition = "LEFT",
 							statusOffsetX = -10,
@@ -169,7 +173,10 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 	end
 
 	local button = AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton
-	CaerdonWardrobe:UpdateButton(button, item, self, { itemKey = itemKeyInfo },  
+	CaerdonWardrobe:UpdateButton(button, item, self, {
+		locationKey = "BrowseResultButton",
+		itemKey = itemKeyInfo
+	},  
 	{
 		statusProminentSize = 30,
 		statusOffsetX = 15,

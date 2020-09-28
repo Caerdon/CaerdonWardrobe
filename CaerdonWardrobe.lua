@@ -681,12 +681,6 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 end
 
-function CaerdonWardrobeMixin:QueueProcessItem(button, item, feature, locationInfo, options)
-	C_Timer.After(0, function()
-		self:UpdateButton(button, item, feature, locationInfo, options)
-	end)
-end
-
 function CaerdonWardrobeMixin:ItemIsSellable(itemID, itemLink)
 	local isSellable = itemID ~= nil
 	if itemID == 23192 then -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
@@ -1095,7 +1089,10 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 	end
 
 	if locationKey then -- opt-in to coroutine-based update
-		self.waitingToProcess[format("%s-%s", feature:GetName(), locationKey)] = {
+		locationKey = format("%s-%s", feature:GetName(), locationKey)
+		button.caerdonKey = locationKey
+
+		self.waitingToProcess[locationKey] = {
 			button = button,
 			item = item,
 			feature = feature,
@@ -1103,30 +1100,6 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 			options = options
 		}
 		return
-	end
-
-	local scanTip = CaerdonWardrobeFrameTooltip
-	scanTip:ClearLines()
-	feature:SetTooltipItem(scanTip, item, locationInfo)
-
-	if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-		local tooltipInfo = self:GetTooltipInfo(item)
-		if tooltipInfo.isRetrieving then
-			self:QueueProcessItem(button, item, feature, locationInfo, options)
-			return
-		end	
-	
-		self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
-	else
-		item:ContinueOnItemLoad(function ()
-			local tooltipInfo = self:GetTooltipInfo(item)
-			if tooltipInfo.isRetrieving then
-				self:QueueProcessItem(button, item, feature, locationInfo, options)
-				return
-			end	
-	
-			self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
-		end)
 	end
 end
 
@@ -1140,9 +1113,14 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 			local isBatch = false
 			local itemCount = 0
 			for locationKey, processInfo in pairs(self.waitingToProcess) do
-				self.processQueue[locationKey] = processInfo
+				-- Don't process item if the key is different than expected
+				if processInfo.button.caerdonKey == locationKey then
+					itemCount = itemCount + 1
+					self.processQueue[locationKey] = processInfo
+				end
+
 				self.waitingToProcess[locationKey] = nil
-				itemCount = itemCount + 1
+
 				if itemCount > 12 then -- Process a small batch at a time
 					isBatch = true
 					break
@@ -1174,13 +1152,6 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 					-- Specifically, the Equip: line was missing on a fishing pole (and other items)
 					-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
 					-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
-
-					-- Trying without the retry if possible...
-					-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
-					-- 	button.isCaerdonRetry = true
-					-- 	QueueProcessItem(button, item, feature, locationInfo, options)
-					-- 	return
-					-- end	
 					if tooltipInfo.isRetrieving then
 						self:UpdateButton(button, item, feature, locationInfo, options)
 					else
@@ -1189,12 +1160,6 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 				else
 					item:ContinueOnItemLoad(function ()
 						local tooltipInfo = self:GetTooltipInfo(item)
-						-- Trying without the retry if possible...
-						-- if not button.isCaerdonRetry or tooltipInfo.isRetrieving then
-						-- 	button.isCaerdonRetry = true
-						-- 	QueueProcessItem(button, item, feature, locationInfo, options)
-						-- 	return
-						-- end	
 						if tooltipInfo.isRetrieving then
 							self:UpdateButton(button, item, feature, locationInfo, options)
 						else
