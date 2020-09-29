@@ -120,7 +120,7 @@ function CaerdonQuestMixin:GetQuestInfo()
         if isQuestLog then
             texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetQuestLogRewardSpell(i, questID)
         else
-            texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetRewardSpell()
+            texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetRewardSpell(i)
         end
 
         spellRewards[i] = {
