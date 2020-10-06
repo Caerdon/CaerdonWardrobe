@@ -783,7 +783,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 						mogStatus = "collected"
 					end
 				else
-					mogStatus = "collected"
+					if transmogInfo.hasMetRequirements then
+						mogStatus = "collected"
+					else
+						mogStatus = "lowSkill"
+					end
 				end
 
 				-- TODO: Exceptions need to be broken out
@@ -817,8 +821,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 						end
 					end
 				end
-			-- else
-			-- 	mogStatus = "collected"
+			else
+				if not transmogInfo.hasMetRequirements then
+					mogStatus = "lowSkill"
+				else
+					mogStatus = "collected"
+				end
 			end
 
 			local equipmentSets = itemData:GetEquipmentSets()
@@ -1092,6 +1100,14 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 		locationKey = format("%s-%s", feature:GetName(), locationKey)
 		button.caerdonKey = locationKey
 
+		if not item:IsItemEmpty() then
+			local itemID = item:GetItemID()
+			if not button.caerdonItemID or button.caerdonItemID ~= itemID then
+				button.caerdonItemID = itemID
+				self:ClearButton(button)
+			end
+		end
+
 		self.waitingToProcess[locationKey] = {
 			button = button,
 			item = item,
@@ -1222,8 +1238,12 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 8,
+		Version = 10,
 		
+		Debug = {
+			Enabled = true
+		},
+
 		Icon = {
 			EnableAnimation = true,
 			Position = "TOPLEFT",
@@ -1280,9 +1300,6 @@ end
 local function ProcessSettings()
 	if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
 		CaerdonWardrobeConfig = NS:GetDefaultConfig()
-	else
-		-- TODO: Upgrade handling needs to be smarter - coordinate with config update
-		CaerdonWardrobeConfig.Debug = CaerdonWardrobeConfig.Debug or { Enabled = false }
 	end
 end
 

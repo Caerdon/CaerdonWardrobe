@@ -1,11 +1,11 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\..\FrameXML\UI.xsd">
-	<Script file="Config.lua"/>
+	<Script file="General.lua"/>
 
-	<Frame name="CaerdonWardrobeConfigFrame" hidden="true" secureMixin="CaerdonWardrobeConfigMixin">
-       <Layers>
+    <Frame name="CaerdonWardrobeConfigGeneralFrame" hidden="false" secureMixin="CaerdonWardrobeConfigGeneralMixin">
+        <Layers>
             <Layer level="ARTWORK">
-                <FontString name="$parentTitle" text="CAERDON_CONFIG_LABEL" inherits="GameFontNormalLarge" justifyH="LEFT" justifyV="TOP">
+                <FontString name="$parentTitle" text="CAERDON_GENERAL_LABEL" inherits="GameFontNormalLarge" justifyH="LEFT" justifyV="TOP">
                 <Anchors>
                     <Anchor point="TOPLEFT">
                     <Offset>
@@ -14,7 +14,10 @@
                     </Anchor>
                 </Anchors>
                 </FontString>
-                <FontString name="$parentSubText" text="CAERDON_CONFIG_SUBTEXT" inherits="GameFontHighlightSmall" nonspacewrap="true" justifyH="LEFT" justifyV="TOP">
+                <FontString name="$parentSubText" text="CAERDON_GENERAL_SUBTEXT" inherits="GameFontHighlightSmall" nonspacewrap="true" maxLines="3" justifyH="LEFT" justifyV="TOP">
+                <Size>
+                    <AbsDimension y="32" x="0"/>
+                </Size>
                 <Anchors>
                     <Anchor point="TOPLEFT" relativeTo="$parentTitle" relativePoint="BOTTOMLEFT">
                     <Offset>
@@ -30,10 +33,8 @@
                 </FontString>
             </Layer>
         </Layers>
-		<Scripts>
-			<OnLoad method="OnLoad"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
         </Scripts>
     </Frame>
-
-	<Include file="BankAndBags.xml" />
 </Ui>
