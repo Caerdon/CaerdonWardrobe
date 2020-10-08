@@ -65,6 +65,7 @@
 
 	<Script file="types\BattlePetMixin.lua" />
 	<Script file="types\CompanionPetMixin.lua" />
+	<Script file="types\ConduitMixin.lua" />
 	<Script file="types\ConsumableMixin.lua" />
 	<Script file="types\EquipmentMixin.lua" />
 	<Script file="types\MountMixin.lua" />

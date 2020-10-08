@@ -10,9 +10,6 @@ BINDING_NAME_PRINTMOUSEOVERLINKDETAILS = L["Print Mouseover Link Details"]
 local availableFeatures = {}
 local registeredFeatures = {}
 
-local version, build, date, tocversion = GetBuildInfo()
-local isShadowlands = tonumber(build) > 35700
-
 CaerdonWardrobeMixin = {}
 
 function CaerdonWardrobeMixin:OnLoad()
@@ -36,10 +33,6 @@ local bindTextTable = {
 	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
 	-- [ITEM_BIND_ON_USE]         = L["BoE"]
 }
-
-local function IsConduit(itemLink)
-	return isShadowlands and C_Soulbinds.IsItemConduitByItemInfo(itemLink)
-end
 
 local function IsCollectibleLink(item)
 	local caerdonType = item:GetCaerdonItemType()
@@ -94,33 +87,6 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 		bindingStatus = nil
 	end
 
-	local isConduit = false
-	if IsConduit(itemLink) then
-		isConduit = true
-
-		local conduitTypes = { 
-			Enum.SoulbindConduitType.Potency,
-			Enum.SoulbindConduitType.Endurance,
-			Enum.SoulbindConduitType.Finesse
-		}
-
-		local conduitKnown = false
-		for conduitTypeIndex = 1, #conduitTypes do
-			local conduitCollection = C_Soulbinds.GetConduitCollection(conduitTypes[conduitTypeIndex])
-			for conduitCollectionIndex = 1, #conduitCollection do
-				local conduitData = conduitCollection[conduitCollectionIndex]
-				if conduitData.conduitItemID == itemID then
-					conduitKnown = true
-				end
-			end
-		end
-
-		if not conduitKnown then
-			-- TODO: May need to consider spec / class?  Not sure yet
-			needsItem = true
-		end
-	end
-	
 	if tooltipInfo then
 		hasEquipEffect = tooltipInfo.hasEquipEffect
 
@@ -170,6 +136,11 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 		end
 	end
 
+	if caerdonType == CaerdonItemType.Conduit then
+		local conduitInfo = itemData:GetTypeInfo()
+		needsItem = conduitInfo.needsItem
+	end
+	
 	if caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
 		local petInfo = 
 			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
@@ -724,7 +695,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 
 	local playerLevel = UnitLevel("player")
 
-	if not IsCollectibleLink(item) and not IsConduit(itemLink) then
+	if not IsCollectibleLink(item) and caerdonType ~= CaerdonItemType.Conduit then
 		local expansionID = expacID
 		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
 			local shouldShowExpansion = false
@@ -911,7 +882,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 					mogStatus = nil
 				end
 			end
-		elseif IsConduit(itemLink) then
+		elseif caerdonType == CaerdonItemType.Conduit then
 			mogStatus = "own"
 		end
 	end

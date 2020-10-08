@@ -1,6 +1,9 @@
 CaerdonItem = {}
 CaerdonItemMixin = {}
 
+local version, build, date, tocversion = GetBuildInfo()
+local isShadowlands = tonumber(build) > 35700
+
 -- Should not be translated - used to provide me with screenshots for debugging.
 CaerdonItemType = {
     Empty = "Empty",
@@ -8,6 +11,7 @@ CaerdonItemType = {
     Unhandled = "Unhandled",
     BattlePet = "Battle Pet", -- pets that have been caged
     CompanionPet = "Companion Pet", -- unlearned pets
+    Conduit = "Conduit",
     Consumable = "Consumable",
     Equipment = "Equipment",
     Mount = "Mount",
@@ -270,13 +274,13 @@ function CaerdonItemMixin:GetCaerdonItemType()
         local typeID = self:GetItemTypeID()
         local subTypeID = self:GetItemSubTypeID()
 
-        local toylink
-        if typeID then
-            toylink = C_ToyBox.GetToyLink(self:GetItemID())
-        end
+        local toylink = typeID and C_ToyBox.GetToyLink(self:GetItemID())
+        local isConduit = isShadowlands and C_Soulbinds.IsItemConduitByItemInfo(itemLink)
 
         if toylink then
             caerdonType = CaerdonItemType.Toy
+        elseif isConduit then
+            caerdonType = CaerdonItemType.Conduit
         elseif linkType == "item" then
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)
@@ -327,6 +331,8 @@ function CaerdonItemMixin:GetItemData()
             self.caerdonItemData = CaerdonBattlePet:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.CompanionPet then
             self.caerdonItemData = CaerdonCompanionPet:CreateFromCaerdonItem(self)
+        elseif caerdonType == CaerdonItemType.Conduit then
+            self.caerdonItemData = CaerdonConduit:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Consumable then
             self.caerdonItemData = CaerdonConsumable:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Equipment then
