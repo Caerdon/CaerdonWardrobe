@@ -1,92 +1,86 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-local addonName = 'Inventorian'
+local addonName = "Inventorian"
+local InventorianMixin = {}
+
+function InventorianMixin:GetName()
+    return addonName
+end
+
+function InventorianMixin:Init()
+	self.Inventorian = LibStub('AceAddon-3.0'):GetAddon('Inventorian')
+	self.mod = self.Inventorian:NewModule("CaerdonWardrobeInventorianUpdate")
+	self.mod.uiName = L["Caerdon Wardrobe Inventorian"]
+	self.mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
+
+	self.mod.OnEnable = function(mod)
+		hooksecurefunc(self.Inventorian.bag.itemContainer, "UpdateSlot", function(...) self:UpdateBagSlot(...) end)
+		hooksecurefunc(self.Inventorian.bank.itemContainer, "UpdateSlot", function(...) self:UpdateBankSlot(...) end)
+	end
+end
+
+function InventorianMixin:SetTooltipItem(tooltip, item, locationInfo)
+	if locationInfo.isOffline then
+		if not item:IsItemEmpty() then
+			tooltip:SetHyperlink(item:GetItemLink())
+		end
+	elseif locationInfo.bag == BANK_CONTAINER then
+		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+	else
+		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+	end
+end
+
+function InventorianMixin:Refresh()
+	-- TODO: Was missing
+end
+
+local function ToIndex(bag, slot)
+	return (bag < 0 and bag * 100 - slot) or (bag * 100 + slot)
+end
+
+function InventorianMixin:UpdateBagSlot(event, bag, slot)
+	local button = self.Inventorian.bag.itemContainer.items[ToIndex(bag, slot)]
+	self:UpdateSlot(button, bag, slot)
+end
+
+function InventorianMixin:UpdateBankSlot(event, bag, slot)
+	local button = self.Inventorian.bank.itemContainer.items[ToIndex(bag, slot)]
+	self:UpdateSlot(button, bag, slot)
+end
+
+function InventorianMixin:UpdateSlot(button, bag, slot)
+	if button then
+		local icon, count, locked, quality, readable, lootable, itemLink, noValue, itemID = button:GetInfo()
+		local options = {
+			showMogIcon=true, 
+			showBindStatus=true,
+			showSellables=true,
+			iconPosition="TOPRIGHT" 
+		}
+
+		if button:IsCached() then
+			if itemLink then
+				local item = CaerdonItem:CreateFromItemLink(itemLink)
+				CaerdonWardrobe:UpdateButton(button, item, self, {
+					locationKey = format("bag%d-slot%d", bag, slot),
+					isOffline = true
+				}, options)
+			else
+				CaerdonWardrobe:ClearButton(button)
+			end
+		else
+			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+			CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
+		end
+	end
+end
+
 local Version = nil
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
 		Version = GetAddOnMetadata(addonName, 'Version')
-		CaerdonWardrobe:RegisterAddon(addonName)
+		CaerdonWardrobe:RegisterFeature(InventorianMixin)
 	end
 end
-
-if Version then
-	local Inventorian = LibStub('AceAddon-3.0'):GetAddon('Inventorian')
-	local mod = Inventorian:NewModule("CaerdonWardrobeInventorianUpdate")
-	mod.uiName = L["Caerdon Wardrobe Inventorian"]
-	mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
-
-	function mod:OnEnable()
-		hooksecurefunc(Inventorian.bag.itemContainer, "UpdateSlot", UpdateBagSlot)
-		hooksecurefunc(Inventorian.bank.itemContainer, "UpdateSlot", UpdateBankSlot)
-	end
-
-	local function ToIndex(bag, slot)
-		return (bag < 0 and bag * 100 - slot) or (bag * 100 + slot)
-	end
-
-	function UpdateBagSlot(event, bag, slot)
-		local button = Inventorian.bag.itemContainer.items[ToIndex(bag, slot)]
-		if button then
-			local itemLink = GetContainerItemLink(bag, slot)
-
-			local options = {
-				showMogIcon=true, 
-				showBindStatus=true,
-				showSellables=true,
-				iconPosition="TOPRIGHT" 
-			}
-
-			if Inventorian.bag:IsCached() then
-				-- TODO: Support cache?
-				CaerdonWardrobe:ClearButton(button)
-			else
-				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
-			end
-		end
-	end
-
-	function UpdateBankSlot(event, bag, slot)
-		local button = Inventorian.bank.itemContainer.items[ToIndex(bag, slot)]
-		if button then
-			local itemLink = GetContainerItemLink(bag, slot)
-
-			local options = {
-				showMogIcon=true, 
-				showBindStatus=true,
-				showSellables=true,
-				iconPosition="TOPRIGHT" 
-			}
-
-			if Inventorian.bank:IsCached() then
-				-- TODO: Support cache?
-				CaerdonWardrobe:ClearButton(button)
-			else
-				CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, button, options)
-			end
-		end
-	end
-
-	local function OnEvent(self, event, ...)
-		local handler = self[event]
-		if(handler) then
-			handler(self, ...)
-		end
-	end
-
-	local eventFrame = CreateFrame("FRAME")
-	eventFrame:RegisterEvent "ADDON_LOADED"
-	eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-	eventFrame:SetScript("OnEvent", OnEvent)
-
-	local function RefreshItems()
-	end
-
-	function eventFrame:ADDON_LOADED(name)
-	end
-
-	function eventFrame:TRANSMOG_COLLECTION_UPDATED()
-		RefreshItems()
-	end
-end
-

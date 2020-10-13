@@ -1,83 +1,68 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
 
-local addonName = 'BaudBag'
-local Version = nil
-if select(4, GetAddOnInfo(addonName)) then
-    if IsAddOnLoaded(addonName) then
-        Version = GetAddOnMetadata(addonName, 'Version')
-        CaerdonWardrobe:RegisterAddon(addonName)
-    end
+local addonName = "BaudBag"
+local BaudBagMixin = {}
+
+function BaudBagMixin:GetName()
+    return addonName
 end
 
-if Version then
+function BaudBagMixin:Init()
+    hooksecurefunc(BaudBag, "ItemSlot_Updated", function(...) self:ItemSlotUpdated(...) end)
+end
 
-    local function ProcessItem(bagId, slotId, button)
-        if bagId and slotId then
-            local itemLink = GetContainerItemLink(bagId, slotId)
+function BaudBagMixin:SetTooltipItem(tooltip, item, locationInfo)
+	if locationInfo.isOffline then
+		if not item:IsItemEmpty() then
+			tooltip:SetHyperlink(item:GetItemLink())
+		end
+	elseif locationInfo.bag == BANK_CONTAINER then
+		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+	else
+		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+	end
+end
+
+function BaudBagMixin:Refresh()
+    BaudUpdateJoinedBags()
+end
+
+function BaudBagMixin:ProcessItem(bag, slot, button)
+    if bag and slot then
+        if BaudBag.Cache:UsesCache(bag) then
+            local bagCache = BaudBag.Cache:GetBagCache(bag)
+            local slotCache = bagCache[slot]
+            if slotCache and slotCache.Link then
+                local item = CaerdonItem:CreateFromItemLink(slotCache.Link)
+                CaerdonWardrobe:UpdateButton(button, item, self, { 
+                    locationKey = format("bag%d-slot%d", bag, slot),
+                    isOffline=true
+                }, options)
+            else
+                CaerdonWardrobe:ClearButton(button)
+            end
+        else
             local options = {
                 showMogIcon=true,
                 showBindStatus=true,
                 showSellables=true
             }
 
-            CaerdonWardrobe:UpdateButtonLink(itemLink, bagId, slotId, button, options)
+            local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+            CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
         end
     end
+end
 
-    local function ItemSlotUpdated(self, bagSet, containerId, subContainerId, slotId, button)
-        if not IsAddOnLoaded("CaerdonWardrobe") then
-            return
-        end
+function BaudBagMixin:ItemSlotUpdated(bb, bagSet, containerId, subContainerId, slotId, button)
+    self:ProcessItem(subContainerId, slotId, button)
+end
 
-        ProcessItem(subContainerId, slotId, button)
-    end
-
-    local function OnEvent(self, event, ...)
-        local handler = self[event]
-        if(handler) then
-            handler(self, ...)
-        end
-    end
-
-    local eventFrame = CreateFrame("FRAME")
-    eventFrame:RegisterEvent "ADDON_LOADED"
-    eventFrame:SetScript("OnEvent", OnEvent)
-
-    hooksecurefunc(BaudBag, "ItemSlot_Updated", ItemSlotUpdated)
-
-
-    local function RefreshItems()
-        -- Something changed in the transmog collection.  Time to refresh.
-        -- Note: This is primarily necessary to support proper event handling
-        -- with multiple accounts logged in at the same time (i.e. learning an
-        -- appearance on the other account).
-        BaudUpdateJoinedBags()
-    end
-
-    function eventFrame:ADDON_LOADED(name)
-        if IsLoggedIn() then
-            OnEvent(eventFrame, "PLAYER_LOGIN")
-        else
-            eventFrame:RegisterEvent "PLAYER_LOGIN"
-        end
-    end
-
-    function eventFrame:PLAYER_LOGIN(...)
-        eventFrame:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
-        eventFrame:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_ADDED"
-        eventFrame:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_REMOVED"
-    end
-
-    function eventFrame:TRANSMOG_COLLECTION_UPDATED()
-        RefreshItems()
-    end
-
-    function eventFrame:TRANSMOG_COLLECTION_SOURCE_ADDED()
-        RefreshItems()
-    end
-
-    function eventFrame:TRANSMOG_COLLECTION_SOURCE_REMOVED()
-        RefreshItems()
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+    if IsAddOnLoaded(addonName) then
+        Version = GetAddOnMetadata(addonName, "Version")
+		CaerdonWardrobe:RegisterFeature(BaudBagMixin)
     end
 end

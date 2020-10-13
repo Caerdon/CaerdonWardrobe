@@ -382,6 +382,7 @@ end
 function configFrame:OnSave()
 	self:UpdatePendingValues()
 	CaerdonWardrobeConfig = CopyTable(pendingConfig)
+	CaerdonWardrobe:RefreshItems()
 end
 
 function configFrame:OnCancel()

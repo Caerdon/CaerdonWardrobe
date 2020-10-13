@@ -1,7 +1,18 @@
-local LootMixin, Loot = {}
+local LootMixin = {}
 
-function LootMixin:OnLoad()
-    hooksecurefunc("LootFrame_UpdateButton", function(...) Loot:OnLootFrameUpdateButton(...) end)
+function LootMixin:GetName()
+	return "Loot"
+end
+
+function LootMixin:Init()
+    hooksecurefunc("LootFrame_UpdateButton", function(...) self:OnLootFrameUpdateButton(...) end)
+end
+
+function LootMixin:SetTooltipItem(tooltip, item, locationInfo)
+	tooltip:SetLootItem(locationInfo.index)
+end
+
+function LootMixin:Refresh()
 end
 
 function LootMixin:OnLootFrameUpdateButton(index)
@@ -20,12 +31,18 @@ function LootMixin:OnLootFrameUpdateButton(index)
 	local slot = (numLootToShow * (LootFrame.page - 1)) + index;
 	if slot <= numLootItems then
 		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
-			link = GetLootSlotLink(slot)
-			CaerdonWardrobe:UpdateButtonLink(link, "LootFrame", { index = slot, link = link }, button, nil)
+			local link = GetLootSlotLink(slot)
+			if link then
+				local item = CaerdonItem:CreateFromItemLink(link)
+				CaerdonWardrobe:UpdateButton(button, item, self, {
+					locationKey = format("%d", slot),
+					index = slot
+				}, nil)
+			else
+				CaerdonWardrobe:ClearButton(button)
+			end
 		end
 	end
 end
 
-
-Loot = CreateFromMixins(LootMixin)
-Loot:OnLoad()
+CaerdonWardrobe:RegisterFeature(LootMixin)

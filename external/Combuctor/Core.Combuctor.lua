@@ -1,74 +1,112 @@
-local isBagUpdateRequested = false
-local waitingOnBagUpdate = {}
-local atGuild = false
+local addonName = "Combuctor"
+local CombuctorMixin = {}
 
-local addonName = 'Combuctor'
-local Version = nil
-if select(4, GetAddOnInfo(addonName)) then
-	if IsAddOnLoaded(addonName) then
-		Version = GetAddOnMetadata(addonName, 'Version')
-		-- Go ahead and hook into the default bags as well since Combuctor allows a mix.
-		CaerdonWardrobe:RegisterAddon(addonName, { isBags = true, hookDefaultBags = true })
+function CombuctorMixin:GetName()
+    return addonName
+end
+
+function CombuctorMixin:Init()
+	hooksecurefunc(Combuctor.Item, "Update", function(...) self:OnUpdateSlot(...) end)
+end
+
+function CombuctorMixin:SetTooltipItem(tooltip, item, locationInfo)
+	if locationInfo.isOffline then
+		if not item:IsItemEmpty() then
+			tooltip:SetHyperlink(item:GetItemLink())
+		end
+	elseif not item:HasItemLocationBankOrBags() then
+		local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
+	elseif locationInfo.bag == BANK_CONTAINER then
+		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+	else
+		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
 	end
 end
 
-if Version then
+function CombuctorMixin:Refresh()
+	Combuctor.Frames:Update()
+end
 
-	local function OnUpdateSlot(self)
-		local bag, slot = self:GetBag(), self:GetID()
+function CombuctorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	if locationInfo.isOffline then
+		local showBindingStatus = CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
+		local showOwnIcon = CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
+		local showOtherIcon = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
+		local showSellableIcon = CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
+	
+		return {
+			bindingStatus = {
+				shouldShow = showBindingStatus
+			},
+			ownIcon = {
+				shouldShow = showOwnIcon
+			},
+			otherIcon = {
+				shouldShow = showOtherIcon
+			},
+			sellableIcon = {
+				shouldShow = showSellableIcon
+			}
+		}
+	elseif not item:HasItemLocationBankOrBags() then
+		return {
+			bindingStatus = {
+				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
+			},
+			ownIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
+			},
+			otherIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
+			},
+			sellableIcon = {
+				shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
+			}
+		}
+	else
+		return {}
+	end
+end
 
-		if self.info.cached then
-			CaerdonWardrobe:UpdateButtonLink(self.info.link, "ItemLink", nil, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+function CombuctorMixin:OnUpdateSlot(button)
+	local bag, slot = button:GetBag(), button:GetID()
+	if button.info.cached then
+		if button.info.link then
+			local item = CaerdonItem:CreateFromItemLink(button.info.link)
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				locationKey = format("bag%d-slot%d", bag, slot),
+				isOffline = true
+			}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 		else
-			if bag ~= "vault" then
-				local tab = GetCurrentGuildBankTab()
-				if atGuild and tab == bag then
-					local itemLink = GetGuildBankItemLink(tab, slot)
-					bag = "GuildBankFrame"
-					slot = { tab = tab, index = slot }
-					CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
-					ScheduleItemUpdate(itemID, bag, slot, self)
+			CaerdonWardrobe:ClearButton(button)
+		end
+	else
+		if bag ~= "vault" then
+			local tab = GetCurrentGuildBankTab()
+			if Combuctor:InGuild() and tab == bag then
+				local itemLink = GetGuildBankItemLink(tab, slot)
+				if itemLink then
+					local item = CaerdonItem:CreateFromItemLink(itemLink)
+					CaerdonWardrobe:UpdateButton(button, item, self, {
+						locationKey = format("tab%d-index%d", tab, slot),
+						tab = tab,
+						index = slot
+					}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 				else
-					local itemLink = GetContainerItemLink(bag, slot)
-					CaerdonWardrobe:UpdateButtonLink(itemLink, bag, slot, self, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+					CaerdonWardrobe:ClearButton(button)
 				end
+			else
+				local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+				CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
 			end
 		end
 	end
+end
 
-	local function OnEvent(self, event, ...)
-		local handler = self[event]
-		if(handler) then
-			handler(self, ...)
-		end
+local Version = nil
+if select(4, GetAddOnInfo(addonName)) then
+	if IsAddOnLoaded(addonName) then
+		Version = GetAddOnMetadata(addonName, "Version")
+		CaerdonWardrobe:RegisterFeature(CombuctorMixin)
 	end
-
-	local function HookCombuctor()
-		hooksecurefunc(Combuctor.Item, "Update", OnUpdateSlot)
-	end
-
-	local eventFrame = CreateFrame("FRAME")
-
-	eventFrame:SetScript("OnEvent", OnEvent)
-	-- eventFrame:RegisterEvent("TRANSMOG_COLLECTION_ITEM_UPDATE")
-
-	HookCombuctor()
-
-	function eventFrame:ADDON_LOADED(name)
-	end
-
-	function eventFrame:TRANSMOG_COLLECTION_ITEM_UPDATE()
-	    if Combuctor.sets then
-	        Combuctor:UpdateFrames()
-	    end
-	end
-
-	function eventFrame:GUILDBANKFRAME_OPENED()
-		atGuild = true
-	end
-
-	function eventFrame:GUILDBANKFRAME_CLOSED()
-		atGuild = false
-	end
-
 end

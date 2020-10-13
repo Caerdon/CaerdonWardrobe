@@ -14,9 +14,14 @@ end
 function CaerdonCompanionPetMixin:GetCompanionPetInfo()
     local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradeable, unique, obtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self.item:GetItemID())
     if creatureID and displayID then
+        local needsItem = false
         local numCollected = C_PetJournal.GetNumCollectedInfo(speciesID)
+        if numCollected == 0 then
+            needsItem = true
+        end
 
         return {
+            needsItem = needsItem,
             name = name,
             petType = petType,
             creatureID = creatureID,

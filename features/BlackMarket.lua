@@ -1,55 +1,80 @@
-local BlackMarketMixin, BlackMarket = {}
+local BlackMarketMixin = {}
 
-local frame = CreateFrame("frame")
-frame:RegisterEvent "ADDON_LOADED"
-frame:SetScript("OnEvent", function(this, event, ...)
-    BlackMarket[event](Quest, ...)
-end)
-
-function BlackMarketMixin:OnLoad()
+function BlackMarketMixin:GetName()
+	return "BlackMarket"
 end
 
-function BlackMarketMixin:ADDON_LOADED(name)
-	if name == "Blizzard_BlackMarketUI" then
-		frame:RegisterEvent "BLACK_MARKET_ITEM_UPDATE"
+function BlackMarketMixin:Init()
+	return { "BLACK_MARKET_ITEM_UPDATE" }
+end
+
+function BlackMarketMixin:SetTooltipItem(tooltip, item, locationInfo)
+	tooltip:SetHyperlink(item:GetItemLink())
+end
+
+function BlackMarketMixin:Refresh()
+end
+
+function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
+	if BlackMarketScrollFrame:IsShown() then
+		self:UpdateBlackMarketItems()
+		self:UpdateBlackMarketHotItem()
 	end
 end
 
 function BlackMarketMixin:UpdateBlackMarketItems()
-	local numItems = C_BlackMarket.GetNumItems();
-	
-	if (not numItems) then
-		numItems = 0;
-	end
-	
-	local scrollFrame = BlackMarketScrollFrame;
-	local offset = HybridScrollFrame_GetOffset(scrollFrame);
-	local buttons = scrollFrame.buttons;
-	local numButtons = #buttons;
-
-	for i = 1, numButtons do
-		local button = buttons[i];
-		local index = offset + i; -- adjust index
-
-		if ( index <= numItems ) then
-			local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
-			CaerdonWardrobe:UpdateButtonLink(link, "BlackMarketScrollFrame", index, button, nil)
-		else
-            CaerdonWardrobe:ClearButton(button)
+	-- Pump to ensure buttons are ready
+	C_Timer.After(0, function ()
+		local numItems = C_BlackMarket.GetNumItems();
+		
+		if (not numItems) then
+			numItems = 0;
 		end
-	end
+		
+		local scrollFrame = BlackMarketScrollFrame;
+		local offset = HybridScrollFrame_GetOffset(scrollFrame);
+		local buttons = scrollFrame.buttons;
+		local numButtons = #buttons;
+
+		for i = 1, numButtons do
+			local button = buttons[i];
+			local index = offset + i; -- adjust index
+
+			local options = {
+				relativeFrame = button.Item
+			}
+				
+			if ( index <= numItems ) then
+				local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetItemInfoByIndex(index);
+				if link then
+					local item = CaerdonItem:CreateFromItemLink(link)
+					CaerdonWardrobe:UpdateButton(button, item, self, { 
+						locationKey = format("%d", index),
+						type = "listItem", 
+						index = index 
+					}, options)
+				else
+					CaerdonWardrobe:ClearButton(button)
+				end
+			else
+				CaerdonWardrobe:ClearButton(button)
+			end
+		end
+	end)
 end
 
 function BlackMarketMixin:UpdateBlackMarketHotItem()
 	local button = BlackMarketFrame.HotDeal.Item
 	local name, texture, quantity, itemType, usable, level, levelType, sellerName, minBid, minIncrement, currBid, youHaveHighBid, numBids, timeLeft, link, marketID, quality = C_BlackMarket.GetHotItem();
-	CaerdonWardrobe:UpdateButtonLink(link, "BlackMarketScrollFrame", "HotItem", button, nil)
+	if link then
+		local item = CaerdonItem:CreateFromItemLink(link)
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = format("hotItem"),
+			type="hotItem"
+		}, nil)
+	else
+		CaerdonWardrobe:ClearButton(button)
+	end
 end
 
-function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
-	BlackMarket:UpdateBlackMarketItems()
-	BlackMarket:UpdateBlackMarketHotItem()
-end
-
-BlackMarket = CreateFromMixins(BlackMarketMixin)
-BlackMarket:OnLoad()
+CaerdonWardrobe:RegisterFeature(BlackMarketMixin)

@@ -15,10 +15,16 @@ function CaerdonBattlePetMixin:GetBattlePetInfo()
     local linkType, linkOptions, displayText = LinkUtil.ExtractLink(self.item:GetItemLink())
 
     local itemType = CaerdonItemType.BattlePet
+    local needsItem = false
+
     local speciesID, level, quality, health, power, speed, petID, displayID = strsplit(":", linkOptions);
     local numCollected = C_PetJournal.GetNumCollectedInfo(speciesID)
+    if numCollected == 0 then
+        needsItem = true
+    end
 
     return {
+        needsItem = needsItem,
         speciesID = tonumber(speciesID),
         level = tonumber(level),
         quality = tonumber(quality),
