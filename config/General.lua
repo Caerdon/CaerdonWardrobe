@@ -9,5 +9,5 @@ CAERDON_GENERAL_SUBTEXT = L["These are general settings that apply broadly to Ca
 function CaerdonWardrobeConfigGeneralMixin:OnLoad()
     self.name = "General"
     self.parent = "Caerdon Wardrobe"
-	InterfaceOptions_AddCategory(self)
+	-- InterfaceOptions_AddCategory(self)
 end

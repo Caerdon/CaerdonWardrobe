@@ -89,7 +89,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, { 
 					locationKey = format("%s-index%d", questItem.type, questLogIndex),
 					questID = questID, 
-					index = questLogIndex, 
+					index = i, 
 					questItem = questItem 
 				}, options)
 			else
