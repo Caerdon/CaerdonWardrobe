@@ -1209,10 +1209,10 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 10,
+		Version = 11,
 		
 		Debug = {
-			Enabled = true
+			Enabled = false
 		},
 
 		Icon = {
