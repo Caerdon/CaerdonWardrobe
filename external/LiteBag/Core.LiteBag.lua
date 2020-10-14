@@ -9,8 +9,8 @@ function LiteBagMixin:GetName()
 end
 
 function LiteBagMixin:Init()
-    LiteBagItemButton_RegisterHook('LiteBagItemButton_Update', function(...) self:UpdateButton(...) end)
-    LiteBagPanel_AddUpdateEvent('TRANSMOG_COLLECTION_UPDATED')
+    LiteBag_RegisterHook('LiteBagItemButton_Update', function(...) self:UpdateButton(...) end)
+    LiteBag_AddUpdateEvent('TRANSMOG_COLLECTION_UPDATED')
 end
 
 function LiteBagMixin:SetTooltipItem(tooltip, item, locationInfo)
