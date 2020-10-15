@@ -1,3 +1,6 @@
+local ADDON_NAME, NS = ...
+local L = NS.L
+
 CaerdonWardrobeFeatureMixin = {}
 function CaerdonWardrobeFeatureMixin:GetName()
 	-- Must be unique
