@@ -151,6 +151,11 @@ function TooltipMixin:OnFloatingBattlePetShow(speciesID, level, quality, health,
     -- Not sure where all this is used - definitely when hyperlinking the Pet Cage.  Maybe AH?
     -- TODO: If name comes in blank, I think there might be some logic to use it when customName isn't set.
 
+    if not CaerdonWardrobeConfig.Debug.Enabled then
+        -- Not doing anything other than debug for tooltips right now
+        return
+    end
+
     local tooltip = FloatingBattlePetTooltip
     local ownedText = tooltip.Owned:GetText() or ""
     local origHeight = tooltip.Owned:GetHeight()
