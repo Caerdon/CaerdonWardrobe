@@ -12,6 +12,11 @@ function QuestLogMixin:Init()
 end
 
 function QuestLogMixin:SetTooltipItem(tooltip, item, locationInfo)
+	local currentQuestID = self:GetQuestID()
+
+	--Make sure it's still the expected quest (usually due to automatic turn-in addons)
+	if currentQuestID ~= locationInfo.questID then return end
+
 	if QuestInfoFrame.questLog then
 		tooltip:SetQuestLogItem(locationInfo.questItem.type, locationInfo.index, locationInfo.questID)
 	else
