@@ -68,6 +68,8 @@ function WorldMapMixin:UpdatePin(pin)
 
 		local item = CaerdonItem:CreateFromItemLink(questLink)
 		local itemData = item:GetItemData()
+		if not itemData then return end
+		
 		local questInfo = itemData:GetQuestInfo()
 
 		-- TODO: Review if necessary to iterate through rewards and find unknown ones...
