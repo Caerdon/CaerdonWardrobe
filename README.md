@@ -27,13 +27,6 @@
 <li>Provides separate indicators for items specific to your class vs. something you'd need to send to and / or learn on an alt.</li>
 <li>Show bag icon for items that you have learned for transmog that don't have an on-use or on-equip effect (sell those things!)</li>
 </ul>
-<p>The following add-ons are available to help tie Caerdon Wardrobe functionality to specific add-ons:</p>
-<ul>
-<li><strong>Bagnon:</strong> <a href="http://mods.curse.com/addons/wow/caerdon-wardrobe-bagnon">Caerdon Wardrobe Bagnon</a></li>
-<li><strong>AdiBags:</strong> <a href="https://mods.curse.com/addons/wow/caerdon-wardrobe-adibags">Caerdon Wardrobe AdiBags</a></li>
-<li><strong>ArkInventory:</strong> <a href="https://mods.curse.com/addons/wow/caerdon-wardrobe-arkinventory">Caerdon Wardrobe ArkInventory</a></li>
-<li><strong>ElvUI:</strong> <a href="https://mods.curse.com/addons/wow/caerdon-wardrobe-elvui">Caerdon Wardrobe ElvUI</a></li>
-</ul>
 <h3 id="w-how-the-icons-work">How the icons work:</h3>
 <p><strong>Stars</strong> - You don't know this appearance yet, and your current toon can equip it and learn it.</p>
 <p><strong>Question Mark</strong> - You don't know this appearance yet, but your current toon cannot learn it. You'll have to send the item to the correct class to learn it.</p>
