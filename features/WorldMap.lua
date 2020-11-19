@@ -1,4 +1,6 @@
 local WorldMapMixin = {}
+local version, build, date, tocversion = GetBuildInfo()
+local isShadowlands = tonumber(build) > 35700
 
 function WorldMapMixin:GetName()
 	return "WorldMap"
@@ -57,13 +59,13 @@ function WorldMapMixin:UpdatePin(pin)
 		if not questLink then 
 			local questName
 			if isShadowlands then
-				questName = C_QuestLog.GetTitleForQuestID(questID)
+				questName = C_QuestLog.GetTitleForQuestID(pin.questID)
 			else
-				questName = C_QuestLog.GetQuestInfo(questID)
+				questName = C_QuestLog.GetQuestInfo(pin.questID)
 			end
 
-			local questLevel = C_QuestLog.GetQuestDifficultyLevel(questID)
-			questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", questID, questLevel, questName)
+			local questLevel = C_QuestLog.GetQuestDifficultyLevel(pin.questID)
+			questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", pin.questID, questLevel, questName)
 		end
 
 		local item = CaerdonItem:CreateFromItemLink(questLink)
