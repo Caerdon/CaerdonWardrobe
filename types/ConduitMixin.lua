@@ -11,7 +11,7 @@ CaerdonConduitMixin = {}
     return itemType
 end
 
-function CaerdonConduitMixin:GetTypeInfo()
+function CaerdonConduitMixin:GetConduitInfo()
     local conduitTypes = { 
         Enum.SoulbindConduitType.Potency,
         Enum.SoulbindConduitType.Endurance,
@@ -20,6 +20,8 @@ function CaerdonConduitMixin:GetTypeInfo()
 
     local needsItem = true
     local conduitKnown = false
+    local isUpgrade = false
+
     for conduitTypeIndex = 1, #conduitTypes do
         if conduitKnown then break end
 
@@ -27,7 +29,8 @@ function CaerdonConduitMixin:GetTypeInfo()
         for conduitCollectionIndex = 1, #conduitCollection do
             local conduitData = conduitCollection[conduitCollectionIndex]
             if conduitData.conduitItemID == self.item:GetItemID() then
-                conduitKnown = true
+                conduitKnown = conduitData.conduitItemLevel >= self.item:GetCurrentItemLevel()
+                isUpgrade = conduitData.conduitItemLevel < self.item:GetCurrentItemLevel()
                 break
             end
         end
@@ -40,5 +43,6 @@ function CaerdonConduitMixin:GetTypeInfo()
 
     return {
         needsItem = needsItem,
+        isUpgrade = isUpgrade
     }
 end

@@ -137,7 +137,7 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 	end
 
 	if caerdonType == CaerdonItemType.Conduit then
-		local conduitInfo = itemData:GetTypeInfo()
+		local conduitInfo = itemData:GetConduitInfo()
 		needsItem = conduitInfo.needsItem
 	end
 	
@@ -366,7 +366,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" then
+		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgrade" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -418,7 +418,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	local alpha = 1
 	mogStatus:SetVertexColor(1, 1, 1)
 	mogStatus:SetTexture("")
-	mogStatus:SetTexCoord(0, 1, 1, 0)
+	mogStatus:SetTexCoord(0, 1, 0, 1)
 
 	local isProminent = false
 
@@ -446,6 +446,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		-- mogStatus:SetTexture("Interface\\QUESTFRAME\\SkillUp-BG")
 		-- mogStatus:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
 		-- mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+	elseif status == "upgrade" then
+		isProminent = false
+		mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
+		mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
 	elseif status == "locked" then
 		isProminent = true
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
@@ -883,7 +887,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				end
 			end
 		elseif caerdonType == CaerdonItemType.Conduit then
-			mogStatus = "own"
+			local conduitInfo = itemData:GetConduitInfo()
+			if conduitInfo.isUpgrade then
+				mogStatus = "upgrade"
+			else
+				mogStatus = "own"
+			end
 		end
 	end
 

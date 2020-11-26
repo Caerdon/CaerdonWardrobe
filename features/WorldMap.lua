@@ -18,18 +18,7 @@ function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
 	local itemLink = item:GetItemLink()
 	if itemLink then
 		tooltip:SetHyperlink(itemLink)
-	else
-		tooltip:SetItemByID(item:GetItemID())
 	end
-
-	-- TODO: Ignoring the WorldMap tooltip itself for now since it's the item I care about
-	-- May need to revisit if I care about the quest itself
-
-	-- GameTooltip_AddQuestRewardsToTooltip(tooltip, locationInfo.questID)
-	
-	-- TODO: This was for scanning the embedded item, but I don't think I need it now.
-	-- Will need to handle somehow if I do.
-	-- scanTip = scanTip.ItemTooltip.Tooltip
 end
 
 function WorldMapMixin:Refresh()
@@ -68,9 +57,12 @@ function WorldMapMixin:UpdatePin(pin)
 			questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", pin.questID, questLevel, questName)
 		end
 
-		local item = CaerdonItem:CreateFromItemLink(questLink)
-		local itemData = item:GetItemData()
-		if not itemData then return end
+		local questItem = CaerdonItem:CreateFromItemLink(questLink)
+		local itemData = questItem:GetItemData()
+		if not itemData then
+			CaerdonWardrobe:ClearButton(pin)
+			return
+		end
 		
 		local questInfo = itemData:GetQuestInfo()
 
@@ -83,25 +75,23 @@ function WorldMapMixin:UpdatePin(pin)
 			reward = questInfo.choices[bestIndex]
 		end
 
-		if reward then
-			if reward.itemLink then
-				local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
-				CaerdonWardrobe:UpdateButton(pin, item, self, { 
-					locationKey = format("%d", pin.questID),
-					questID = pin.questID 
-				}, options)
-			elseif reward.itemID then
-				local item = CaerdonItem:CreateFromItemID(reward.itemID)
-				CaerdonWardrobe:UpdateButton(pin, item, self, {
-					locationKey = format("%d", pin.questID),
-					questID = pin.questID
-				}, options)
-			else
-				CaerdonWardrobe:ClearButton(pin)
-			end
-		else
+		if not bestType then 
 			CaerdonWardrobe:ClearButton(pin)
+			return
 		end
+
+		local itemLink = GetQuestLogItemLink(bestType, bestIndex, pin.questID)
+		if not itemLink then
+			CaerdonWardrobe:ClearButton(pin)
+			return
+		end
+
+		local item = CaerdonItem:CreateFromItemLink(itemLink)
+		CaerdonWardrobe:UpdateButton(pin, item, self, { 
+			locationKey = format("%d", pin.questID),
+			questID = pin.questID,
+			questItem
+		}, options)
 	end)
 end
 
