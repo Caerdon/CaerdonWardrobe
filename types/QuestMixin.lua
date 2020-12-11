@@ -81,6 +81,7 @@ function CaerdonQuestMixin:GetQuestInfo()
         local itemLink, name, texture, numItems, quality, isUsable, itemID
         if isQuestLog then
             name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID)
+            itemLink = GetQuestLogItemLink("reward", i, questID)
         else
             name, texture, numItems, quality, isUsable = GetQuestItemInfo("reward", i)
             itemLink = GetQuestItemLink("reward", i)
@@ -100,6 +101,7 @@ function CaerdonQuestMixin:GetQuestInfo()
         local itemLink, name, texture, numItems, quality, isUsable, itemID
         if isQuestLog then
             name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
+            itemLink = GetQuestLogItemLink("choice", i, questID)
         else
             name, texture, numItems, quality, isUsable = GetQuestItemInfo("choice", i)
             itemLink = GetQuestItemLink("choice", i)

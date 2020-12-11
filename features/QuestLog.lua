@@ -18,9 +18,9 @@ function QuestLogMixin:SetTooltipItem(tooltip, item, locationInfo)
 	if currentQuestID ~= locationInfo.questID then return end
 
 	if QuestInfoFrame.questLog then
-		tooltip:SetQuestLogItem(locationInfo.questItem.type, locationInfo.index, locationInfo.questID)
+		tooltip:SetQuestLogItem(locationInfo.type, locationInfo.index, locationInfo.questID)
 	else
-		tooltip:SetQuestItem(locationInfo.questItem.type, locationInfo.index, locationInfo.questID)
+		tooltip:SetQuestItem(locationInfo.type, locationInfo.index, locationInfo.questID)
 	end
 end
 
@@ -71,6 +71,11 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 
 		local item = CaerdonItem:CreateFromItemLink(questLink)
 		local itemData = item:GetItemData()
+		if not itemData then
+			CaerdonWardrobe:ClearButton(pin)
+			return
+		end
+
 		local questInfo = itemData:GetQuestInfo()
 
 		local choiceCount = #questInfo.choices
@@ -86,16 +91,19 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local rewardItem
 			if reward.itemLink then
 				rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
-			elseif reward.itemID then
-				rewardItem = CaerdonItem:CreateFromItemID(reward.itemID)
 			end
+			-- if reward.itemLink then
+			-- 	rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
+			-- elseif reward.itemID then
+			-- 	rewardItem = CaerdonItem:CreateFromItemID(reward.itemID)
+			-- end
 			
-			if questItem and questItem.type and rewardItem then
+			if questItem and rewardItem then
 				CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, { 
-					locationKey = format("%s-index%d", questItem.type, questLogIndex),
+					locationKey = format("%s-index%d", "choice", questLogIndex),
 					questID = questID, 
 					index = i, 
-					questItem = questItem 
+					type = "choice" 
 				}, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
@@ -114,16 +122,19 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 			local rewardItem
 			if reward.itemLink then
 				rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
-			elseif reward.itemID then
-				rewardItem = CaerdonItem:CreateFromItemID(reward.itemID)
 			end
+			-- if reward.itemLink then
+			-- 	rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
+			-- elseif reward.itemID then
+			-- 	rewardItem = CaerdonItem:CreateFromItemID(reward.itemID)
+			-- end
 
-			if rewardItem then
+			if questItem and rewardItem then
 				CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
-					locationKey = format("%s-index%d", questItem.type, i, questID),
+					locationKey = format("%s-index%d", "reward", i, questID),
 					questID = questID,
 					index = i,
-					questItem = questItem
+					type = "reward"
 				}, options)
 			else
 				CaerdonWardrobe:ClearButton(questItem)
