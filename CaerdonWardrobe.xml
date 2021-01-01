@@ -60,6 +60,7 @@
 	<Script file="external\Combuctor\Core.Combuctor.lua" />
 	<Script file="external\ElvUI\Core.ElvUI.lua" />
 	<Script file="external\Inventorian\Core.Inventorian.lua" />
+	<Script file="external\KkthnxUI\Core.KkthnxUI.lua" />
 	<Script file="external\LiteBag\Core.LiteBag.lua" />
 	<Script file="external\WorldQuestTab\Core.WorldQuestTab.lua" />
 	<Script file="external\Zygor\Core.ZygorWorldQuests.lua" />
