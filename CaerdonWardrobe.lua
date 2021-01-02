@@ -1136,32 +1136,36 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 				local locationInfo = processInfo.locationInfo
 				local options = processInfo.options
 				
-				local scanTip = CaerdonWardrobeFrameTooltip
-				scanTip:ClearLines()
-				feature:SetTooltipItem(scanTip, item, locationInfo)
-						
-				if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-					local tooltipInfo = self:GetTooltipInfo(item)
-
-					-- This is lame, but tooltips end up not having all of their data
-					-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
-					-- Specifically, the Equip: line was missing on a fishing pole (and other items)
-					-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
-					-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
-					if tooltipInfo.isRetrieving then
-						self:UpdateButton(button, item, feature, locationInfo, options)
-					else
-						self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
-					end
-				else
-					item:ContinueOnItemLoad(function ()
+				if feature:IsSameItem(button, item, locationInfo) then
+					local scanTip = CaerdonWardrobeFrameTooltip
+					scanTip:ClearLines()
+					feature:SetTooltipItem(scanTip, item, locationInfo)
+							
+					if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
 						local tooltipInfo = self:GetTooltipInfo(item)
+
+						-- This is lame, but tooltips end up not having all of their data
+						-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
+						-- Specifically, the Equip: line was missing on a fishing pole (and other items)
+						-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
+						-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
 						if tooltipInfo.isRetrieving then
 							self:UpdateButton(button, item, feature, locationInfo, options)
 						else
 							self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
 						end
-					end)
+					else
+						item:ContinueOnItemLoad(function ()
+							local tooltipInfo = self:GetTooltipInfo(item)
+							if tooltipInfo.isRetrieving then
+								self:UpdateButton(button, item, feature, locationInfo, options)
+							else
+								self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+							end
+						end)
+					end
+				else
+					self:ClearButton(button)
 				end
 
 				self.processQueue[locationKey] = nil

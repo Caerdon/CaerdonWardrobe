@@ -21,6 +21,10 @@ function CaerdonWardrobeFeatureMixin:Refresh()
 	error("Caerdon Wardrobe: Must provide Refresh implementation")
 end
 
+function CaerdonWardrobeFeatureMixin:IsSameItem(button, item, locationInfo)
+	return true
+end
+
 function CaerdonWardrobeFeatureMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {}
 end
