@@ -1021,7 +1021,11 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 				local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
 				skillCheck = string.gsub(skillCheck, "2%$", "")
 				skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-				skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+				if GetLocale() == "zhCN" then
+					skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+				else
+					skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+				end
 				if strmatch(lineText, skillCheck) then
 					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 					local skillLines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
