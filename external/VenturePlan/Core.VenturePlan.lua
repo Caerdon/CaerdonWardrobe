@@ -32,7 +32,8 @@ function VenturePlanMixin:UpdateButton(button, rew, isOvermax, pw)
 		showMogIcon=true, 
 		showBindStatus=true,
 		showSellables=true,
-        overrideStatusPosition = "TOPRIGHT"
+        overrideStatusPosition = "TOPRIGHT",
+        overrideBindingPosition = "CENTER"
 	}
 
     if rew and rew.itemLink then
