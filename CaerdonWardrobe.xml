@@ -62,6 +62,7 @@
 	<Script file="external\Inventorian\Core.Inventorian.lua" />
 	<Script file="external\KkthnxUI\Core.KkthnxUI.lua" />
 	<Script file="external\LiteBag\Core.LiteBag.lua" />
+	<Script file="external\VenturePlan\Core.VenturePlan.lua" />
 	<Script file="external\WorldQuestTab\Core.WorldQuestTab.lua" />
 	<Script file="external\Zygor\Core.ZygorWorldQuests.lua" />
 

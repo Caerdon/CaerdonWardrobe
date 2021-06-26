@@ -15,6 +15,7 @@ function QuestLogMixin:SetTooltipItem(tooltip, item, locationInfo)
 	local currentQuestID = self:GetQuestID()
 
 	--Make sure it's still the expected quest (usually due to automatic turn-in addons)
+	if currentQuestID == 0 or currentQuestID == nil then return end -- quest abandoned
 	if currentQuestID ~= locationInfo.questID then return end
 
 	if QuestInfoFrame.questLog then
