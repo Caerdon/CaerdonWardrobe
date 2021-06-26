@@ -1,5 +1,5 @@
-## Interface: 90005
-## X-Compatible-With: 90005
+## Interface: 90100
+## X-Compatible-With: 90100
 ## Title: Caerdon Wardrobe
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
