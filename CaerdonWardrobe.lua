@@ -956,7 +956,7 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 
 	-- Weird bug with scanning tooltips - have to disable showing
 	-- transmog info during the scan
-	C_TransmogCollection.SetShowMissingSourceInItemTooltips(false)
+	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(false)
 	SetCVar("missingTransmogSourceInItemTooltips", 0)
 	local originalAlwaysCompareItems = GetCVarBool("alwaysCompareItems")
 	SetCVar("alwaysCompareItems", 0)
@@ -1050,7 +1050,7 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 		end
 	end
 
-	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 	SetCVar("missingTransmogSourceInItemTooltips", 1)
 	SetCVar("alwaysCompareItems", originalAlwaysCompareItems)
 

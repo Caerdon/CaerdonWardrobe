@@ -79,7 +79,7 @@ function TooltipMixin:OnLoad()
 	-- Show missing info in tooltips
 	-- NOTE: This causes a bug with tooltip scanning, so we disable
 	--   briefly and turn it back on with each scan.
-	C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 	SetCVar("missingTransmogSourceInItemTooltips", 1)
 
     -- May need this for inner items but has same item reference in current tests resulting in double
