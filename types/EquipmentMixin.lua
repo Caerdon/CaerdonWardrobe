@@ -117,6 +117,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(item:GetItemID())
     end
 
+    if sourceID then
+        -- TODO: Look into this more - doc indicates it's an itemModifiedAppearanceID returned from C_TransmogCollection.GetItemInfo (which may also be sourceID?)
+        -- PlayerKnowsSource just seems broken if that's true, though.
+        -- VisualID == AppearanceID, SourceID == ItemModifiedAppearanceID
+        -- Also check PlayerHasTransmog with the following
+        -- print(itemLink .. ",  PlayerHasTransmogItemModifiedAppearance: " .. tostring(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)) .. ", PlayerKnowsSource: " .. tostring(C_TransmogCollection.PlayerKnowsSource(sourceID)))
+    end
+
     if item:GetMinLevel() and item:GetMinLevel() > UnitLevel("player") then
         hasMetRequirements = false
     end
@@ -137,20 +145,21 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- If the source is already collected, we don't need to check anything else for the source / appearance
         if sourceInfo and not sourceInfo.isCollected then
             -- Only returns for sources that can be transmogged by current toon right now
-            appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
-            if appearanceInfo then -- Toon can learn
-                needsItem = not appearanceInfo.sourceIsCollected
-                isCompletionistItem = needsItem and appearanceInfo.appearanceIsCollected
+            -- appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+            -- if appearanceInfo then -- Toon can learn
+            -- --     needsItem = not appearanceInfo.sourceIsCollected
+            -- --     isCompletionistItem = needsItem and appearanceInfo.appearanceIsCollected
 
-                -- TODO: I think this logic might help with appearances but not sources?
-                -- What are appearance non-level requirements?
-                if appearanceInfo.appearanceHasAnyNonLevelRequirements and not appearanceInfo.appearanceMeetsNonLevelRequirements then
-                    -- TODO: Do I want to separate out level vs other requirements?
-                    hasMetRequirements = false
-                end
-            else
-                shouldSearchSources = true
-            end
+            -- --     print(itemLink .. ", " .. tostring(needsItem) .. ", " .. tostring(isCompletionistItem))
+            --     -- TODO: I think this logic might help with appearances but not sources?
+            --     -- What are appearance non-level requirements?
+            --     if appearanceInfo.appearanceHasAnyNonLevelRequirements and not appearanceInfo.appearanceMeetsNonLevelRequirements then
+            --         -- TODO: Do I want to separate out level vs other requirements?
+            --         hasMetRequirements = false
+            --     end
+            -- -- else
+            -- --     shouldSearchSources = true
+            -- end
 
             if shouldSearchSources then
                 local sourceIndex, source
@@ -180,7 +189,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         if source.sourceID == sourceID and source.isCollected then
                             currentSourceFound = true
                             break -- found the current source so don't need to learn or continue the search
-                        elseif source.isCollected and item:GetItemSubTypeID() == source.itemSubTypeID then 
+                        elseif source.isCollected and (item:GetItemSubTypeID() == source.itemSubTypeID or source.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then 
                             -- Make sure it's the same armor type and doesn't have spec reqs
                             -- (otherwise assume we need it since we can't check for specs outside our own)
                             -- TODO: Keep an eye out for a way to get spec reqs for an item not for that class

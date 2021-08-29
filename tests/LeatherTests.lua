@@ -15,7 +15,7 @@ if IsAddOnLoaded("WoWUnit") then
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:68751::::::::60:581:::1:6654:2:9:15:28:73:::|h[Imbued Pioneer Bracers]|h|r"));
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff0070dd|Hitem:172790::::::::120:581::47:4:6516:6515:1537:4785:::|h[Corrupted Aspirant's Leather Gloves]|h|r"));
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:154820::::::::60:581:::2:6654:1691:2:9:36:28:190:::|h[Festerroot Jerkin of the Fireflash]|h|r"));
-        
+
             continuableContainer:ContinueOnLoad(function()
                 WoWUnit:OnEvent(CustomEventTrigger)
             end);

@@ -68,6 +68,8 @@ function TooltipMixin:OnLoad()
     GameTooltip:HookScript("OnTooltipSetItem", function (...) Tooltip:OnTooltipSetItem(...) end)
     ItemRefTooltip:HookScript("OnTooltipSetItem", function(...) Tooltip:OnTooltipSetItem(...) end)
 
+    hooksecurefunc(GameTooltip, "SetBagItem", function (...) Tooltip:OnTooltipSetBagItem(...) end)
+    hooksecurefunc(GameTooltip, "SetInventoryItem", function (...) Tooltip:OnTooltipSetInventoryItem(...) end)
     hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(...) end)
     hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnFloatingBattlePetShow(...) end)
     hooksecurefunc("GameTooltip_AddQuestRewardsToTooltip", function(...) Tooltip:OnGameTooltipAddQuestRewardsToTooltip(...) end)
@@ -124,11 +126,32 @@ function TooltipMixin:OnEmbeddedItemTooltipSetItem(tooltip)
     end
 end
 
+local tooltipItem
+function TooltipMixin:OnTooltipSetBagItem(tooltip, bag, slot)
+    if bag and slot then
+        tooltipItem = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+    else
+        tooltipItem = nil
+    end
+end
+
+function TooltipMixin:OnTooltipSetInventoryItem(tooltip, target, slot)
+    if slot then
+        tooltipItem = CaerdonItem:CreateFromEquipmentSlot(slot)
+    else
+        tooltipItem = nil
+    end
+end
 function TooltipMixin:OnTooltipSetItem(tooltip)
     local itemName, itemLink = tooltip:GetItem()
     if itemLink then
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+            tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+        end
+
+        if not tooltipItem:IsItemEmpty() then
+            Tooltip:ProcessTooltip(tooltip, tooltipItem)
+        end
     end
 end
 
@@ -299,6 +322,21 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         self:AddTooltipDoubleData(tooltip, "Link Type", forDebugUse.linkType, "Options", forDebugUse.linkOptions)
         if item:GetItemQuality() then
             self:AddTooltipData(tooltip, "Quality", _G[format("ITEM_QUALITY%d_DESC", item:GetItemQuality())], item:GetItemQualityColor().color)
+        end
+
+        local itemLocation = item:GetItemLocation()
+        if itemLocation and itemLocation:HasAnyLocation() then
+            if itemLocation:IsEquipmentSlot() then
+                self:AddTooltipData(tooltip, "Equipment Slot", tostring(itemLocation:GetEquipmentSlot()))
+            end
+
+            if itemLocation:IsBagAndSlot() then
+                local bag, slot = itemLocation:GetBagAndSlot();
+                self:AddTooltipDoubleData(tooltip, "Bag", bag, "Slot", slot)
+
+                local canTransmog, error = C_Item.CanItemTransmogAppearance(itemLocation)
+                self:AddTooltipData(tooltip, "Can Item Transmog Appearance", tostring(canTransmog))    
+            end
         end
 
         GameTooltip_AddBlankLineToTooltip(tooltip);
