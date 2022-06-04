@@ -50,7 +50,7 @@ function Tests:ImbuedPioneerBracersNeed()
     AreEqual(info.canEquip, info.needsItem)
     AreEqual(true, info.hasMetRequirements)
     AreEqual(not info.canEquip, info.otherNeedsItem)
-    AreEqual(false, info.isCompletionistItem)
+    AreEqual(true, info.isCompletionistItem)
     AreEqual(true, info.matchesLootSpec)
 end
 

@@ -197,26 +197,31 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                             if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
                                 lowestLevelFound = sourceMinLevel
                             end
-                            local sourceSpecIndex, sourceSpec
-                            if sourceSpecs and source.specs and #source.specs > 0 then
-                                for sourceSpecIndex, sourceSpec in pairs(sourceSpecs) do
-                                    if tContains(source.specs, sourceSpec) then
-                                        otherSourceFound = true
-                                        table.insert(matchedSources, source)
-                                        break
-                                    end
-                                end
-                            else
+                            -- TODO: Confirm if this is needed - appears to be working correctly now.
+                            -- local sourceSpecIndex, sourceSpec
+                            -- if sourceSpecs and source.specs and #source.specs > 0 then
+                            --     for sourceSpecIndex, sourceSpec in pairs(sourceSpecs) do
+                            --         print(itemLink .. ": " .. sourceSpec)
+                            --         if tContains(source.specs, sourceSpec) then
+                            --             otherSourceFound = true
+                            --             print(itemLink .. ": SOURCESPEC FOUND")
+                            --             table.insert(matchedSources, source)
+                            --             break
+                            --         end
+                            --     end
+                            -- else
                                 table.insert(matchedSources, source)
                                 otherSourceFound = true
-                            end
+                            -- end
                         end
                     end
 
                     -- Ignore the other source if this item is lower level than what we know
                     -- TODO: Find an item to add to tests
+                    local includeLevelDifferences = CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem and CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentLevel
+
                     local itemMinLevel = item:GetMinLevel()
-                    if lowestLevelFound ~= nil and itemMinLevel ~= nil and itemMinLevel < lowestLevelFound then
+                    if lowestLevelFound ~= nil and itemMinLevel ~= nil and itemMinLevel < lowestLevelFound and includeLevelDifferences then
                         otherSourceFound = false
                     end
                 end

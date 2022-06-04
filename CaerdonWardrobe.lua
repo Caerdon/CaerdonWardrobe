@@ -760,8 +760,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				else
 					if transmogInfo.hasMetRequirements then
 						mogStatus = "collected"
-					else
-						mogStatus = "lowSkill"
+					-- Don't mark as lowSkill for equipment if it's known but not the right level... too much noise
+					-- else
+					-- 	mogStatus = "lowSkill"
 					end
 				end
 
@@ -1225,7 +1226,7 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 11,
+		Version = 17,
 		
 		Debug = {
 			Enabled = false
@@ -1240,7 +1241,8 @@ function NS:GetDefaultConfig()
 				GuildBank = true,
 				Merchant = true,
 				Auction = true,
-				SameLookDifferentItem = false
+				SameLookDifferentItem = false,
+				SameLookDifferentLevel = true
 			},
 
 			ShowLearnableByOther = {
@@ -1248,8 +1250,7 @@ function NS:GetDefaultConfig()
 				GuildBank = true,
 				Merchant = true,
 				Auction = true,
-				EncounterJournal = true,
-				SameLookDifferentItem = false
+				EncounterJournal = true
 			},
 
 			ShowSellable = {

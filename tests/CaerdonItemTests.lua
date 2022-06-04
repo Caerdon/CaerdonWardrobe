@@ -92,7 +92,7 @@ function Tests:DataChangeCanary()
     -- See if there is any new, unexpected data coming from WoW
     local appearanceCount = 0
     for k,v in pairs(appearanceSource) do appearanceCount = appearanceCount + 1 end
-    AreEqual(11, appearanceCount)
+    AreEqual(12, appearanceCount)
 
     local sourceInfo = debugUse.sourceInfo
     local sourceCount = 0
