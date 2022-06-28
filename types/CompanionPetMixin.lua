@@ -12,7 +12,7 @@ CaerdonCompanionPetMixin = {}
 end
 
 function CaerdonCompanionPetMixin:GetCompanionPetInfo()
-    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradeable, unique, obtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self.item:GetItemID())
+    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self.item:GetItemID())
     if creatureID and displayID then
         local needsItem = false
         local numCollected = C_PetJournal.GetNumCollectedInfo(speciesID)
@@ -28,12 +28,11 @@ function CaerdonCompanionPetMixin:GetCompanionPetInfo()
             sourceText = sourceText,
             isWild = isWild,
             canBattle = canBattle,
-            tradeable = tradeable,
-            unique = unique,
-            obtainable = obtainable,
-            displayID = displayID,
+            isTradeable = isTradeable,
+            isUnique = isUnique,
+            isObtainable = isObtainable,
             speciesID = speciesID,
-            quality = itemRarity,
+            displayID = displayID,
             numCollected = numCollected
         }
     end

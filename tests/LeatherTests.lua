@@ -8,9 +8,9 @@ if IsAddOnLoaded("WoWUnit") then
     AreEqual, Exists, Replace, IsTrue, IsFalse = WoWUnit.AreEqual, WoWUnit.Exists, WoWUnit.Replace, WoWUnit.IsTrue, WoWUnit.IsFalse
     Tests = WoWUnit("Leather Tests", CustomEventTrigger)
 
-    frame:RegisterEvent "PLAYER_LOGIN"
+    frame:RegisterEvent "FIRST_FRAME_RENDERED"
     frame:SetScript("OnEvent", function(this, event, ...)
-        if event == "PLAYER_LOGIN" then
+        if event == "FIRST_FRAME_RENDERED" then
             local continuableContainer = ContinuableContainer:Create();
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:68751::::::::60:581:::1:6654:2:9:15:28:73:::|h[Imbued Pioneer Bracers]|h|r"));
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff0070dd|Hitem:172790::::::::120:581::47:4:6516:6515:1537:4785:::|h[Corrupted Aspirant's Leather Gloves]|h|r"));
@@ -27,13 +27,19 @@ end
 
 local beforeTestValue
 function Tests:BeforeEach()
-    -- beforeTestValue = CaerdonWardrobeConfig.Debug.Enabled
-    -- CaerdonWardrobeConfig.Debug.Enabled = true
+    beforeSameLookDifferentItem = CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem
+    CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem = true
+
+    beforeSameLookDifferentLevel = CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentLevel
+    CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentLevel = true
 end
 
 function Tests:AfterEach()
-    -- CaerdonWardrobeConfig.Debug.Enabled = beforeTestValue
-    -- beforeTestValue = nil
+    CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem = beforeSameLookDifferentItem
+    beforeSameLookDifferentItem = nil
+
+    CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentLevel = beforeSameLookDifferentLevel
+    beforeSameLookDifferentLevel = nil
 end
 
 function Tests:ImbuedPioneerBracersNeed()
@@ -48,9 +54,9 @@ function Tests:ImbuedPioneerBracersNeed()
     AreEqual(2125, info.appearanceID)
     AreEqual(35153, info.sourceID)
     AreEqual(info.canEquip, info.needsItem)
-    AreEqual(true, info.hasMetRequirements)
+    AreEqual(UnitLevel("player") >= item:GetMinLevel(), info.hasMetRequirements)
     AreEqual(not info.canEquip, info.otherNeedsItem)
-    AreEqual(true, info.isCompletionistItem)
+    AreEqual(false, info.isCompletionistItem)
     AreEqual(true, info.matchesLootSpec)
 end
 

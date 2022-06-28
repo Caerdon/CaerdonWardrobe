@@ -46,7 +46,8 @@ end
 	return item;
 end
 
---[[static]] function CaerdonItem:CreateFromItemID(itemID)
+--[[static]] function CaerdonItem:CreateFromItemID(itemIDCheck)
+    local itemID = tonumber(itemIDCheck)
 	if type(itemID) ~= "number" then
 		error("Usage: CaerdonItem:CreateFromItemID(itemID)", 2);
     end
@@ -89,8 +90,7 @@ end
 		error("Usage: CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName)", 2);
 	end
 
-    local _, _, _, creatureID, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
-
+    local _, _, _, _, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
     local itemLink = format("|cff0070dd|Hbattlepet:%d:%d:%d:%d:%d:%d:%x:%d|h[%s]|h|r", speciesID, level, quality, health, power, speed, petID or 0, displayID, name)
     return CaerdonItem:CreateFromItemLink(itemLink)
 end
@@ -295,7 +295,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
                 caerdonType = CaerdonItemType.Consumable
             elseif typeID == LE_ITEM_CLASS_MISCELLANEOUS then
                 if subTypeID == LE_ITEM_MISCELLANEOUS_COMPANION_PET then
-                    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradeable, unique, obtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self:GetItemID());
+                    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self:GetItemID());
                     if creatureID and displayID then
                         caerdonType = CaerdonItemType.CompanionPet
                     else

@@ -8,9 +8,9 @@ if IsAddOnLoaded("WoWUnit") then
     AreEqual, Exists, Replace, IsTrue, IsFalse = WoWUnit.AreEqual, WoWUnit.Exists, WoWUnit.Replace, WoWUnit.IsTrue, WoWUnit.IsFalse
     Tests = WoWUnit("Shared Tests", CustomEventTrigger)
 
-    frame:RegisterEvent "PLAYER_LOGIN"
+    frame:RegisterEvent "FIRST_FRAME_RENDERED"
     frame:SetScript("OnEvent", function(this, event, ...)
-        if event == "PLAYER_LOGIN" then
+        if event == "FIRST_FRAME_RENDERED" then
             local continuableContainer = ContinuableContainer:Create();
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff0070dd|Hitem:93607::::::::60:581:::1:6874:1:9:50:::|h[Crafted Dreadful Gladiator's Cloak of Alacrity]|h|r"));
         

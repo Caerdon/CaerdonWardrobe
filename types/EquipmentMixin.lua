@@ -180,6 +180,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 otherSourceFound = false
 
                 if appearanceSources then
+                    local sourceIndex, source
                     for sourceIndex, source in pairs(appearanceSources) do
                         local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = GetItemInfoInstant(source.itemID)
                         -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
@@ -197,21 +198,38 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                             if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
                                 lowestLevelFound = sourceMinLevel
                             end
-                            -- TODO: Confirm if this is needed - appears to be working correctly now.
+
+                            -- Log any matched sources even if they're treated as not found due to logic below (for debug)
+                            table.insert(matchedSources, source)
+                            otherSourceFound = true -- remove this and do something like below if I can ever find a way to get full spec / class reqs for an item
+
+                            -- If this item covers classes that aren't already covered by another source, we want to learn it... 
+                            -- EXCEPT TODO: This doesn't work because GetItemSpecInfo appears to at least sometimes return just your own class specs for an item...
+                            -- Weapons may be accurate but also spec doesn't seem to matter for them to show up.
                             -- local sourceSpecIndex, sourceSpec
-                            -- if sourceSpecs and source.specs and #source.specs > 0 then
+                            -- if sourceSpecs and #sourceSpecs > 0 and source.specs and #source.specs > 0 then
+                            --     local itemClasses = {}
+                            --     print("Checking classes for " .. itemLink)
+
+                            --     for sourceSpecIndex, sourceSpec in pairs(source.specs) do
+                            --         local id, name, description, icon, role, classFile, className = GetSpecializationInfoByID(sourceSpec)
+                            --         print(itemLink .. source.name .. " found " .. className)
+                            --         table.insert(itemClasses, className)
+                            --     end
+
                             --     for sourceSpecIndex, sourceSpec in pairs(sourceSpecs) do
-                            --         print(itemLink .. ": " .. sourceSpec)
-                            --         if tContains(source.specs, sourceSpec) then
-                            --             otherSourceFound = true
-                            --             print(itemLink .. ": SOURCESPEC FOUND")
-                            --             table.insert(matchedSources, source)
+                            --         -- print(itemLink .. ": " .. sourceSpec)
+                            --         local id, name, description, icon, role, classFile, className = GetSpecializationInfoByID(sourceSpec)
+                            --         if not tContains(itemClasses, className) then
+                            --             print(itemLink .. ": New Spec " .. sourceSpec .. " for " .. className .. " " .. source.itemID)
+                            --             otherSourceFound = false
                             --             break
+                            --         else
+                            --             otherSourceFound = true
                             --         end
                             --     end
                             -- else
-                                table.insert(matchedSources, source)
-                                otherSourceFound = true
+                            --     otherSourceFound = true
                             -- end
                         end
                     end
@@ -222,7 +240,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
                     local itemMinLevel = item:GetMinLevel()
                     if lowestLevelFound ~= nil and itemMinLevel ~= nil and itemMinLevel < lowestLevelFound and includeLevelDifferences then
-                        otherSourceFound = false
+                        -- This logic accounts for the changes to transmog that allow lower-level players to wear transmog up to a certain level.
+                        -- This changes "completionist" slightly in that you will no longer collect every single level difference of an appearance as it's no longer needed.
+                        if (lowestLevelFound > 9 and itemMinLevel <= 9) or (lowestLevelFound > 48 and itemMinLevel <= 48) or (lowestLevelFound > 60 and itemMinLevel <= 60) then
+                            otherSourceFound = false
+                        end
                     end
                 end
 

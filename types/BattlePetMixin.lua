@@ -18,6 +18,10 @@ function CaerdonBattlePetMixin:GetBattlePetInfo()
     local needsItem = false
 
     local speciesID, level, quality, health, power, speed, petID, displayID = strsplit(":", linkOptions);
+    -- local owned = C_PetJournal.GetOwnedBattlePetString(speciesID);
+
+    local petName, petIcon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
+
     local numCollected = C_PetJournal.GetNumCollectedInfo(speciesID)
     if numCollected == 0 then
         needsItem = true
@@ -25,15 +29,23 @@ function CaerdonBattlePetMixin:GetBattlePetInfo()
 
     return {
         needsItem = needsItem,
+        name = displayText,
+        petType = petType,
+        creatureID = creatureID,
+        sourceText = sourceText,
+        isWild = isWild,
+        canBattle = canBattle,
+        isTradeable = isTradeable,
+        isUnique = isUnique,
+        isObtainable = isObtainable,
         speciesID = tonumber(speciesID),
-        level = tonumber(level),
+        displayID = tonumber(displayID),
+        numCollected = numCollected,
         quality = tonumber(quality),
+        level = tonumber(level),
         health = tonumber(health),
         power = tonumber(power),
         speed = tonumber(speed),
         petID = tonumber(petID),
-        displayID = tonumber(displayID),
-        name = displayText,
-        numCollected = numCollected
     }
 end

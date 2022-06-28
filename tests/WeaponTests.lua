@@ -8,9 +8,9 @@ if IsAddOnLoaded("WoWUnit") then
     AreEqual, Exists, Replace, IsTrue, IsFalse = WoWUnit.AreEqual, WoWUnit.Exists, WoWUnit.Replace, WoWUnit.IsTrue, WoWUnit.IsFalse
     Tests = WoWUnit("Weapon Tests", CustomEventTrigger)
 
-    frame:RegisterEvent "PLAYER_LOGIN"
+    frame:RegisterEvent "FIRST_FRAME_RENDERED"
     frame:SetScript("OnEvent", function(this, event, ...)
-        if event == "PLAYER_LOGIN" then
+        if event == "FIRST_FRAME_RENDERED" then
             local continuableContainer = ContinuableContainer:Create();
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:36445::::::::20:64:512:28:2:1695:3869:67:::|h[Riveted Shield of the Fireflash]|h|r"));
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:25114::::::::20:64:512:30:2:1707:3871:118:::|h[Doomsayer's Mace of the Aurora]|h|r"));

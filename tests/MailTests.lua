@@ -8,9 +8,9 @@ if IsAddOnLoaded("WoWUnit") then
     AreEqual, Exists, Replace, IsTrue, IsFalse = WoWUnit.AreEqual, WoWUnit.Exists, WoWUnit.Replace, WoWUnit.IsTrue, WoWUnit.IsFalse
     Tests = WoWUnit("Mail Tests", CustomEventTrigger)
 
-    frame:RegisterEvent "PLAYER_LOGIN"
+    frame:RegisterEvent "FIRST_FRAME_RENDERED"
     frame:SetScript("OnEvent", function(this, event, ...)
-        if event == "PLAYER_LOGIN" then
+        if event == "FIRST_FRAME_RENDERED" then
             local continuableContainer = ContinuableContainer:Create();
             continuableContainer:AddContinuable(CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:106552::::::::20:64:512:29:2:3854:107:120:::|h[Warpscale Legguards of the Quickblade]|h|r"));
         

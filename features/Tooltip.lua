@@ -149,9 +149,7 @@ function TooltipMixin:OnTooltipSetItem(tooltip)
             tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
         end
 
-        if not tooltipItem:IsItemEmpty() then
-            Tooltip:ProcessTooltip(tooltip, tooltipItem)
-        end
+        Tooltip:ProcessTooltip(tooltip, tooltipItem)
     end
 end
 
@@ -167,7 +165,7 @@ end
 
 function TooltipMixin:OnBattlePetTooltipShow(speciesID, level, quality, health, power, speed, customName)
     local item = CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName)
-	Tooltip:ProcessTooltip(BattlePetTooltip, item)
+    Tooltip:ProcessTooltip(BattlePetTooltip, item)
 end
 
 function TooltipMixin:OnFloatingBattlePetShow(speciesID, level, quality, health, power, speed, customName, petID)
@@ -197,28 +195,37 @@ function TooltipMixin:OnFloatingBattlePetShow(speciesID, level, quality, health,
 
     local item = CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName, petID)
     if item then
-        local itemData = item:GetItemData()
-        extraText = extraText .. format("|nIdentified Type: %s", item:GetCaerdonItemType())
+        item:ContinueOnItemLoad(function ()
+            local itemData = item:GetItemData()
+            extraText = extraText .. format("|nIdentified Type: %s", item:GetCaerdonItemType())
 
-        local forDebugUse = item:GetForDebugUse()
-        extraText = extraText .. format("|nLink Type: %s", forDebugUse.linkType)
-        extraText = extraText .. format("|nOptions: %s|n", forDebugUse.linkOptions)
-        
-        if item:GetCaerdonItemType() == CaerdonItemType.BattlePet then
-            local petInfo = itemData and itemData:GetBattlePetInfo()
-            if petInfo then
-                extraText = extraText .. format("|nSpecies ID: %s", petInfo.speciesID)
-                extraText = extraText .. format("|nNum Collected: %s", petInfo.numCollected)
+            local forDebugUse = item:GetForDebugUse()
+            extraText = extraText .. format("|nLink Type: %s", forDebugUse.linkType)
+            extraText = extraText .. format("|nOptions: %s|n", forDebugUse.linkOptions)
+            
+            if item:GetCaerdonItemType() == CaerdonItemType.BattlePet then
+                local petInfo = itemData and itemData:GetBattlePetInfo()
+                if petInfo then
+                    extraText = extraText .. format("|nSpecies ID: %s", petInfo.speciesID)
+                    extraText = extraText .. format("|nNum Collected: %s", petInfo.numCollected)
+                end
             end
-        end
+
+            local ownedLine = format("%s|n%s", ownedText, extraText)
+
+            tooltip.Owned:SetText(ownedLine)
+            tooltip:SetHeight(tooltip:GetHeight() + tooltip.Owned:GetHeight() - origHeight + 2)
+            tooltip.Delimiter:ClearAllPoints();
+            tooltip.Delimiter:SetPoint("TOPLEFT", tooltip.Owned, "BOTTOMLEFT", -6, -2)
+        end)
+    else
+        local ownedLine = format("%s|n%s", ownedText, extraText)
+
+        tooltip.Owned:SetText(ownedLine)
+        tooltip:SetHeight(tooltip:GetHeight() + tooltip.Owned:GetHeight() - origHeight + 2)
+        tooltip.Delimiter:ClearAllPoints();
+        tooltip.Delimiter:SetPoint("TOPLEFT", tooltip.Owned, "BOTTOMLEFT", -6, -2)
     end
-
-    local ownedLine = format("%s|n%s", ownedText, extraText)
-
-    tooltip.Owned:SetText(ownedLine)
-    tooltip:SetHeight(tooltip:GetHeight() + tooltip.Owned:GetHeight() - origHeight + 2)
-    tooltip.Delimiter:ClearAllPoints();
-    tooltip.Delimiter:SetPoint("TOPLEFT", tooltip.Owned, "BOTTOMLEFT", -6, -2)
 end
 
 function TooltipMixin:AddTooltipData(tooltip, title, value, valueColor)
@@ -282,19 +289,19 @@ function TooltipMixin:AddTooltipDoubleData(tooltip, title, value, title2, value2
     end
 end
 
--- local cancelFuncs = {}
+local cancelFuncs = {}
 function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
-    -- if cancelFuncs[tooltip] then
-    --     cancelFuncs[tooltip]()
-    --     cancelFuncs[tooltip] = nil
-    -- end
+    if not CaerdonWardrobeConfig.Debug.Enabled then
+        -- Not doing anything other than debug for tooltips right now
+        return
+    end
 
-    -- function continueLoad()
-        if not CaerdonWardrobeConfig.Debug.Enabled then
-            -- Not doing anything other than debug for tooltips right now
-            return
-        end
+    if cancelFuncs[tooltip] then
+         cancelFuncs[tooltip]()
+         cancelFuncs[tooltip] = nil
+     end
 
+    function continueLoad()
         GameTooltip_AddBlankLineToTooltip(tooltip);
         GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe", LIGHTBLUE_FONT_COLOR);
 
@@ -363,13 +370,13 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         elseif identifiedType == CaerdonItemType.Equipment then
             self:AddTransmogInfoToTooltip(tooltip, item)
         end
-    -- end
+    end
 
-    -- if item:IsItemEmpty() then
-    --     continueLoad()
-    -- else
-    --     cancelFuncs[tooltip] = item:ContinueWithCancelOnItemLoad(continueLoad)
-    -- end
+    if not item:IsItemEmpty() then
+        cancelFuncs[tooltip] = item:ContinueWithCancelOnItemLoad(continueLoad)
+    else
+        continueLoad()
+    end
 end
 
 
@@ -436,7 +443,13 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
         self:AddTooltipData(tooltip, "Can Equip", transmogInfo.canEquip)
 
         local matchedSources = transmogInfo.forDebugUseOnly.matchedSources
-        self:AddTooltipData(tooltip, "Matched Source", matchedSources and #matchedSources > 0)
+        if matchedSources and #matchedSources > 0 then
+            for k,v in pairs(matchedSources) do
+                self:AddTooltipData(tooltip, "Matched Source", v.name)
+            end
+        else
+            self:AddTooltipData(tooltip, "Matched Source", false)
+        end
 
         local appearanceInfo = transmogInfo.forDebugUseOnly.appearanceInfo
         if appearanceInfo then
