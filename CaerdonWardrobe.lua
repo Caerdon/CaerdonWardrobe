@@ -295,27 +295,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	local mogStatus = button.mogStatus
 	local mogAnim = button.mogAnim
 	local iconPosition, showSellables, isSellable
-	local otherIconSize = 40
-	local otherIconOffset = 0
-	local iconOffset = 0
 
 	if options then 
 		showSellables = options.showSellables
 		isSellable = options.isSellable
-		if options.iconOffset then
-			iconOffset = options.iconOffset
-			otherIconOffset = iconOffset
-		end
-
-		if options.otherIconSize then
-			otherIconSize = options.otherIconSize
-		else
-			otherIconSize = iconSize
-		end
-
-		if options.otherIconOffset then
-			otherIconOffset = options.otherIconOffset
-		end
 	else
 		options = {}
 	end
@@ -720,7 +703,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		end
 	end
 
-	local isQuestItem = itemClassID == LE_ITEM_CLASS_QUESTITEM
+	local isQuestItem = itemClassID == Enum.ItemClass.Questitem
 	if isQuestItem and CaerdonWardrobeConfig.Icon.ShowQuestItems then
 		mogStatus = "quest"
 	end

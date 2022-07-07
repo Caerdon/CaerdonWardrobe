@@ -77,13 +77,13 @@ end
 -- function CaerdonAPIMixin:GetClassArmor()
 --     local playerClass, englishClass = UnitClass("player");
 --     if (englishClass == "ROGUE" or englishClass == "DRUID" or englishClass == "MONK" or englishClass == "DEMONHUNTER") then
---         classArmor = LE_ITEM_ARMOR_LEATHER;
+--         classArmor = Enum.ItemArmorSubclass.Leather;
 --     elseif (englishClass == "WARRIOR" or englishClass == "PALADIN" or englishClass == "DEATHKNIGHT") then
---         classArmor = LE_ITEM_ARMOR_PLATE;
+--         classArmor = Enum.ItemArmorSubclass.Plate;
 --     elseif (englishClass == "MAGE" or englishClass == "PRIEST" or englishClass == "WARLOCK") then
---         classArmor = LE_ITEM_ARMOR_CLOTH;
+--         classArmor = Enum.ItemArmorSubclass.Cloth;
 --     elseif (englishClass == "SHAMAN" or englishClass == "HUNTER") then
---         classArmor = LE_ITEM_ARMOR_MAIL;
+--         classArmor = Enum.ItemArmorSubclass.Mail;
 --     end
 
 --     return classArmor

@@ -6,7 +6,7 @@ CaerdonRecipeMixin = {}
 		error("Usage: CaerdonRecipe:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonRecipeMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonRecipeMixin)
     itemType.item = caerdonItem
     return itemType
 end

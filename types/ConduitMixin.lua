@@ -6,7 +6,7 @@ CaerdonConduitMixin = {}
 		error("Usage: CaerdonConduit:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonConduitMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonConduitMixin)
     itemType.item = caerdonItem
     return itemType
 end

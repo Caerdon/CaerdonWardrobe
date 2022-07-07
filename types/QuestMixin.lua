@@ -9,7 +9,7 @@ local isShadowlands = tonumber(build) > 35700
 		error("Usage: CaerdonQuest:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonQuestMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonQuestMixin)
     itemType.item = caerdonItem
     return itemType
 end

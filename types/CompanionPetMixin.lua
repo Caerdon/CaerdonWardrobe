@@ -6,7 +6,7 @@ CaerdonCompanionPetMixin = {}
 		error("Usage: CaerdonCompanion:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonCompanionPetMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonCompanionPetMixin)
     itemType.item = caerdonItem
     return itemType
 end

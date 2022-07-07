@@ -70,6 +70,10 @@ function TooltipMixin:OnLoad()
 
     hooksecurefunc(GameTooltip, "SetBagItem", function (...) Tooltip:OnTooltipSetBagItem(...) end)
     hooksecurefunc(GameTooltip, "SetInventoryItem", function (...) Tooltip:OnTooltipSetInventoryItem(...) end)
+    hooksecurefunc(GameTooltip, "SetCurrencyByID", function (...) Tooltip:OnTooltipSetCurrencyByID(...) end)
+    hooksecurefunc(GameTooltip, "SetCurrencyToken", function (...) Tooltip:OnTooltipSetCurrencyToken(...) end)
+    hooksecurefunc(GameTooltip, "SetBackpackToken", function (...) Tooltip:OnTooltipSetBackpackToken(...) end)
+    -- TODO (Check this): hooksecurefunc(GameTooltip, "SetQuestCurrency", function (...) Tooltip:OnTooltipSetQuestCurrency(...) end)
     hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(...) end)
     hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnFloatingBattlePetShow(...) end)
     hooksecurefunc("GameTooltip_AddQuestRewardsToTooltip", function(...) Tooltip:OnGameTooltipAddQuestRewardsToTooltip(...) end)
@@ -142,9 +146,51 @@ function TooltipMixin:OnTooltipSetInventoryItem(tooltip, target, slot)
         tooltipItem = nil
     end
 end
+
+function TooltipMixin:OnTooltipSetCurrencyByID(tooltip, currencyID)
+    local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
+    if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+        tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+    end
+
+    Tooltip:ProcessTooltip(tooltip, tooltipItem)
+end
+
+function TooltipMixin:OnTooltipSetCurrencyToken(tooltip, tokenIndex)
+    local itemLink = C_CurrencyInfo.GetCurrencyListLink(tokenIndex)
+
+    if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+        tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+    end
+
+    Tooltip:ProcessTooltip(tooltip, tooltipItem)
+end
+
+function TooltipMixin:OnTooltipSetBackpackToken(tooltip, currencyIndex)
+    local currencyInfo = C_CurrencyInfo.GetBackpackCurrencyInfo(currencyIndex);
+    local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyInfo.currencyTypesID)
+
+    if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+        tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+    end
+
+    Tooltip:ProcessTooltip(tooltip, tooltipItem)
+end
+
 function TooltipMixin:OnTooltipSetItem(tooltip)
     local itemName, itemLink = tooltip:GetItem()
-    if itemLink then
+    if itemLink and itemName then
+        local id = string.match(itemLink, "item:(%d*)")
+        if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
+            local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
+            for i = 1, 8 do
+                if GetMouseFocus().reagentIndex == i then
+                    itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
+                    break
+                end
+            end
+        end
+
         if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
             tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
         end
@@ -228,9 +274,11 @@ function TooltipMixin:OnFloatingBattlePetShow(speciesID, level, quality, health,
     end
 end
 
-function TooltipMixin:AddTooltipData(tooltip, title, value, valueColor)
+function TooltipMixin:AddTooltipData(tooltip, item, title, value, valueColor)
 	local noWrap = false;
     local wrap = true;
+
+    local identifiedType = item:GetCaerdonItemType()
 
     valueColor = valueColor or HIGHLIGHT_FONT_COLOR
     
@@ -241,16 +289,18 @@ function TooltipMixin:AddTooltipData(tooltip, title, value, valueColor)
    
     if title and value == nil then
         GameTooltip_AddErrorLine(tooltip, format("Missing %s", title));
-    elseif tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip then -- assuming this for now
+    elseif tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip or identifiedType == CaerdonItemType.Currency then -- assuming this for now
         GameTooltip_AddColoredLine(tooltip, format("%s: %s", title, value), HIGHLIGHT_FONT_COLOR, wrap)
     else
         GameTooltip_AddColoredDoubleLine(tooltip, format("%s:", title), tostring(value), HIGHLIGHT_FONT_COLOR, valueColor, wrap);
     end
 end
 
-function TooltipMixin:AddTooltipDoubleData(tooltip, title, value, title2, value2, valueColor)
+function TooltipMixin:AddTooltipDoubleData(tooltip, item, title, value, title2, value2, valueColor)
 	local noWrap = false;
     local wrap = true;
+
+    local identifiedType = item:GetCaerdonItemType()
 
     valueColor = valueColor or HIGHLIGHT_FONT_COLOR
 
@@ -268,7 +318,7 @@ function TooltipMixin:AddTooltipDoubleData(tooltip, title, value, title2, value2
     end
 
     if value ~= nil and value2 ~= nil then
-        if tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip then -- assuming this for now
+        if tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip or identifiedType == CaerdonItemType.Currency then -- assuming this for now
             GameTooltip_AddColoredLine(tooltip, format("%s: %s", title, value), HIGHLIGHT_FONT_COLOR, wrap)
             GameTooltip_AddColoredLine(tooltip, format("%s: %s", title2, value2), HIGHLIGHT_FONT_COLOR, wrap)
         else
@@ -305,18 +355,6 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         GameTooltip_AddBlankLineToTooltip(tooltip);
         GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe", LIGHTBLUE_FONT_COLOR);
 
-        if not isEmbedded then
-            local specIndex = GetSpecialization()
-            local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat = GetSpecializationInfo(specIndex)
-            self:AddTooltipData(tooltip, "Spec", SpecMap[specID] or specID)
-            self:AddTooltipData(tooltip, "Level", UnitLevel("player"))
-
-            local englishFaction = UnitFactionGroup("player")
-            self:AddTooltipData(tooltip, "Faction", englishFaction)
-
-            GameTooltip_AddBlankLineToTooltip(tooltip);
-        end
-
         local forDebugUse = item:GetForDebugUse()
         local identifiedType = item:GetCaerdonItemType()
 
@@ -325,50 +363,67 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
             identifiedColor = RED_FONT_COLOR
         end
             
-        self:AddTooltipData(tooltip, "Identified Type", identifiedType, identifiedColor)
-        self:AddTooltipDoubleData(tooltip, "Link Type", forDebugUse.linkType, "Options", forDebugUse.linkOptions)
+        if not isEmbedded and identifiedType ~= CaerdonItemType.Currency then
+            local specIndex = GetSpecialization()
+            local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat = GetSpecializationInfo(specIndex)
+            self:AddTooltipData(tooltip, item, "Spec", SpecMap[specID] or specID)
+            self:AddTooltipData(tooltip, item, "Level", UnitLevel("player"))
+
+            local englishFaction = UnitFactionGroup("player")
+            self:AddTooltipData(tooltip, item, "Faction", englishFaction)
+
+            GameTooltip_AddBlankLineToTooltip(tooltip);
+        end
+
+        self:AddTooltipData(tooltip, item, "Identified Type", identifiedType, identifiedColor)
+        self:AddTooltipDoubleData(tooltip, item, "Link Type", forDebugUse.linkType, "Options", forDebugUse.linkOptions)
         if item:GetItemQuality() then
-            self:AddTooltipData(tooltip, "Quality", _G[format("ITEM_QUALITY%d_DESC", item:GetItemQuality())], item:GetItemQualityColor().color)
+            self:AddTooltipData(tooltip, item, "Quality", _G[format("ITEM_QUALITY%d_DESC", item:GetItemQuality())], item:GetItemQualityColor().color)
         end
 
         local itemLocation = item:GetItemLocation()
         if itemLocation and itemLocation:HasAnyLocation() then
             if itemLocation:IsEquipmentSlot() then
-                self:AddTooltipData(tooltip, "Equipment Slot", tostring(itemLocation:GetEquipmentSlot()))
+                self:AddTooltipData(tooltip, item, "Equipment Slot", tostring(itemLocation:GetEquipmentSlot()))
             end
 
             if itemLocation:IsBagAndSlot() then
                 local bag, slot = itemLocation:GetBagAndSlot();
-                self:AddTooltipDoubleData(tooltip, "Bag", bag, "Slot", slot)
+                self:AddTooltipDoubleData(tooltip, item, "Bag", bag, "Slot", slot)
 
                 local canTransmog, error = C_Item.CanItemTransmogAppearance(itemLocation)
-                self:AddTooltipData(tooltip, "Can Item Transmog Appearance", tostring(canTransmog))    
+                self:AddTooltipData(tooltip, item, "Can Item Transmog Appearance", tostring(canTransmog))    
             end
         end
 
         GameTooltip_AddBlankLineToTooltip(tooltip);
 
-        if identifiedType ~= CaerdonItemType.BattlePet and identifiedType ~= CaerdonItemType.Quest then
-            self:AddTooltipData(tooltip, "Item ID", item:GetItemID())
-            self:AddTooltipDoubleData(tooltip, "Item Type", item:GetItemType(), "SubType", item:GetItemSubType())
-            self:AddTooltipDoubleData(tooltip, "Item Type ID", item:GetItemTypeID(), "SubType ID", item:GetItemSubTypeID())
-            self:AddTooltipData(tooltip, "Binding", item:GetBinding())
+        if identifiedType ~= CaerdonItemType.BattlePet and identifiedType ~= CaerdonItemType.Quest and identifiedType ~= CaerdonItemType.Currency then
+            self:AddTooltipData(tooltip, item, "Item ID", item:GetItemID())
+            self:AddTooltipDoubleData(tooltip, item, "Item Type", item:GetItemType(), "SubType", item:GetItemSubType())
+            self:AddTooltipDoubleData(tooltip, item, "Item Type ID", item:GetItemTypeID(), "SubType ID", item:GetItemSubTypeID())
+            self:AddTooltipData(tooltip, item, "Binding", item:GetBinding())
 
             GameTooltip_AddBlankLineToTooltip(tooltip);
 
-            self:AddTooltipData(tooltip, "Expansion ID", item:GetExpansionID())
-            self:AddTooltipData(tooltip, "Is Crafting Reagent", tostring(item:GetIsCraftingReagent()))
+            self:AddTooltipData(tooltip, item, "Expansion ID", item:GetExpansionID())
+            self:AddTooltipData(tooltip, item, "Is Crafting Reagent", tostring(item:GetIsCraftingReagent()))
         end
         
 
         -- All data from here on out should come from the API
         -- TODO: Add additional option to show item link since it's so large?
-        -- self:AddTooltipData(tooltip, "Item Link", gsub(item:GetItemLink(), "\124", "\124\124"))
+        -- self:AddTooltipData(tooltip, item, "Item Link", gsub(item:GetItemLink(), "\124", "\124\124"))
 
         if identifiedType == CaerdonItemType.BattlePet or identifiedType == CaerdonItemType.CompanionPet then
             self:AddPetInfoToTooltip(tooltip, item)
         elseif identifiedType == CaerdonItemType.Equipment then
             self:AddTransmogInfoToTooltip(tooltip, item)
+        end
+
+        if identifiedType == CaerdonItemType.Currency then
+            -- Hack to fix height for now... need to review
+            tooltip:SetHeight(tooltip:GetHeight() + 70)
         end
     end
 
@@ -394,15 +449,15 @@ function TooltipMixin:AddPetInfoToTooltip(tooltip, item)
 
         local petInfo = itemData:GetCompanionPetInfo()
         local speciesID = petInfo.speciesID
-        self:AddTooltipData(tooltip, "Species ID", speciesID)
-        self:AddTooltipData(tooltip, "Num Collected", petInfo.numCollected or 0)
-        self:AddTooltipData(tooltip, "Pet Type", petInfo.petType)
-        self:AddTooltipData(tooltip, "Source", petInfo.sourceText)
+        self:AddTooltipData(tooltip, item, "Species ID", speciesID)
+        self:AddTooltipData(tooltip, item, "Num Collected", petInfo.numCollected or 0)
+        self:AddTooltipData(tooltip, item, "Pet Type", petInfo.petType)
+        self:AddTooltipData(tooltip, item, "Source", petInfo.sourceText)
     elseif itemType == CaerdonItemType.BattlePet then
         local petInfo = itemData:GetBattlePetInfo()
         local speciesID = petInfo.speciesID
-        self:AddTooltipData(tooltip, "Species ID", petInfo.speciesID)
-        self:AddTooltipData(tooltip, "Num Collected", petInfo.numCollected or 0)
+        self:AddTooltipData(tooltip, item, "Species ID", petInfo.speciesID)
+        self:AddTooltipData(tooltip, item, "Num Collected", petInfo.numCollected or 0)
     end
 end
 
@@ -410,10 +465,10 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
     local itemData = item:GetItemData()
     local transmogInfo = itemData:GetTransmogInfo()
 
-    self:AddTooltipData(tooltip, "Item Equip Location", item:GetEquipLocation())
+    self:AddTooltipData(tooltip, item, "Item Equip Location", item:GetEquipLocation())
 
     if item:GetSetID() then
-        self:AddTooltipData(tooltip, "Item Set ID", item:GetSetID())
+        self:AddTooltipData(tooltip, item, "Item Set ID", item:GetSetID())
     end
 
     local equipmentSets = itemData:GetEquipmentSets()
@@ -423,46 +478,46 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
             setNames = setNames .. ", " .. equipmentSets[setIndex]
         end
 
-        self:AddTooltipData(tooltip, "Equipment Sets", setNames)
+        self:AddTooltipData(tooltip, item, "Equipment Sets", setNames)
     end
 
 	if transmogInfo.isTransmog then
-		self:AddTooltipData(tooltip, "Appearance ID", transmogInfo.appearanceID)
-        self:AddTooltipData(tooltip, "Source ID", transmogInfo.sourceID)
+		self:AddTooltipData(tooltip, item, "Appearance ID", transmogInfo.appearanceID)
+        self:AddTooltipData(tooltip, item, "Source ID", transmogInfo.sourceID)
 
         GameTooltip_AddBlankLineToTooltip(tooltip);
 
-        self:AddTooltipData(tooltip, "Needs Item", transmogInfo.needsItem)
-        self:AddTooltipData(tooltip, "Other Needs Item", transmogInfo.otherNeedsItem)
-        self:AddTooltipData(tooltip, "Is Completionist Item", transmogInfo.isCompletionistItem)
-        self:AddTooltipData(tooltip, "Matches Loot Spec", transmogInfo.matchesLootSpec)
+        self:AddTooltipData(tooltip, item, "Needs Item", transmogInfo.needsItem)
+        self:AddTooltipData(tooltip, item, "Other Needs Item", transmogInfo.otherNeedsItem)
+        self:AddTooltipData(tooltip, item, "Is Completionist Item", transmogInfo.isCompletionistItem)
+        self:AddTooltipData(tooltip, item, "Matches Loot Spec", transmogInfo.matchesLootSpec)
 
         local requirementsColor = (transmogInfo.hasMetRequirements == false and RED_FONT_COLOR) or nil
-        self:AddTooltipData(tooltip, "Has Met Requirements", transmogInfo.hasMetRequirements, requirementsColor)
-        self:AddTooltipData(tooltip, "Item Min Level", item:GetMinLevel())
-        self:AddTooltipData(tooltip, "Can Equip", transmogInfo.canEquip)
+        self:AddTooltipData(tooltip, item, "Has Met Requirements", transmogInfo.hasMetRequirements, requirementsColor)
+        self:AddTooltipData(tooltip, item, "Item Min Level", item:GetMinLevel())
+        self:AddTooltipData(tooltip, item, "Can Equip", transmogInfo.canEquip)
 
         local matchedSources = transmogInfo.forDebugUseOnly.matchedSources
         if matchedSources and #matchedSources > 0 then
             for k,v in pairs(matchedSources) do
-                self:AddTooltipData(tooltip, "Matched Source", v.name)
+                self:AddTooltipData(tooltip, item, "Matched Source", v.name)
             end
         else
-            self:AddTooltipData(tooltip, "Matched Source", false)
+            self:AddTooltipData(tooltip, item, "Matched Source", false)
         end
 
         local appearanceInfo = transmogInfo.forDebugUseOnly.appearanceInfo
         if appearanceInfo then
             GameTooltip_AddBlankLineToTooltip(tooltip);
 
-            self:AddTooltipData(tooltip, "Appearance Collected", appearanceInfo.appearanceIsCollected)
-            self:AddTooltipData(tooltip, "Source Collected", appearanceInfo.sourceIsCollected)
-            self:AddTooltipData(tooltip, "Is Conditionally Known", appearanceInfo.sourceIsCollectedConditional)
-            self:AddTooltipData(tooltip, "Is Permanently Known", appearanceInfo.sourceIsCollectedPermanent)
-            self:AddTooltipData(tooltip, "Has Non-level Reqs", appearanceInfo.appearanceHasAnyNonLevelRequirements)
-            self:AddTooltipData(tooltip, "Meets Non-level Reqs", appearanceInfo.appearanceMeetsNonLevelRequirements)
-            self:AddTooltipData(tooltip, "Appearance Is Usable", appearanceInfo.appearanceIsUsable)
-            self:AddTooltipData(tooltip, "Meets Condition", appearanceInfo.meetsTransmogPlayerCondition)
+            self:AddTooltipData(tooltip, item, "Appearance Collected", appearanceInfo.appearanceIsCollected)
+            self:AddTooltipData(tooltip, item, "Source Collected", appearanceInfo.sourceIsCollected)
+            self:AddTooltipData(tooltip, item, "Is Conditionally Known", appearanceInfo.sourceIsCollectedConditional)
+            self:AddTooltipData(tooltip, item, "Is Permanently Known", appearanceInfo.sourceIsCollectedPermanent)
+            self:AddTooltipData(tooltip, item, "Has Non-level Reqs", appearanceInfo.appearanceHasAnyNonLevelRequirements)
+            self:AddTooltipData(tooltip, item, "Meets Non-level Reqs", appearanceInfo.appearanceMeetsNonLevelRequirements)
+            self:AddTooltipData(tooltip, item, "Appearance Is Usable", appearanceInfo.appearanceIsUsable)
+            self:AddTooltipData(tooltip, item, "Meets Condition", appearanceInfo.meetsTransmogPlayerCondition)
         else
         end
 	end

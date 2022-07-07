@@ -6,7 +6,7 @@ CaerdonConsumableMixin = {}
 		error("Usage: CaerdonConsumable:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonConsumableMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonConsumableMixin)
     itemType.item = caerdonItem
     return itemType
 end

@@ -6,9 +6,56 @@ CaerdonEquipmentMixin = {}
 		error("Usage: CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonEquipmentMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonEquipmentMixin)
     itemType.item = caerdonItem
     return itemType
+end
+
+function CaerdonEquipmentMixin:LoadSources(callbackFunction)
+    local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(self.item:GetItemLink())
+    if not sourceID then
+        -- TODO: Not sure why this is the case?  EncounterJournal links aren't returning source info
+        appearanceID, sourceID = C_TransmogCollection.GetItemInfo(self.item:GetItemID())
+    end
+
+    local continuableContainer = ContinuableContainer:Create();
+    local cancelFunc = function() end;
+
+    if not appearanceID then
+        callbackFunction()
+    else
+        local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
+        for appearanceSourceIndex, appearanceSourceID in pairs(appearanceSourceIDs) do
+            local itemID = C_TransmogCollection.GetSourceItemID(appearanceSourceID);
+            -- Using Item here to avoid recursively diving
+            local item = Item:CreateFromItemID(itemID)
+            if not item:IsItemEmpty() then
+                continuableContainer:AddContinuable(item);
+            end
+        end
+
+        cancelFunc = continuableContainer:ContinueOnLoad(callbackFunction);
+    end
+
+    return cancelFunc
+end
+
+-- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
+function CaerdonEquipmentMixin:ContinueOnItemDataLoad(callbackFunction)
+    if type(callbackFunction) ~= "function" or self.item:IsItemEmpty() then
+        error("Usage: NonEmptyItem:ContinueOnLoad(callbackFunction)", 2);
+    end
+
+    self:LoadSources(callbackFunction)
+end
+
+-- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
+function CaerdonEquipmentMixin:ContinueWithCancelOnItemDataLoad(callbackFunction)
+    if type(callbackFunction) ~= "function" or self.item:IsItemEmpty() then
+        error("Usage: NonEmptyItem:ContinueOnLoad(callbackFunction)", 2);
+    end
+
+    return self:LoadSources(callbackFunction)
 end
 
 function CaerdonEquipmentMixin:GetEquipmentSets()
@@ -100,7 +147,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
     -- Keep available for debug info
     local appearanceInfo, sourceInfo
-    local isInfoReady, canCollect
+    local isInfoReady, canCollect, accountCanCollect
     local shouldSearchSources
     local appearanceSources
     local currentSourceFound
@@ -132,14 +179,26 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
         isTransmog = true
 
-        -- If canCollect, then the current toon can learn it.
+        -- If canCollect, then the current toon can learn it (but may already know it)
         isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+        -- hasItemData, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
+
+        -- if not isInfoReady then
+        --     print('Info not ready - source ID ' .. tostring(sourceID) .. ' for ' .. itemLink)
+        -- end
 
          -- TODO: Forcing to always for now be true because a class could have an item it knows
          -- that no other class can use, so we actually need the item rather than just completionist
         shouldSearchSources = true
 
         sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+
+        -- if sourceInfo and sourceInfo.quality then
+        --     -- Item is ready
+        -- else
+        --     print('SourceInfo quality not available: ' .. itemLink)
+        -- end
+        
         sourceSpecs = GetItemSpecInfo(itemLink)
 
         -- If the source is already collected, we don't need to check anything else for the source / appearance
@@ -165,7 +224,18 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 local sourceIndex, source
                 local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
                 for sourceIndex, source in pairs(appearanceSourceIDs) do
+                    local isInfoReadySearch, canCollectSearch = C_TransmogCollection.PlayerCanCollectSource(source)
+                    -- if not isInfoReadySearch then
+                    --     print('Search Info not ready - source ID ' .. tostring(source) .. ' for ' .. itemLink)
+                    -- end
+
                     local info = C_TransmogCollection.GetSourceInfo(source)
+                    -- if info and info.quality then
+                    --     -- Item is ready
+                    -- else
+                    --     print('Search SourceInfo quality not available: ' .. itemLink)
+                    -- end
+            
                     if info then
                         if not appearanceSources then
                             appearanceSources = {}

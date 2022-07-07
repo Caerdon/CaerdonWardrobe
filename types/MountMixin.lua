@@ -6,7 +6,7 @@ CaerdonMountMixin = {}
 		error("Usage: CaerdonMount:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonMountMixin)
+    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonMountMixin)
     itemType.item = caerdonItem
     return itemType
 end
