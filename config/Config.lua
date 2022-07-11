@@ -1,7 +1,8 @@
 CaerdonWardrobeConfigMixin = {}
 
-local ADDON_NAME, namespace = ...
-local L = namespace.L
+local ADDON_NAME, NS = ...
+local L = NS.L
+local components, pendingConfig
 
 CAERDON_CONFIG_LABEL = L["Caerdon Wardrobe... and more!"]
 CAERDON_CONFIG_SUBTEXT = L[ [[
@@ -13,11 +14,32 @@ I try to really focus on performance.  If Caerdon Wardrobe is causing a performa
 ]] ]
 
 function CaerdonWardrobeConfigMixin:OnLoad()
-    self.name = "Caerdon Wardrobe"
-	-- self.okay = PropagateErrors(self.OnSave)
-	-- self.cancel = PropagateErrors(self.OnCancel)
-	-- self.default = PropagateErrors(self.OnResetToDefaults)
-	-- self.refresh = PropagateErrors(self.OnRefresh)
+	self:RegisterEvent("VARIABLES_LOADED");
 
-	-- InterfaceOptions_AddCategory(self)
+	self.name = "Caerdon Wardrobe"
+	self.okay = self.OnSave
+
+	InterfaceOptions_AddCategory(self)
+end
+
+function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
+	BlizzardOptionsPanel_OnEvent(self, event, ...);
+
+	if ( event == "VARIABLES_LOADED" ) then
+		self.variablesLoaded = true;
+		self:UnregisterEvent(event);
+
+		if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+			CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
+		end
+	
+		CaerdonWardrobe:RefreshItems()
+	end
+end
+
+function CaerdonWardrobeConfigMixin:OnSave()
+	-- Make sure that errors aren't swallowed for InterfaceOption callbacks
+	xpcall(function()
+		CaerdonWardrobe:RefreshItems()
+	end, geterrorhandler())
 end

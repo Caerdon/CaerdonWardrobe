@@ -1209,14 +1209,14 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 17,
+		Version = 21,
 		
 		Debug = {
-			Enabled = false
+			Enabled = false --DONE
 		},
 
 		Icon = {
-			EnableAnimation = true,
+			EnableAnimation = true, --DONE
 			Position = "TOPLEFT",
 
 			ShowLearnable = {
@@ -1269,9 +1269,9 @@ function NS:GetDefaultConfig()
 end
 
 local function ProcessSettings()
-	if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
-		CaerdonWardrobeConfig = NS:GetDefaultConfig()
-	end
+	-- if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+	-- 	CaerdonWardrobeConfig = NS:GetDefaultConfig()
+	-- end
 end
 
 function CaerdonWardrobeMixin:PLAYER_LOGOUT()
@@ -1360,6 +1360,6 @@ end
 function NS:FireConfigLoaded()
 	isConfigLoaded = true
 	if configFrame then
-		configFrame:OnConfigLoaded()
+		-- configFrame:OnConfigLoaded()
 	end
 end

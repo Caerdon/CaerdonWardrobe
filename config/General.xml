@@ -2,37 +2,94 @@
 ..\..\FrameXML\UI.xsd">
 	<Script file="General.lua"/>
 
-    <Frame name="CaerdonWardrobeConfigGeneralFrame" hidden="false" secureMixin="CaerdonWardrobeConfigGeneralMixin">
+    <Frame name="CaerdonWardrobeConfigGeneralFrame" hidden="false" parent="InterfaceOptionsFramePanelContainer" secureMixin="CaerdonWardrobeConfigGeneralMixin">
         <Layers>
-            <Layer level="ARTWORK">
+            <Layer level="BACKGROUND">
                 <FontString name="$parentTitle" text="CAERDON_GENERAL_LABEL" inherits="GameFontNormalLarge" justifyH="LEFT" justifyV="TOP">
-                <Anchors>
-                    <Anchor point="TOPLEFT">
-                    <Offset>
-                        <AbsDimension x="16" y="-16"/>
-                    </Offset>
-                    </Anchor>
-                </Anchors>
+                    <Anchors>
+                        <Anchor point="TOPLEFT">
+                            <Offset>
+                                <AbsDimension x="16" y="-16"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
                 </FontString>
                 <FontString name="$parentSubText" text="CAERDON_GENERAL_SUBTEXT" inherits="GameFontHighlightSmall" nonspacewrap="true" maxLines="3" justifyH="LEFT" justifyV="TOP">
-                <Size>
-                    <AbsDimension y="32" x="0"/>
-                </Size>
-                <Anchors>
-                    <Anchor point="TOPLEFT" relativeTo="$parentTitle" relativePoint="BOTTOMLEFT">
-                    <Offset>
-                        <AbsDimension x="0" y="-8"/>
-                    </Offset>
-                    </Anchor>
-                    <Anchor point="RIGHT">
-                    <Offset>
-                        <AbsDimension x="-32" y="0"/>
-                    </Offset>
-                    </Anchor>
-                </Anchors>
+                    <Size>
+                        <AbsDimension y="32" x="0"/>
+                    </Size>
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentTitle" relativePoint="BOTTOMLEFT">
+                            <Offset>
+                                <AbsDimension x="0" y="-8"/>
+                            </Offset>
+                            </Anchor>
+                            <Anchor point="RIGHT">
+                            <Offset>
+                                <AbsDimension x="-32" y="0"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentIconConfigLabel" inherits="GameFontNormalLarge" justifyH="CENTER" text="CAERDON_GENERAL_ICON_CONFIG">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentSubText" relativePoint="BOTTOMLEFT" x="0" y="-40"/>
+                    </Anchors>
                 </FontString>
             </Layer>
         </Layers>
+        <Frames>
+			<CheckButton name="$parentEnableDebug" inherits="InterfaceOptionsCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativeTo="$parentSubText" relativePoint="BOTTOMLEFT" x="0" y="0"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "enableDebug", "Debug", nil, "Enabled")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentEnableIconAnimation" inherits="InterfaceOptionsCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativeTo="$parentIconConfigLabel" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "enableIconAnimation", "Icon", nil, "EnableAnimation")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<Frame name="$parentIconPosition" inherits="UIDropDownMenuTemplate" enableMouse="true">
+				<Anchors>
+					<Anchor point="LEFT" relativeTo="$parentEnableIconAnimationText" relativePoint="RIGHT" x="0" y="0" />
+				</Anchors>
+				<Layers>
+					<Layer level="BACKGROUND">
+						<FontString name="$parentLabel" inherits="OptionsFontSmall" text="CAERDON_GENERAL_ICON_CONFIG_POSITION">
+							<Anchors>
+								<Anchor point="RIGHT" relativePoint="LEFT"/>
+							</Anchors>
+						</FontString>
+					</Layer>
+				</Layers>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureDropdown(self, "iconPosition", "Icon", nil, "Position")
+					</OnLoad>
+                    <OnEnter>
+                        if ( not self.isDisabled ) then
+                        GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
+                        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+                        end
+                    </OnEnter>
+                    <OnLeave>
+                        if ( GameTooltip:GetOwner() == self ) then
+                            GameTooltip:Hide();
+                        end
+                    </OnLeave>
+				</Scripts>
+			</Frame>
+        </Frames>
         <Scripts>
             <OnLoad method="OnLoad"/>
         </Scripts>
