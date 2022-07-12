@@ -61,7 +61,7 @@
 			</CheckButton>
 			<Frame name="$parentIconPosition" inherits="UIDropDownMenuTemplate" enableMouse="true">
 				<Anchors>
-					<Anchor point="LEFT" relativeTo="$parentEnableIconAnimationText" relativePoint="RIGHT" x="0" y="0" />
+					<Anchor point="LEFT" relativeTo="$parentEnableIconAnimationText" relativePoint="RIGHT" x="80" y="0" />
 				</Anchors>
 				<Layers>
 					<Layer level="BACKGROUND">
@@ -74,21 +74,39 @@
 				</Layers>
 				<Scripts>
 					<OnLoad>
-                        self:GetParent():ConfigureDropdown(self, "iconPosition", "Icon", nil, "Position")
+                        self:GetParent():ConfigureDropdown(self, "iconPosition", "Icon", nil, "Position", { 
+                            { title = "Top Left", value = "TOPLEFT", tooltip = "Show the primary icon in the top left" },
+                            { title = "Top Right", value = "TOPRIGHT", tooltip = "Show the primary icon in the top right" },
+                            { title = "Bottom Left", value = "BOTTOMLEFT", tooltip = "Show the primary icon in the bottom left" },
+                            { title = "Bottom Right", value = "BOTTOMRIGHT", tooltip = "Show the primary icon in the bottom right" }
+                        })
 					</OnLoad>
-                    <OnEnter>
-                        if ( not self.isDisabled ) then
-                        GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
-                        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
-                        end
-                    </OnEnter>
-                    <OnLeave>
-                        if ( GameTooltip:GetOwner() == self ) then
-                            GameTooltip:Hide();
-                        end
-                    </OnLeave>
 				</Scripts>
 			</Frame>
+			<CheckButton name="$parentSameLookDifferentItem" inherits="InterfaceOptionsCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativeTo="$parentEnableIconAnimation" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "sameLookDifferentItem", "Icon", "ShowLearnable", "SameLookDifferentItem")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentSameLookDifferentLevel" inherits="InterfaceOptionsCheckButtonTemplate">
+                <KeyValues>
+                    <KeyValue key="dependentOn" value="$parentSameLookDifferentItem" type="string" />
+                </KeyValues>
+				<Anchors>
+					<Anchor point="LEFT" relativeTo="$parentIconPositionLabel" relativePoint="LEFT" x="0" y="0"/>
+					<Anchor point="TOP" relativeTo="$parentIconPosition" relativePoint="BOTTOM" x="0" y="-10"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "sameLookDifferentLevel", "Icon", "ShowLearnable", "SameLookDifferentLevel")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
         </Frames>
         <Scripts>
             <OnLoad method="OnLoad"/>
