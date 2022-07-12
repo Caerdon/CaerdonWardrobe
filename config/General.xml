@@ -2,6 +2,22 @@
 ..\..\FrameXML\UI.xsd">
 	<Script file="General.lua"/>
 
+  <CheckButton name="GeneralInterfaceOptionsSmallCheckButtonTemplate" virtual="true" inherits="InterfaceOptionsBaseCheckButtonTemplate">
+    <Layers>
+      <Layer level="ARTWORK">
+        <FontString name="$parentText" inherits="GameFontHighlightSmall" justifyH="LEFT" parentKey="Text">
+          <Anchors>
+            <Anchor point="LEFT" relativePoint="RIGHT">
+              <Offset>
+                <AbsDimension x="0" y="1"/>
+              </Offset>
+            </Anchor>
+          </Anchors>
+        </FontString>
+      </Layer>
+    </Layers>
+  </CheckButton>
+
     <Frame name="CaerdonWardrobeConfigGeneralFrame" hidden="false" parent="InterfaceOptionsFramePanelContainer" secureMixin="CaerdonWardrobeConfigGeneralMixin">
         <Layers>
             <Layer level="BACKGROUND">
@@ -34,6 +50,11 @@
                 <FontString name="$parentIconConfigLabel" inherits="GameFontNormalLarge" justifyH="CENTER" text="CAERDON_GENERAL_ICON_CONFIG">
                     <Anchors>
                         <Anchor point="TOPLEFT" relativeTo="$parentSubText" relativePoint="BOTTOMLEFT" x="0" y="-40"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentShowOldExpansionLabel" inherits="GameFontNormalSmall" justifyH="CENTER" text="CAERDON_GENERAL_SHOW_OLD_EXPANSION">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentIconConfigLabel" relativePoint="BOTTOMLEFT" x="0" y="-120"/>
                     </Anchors>
                 </FontString>
             </Layer>
@@ -93,17 +114,66 @@
 					</OnLoad>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parentSameLookDifferentLevel" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parentSameLookDifferentLevel" inherits="GeneralInterfaceOptionsSmallCheckButtonTemplate">
                 <KeyValues>
                     <KeyValue key="dependentOn" value="$parentSameLookDifferentItem" type="string" />
                 </KeyValues>
 				<Anchors>
-					<Anchor point="LEFT" relativeTo="$parentIconPositionLabel" relativePoint="LEFT" x="0" y="0"/>
-					<Anchor point="TOP" relativeTo="$parentIconPosition" relativePoint="BOTTOM" x="0" y="-10"/>
+					<Anchor point="TOPLEFT" relativeTo="$parentSameLookDifferentItem" relativePoint="BOTTOMLEFT" x="30" y="-5"/>
 				</Anchors>
 				<Scripts>
 					<OnLoad>
                         self:GetParent():ConfigureCheckbox(self, "sameLookDifferentLevel", "Icon", "ShowLearnable", "SameLookDifferentLevel")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentShowOldExpansionReagents" inherits="GeneralInterfaceOptionsSmallCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativeTo="$parentShowOldExpansionLabel" relativePoint="BOTTOMLEFT" x="0" y="-5"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "showOldExpansionReagents", "Icon", "ShowOldExpansion", "Reagents")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentShowOldExpansionUsable" inherits="GeneralInterfaceOptionsSmallCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="LEFT" relativeTo="$parentShowOldExpansionReagents" relativePoint="RIGHT" x="100" y="0"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "showOldExpansionUsable", "Icon", "ShowOldExpansion", "Usable")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentShowOldExpansionOther" inherits="GeneralInterfaceOptionsSmallCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativeTo="$parentShowOldExpansionReagents" relativePoint="BOTTOMLEFT" x="0" y="-5"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "showOldExpansionOther", "Icon", "ShowOldExpansion", "Other")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentShowOldExpansionUnknown" inherits="GeneralInterfaceOptionsSmallCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="LEFT" relativeTo="$parentShowOldExpansionOther" relativePoint="RIGHT" x="100" y="0"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "showOldExpansionUnknown", "Icon", "ShowOldExpansion", "Unknown")
+					</OnLoad>
+				</Scripts>
+			</CheckButton>
+			<CheckButton name="$parentShowQuestItems" inherits="InterfaceOptionsCheckButtonTemplate">
+				<Anchors>
+					<Anchor point="LEFT" relativeTo="$parentShowOldExpansionLabel" relativePoint="RIGHT" x="220" y="0"/>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+                        self:GetParent():ConfigureCheckbox(self, "showQuestItems", "Icon", nil, "ShowQuestItems")
 					</OnLoad>
 				</Scripts>
 			</CheckButton>

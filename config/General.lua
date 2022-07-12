@@ -10,11 +10,25 @@ CAERDON_GENERAL_SUBTEXT = L["These are general settings that apply broadly to Ca
 CAERDON_GENERAL_ICON_CONFIG = L["Icon Configuration"]
 CAERDON_GENERAL_ICON_CONFIG_POSITION = L["Icon Position:"]
 
+CAERDON_GENERAL_SHOW_OLD_EXPANSION = L["Show Old Expansion Items:"]
+
 function CaerdonWardrobeConfigGeneralMixin:UpdatePendingValues()
 	local config = pendingConfig
 
-	-- config.ShowBoA = components.showBoA:GetChecked()
-	-- config.ShowBoE = components.showBoE:GetChecked()
+    -- Icon = {
+    --     ShowOldExpansion = {
+    --         Auction = true
+    --     },
+    -- }
+
+
+    -- Binding = {
+    --     ShowBoA = true,
+    --     ShowBoE = true,
+    --     ShowGearSets = true,
+    --     ShowGearSetsAsIcon = false,
+    --     Position = "BOTTOM"
+    -- }
 end
 
 function CaerdonWardrobeConfigGeneralMixin:OnLoad()
@@ -25,7 +39,12 @@ function CaerdonWardrobeConfigGeneralMixin:OnLoad()
         enableIconAnimation = { text = "Show Icon Animation", tooltip = "Turns icon animation on / off (largely in unlearned and openable items)", default = NS:GetDefaultConfig().Icon.EnableAnimation and "1" or "0" },
         iconPosition = { text = "Select Icon Position", tooltip = "Configures placement of the primary collectible icon", default = "TOPLEFT" },
         sameLookDifferentItem = { text = "Include different items w/ the same look (you completionist, you)", tooltip = "Ensures that you learn every single item that provides the same exact appearance for no other reason than you know you don't have that one.", default = NS:GetDefaultConfig().Icon.ShowLearnable.SameLookDifferentItem and "1" or "0" },
-        sameLookDifferentLevel = { text = "Including identical items w/ lower levels", tooltip = "Enable this to ensure that an item will show as learnable if the item's level would allow a lower level toon to use it for transmog than the one you already know.", default = NS:GetDefaultConfig().Icon.ShowLearnable.SameLookDifferentLevel and "1" or "0" }
+        sameLookDifferentLevel = { text = "Including identical items w/ lower levels", tooltip = "Enable this to ensure that an item will show as learnable if the item's level would allow a lower level toon to use it for transmog than the one you already know.", default = NS:GetDefaultConfig().Icon.ShowLearnable.SameLookDifferentLevel and "1" or "0" },
+        showOldExpansionReagents = { text = "Reagents", tooltip = "Add an icon to reagents from older expansions", default = NS:GetDefaultConfig().Icon.ShowOldExpansion.Reagents and "1" or "0"},
+        showOldExpansionUsable = { text = "Usable Items", tooltip = "Add an icon to usable items from older expansions", default = NS:GetDefaultConfig().Icon.ShowOldExpansion.Usable and "1" or "0"},
+        showOldExpansionOther = { text = "Other Items", tooltip = "Add an icon to any other items from older expansions", default = NS:GetDefaultConfig().Icon.ShowOldExpansion.Other and "1" or "0"},
+        showOldExpansionUnknown = { text = "Unknown Expansion", tooltip = "Add an icon to items that didn't indicate what expansion they were from.  This happens more often than I'd like to see, and it's probably not a super useful option (other than maybe for WoW devs that need to fix this.)", default = NS:GetDefaultConfig().Icon.ShowOldExpansion.Unknown and "1" or "0"},
+        showQuestItems = { text = "Show Quest Items", tooltip = "Adds an icon to any items that are tied to a quest", default = NS:GetDefaultConfig().Icon.ShowQuestItems and "1" or "0"},
 	}
 
 	InterfaceOptionsPanel_OnLoad(self);

@@ -1217,15 +1217,15 @@ function NS:GetDefaultConfig()
 
 		Icon = {
 			EnableAnimation = true, --DONE
-			Position = "TOPLEFT",
+			Position = "TOPLEFT", --DONE
 
 			ShowLearnable = {
 				BankAndBags = true,
 				GuildBank = true,
 				Merchant = true,
 				Auction = true,
-				SameLookDifferentItem = false,
-				SameLookDifferentLevel = true
+				SameLookDifferentItem = false, --DONE
+				SameLookDifferentLevel = true --DONE
 			},
 
 			ShowLearnableByOther = {
@@ -1242,14 +1242,14 @@ function NS:GetDefaultConfig()
 			},
 
 			ShowOldExpansion = {
-				Unknown = false,
-				Reagents = true,
-				Usable = false,
-				Other = false,
+				Unknown = false, --DONE
+				Reagents = true, --DONE
+				Usable = false, --DONE
+				Other = false, --DONE
 				Auction = true
 			},
 
-			ShowQuestItems = true
+			ShowQuestItems = true --DONE
 		},
 
 		Binding = {
