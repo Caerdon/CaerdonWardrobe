@@ -552,7 +552,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 
 	local bindingText = ""
 	if IsGearSetStatus(bindingStatus) then -- is gear set
-		if CaerdonWardrobeConfig.Binding.ShowGearSets and not CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+		if CaerdonWardrobeConfig.Binding.ShowGearSets then
 			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
 		end
 	else
@@ -1207,73 +1207,6 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	end
 end
 
-function NS:GetDefaultConfig()
-	return {
-		Version = 21,
-		
-		Debug = {
-			Enabled = false --DONE
-		},
-
-		Icon = {
-			EnableAnimation = true, --DONE
-			Position = "TOPLEFT", --DONE
-
-			ShowLearnable = {
-				BankAndBags = true,
-				GuildBank = true,
-				Merchant = true,
-				Auction = true,
-				SameLookDifferentItem = false, --DONE
-				SameLookDifferentLevel = true --DONE
-			},
-
-			ShowLearnableByOther = {
-				BankAndBags = true,
-				GuildBank = true,
-				Merchant = true,
-				Auction = true,
-				EncounterJournal = true
-			},
-
-			ShowSellable = {
-				BankAndBags = true,
-				GuildBank = false
-			},
-
-			ShowOldExpansion = {
-				Unknown = false, --DONE
-				Reagents = true, --DONE
-				Usable = false, --DONE
-				Other = false, --DONE
-				Auction = true
-			},
-
-			ShowQuestItems = true --DONE
-		},
-
-		Binding = {
-			ShowStatus = {
-				BankAndBags = true,
-				GuildBank = true,
-				Merchant = true
-			},
-
-			ShowBoA = true,
-			ShowBoE = true,
-			ShowGearSets = true,
-			ShowGearSetsAsIcon = false,
-			Position = "BOTTOM"
-		}
-	}
-end
-
-local function ProcessSettings()
-	-- if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
-	-- 	CaerdonWardrobeConfig = NS:GetDefaultConfig()
-	-- end
-end
-
 function CaerdonWardrobeMixin:PLAYER_LOGOUT()
 end
 
@@ -1290,9 +1223,6 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 				end
 			end
 		end
-	
-		ProcessSettings()
-		NS:FireConfigLoaded()
 	-- elseif name == "TradeSkillMaster" then
 	-- 	print("HOOKING TSM")
 	-- 	hooksecurefunc (TSM.UI.AuctionScrollingTable, "_SetRowData", function (self, row, data)
@@ -1345,21 +1275,4 @@ end
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 	-- Can change while logged in!
 	self:RefreshItems()
-end
-
-local configFrame
-local isConfigLoaded = false
-
-function NS:RegisterConfigFrame(frame)
-	configFrame = frame
-	if isConfigLoaded then
-		NS:FireConfigLoaded()
-	end
-end
-
-function NS:FireConfigLoaded()
-	isConfigLoaded = true
-	if configFrame then
-		-- configFrame:OnConfigLoaded()
-	end
 end

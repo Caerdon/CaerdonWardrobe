@@ -14,7 +14,7 @@
                     </Anchor>
                 </Anchors>
                 </FontString>
-                <FontString name="$parentSubText" text="CAERDON_CONFIG_SUBTEXT" inherits="GameFontHighlightSmall" nonspacewrap="true" justifyH="LEFT" justifyV="TOP">
+                <FontString name="$parentSubText" text="CAERDON_CONFIG_SUBTEXT" inherits="GameTooltipText" nonspacewrap="true" justifyH="LEFT" justifyV="TOP">
                 <Anchors>
                     <Anchor point="TOPLEFT" relativeTo="$parentTitle" relativePoint="BOTTOMLEFT">
                     <Offset>
@@ -36,6 +36,12 @@
         </Scripts>
     </Frame>
 
+    <Include file="ConfigPanel.xml" />
 	<Include file="General.xml" />
 	<Include file="BankAndBags.xml" />
+	<Include file="GuildBank.xml" />
+	<Include file="Merchant.xml" />
+	<Include file="Auction.xml" />
+	<Include file="EncounterJournal.xml" />
+
 </Ui>
