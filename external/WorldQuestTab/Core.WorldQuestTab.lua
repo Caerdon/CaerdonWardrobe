@@ -142,9 +142,14 @@ function WorldQuestTabMixin:UpdatePin(pin)
 end
 
 local Version = nil
+local isActive = false
+
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
 	    Version = GetAddOnMetadata(addonName, "Version")
 		CaerdonWardrobe:RegisterFeature(WorldQuestTabMixin)
+		isActive = true
 	end
 end
+
+WagoAnalytics:Switch(addonName, isActive)

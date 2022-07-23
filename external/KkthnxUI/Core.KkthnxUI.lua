@@ -50,6 +50,8 @@ function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
 end
 
 local Version = nil
+local isActive = false
+
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
 		local global = _G[addonName]
@@ -64,6 +66,9 @@ if select(4, GetAddOnInfo(addonName)) then
 
 		if cargBags then
 			CaerdonWardrobe:RegisterFeature(CargBagsMixin)
+			isActive = true
 		end
 	end
 end
+
+WagoAnalytics:Switch(addonName, isActive)

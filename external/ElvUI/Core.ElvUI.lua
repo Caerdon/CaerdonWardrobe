@@ -1,6 +1,5 @@
 local ADDON_NAME, namespace = ...
 local L = namespace.L
-local Version = nil
 
 local addonName = "ElvUI"
 local ElvUIMixin = {}
@@ -70,11 +69,17 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 	})
 end
 
+local Version = nil
+local isActive = false
+
 if select(4, GetAddOnInfo(addonName)) then
 	if IsAddOnLoaded(addonName) then
 		if ElvUI[1].private.bags.enable then
 			Version = GetAddOnMetadata(addonName, 'Version')
 			CaerdonWardrobe:RegisterFeature(ElvUIMixin)
+			isActive = true
 		end
 	end
 end
+
+WagoAnalytics:Switch(addonName, isActive)
