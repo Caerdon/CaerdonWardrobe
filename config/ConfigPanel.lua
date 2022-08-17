@@ -31,7 +31,7 @@ end
 
 function CaerdonWardrobeConfigPanelMixin:ConfigureDropdown(dropdown, label, configSection, configSubsection, configValue, items)
     dropdown:SetScript("OnEvent", function (self, event, ...)
-        if ( event == "PLAYER_ENTERING_WORLD" ) then
+        if ( event == "FIRST_FRAME_RENDERED" ) then
             self:GetParent():InitializeDropdown(dropdown, label, configSection, configSubsection, configValue, items)
             self:UnregisterEvent(event)
         end
@@ -50,7 +50,7 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureDropdown(dropdown, label, conf
         end
     end)
 
-    dropdown:RegisterEvent("PLAYER_ENTERING_WORLD");
+    dropdown:RegisterEvent("FIRST_FRAME_RENDERED");
 end
 
 function CaerdonWardrobeConfigPanelMixin:InitializeDropdown(dropdown, label, configSection, configSubsection, configValue, items)
