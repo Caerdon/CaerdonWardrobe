@@ -10,7 +10,8 @@ function AuctionMixin:Init(frame)
 
 	return {
 		"AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
-		"AUCTION_HOUSE_SHOW"
+		"AUCTION_HOUSE_SHOW",
+		"OWNED_AUCTIONS_UPDATED"
 	}
 end
 
@@ -22,7 +23,10 @@ function AuctionMixin:AUCTION_HOUSE_SHOW()
 	if (self.shouldHookAuction) then
 		self.shouldHookAuction = false
 		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", function(...) self:OnAuctionBrowseUpdate(...) end)
+		AuctionHouseFrame.AuctionsFrame.AllAuctionsList.ScrollFrame.scrollBar:HookScript("OnValueChanged", function(...) self:OWNED_AUCTIONS_UPDATED(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
+		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)
+		hooksecurefunc(AuctionHouseFrame.AuctionsFrame.ItemDisplay, "SetItemInternal", function(...) self:OnSetAuctionItemDisplay(...) end)
 	end
 end
 
@@ -64,12 +68,54 @@ function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, option
 	}
 end
 
+function AuctionMixin:OnSetAuctionItemDisplay(frame, itemDisplayItem)
+	local itemDisplay = AuctionHouseFrame.AuctionsFrame.ItemDisplay
+	local itemButton = itemDisplay.ItemButton
+
+	if itemDisplay.itemValidationFunc and not itemDisplay.itemValidationFunc(itemDisplay) then
+		return;
+	end
+
+	if not itemDisplayItem then
+		CaerdonWardrobe:ClearButton(itemButton)
+		return;
+	end
+
+	if itemDisplay.itemLink == nil then
+		CaerdonWardrobe:ClearButton(itemButton)
+		return;
+	end
+
+	local item = CaerdonItem:CreateFromItemLink(itemDisplay.itemLink)
+
+	CaerdonWardrobe:UpdateButton(itemButton, item, self, {
+		locationKey = "ItemAuctionItemDisplayButton",
+		itemKey = itemDisplay.itemKey
+	},  
+	{
+		statusProminentSize = 24,
+		statusOffsetX = 5,
+		statusOffsetY = 5,
+		showMogIcon=true, 
+		showBindStatus=false,
+		showSellables=false
+	})
+end
+
+function AuctionMixin:OWNED_AUCTIONS_UPDATED()
+	self:UpdateItemList(AuctionHouseFrame.AuctionsFrame.AllAuctionsList, 1)
+end
+
 function AuctionMixin:OnAuctionBrowseUpdate()
 	-- Event pump since first load won't have UI ready
 	if not AuctionHouseFrame:IsVisible() then
 		return
 	end
 
+	self:UpdateItemList(AuctionHouseFrame.BrowseResultsFrame.ItemList, 2)
+end
+
+function AuctionMixin:UpdateItemList(itemList, buttonCellIndex)
 	if self.auctionTimer then
 		self.auctionTimer:Cancel()
 	end
@@ -77,22 +123,23 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 	-- TODO: Battle Pet scans are not clean, yet.
 	self.auctionContinuableContainer:Cancel()
 
-	local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
+	local buttons = HybridScrollFrame_GetButtons(itemList.ScrollFrame);
+	if not buttons then return end
+
 	for i, button in ipairs(buttons) do
 		CaerdonWardrobe:ClearButton(button)
 	end
 
 	self.auctionTimer = C_Timer.NewTimer(0.1, function() 
-		local browseResults = C_AuctionHouse.GetBrowseResults()
-		local offset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
+		local offset = itemList:GetScrollOffset();
 
-		local buttons = HybridScrollFrame_GetButtons(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame);
+		local buttons = HybridScrollFrame_GetButtons(itemList.ScrollFrame);
 		for i, button in ipairs(buttons) do
 			local slot = i + offset
 
 			local _, itemLink
 
-			local browseResult = browseResults[slot]
+			local browseResult = itemList.tableBuilder:GetDataProviderData(slot)
 			if browseResult then
 				local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
 				-- TODO: Do we need to check if slot has changed for buttons?  Could do something here...
@@ -106,7 +153,7 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 		end
 
 		self.auctionContinuableContainer:ContinueOnLoad(function()
-			local checkOffset = AuctionHouseFrame.BrowseResultsFrame.ItemList:GetScrollOffset();
+			local checkOffset = itemList:GetScrollOffset();
 			-- TODO: Not sure if this is actually doing anything - hasn't been triggered, yet.
 			if checkOffset ~= offset then 
 				return
@@ -114,7 +161,7 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 
 			for i, button in ipairs(buttons) do
 				local slot = i + offset
-				local browseResult = browseResults[slot]
+				local browseResult = itemList.tableBuilder:GetDataProviderData(slot)
 				if browseResult then
 					-- From AuctionHouseTableBuilder
 					local PRICE_DISPLAY_WIDTH = 120;
@@ -123,7 +170,7 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 					local BUYOUT_DISPLAY_PADDING = 0;
 					local STANDARD_PADDING = 10;
 
-					local cell = AuctionHouseFrame.BrowseResultsFrame.ItemList.tableBuilder:GetCellByIndex(i, 2)
+					local cell = itemList.tableBuilder:GetCellByIndex(i, buttonCellIndex)
 			
 					if button then
 						local item
@@ -134,7 +181,7 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 						else
 							item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
 						end
-		
+
 						CaerdonWardrobe:UpdateButton(button, item, self, {
 							locationKey = format("%d", i),
 							index = slot,
@@ -142,7 +189,8 @@ function AuctionMixin:OnAuctionBrowseUpdate()
 						},  
 						{
 							overrideStatusPosition = "LEFT",
-							statusOffsetX = -10,
+							statusProminentSize = 13,
+							statusOffsetX = -4,
 							statusOffsetY = 0,
 							showMogIcon=true, 
 							showBindStatus=false,
@@ -178,13 +226,60 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 		itemKey = itemKeyInfo
 	},  
 	{
-		statusProminentSize = 30,
-		statusOffsetX = 15,
-		statusOffsetY = 15,
+		statusProminentSize = 24,
+		statusOffsetX = 5,
+		statusOffsetY = 5,
 		showMogIcon=true, 
 		showBindStatus=false,
 		showSellables=false
 	})
+end
+
+function AuctionMixin:OnSetPostItem(frame, itemLocation)
+	local displayMode = AuctionHouseFrame:GetDisplayMode()
+	local item = CaerdonItem:CreateFromItemLocation(itemLocation)
+
+	local itemSellButton = AuctionHouseFrame.ItemSellFrame.ItemDisplay.ItemButton
+	local commoditiesSellButton = AuctionHouseFrame.CommoditiesSellFrame.ItemDisplay.ItemButton
+	if displayMode == AuctionHouseFrameDisplayMode.ItemSell then
+		CaerdonWardrobe:ClearButton(commoditiesSellButton)
+		CaerdonWardrobe:UpdateButton(itemSellButton, item, self, {
+			locationKey = "ItemSellFrameButton",
+			itemKey = AuctionHouseFrame.ItemSellFrame.listDisplayedItemKey
+		},  
+		{
+			statusProminentSize = 24,
+			statusOffsetX = 5,
+			statusOffsetY = 5,
+			showMogIcon=true, 
+			showBindStatus=false,
+			showSellables=false
+		})
+	elseif displayMode == AuctionHouseFrameDisplayMode.CommoditiesSell then
+		CaerdonWardrobe:ClearButton(itemSellButton)
+		CaerdonWardrobe:UpdateButton(commoditiesSellButton, item, self, {
+			locationKey = "ItemCommoditiesSellFrameButton"
+		},  
+		{
+			statusProminentSize = 24,
+			statusOffsetX = 5,
+			statusOffsetY = 5,
+			showMogIcon=true, 
+			showBindStatus=false,
+			showSellables=false
+		})
+	else
+		CaerdonWardrobe:ClearButton(commoditiesSellButton)
+		CaerdonWardrobe:ClearButton(itemSellButton)
+	end
+end
+
+function AuctionMixin:OnClearPostItem(frame)
+	local itemSellButton = AuctionHouseFrame.ItemSellFrame.ItemDisplay.ItemButton
+	local commoditiesSellButton = AuctionHouseFrame.CommoditiesSellFrame.ItemDisplay.ItemButton
+
+	CaerdonWardrobe:ClearButton(commoditiesSellButton)
+	CaerdonWardrobe:ClearButton(itemSellButton)
 end
 
 CaerdonWardrobe:RegisterFeature(AuctionMixin)
