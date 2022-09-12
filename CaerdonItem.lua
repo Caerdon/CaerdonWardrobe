@@ -140,7 +140,7 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
     end);
 
     return function()
-        if itemDataCancel then
+        if type(itemDataCancel) == "function" then
             itemDataCancel()
         end
 

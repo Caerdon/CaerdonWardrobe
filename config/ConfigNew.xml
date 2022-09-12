@@ -36,9 +36,9 @@
         </Scripts>
     </Frame>
 
-    <Include file="ConfigPanel.xml" />
-	<!-- <Include file="General.xml" />
-	<Include file="BankAndBags.xml" />
+    <!-- <Include file="ConfigPanel.xml" /> -->
+	<!-- <Include file="General.xml" /> -->
+	<!-- <Include file="BankAndBags.xml" />
 	<Include file="GuildBank.xml" />
 	<Include file="Merchant.xml" />
 	<Include file="Auction.xml" />

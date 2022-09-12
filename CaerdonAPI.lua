@@ -27,9 +27,13 @@ function CaerdonAPIMixin:DumpLinkDetails(link)
     if link then
         local originalValue = CaerdonWardrobeConfig.Debug.Enabled
         CaerdonWardrobeConfig.Debug.Enabled = true
-    
+
+        local originalMax = DEVTOOLS_MAX_ENTRY_CUTOFF
+        DEVTOOLS_MAX_ENTRY_CUTOFF = 300
+
         SlashCmdList.DUMP(format("CaerdonAPI:GetItemDetails(CaerdonItem:CreateFromItemLink(\"%s\"))", link))
 
+        DEVTOOLS_MAX_ENTRY_CUTOFF = originalMax
         CaerdonWardrobeConfig.Debug.Enabled = originalValue
     end
 end
@@ -47,6 +51,8 @@ function CaerdonAPIMixin:GetItemDetails(item)
             itemResults = itemData:GetTransmogInfo()
     elseif caerdonType == CaerdonItemType.Quest then
         itemResults = itemData:GetQuestInfo()
+    elseif caerdonType == CaerdonItemType.Recipe then
+        itemResults = itemData:GetRecipeInfo()
     end
 
     return {

@@ -22,7 +22,7 @@ function CaerdonWardrobeMixin:OnLoad()
 	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
 
 	hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
-	hooksecurefunc("ContainerFrame_UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
+	hooksecurefunc(BankFrame, "UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
 end
 
 local bindTextTable = {
@@ -1011,16 +1011,18 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 				end
 				if strmatch(lineText, skillCheck) then
 					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+
 					local skillLines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
 					for skillLineIndex = 1, #skillLines do
 						local skillLineID = skillLines[skillLineIndex]
-						local name, rank, maxRank, modifier, parentSkillLineID = C_TradeSkillUI.GetTradeSkillLineInfoByID(skillLineID)
-						if requiredSkill == name then
-							if not rank or rank < tonumber(requiredRank) then
-								if not rank or rank == 0 then
+						-- NOTE: This only grabs primary professions right now.
+						local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skillLineID)
+						if requiredSkill == professionInfo.professionName then
+							if not professionInfo.skillLevel or professionInfo.skillLevel < tonumber(requiredRank) then
+								if not professionInfo.skillLevel or professionInfo.skillLevel == 0 then
 									-- Toon either doesn't have profession or isn't high enough level.
 									tooltipInfo.requiredTradeSkillMissingOrUnleveled = true
-								elseif rank and rank > 0 then -- has skill but isn't high enough
+								elseif professionInfo.skillLevel and professionInfo.skillLevel > 0 then -- has skill but isn't high enough
 									tooltipInfo.requiredTradeSkillTooLow = true
 								end
 							else

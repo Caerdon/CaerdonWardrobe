@@ -5,7 +5,11 @@ function BagsMixin:GetName()
 end
 
 function BagsMixin:Init()
-	hooksecurefunc("ContainerFrame_Update", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame1, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame2, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame3, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame4, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame5, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
 	return { "UNIT_SPELLCAST_SUCCEEDED" }
 end
 

@@ -5,7 +5,7 @@ function LootMixin:GetName()
 end
 
 function LootMixin:Init()
-    hooksecurefunc("LootFrame_UpdateButton", function(...) self:OnLootFrameUpdateButton(...) end)
+    hooksecurefunc("LootButton_Update", function(...) self:OnLootFrameUpdateButton(...) end)
 end
 
 function LootMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -15,22 +15,24 @@ end
 function LootMixin:Refresh()
 end
 
-function LootMixin:OnLootFrameUpdateButton(index)
+function LootMixin:OnLootFrameUpdateButton(button)
 	local numLootItems = LootFrame.numLootItems;
-	local numLootToShow = LOOTFRAME_NUMBUTTONS;
+	local slot = button:GetElementData().index;
 
-	if LootFrame.AutoLootTable then
-		numLootItems = #LootFrame.AutoLootTable
-	end
+	-- local numLootToShow = LOOTFRAME_NUMBUTTONS;
 
-	if numLootItems > LOOTFRAME_NUMBUTTONS then
-		numLootToShow = numLootToShow - 1
-	end
+	-- if LootFrame.AutoLootTable then
+	-- 	numLootItems = #LootFrame.AutoLootTable
+	-- end
 
-	local button = _G["LootButton"..index];
-	local slot = (numLootToShow * (LootFrame.page - 1)) + index;
-	if slot <= numLootItems then
-		if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
+	-- if numLootItems > LOOTFRAME_NUMBUTTONS then
+	-- 	numLootToShow = numLootToShow - 1
+	-- end
+
+	-- local button = _G["LootButton"..index];
+	-- local slot = (numLootToShow * (LootFrame.page - 1)) + index;
+	-- if slot <= numLootItems then
+		-- if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
 			local link = GetLootSlotLink(slot)
 			if link then
 				local item = CaerdonItem:CreateFromItemLink(link)
@@ -41,8 +43,8 @@ function LootMixin:OnLootFrameUpdateButton(index)
 			else
 				CaerdonWardrobe:ClearButton(button)
 			end
-		end
-	end
+		-- end
+	-- end
 end
 
 CaerdonWardrobe:RegisterFeature(LootMixin)

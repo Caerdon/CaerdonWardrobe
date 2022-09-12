@@ -6,7 +6,13 @@ end
 
 function BankMixin:Init()
 	hooksecurefunc("BankFrameItemButton_Update", function(...) self:OnBankItemUpdate(...) end)
-	hooksecurefunc("ContainerFrame_Update", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame7, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame8, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame9, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame10, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame11, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame12, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	hooksecurefunc(ContainerFrame13, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
 end
 
 function BankMixin:SetTooltipItem(tooltip, item, locationInfo)

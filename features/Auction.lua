@@ -16,17 +16,17 @@ function AuctionMixin:Init(frame)
 end
 
 function AuctionMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
-	self:OnAuctionBrowseUpdate()
 end
 
 function AuctionMixin:AUCTION_HOUSE_SHOW()
 	if (self.shouldHookAuction) then
 		self.shouldHookAuction = false
-		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollFrame.scrollBar:HookScript("OnValueChanged", function(...) self:OnAuctionBrowseUpdate(...) end)
-		AuctionHouseFrame.AuctionsFrame.AllAuctionsList.ScrollFrame.scrollBar:HookScript("OnValueChanged", function(...) self:OWNED_AUCTIONS_UPDATED(...) end)
+		-- hooksecurefunc(AuctionHouseFrame.BrowseResultsFrame.ItemList, "RefreshScrollFrame", function(...) self:OnScrollBoxRangeChanged(...) end)
+		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self);
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)
 		hooksecurefunc(AuctionHouseFrame.AuctionsFrame.ItemDisplay, "SetItemInternal", function(...) self:OnSetAuctionItemDisplay(...) end)
+
 	end
 end
 
@@ -41,7 +41,7 @@ end
 
 function AuctionMixin:Refresh()
 	if AuctionFrame and AuctionFrame:IsShown() then
-		self:OnAuctionBrowseUpdate()
+		-- TODO: Could refresh here but probably don't need to?
 	end
 end
 
@@ -106,12 +106,7 @@ function AuctionMixin:OWNED_AUCTIONS_UPDATED()
 	self:UpdateItemList(AuctionHouseFrame.AuctionsFrame.AllAuctionsList, 1)
 end
 
-function AuctionMixin:OnAuctionBrowseUpdate()
-	-- Event pump since first load won't have UI ready
-	if not AuctionHouseFrame:IsVisible() then
-		return
-	end
-
+function AuctionMixin:OnScrollBoxRangeChanged(sortPending)
 	self:UpdateItemList(AuctionHouseFrame.BrowseResultsFrame.ItemList, 2)
 end
 
@@ -123,54 +118,47 @@ function AuctionMixin:UpdateItemList(itemList, buttonCellIndex)
 	-- TODO: Battle Pet scans are not clean, yet.
 	self.auctionContinuableContainer:Cancel()
 
-	local buttons = HybridScrollFrame_GetButtons(itemList.ScrollFrame);
-	if not buttons then return end
-
-	for i, button in ipairs(buttons) do
-		CaerdonWardrobe:ClearButton(button)
-	end
-
-	self.auctionTimer = C_Timer.NewTimer(0.1, function() 
-		local offset = itemList:GetScrollOffset();
-
-		local buttons = HybridScrollFrame_GetButtons(itemList.ScrollFrame);
-		for i, button in ipairs(buttons) do
-			local slot = i + offset
-
-			local _, itemLink
-
-			local browseResult = itemList.tableBuilder:GetDataProviderData(slot)
+	self.auctionTimer = C_Timer.NewTimer(0.05, function() 
+		local index = itemList.ScrollBox:GetDataIndexBegin();
+		itemList.ScrollBox:ForEachFrame(function(button)
+			local browseResult = itemList.tableBuilder:GetDataProviderData(index)
 			if browseResult then
 				local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
-				-- TODO: Do we need to check if slot has changed for buttons?  Could do something here...
-				-- item:ContinueOnItemLoad(function ()
-				-- 	print(item:GetItemLink())
-				-- end)
 				if not item:IsItemEmpty() then
 					self.auctionContinuableContainer:AddContinuable(item)
 				end
 			end
-		end
+
+			index = index + 1;
+		end);
 
 		self.auctionContinuableContainer:ContinueOnLoad(function()
-			local checkOffset = itemList:GetScrollOffset();
-			-- TODO: Not sure if this is actually doing anything - hasn't been triggered, yet.
-			if checkOffset ~= offset then 
-				return
+			-- local checkOffset = itemList:GetScrollOffset();
+			-- -- TODO: Not sure if this is actually doing anything - hasn't been triggered, yet.
+			-- if checkOffset ~= offset then 
+			-- 	return
+			-- end
+
+			-- for i, button in ipairs(buttons) do
+			local dataIndex = itemList.ScrollBox:GetDataIndexBegin();
+			local dataIndexEnd = itemList.ScrollBox:GetDataIndexEnd();
+			local frameCount = itemList.ScrollBox:GetFrameCount()
+			local offset = 0
+			if frameCount < dataIndexEnd then
+				offset = frameCount - dataIndexEnd
 			end
-
-			for i, button in ipairs(buttons) do
-				local slot = i + offset
-				local browseResult = itemList.tableBuilder:GetDataProviderData(slot)
+			itemList.ScrollBox:ForEachFrame(function(button)
+				local slot = dataIndex + offset
+				local browseResult = itemList.tableBuilder:GetDataProviderData(dataIndex)
 				if browseResult then
-					-- From AuctionHouseTableBuilder
-					local PRICE_DISPLAY_WIDTH = 120;
-					local PRICE_DISPLAY_WITH_CHECKMARK_WIDTH = 140;
-					local PRICE_DISPLAY_PADDING = 0;
-					local BUYOUT_DISPLAY_PADDING = 0;
-					local STANDARD_PADDING = 10;
+					local row = itemList.tableBuilder.rows[slot] -- TODO: This is matching on the wrong row... probably unsorted?  Searching through for now.
+					for i, checkRow in ipairs(itemList.tableBuilder.rows) do
+						if checkRow.rowData == browseResult then
+							row = checkRow
+						end
+					end
 
-					local cell = itemList.tableBuilder:GetCellByIndex(i, buttonCellIndex)
+					local cell = row.cells[buttonCellIndex]
 			
 					if button then
 						local item
@@ -183,7 +171,7 @@ function AuctionMixin:UpdateItemList(itemList, buttonCellIndex)
 						end
 
 						CaerdonWardrobe:UpdateButton(button, item, self, {
-							locationKey = format("%d", i),
+							locationKey = format("%d", slot),
 							index = slot,
 							itemKey = browseResult.itemKey
 						},  
@@ -199,15 +187,10 @@ function AuctionMixin:UpdateItemList(itemList, buttonCellIndex)
 						})
 					end
 				end
-			end
+				dataIndex = dataIndex + 1;
+			end)
 		end)
 	end, 1)
-end
-
-function AuctionMixin:OnAuctionBrowseClick(frame, buttonName, isDown)
-	if (buttonName == "LeftButton" and isDown) then
-		self:OnAuctionBrowseUpdate()
-	end
 end
 
 function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
