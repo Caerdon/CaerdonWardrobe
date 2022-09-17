@@ -141,6 +141,41 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				CaerdonWardrobe:ClearButton(questItem)
 			end
 		end
+
+		for i = 1, #questInfo.currencyRewards do
+			local questLogIndex = #questInfo.rewards + choiceCount + i
+			local reward = questInfo.currencyRewards[i]
+			local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
+
+			local options = {
+				relativeFrame = questItem.Icon
+			}	
+
+			local rewardItem
+			if reward.itemLink then
+				rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
+			end
+
+			-- local name, texture, quality, amount, currencyID;
+			-- if ( QuestInfoFrame.questLog ) then
+			-- 	name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(index, questItem.questID, isChoice);
+			-- else
+			-- 	name, texture, amount, quality = GetQuestCurrencyInfo(questItem.type, index);
+			-- 	currencyID = GetQuestCurrencyID(questItem.type, index);
+			-- end
+			-- name, texture, amount, quality = CurrencyContainerUtil.GetCurrencyContainerInfo(currencyID, amount, name, texture, quality);
+
+			if questItem and rewardItem then
+				CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
+					locationKey = format("%s-index%d", "currency", i, questID),
+					questID = questID,
+					index = i,
+					type = "currency"
+				}, options)
+			else
+				CaerdonWardrobe:ClearButton(questItem)
+			end
+		end
 	end)
 end
 

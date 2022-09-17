@@ -121,11 +121,14 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 			-- if isBindOnPickup then -- assume all unknown not needed for now
 				needsItem = false
 			-- end
-		end
-
-		if tooltipInfo.requiredTradeSkillTooLow then
-			skillTooLow = true
-			needsItem = true -- still need this but need to rank up
+		else
+			if tooltipInfo.requiredTradeSkillTooLow then
+				unusableItem = true
+				skillTooLow = true
+				needsItem = true -- still need this but need to rank up
+			else
+				needsItem = true
+			end
 		end
 	end
 
@@ -992,9 +995,6 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 				tooltipInfo.foundRedRequirements = true
 			end
 			if isRecipe then
-				-- TODO: Cooking and fishing are not represented in trade skill lines right now
-				-- Assuming all toons have cooking for now.
-
 				-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
 				-- which toons could learn a recipe.
 
@@ -1012,24 +1012,9 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 				if strmatch(lineText, skillCheck) then
 					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 
-					local skillLines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
-					for skillLineIndex = 1, #skillLines do
-						local skillLineID = skillLines[skillLineIndex]
-						-- NOTE: This only grabs primary professions right now.
-						local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skillLineID)
-						if requiredSkill == professionInfo.professionName then
-							if not professionInfo.skillLevel or professionInfo.skillLevel < tonumber(requiredRank) then
-								if not professionInfo.skillLevel or professionInfo.skillLevel == 0 then
-									-- Toon either doesn't have profession or isn't high enough level.
-									tooltipInfo.requiredTradeSkillMissingOrUnleveled = true
-								elseif professionInfo.skillLevel and professionInfo.skillLevel > 0 then -- has skill but isn't high enough
-									tooltipInfo.requiredTradeSkillTooLow = true
-								end
-							else
-								break
-							end
-						end
-					end
+					local hasSkillLine, meetsMinRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+					tooltipInfo.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
+					tooltipInfo.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
 				end		
 			end
 		end
