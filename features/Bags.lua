@@ -5,11 +5,22 @@ function BagsMixin:GetName()
 end
 
 function BagsMixin:Init()
-	hooksecurefunc(ContainerFrame1, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
-	hooksecurefunc(ContainerFrame2, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
-	hooksecurefunc(ContainerFrame3, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
-	hooksecurefunc(ContainerFrame4, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
-	hooksecurefunc(ContainerFrame5, "UpdateItems", function(...) self:OnContainerFrame_Update(...) end)
+	-- TODO: Review for better hooks
+	hooksecurefunc(ContainerFrame1, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame1, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame2, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame2, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame3, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame3, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame4, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame4, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame5, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame5, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame6, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame6, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrameCombinedBags, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+
 	return { "UNIT_SPELLCAST_SUCCEEDED" }
 end
 
@@ -30,17 +41,53 @@ function BagsMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function BagsMixin:Refresh()
-	for i = 1, NUM_CONTAINER_FRAMES, 1 do
+	for i = 1, NUM_TOTAL_BAG_FRAMES + 1, 1 do
 		local frame = _G["ContainerFrame"..i]
 		if ( frame:IsShown() ) then
-			self:OnContainerFrame_Update(frame)
+			self:OnUpdateItems(frame)
 		end
 	end
 end
 
-function BagsMixin:OnContainerFrame_Update(frame)
-	local bag = frame:GetID()
-	if bag >= BACKPACK_CONTAINER and bag <= NUM_BAG_SLOTS then
+function BagsMixin:OnUpdateSearchResults(frame)
+	for i, button in frame:EnumerateValidItems() do
+		local isFiltered = select(8, GetContainerItemInfo(button:GetBagID(), button:GetID()));
+		-- local slot, bag = button:GetSlotAndBagID()
+		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		if button.caerdonButton then
+			if isFiltered then
+				button.caerdonButton.mogStatus:Hide()
+				if button.caerdonButton.bindsOnText then
+					button.caerdonButton.bindsOnText:Hide()
+				end
+			else
+				button.caerdonButton.mogStatus:Show()
+				if button.caerdonButton.bindsOnText then
+					button.caerdonButton.bindsOnText:Show()
+				end
+			end
+		end
+	end
+end
+
+function BagsMixin:OnUpdateItems(frame)
+	if frame:IsCombinedBagContainer() then
+		for i, button in frame:EnumerateValidItems() do
+			-- local isFiltered = select(8, GetContainerItemInfo(button:GetBagID(), button:GetID()));
+			-- button:SetMatchesSearch(not isFiltered);
+			local slot, bag = button:GetSlotAndBagID()
+			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				bag = bag, 
+				slot = slot
+			}, { 
+				showMogIcon = true, 
+				showBindStatus = true, 
+				showSellables = true
+			})
+		end
+	else
+		local bag = frame:GetID()
 		local size = ContainerFrame_GetContainerNumSlots(bag)
 		for buttonIndex = 1, size do
 			local button = _G[frame:GetName() .. "Item" .. buttonIndex]

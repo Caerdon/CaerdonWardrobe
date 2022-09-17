@@ -118,15 +118,18 @@ end
 -- Wowhead Transmog Guide - https://www.wowhead.com/transmogrification-overview-frequently-asked-questions
 function CaerdonEquipmentMixin:GetTransmogInfo()
     local item = self.item
-    local itemParamType = type(item)
-    if itemParamType == "string" then
-        item = gsub(item, "\124\124", "\124")
-        item = CaerdonItem:CreateFromItemLink(item)
-    elseif itemParamType == "number" then
-        item = CaerdonItem:CreateFromItemID(item)
-    elseif itemParamType ~= "table" then
-        error("Must specify itemLink, itemID, or CaerdonItem for GetTransmogInfo")
-    end
+    -- TODO: Pretty sure this doesn't matter anymore as it should always be a CaerdonItem
+    -- local itemParamType = type(item)
+    -- if itemParamType == "string" then
+    --     item = gsub(item, "\124\124", "\124")
+    --     item = CaerdonItem:CreateFromItemLink(item)
+    --     print("Creating from link: " .. item)
+    -- elseif itemParamType == "number" then
+    --     item = CaerdonItem:CreateFromItemID(item)
+    --     print("Creating from ID: " .. item)
+    -- elseif itemParamType ~= "table" then
+    --     error("Must specify itemLink, itemID, or CaerdonItem for GetTransmogInfo")
+    -- end
 
     local itemLink = item:GetItemLink()
     if not itemLink then
@@ -160,7 +163,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- Sets can have multiple appearances (normal vs mythic, etc.)
     local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
     if not sourceID then
-        -- TODO: Not sure why this is the case?  EncounterJournal links aren't returning source info
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(item:GetItemID())
     end
 

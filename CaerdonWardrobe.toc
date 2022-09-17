@@ -1,5 +1,5 @@
-## Interface: 90207
-## X-Compatible-With: 90207
+## Interface: 100002
+## X-Compatible-With: 100002
 ## X-Curse-Project-ID: 101123
 ## X-WoWI-ID: 26357
 ## X-Wago-ID: pkNMoqKz

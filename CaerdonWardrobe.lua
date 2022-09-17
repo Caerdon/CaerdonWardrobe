@@ -266,7 +266,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	-- Make sure it's sitting in front of the frame it's going to overlay
-	local levelCheckFrame = button
+	local levelCheckFrame = originalButton
 	if options and options.relativeFrame then
 		if options.relativeFrame:GetObjectType() == "Texture" then
 			levelCheckFrame = options.relativeFrame:GetParent()
@@ -549,7 +549,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 
 	if not bindsOnText then
-		bindsOnText = caerdonButton:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") 
+		bindsOnText = caerdonButton:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small")
 		caerdonButton.bindsOnText = bindsOnText
 	end
 
@@ -1028,8 +1028,10 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 end
 
 function CaerdonWardrobeMixin:ClearButton(button)
-	self:SetItemButtonStatus(button)
-	self:SetItemButtonBindType(button)
+	if button.caerdonButton then
+		self:SetItemButtonStatus(button)
+		self:SetItemButtonBindType(button)
+	end
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
