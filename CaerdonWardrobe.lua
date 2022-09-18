@@ -1112,7 +1112,7 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 				local locationInfo = processInfo.locationInfo
 				local options = processInfo.options
 				
-				if feature:IsSameItem(button, item, locationInfo) then
+				if feature:IsSameItem(button, item, locationInfo) and button.caerdonKey == locationKey then
 					local scanTip = CaerdonWardrobeFrameTooltip
 					scanTip:ClearLines()
 					feature:SetTooltipItem(scanTip, item, locationInfo)
@@ -1132,11 +1132,15 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 						end
 					else
 						item:ContinueOnItemLoad(function ()
-							local tooltipInfo = self:GetTooltipInfo(item)
-							if tooltipInfo.isRetrieving then
-								self:UpdateButton(button, item, feature, locationInfo, options)
+							if button.caerdonKey == locationKey then
+								local tooltipInfo = self:GetTooltipInfo(item)
+								if tooltipInfo.isRetrieving then
+									self:UpdateButton(button, item, feature, locationInfo, options)
+								else
+									self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+								end
 							else
-								self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+								self:ClearButton(button)
 							end
 						end)
 					end

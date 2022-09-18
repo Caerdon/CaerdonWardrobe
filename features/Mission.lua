@@ -10,8 +10,8 @@ end
 
 function MissionMixin:ADDON_LOADED(name)
 	if name == "Blizzard_GarrisonUI" then
-        hooksecurefunc("GarrisonMissionButton_SetRewards", function(...) self:OnGarrisonMissionButton_SetRewards(...) end)
-        hooksecurefunc("GarrisonLandingPageReportList_UpdateAvailable", function(...) self:OnGarrisonLandingPageReportList_UpdateAvailable(...) end)
+		CovenantMissionFrameMissions.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnCovenantMissionScrollBoxRangeChanged, self);
+		GarrisonLandingPageReportList.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnGarrisonLandingScrollBoxRangeChanged, self);
 	end
 end
 
@@ -23,66 +23,68 @@ end
 function MissionMixin:Refresh()
 end
 
-function MissionMixin:OnGarrisonMissionButton_SetRewards(button, rewards)
-    local index = 1;
-    for id, reward in pairs(rewards) do
-        local Reward = button.Rewards[index];
-                
-        if (reward.itemLink) then
-            local options = {
-                relativeFrame = Reward.Icon,
-                statusOffsetX = 3,
-                statusOffsetY = 3
-            }
-    
-            local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
-            CaerdonWardrobe:UpdateButton(Reward, item, self, { 
-                locationKey = format("missionbutton-%d-%d", button.id, index)
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(Reward)
-        end
+function MissionMixin:OnCovenantMissionScrollBoxRangeChanged(sortPending)
+	local scrollBox = CovenantMissionFrameMissions.ScrollBox
+	scrollBox:ForEachFrame(function(missionButton, elementData)
+        local missionIndex = scrollBox:FindIndex(elementData)
 
-        index = index + 1;
-    end
+        local index = 1;
+        for id, reward in pairs(elementData.rewards) do
+            local button = missionButton.Rewards[index];
+            if button.itemLink and button.itemID and button.itemID > 0 then
+                local options = {
+                    relativeFrame = button.Icon,
+                    statusOffsetX = 3,
+                    statusOffsetY = 3
+                }
+    
+                local item = CaerdonItem:CreateFromItemLink(button.itemLink)
+                CaerdonWardrobe:UpdateButton(button, item, self, { 
+                    locationKey = format("covenantmissionbutton-%d-%d", button.itemID, id)
+                }, options)
+            else
+                CaerdonWardrobe:ClearButton(button)
+            end
+    
+            index = index + 1
+        end
+    
+        for index = (#elementData.rewards + 1), #missionButton.Rewards do
+            CaerdonWardrobe:ClearButton(missionButton.Rewards[index])
+        end
+    end)
 end
 
-function MissionMixin:OnGarrisonLandingPageReportList_UpdateAvailable()
-	local items = GarrisonLandingPageReport.List.AvailableItems;
-	local numItems = #items;
-	local scrollFrame = GarrisonLandingPageReport.List.listScroll;
-	local offset = HybridScrollFrame_GetOffset(scrollFrame);
-	local buttons = scrollFrame.buttons;
-	local numButtons = #buttons;
+function MissionMixin:OnGarrisonLandingScrollBoxRangeChanged(sortPending)
+	local scrollBox = GarrisonLandingPageReportList.ScrollBox
+	scrollBox:ForEachFrame(function(missionButton, elementData)
+        local missionIndex = scrollBox:FindIndex(elementData)
 
-	for i = 1, numButtons do
-		local button = buttons[i];
-		local index = offset + i; -- adjust index
-		if ( index <= numItems ) then
-            local item = items[index];
-            local index = 1;
-			for id, reward in pairs(item.rewards) do
-                local Reward = button.Rewards[index];
-                
-                if (reward.itemLink) then
-                    local options = {
-                        relativeFrame = Reward.Icon,
-                        statusOffsetX = 3,
-                        statusOffsetY = 3
-                    }
-            
-                    local item = CaerdonItem:CreateFromItemLink(reward.itemLink)
-                    CaerdonWardrobe:UpdateButton(Reward, item, self, { 
-                        locationKey = format("garrisonlandingbutton-%d-%d", button.id, index)
-                    }, options)
-                else
-                    CaerdonWardrobe:ClearButton(Reward)
-                end
-
-                index = index + 1;
+        local index = 1;
+        for id, reward in pairs(elementData.rewards) do
+            local button = missionButton.Rewards[index];
+            if button.itemLink and button.itemID and button.itemID > 0 then
+                local options = {
+                    relativeFrame = button.Icon,
+                    statusOffsetX = 3,
+                    statusOffsetY = 3
+                }
+    
+                local item = CaerdonItem:CreateFromItemLink(button.itemLink)
+                CaerdonWardrobe:UpdateButton(button, item, self, { 
+                    locationKey = format("garrisonlandingbutton-%d-%d", button.itemID, id)
+                }, options)
+            else
+                CaerdonWardrobe:ClearButton(button)
             end
+    
+            index = index + 1
         end
-    end
+    
+        for index = (#elementData.rewards + 1), #missionButton.Rewards do
+            CaerdonWardrobe:ClearButton(missionButton.Rewards[index])
+        end
+    end)
 end
 
 CaerdonWardrobe:RegisterFeature(MissionMixin)
