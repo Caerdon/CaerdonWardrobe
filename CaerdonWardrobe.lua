@@ -754,7 +754,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 
 				-- TODO: Exceptions need to be broken out
 				-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
-				if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" then
+				if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" or feature:GetName() == "CustomerOrders" then
 					if transmogInfo.needsItem then
 						if transmogInfo.matchesLootSpec then
 							if not transmogInfo.isCompletionistItem then

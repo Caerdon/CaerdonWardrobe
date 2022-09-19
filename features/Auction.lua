@@ -21,7 +21,6 @@ end
 function AuctionMixin:AUCTION_HOUSE_SHOW()
 	if (self.shouldHookAuction) then
 		self.shouldHookAuction = false
-		-- hooksecurefunc(AuctionHouseFrame.BrowseResultsFrame.ItemList, "RefreshScrollFrame", function(...) self:OnScrollBoxRangeChanged(...) end)
 		AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self);
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)

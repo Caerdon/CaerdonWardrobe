@@ -304,7 +304,13 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Toy
         elseif isConduit then
             caerdonType = CaerdonItemType.Conduit
-        elseif linkType == "item" then
+        elseif linkType == "battlepet" then
+            caerdonType = CaerdonItemType.BattlePet
+        elseif linkType == "quest" then
+            caerdonType = CaerdonItemType.Quest
+        elseif linkType == "currency" then
+            caerdonType = CaerdonItemType.Currency
+        elseif linkType == "item" or linkType == nil then -- Assuming item if we don't have a linkType
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)
             -- Keep an eye on this
@@ -333,13 +339,11 @@ function CaerdonItemMixin:GetCaerdonItemType()
                 caerdonType = CaerdonItemType.Quest
             elseif typeID == Enum.ItemClass.Recipe then
                 caerdonType = CaerdonItemType.Recipe
+            else
+                print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
-        elseif linkType == "battlepet" then
-            caerdonType = CaerdonItemType.BattlePet
-        elseif linkType == "quest" then
-            caerdonType = CaerdonItemType.Quest
-        elseif linkType == "currency" then
-            caerdonType = CaerdonItemType.Currency
+        else
+            print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
         end
 
         self.caerdonItemType = caerdonType
