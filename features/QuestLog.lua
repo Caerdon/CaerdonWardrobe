@@ -9,6 +9,8 @@ end
 
 function QuestLogMixin:Init()
 	hooksecurefunc("QuestInfo_Display", function(...) self:OnQuestInfoDisplay(...) end)
+
+	return { "QUEST_ITEM_UPDATE" }
 end
 
 function QuestLogMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -26,6 +28,10 @@ function QuestLogMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function QuestLogMixin:Refresh()
+end
+
+function QuestLogMixin:QUEST_ITEM_UPDATE()
+	self:OnQuestInfoShowRewards()
 end
 
 function QuestLogMixin:OnQuestInfoDisplay(template, parentFrame)
