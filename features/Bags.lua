@@ -51,7 +51,7 @@ end
 
 function BagsMixin:OnUpdateSearchResults(frame)
 	for i, button in frame:EnumerateValidItems() do
-		local isFiltered = select(8, GetContainerItemInfo(button:GetBagID(), button:GetID()));
+		local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
 		-- local slot, bag = button:GetSlotAndBagID()
 		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
 		if button.caerdonButton then
@@ -73,7 +73,7 @@ end
 function BagsMixin:OnUpdateItems(frame)
 	if frame:IsCombinedBagContainer() then
 		for i, button in frame:EnumerateValidItems() do
-			-- local isFiltered = select(8, GetContainerItemInfo(button:GetBagID(), button:GetID()));
+			-- local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
 			-- button:SetMatchesSearch(not isFiltered);
 			local slot, bag = button:GetSlotAndBagID()
 			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
@@ -88,7 +88,7 @@ function BagsMixin:OnUpdateItems(frame)
 		end
 	else
 		local bag = frame:GetID()
-		local size = ContainerFrame_GetContainerNumSlots(bag)
+		local size = C_Container.GetContainerNumSlots(bag)
 		for buttonIndex = 1, size do
 			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
 			local slot = button:GetID()

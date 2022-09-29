@@ -5,46 +5,31 @@ function LootMixin:GetName()
 end
 
 function LootMixin:Init()
-    hooksecurefunc("LootButton_Update", function(...) self:OnLootFrameUpdateButton(...) end)
+	LootFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self)
 end
 
 function LootMixin:SetTooltipItem(tooltip, item, locationInfo)
-	tooltip:SetLootItem(locationInfo.index)
+	tooltip:SetLootItem(locationInfo.elementData.slotIndex)
 end
 
 function LootMixin:Refresh()
 end
 
-function LootMixin:OnLootFrameUpdateButton(button)
-	local numLootItems = LootFrame.numLootItems;
-	local slot = button:GetElementData().index;
-
-	-- local numLootToShow = LOOTFRAME_NUMBUTTONS;
-
-	-- if LootFrame.AutoLootTable then
-	-- 	numLootItems = #LootFrame.AutoLootTable
-	-- end
-
-	-- if numLootItems > LOOTFRAME_NUMBUTTONS then
-	-- 	numLootToShow = numLootToShow - 1
-	-- end
-
-	-- local button = _G["LootButton"..index];
-	-- local slot = (numLootToShow * (LootFrame.page - 1)) + index;
-	-- if slot <= numLootItems then
-		-- if ((LootSlotHasItem(slot) or (LootFrame.AutoLootTable and LootFrame.AutoLootTable[slot])) and index <= numLootToShow) then
-			local link = GetLootSlotLink(slot)
-			if link then
-				local item = CaerdonItem:CreateFromItemLink(link)
-				CaerdonWardrobe:UpdateButton(button, item, self, {
-					locationKey = format("%d", slot),
-					index = slot
-				}, nil)
-			else
-				CaerdonWardrobe:ClearButton(button)
-			end
-		-- end
-	-- end
+function LootMixin:OnScrollBoxRangeChanged(sortPending)
+	local scrollBox = LootFrame.ScrollBox
+	scrollBox:ForEachFrame(function(button, elementData)
+		-- elementData: slotIndex, group (coin = 1 else 0), quality
+		local link = GetLootSlotLink(elementData.slotIndex);
+		if link then
+			local item = CaerdonItem:CreateFromItemLink(link)
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				locationKey = format("%d", elementData.slotIndex),
+				elementData = elementData
+			}, nil)
+		else
+			CaerdonWardrobe:ClearButton(button)
+		end
+	end)
 end
 
 CaerdonWardrobe:RegisterFeature(LootMixin)

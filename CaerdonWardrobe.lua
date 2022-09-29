@@ -13,6 +13,14 @@ local registeredFeatures = {}
 CaerdonWardrobeMixin = {}
 
 function CaerdonWardrobeMixin:OnLoad()
+	AddonCompartmentFrame:RegisterAddon({
+		text = 'Caerdon Wardrobe',
+		func = function ()
+			print("Do your thing here")
+		end,
+		icon = "Interface\\Store\\category-icon-featured"
+	})
+
 	self.waitingToProcess = {}
 
 	self:RegisterEvent "ADDON_LOADED"
@@ -890,9 +898,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		local containerID = bag
 		local containerSlot = slot
 
-		local texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot);
+		local texture, itemCount, locked, quality, readable, lootable, _ = C_Container.GetContainerItemInfo(containerID, containerSlot);
 		if lootable then
-			local startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
+			local startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
 			if duration > 0 and not isEnabled then
 				mogStatus = "refundable" -- Can't open yet... show timer
 			else
@@ -903,7 +911,8 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				end
 			end
 		else
-			local money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped);
+			local isEquipped = false
+			local money, itemCount, refundSec, currencyCount, hasEnchants = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped);
 			if refundSec then
 				mogStatus = "refundable"
 			end
@@ -1245,7 +1254,7 @@ function CaerdonWardrobeMixin:OnContainerFrameUpdateSearchResults(frame)
 	
 	for i=1, frame.size, 1 do
 		itemButton = _G[name..i] or frame["Item"..i];
-		_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(id, itemButton:GetID())
+		_, _, _, _, _, _, _, isFiltered = C_Container.GetContainerItemInfo(id, itemButton:GetID())
 		self:SetItemButtonMogStatusFilter(itemButton, isFiltered)
 	end
 end

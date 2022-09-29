@@ -19,3 +19,4 @@ localization\deDE.lua
 
 CaerdonWardrobe.xml
 config\Config.xml
+# config\ConfigNew.lua

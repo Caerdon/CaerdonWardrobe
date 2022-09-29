@@ -96,6 +96,17 @@ end
     return CaerdonItem:CreateFromItemLink(itemLink)
 end
 
+--[[static]] function CaerdonItem:CreateFromItemGUID(itemGUID)
+    if type(itemGUID) ~= "string" then
+        error("Usage: CaerdonItem:CreateFromItemGUID(itemGUIDString)", 2);
+    end
+
+    local item = CreateItem();
+    item:SetItemGUID(itemGUID);
+    return item;
+end
+
+
 function CaerdonItemMixin:Clear()
     ItemMixin.Clear(self)
     self.caerdonItemType = nil

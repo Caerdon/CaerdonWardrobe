@@ -46,7 +46,7 @@ end
 
 function BankMixin:OnUpdateSearchResults(frame)
 	for i, button in frame:EnumerateValidItems() do
-		local isFiltered = select(8, GetContainerItemInfo(button:GetBagID(), button:GetID()));
+		local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
 		-- local slot, bag = button:GetSlotAndBagID()
 		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
 		if button.caerdonButton then
@@ -67,7 +67,7 @@ end
 
 function BankMixin:OnUpdateItems(frame)
 	local bag = frame:GetID()
-	local size = ContainerFrame_GetContainerNumSlots(bag)
+	local size = C_Container.GetContainerNumSlots(bag)
 
 	for buttonIndex = 1, size do
 		local button = _G[frame:GetName() .. "Item" .. buttonIndex]

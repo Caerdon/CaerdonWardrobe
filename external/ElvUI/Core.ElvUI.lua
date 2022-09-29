@@ -30,7 +30,7 @@ function ElvUIMixin:Refresh()
 end
 
 function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
-	if (frame.Bags[bagID] and frame.Bags[bagID].numSlots ~= GetContainerNumSlots(bagID)) or not frame.Bags[bagID] or not frame.Bags[bagID][slotID] then
+	if (frame.Bags[bagID] and frame.Bags[bagID].numSlots ~= C_Container.GetContainerNumSlots(bagID)) or not frame.Bags[bagID] or not frame.Bags[bagID][slotID] then
 		return
 	end
 

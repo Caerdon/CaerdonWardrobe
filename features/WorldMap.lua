@@ -1,6 +1,5 @@
 local WorldMapMixin = {}
 local version, build, date, tocversion = GetBuildInfo()
-local isShadowlands = tonumber(build) > 35700
 
 function WorldMapMixin:GetName()
 	return "WorldMap"
@@ -46,13 +45,7 @@ function WorldMapMixin:UpdatePin(pin)
 
 		local questLink = GetQuestLink(pin.questID)
 		if not questLink then 
-			local questName
-			if isShadowlands then
-				questName = C_QuestLog.GetTitleForQuestID(pin.questID)
-			else
-				questName = C_QuestLog.GetQuestInfo(pin.questID)
-			end
-
+			local questName = C_QuestLog.GetTitleForQuestID(pin.questID)
 			local questLevel = C_QuestLog.GetQuestDifficultyLevel(pin.questID)
 			questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", pin.questID, questLevel, questName)
 		end
@@ -68,12 +61,12 @@ function WorldMapMixin:UpdatePin(pin)
 
 		-- TODO: Review if necessary to iterate through rewards and find unknown ones...
 		local bestIndex, bestType = QuestUtils_GetBestQualityItemRewardIndex(pin.questID)
-		local reward
-		if bestType == "reward" then
-			reward = questInfo.rewards[bestIndex]
-		elseif bestType == "choice" then
-			reward = questInfo.choices[bestIndex]
-		end
+		-- local reward
+		-- if bestType == "reward" then
+		-- 	reward = questInfo.rewards[bestIndex]
+		-- elseif bestType == "choice" then
+		-- 	reward = questInfo.choices[bestIndex]
+		-- end
 
 		if not bestType then 
 			CaerdonWardrobe:ClearButton(pin)

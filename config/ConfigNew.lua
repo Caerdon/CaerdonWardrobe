@@ -1,4 +1,4 @@
-CaerdonWardrobeConfigMixin = {}
+local CaerdonWardrobeConfigMixin = {}
 
 -- local ADDON_NAME, NS = ...
 -- local L = NS.L
@@ -25,7 +25,7 @@ function CaerdonWardrobeConfigMixin:OnLoad()
 	self.name = "Caerdon Wardrobe"
 	-- self.okay = self.OnSave
 
-	hooksecurefunc(SettingsPanel, "Open", function(...) self:OnSettingsPanelOpen(...) end)
+	-- hooksecurefunc(SettingsPanel, "Open", function(...) self:OnSettingsPanelOpen(...) end)
 end
 
 
@@ -48,19 +48,22 @@ function CaerdonWardrobeConfigMixin:OnSettingsPanelOpen(frame)
 end)
 end
 
--- local function Register()
-function CaerdonWardrobeConfigMixin:Register()
-	local category = Settings.RegisterVerticalLayoutCategory("My AddOn")
+local function Register()
+-- function CaerdonWardrobeConfigMixin:Register()
+	-- local category = Settings.RegisterVerticalLayoutCategory("My AddOn")
+	local category = securecall(Settings.RegisterVerticalLayoutCategory, "My AddOn")
 
-	-- do
-	-- 	local variable = "toggle"
-	-- 	local name = "Test Checkbox"
-	-- 	local tooltip = "This is a tooltip for the checkbox."
-	-- 	local defaultValue = false
+	do
+		local variable = "toggle"
+		local name = "Test Checkbox"
+		local tooltip = "This is a tooltip for the checkbox."
+		local defaultValue = false
 
-	-- 	local setting = Settings.RegisterProxySetting(category, variable, MyAddOn_SavedVars, type(defaultValue), name, defaultValue)
-	-- 	Settings.CreateCheckBox(category, setting, tooltip)
-	-- end
+		local setting = securecall(Settings.RegisterProxySetting, category, variable, MyAddOn_SavedVars, type(defaultValue), name, defaultValue)
+		-- local setting = Settings.RegisterProxySetting(category, variable, MyAddOn_SavedVars, type(defaultValue), name, defaultValue)
+		-- Settings.CreateCheckBox(category, setting, tooltip)
+		securecall(Settings.CreateCheckBox, category, setting, tooltip)
+	end
 
 	-- do
 	-- 	local variable = "slider"
@@ -95,7 +98,8 @@ function CaerdonWardrobeConfigMixin:Register()
 	-- 	Settings.CreateDropDown(category, setting, GetOptions, tooltip)
 	-- end
 
-	Settings.RegisterAddOnCategory(category)
+	-- Settings.RegisterAddOnCategory(category)
+	securecall(Settings.RegisterAddOnCategory, category)
 end
 
 -- function CaerdonWardrobeConfigMixin:Register()
@@ -120,29 +124,30 @@ end
 
 -- Register()
 -- SettingsRegistrar:AddRegistrant(Register)
+securecall(SettingsRegistrar.AddRegistrant, SettingsRegistrar, Register)
 
 -- EventUtil.ContinueAfterAllEvents(Register, "SETTINGS_LOADED", "FIRST_FRAME_RENDERED")
 
-function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
-	if ( event == "SETTINGS_LOADED" ) then
-		-- C_Timer.After(0, function ()
-		-- 	self:Register()
-		-- end)
-		-- self.variablesLoaded = true;
-		-- self:UnregisterEvent(event);
+-- function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
+-- 	if ( event == "SETTINGS_LOADED" ) then
+-- 		-- C_Timer.After(0, function ()
+-- 		-- 	self:Register()
+-- 		-- end)
+-- 		-- self.variablesLoaded = true;
+-- 		-- self:UnregisterEvent(event);
 
-		-- if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
-		-- 	CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
-		-- end
+-- 		-- if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+-- 		-- 	CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
+-- 		-- end
 	
-		-- CaerdonWardrobe:RefreshItems()
-	elseif ( event == "FIRST_FRAME_RENDERED" ) then
-		C_Timer.After(0, function ()
-			self:Register()
-		end)
-		-- SettingsRegistrar:AddRegistrant(self.Register);
-	end
-end
+-- 		-- CaerdonWardrobe:RefreshItems()
+-- 	elseif ( event == "FIRST_FRAME_RENDERED" ) then
+-- 		C_Timer.After(0, function ()
+-- 			self:Register()
+-- 		end)
+-- 		-- SettingsRegistrar:AddRegistrant(self.Register);
+-- 	end
+-- end
 
 -- function CaerdonWardrobeConfigMixin:OnSave()
 -- 	-- Make sure that errors aren't swallowed for InterfaceOption callbacks

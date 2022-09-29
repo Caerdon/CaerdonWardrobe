@@ -14,9 +14,30 @@ end
 
 function CustomerOrdersMixin:ADDON_LOADED(name)
     if name == "Blizzard_ProfessionsCustomerOrders" then
-		ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self);
+        ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, self, false)
         hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "Init", function (...) self:OnSchematicFormInit(...) end)
     end
+end
+
+function CustomerOrdersMixin:OnInitializedFrame(frame, elementData)
+    local button = frame
+    local outputItemData = C_TradeSkillUI.GetRecipeOutputItemData(elementData.option.spellID)
+    local item = CaerdonItem:CreateFromItemLink(outputItemData.hyperlink)
+
+    CaerdonWardrobe:UpdateButton(button, item, self, {
+            locationKey = format("%d", elementData.option.itemID),
+            option = elementData.option
+        },  
+        {
+            overrideStatusPosition = "LEFT",
+            statusProminentSize = 13,
+            statusOffsetX = 3,
+            statusOffsetY = 0,
+            showMogIcon=true, 
+            showBindStatus=true,
+            showSellables=false,
+            -- relativeFrame=cell.Icon
+    })
 end
 
 function CustomerOrdersMixin:SetTooltipItem(tooltip, item, locationInfo)
@@ -55,61 +76,6 @@ function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo,
             shouldShow = false
         }
 	}
-end
-
-function CustomerOrdersMixin:OnScrollBoxRangeChanged(sortPending)
-	if self.orderTimer then
-		self.orderTimer:Cancel()
-	end
-
-	self.orderContinuableContainer:Cancel()
-
-    local tableBuilder = ProfessionsCustomerOrdersFrame.BrowseOrders.tableBuilder
-    local scrollBox = ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox
-
-	self.orderTimer = C_Timer.NewTimer(0.05, function() 
-		local index = scrollBox:GetDataIndexBegin();
-		scrollBox:ForEachFrame(function(button, elementData)
-            local isRecraft = false
-            local outputItemData = C_TradeSkillUI.GetRecipeOutputItemData(elementData.option.spellID)
-            local item = CaerdonItem:CreateFromItemLink(outputItemData.hyperlink)
-            if not item:IsItemEmpty() then
-                self.orderContinuableContainer:AddContinuable(item)
-            end
-
-			index = index + 1;
-		end);
-
-		self.orderContinuableContainer:ContinueOnLoad(function()
-			local dataIndex = scrollBox:GetDataIndexBegin();
-			local dataIndexEnd = scrollBox:GetDataIndexEnd();
-			local frameCount = scrollBox:GetFrameCount()
-			local offset = 0
-			if frameCount < dataIndexEnd then
-				offset = frameCount - dataIndexEnd
-			end
-			scrollBox:ForEachFrame(function(button, elementData)
-                local outputItemData = C_TradeSkillUI.GetRecipeOutputItemData(elementData.option.spellID)
-                local item = CaerdonItem:CreateFromItemLink(outputItemData.hyperlink)
-
-                CaerdonWardrobe:UpdateButton(button, item, self, {
-                        locationKey = format("%d", elementData.option.itemID),
-                        option = elementData.option
-                    },  
-                    {
-                        overrideStatusPosition = "LEFT",
-                        statusProminentSize = 13,
-                        statusOffsetX = 3,
-                        statusOffsetY = 0,
-                        showMogIcon=true, 
-                        showBindStatus=true,
-                        showSellables=false,
-                        -- relativeFrame=cell.Icon
-                })
-				dataIndex = dataIndex + 1;
-			end)
-		end)
-	end, 1)
 end
 
 function CustomerOrdersMixin:OnSchematicFormInit(frame, recipeInfo)

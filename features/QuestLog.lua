@@ -55,6 +55,7 @@ function QuestLogMixin:GetQuestID()
 end
 
 function QuestLogMixin:OnQuestInfoShowRewards()
+	-- TODO: Need to look at majorFactionRepRewards... probably need to include. (Maybe QuestInfoReputationRewardButtonMixin:SetUpMajorFactionReputationReward?)
 	local numQuestRewards = 0;
 	local numQuestChoices = 0;
 	local rewardsFrame = QuestInfoFrame.rewardsFrame;
