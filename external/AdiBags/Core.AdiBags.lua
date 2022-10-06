@@ -34,12 +34,16 @@ function AdiBagsMixin:Init()
 	end
 end
 
-function AdiBagsMixin:SetTooltipItem(tooltip, item, locationInfo)
+function AdiBagsMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo
 	if locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
 	else
 		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
 	end
+
+	return tooltipInfo
 end
 
 function AdiBagsMixin:Refresh()

@@ -12,18 +12,21 @@ function ArkInventoryMixin:Init()
 	hooksecurefunc(ArkInventory.API, "ItemFrameUpdated", function(...) self:OnFrameItemUpdate(...) end)
 end
 
-function ArkInventoryMixin:SetTooltipItem(tooltip, item, locationInfo)
+function ArkInventoryMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo
 	if locationInfo.isOffline then
 		if not item:IsItemEmpty() then
-			tooltip:SetHyperlink(item:GetItemLink())
+			tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
 		end
 	elseif not item:HasItemLocationBankOrBags() then
-		local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
+		tooltipInfo = MakeBaseTooltipInfo("GetGuildBankItem", locationInfo.tab, locationInfo.index);
 	elseif locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
 	else
-		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
 	end
+
+	return tooltipInfo
 end
 
 function ArkInventoryMixin:Refresh()

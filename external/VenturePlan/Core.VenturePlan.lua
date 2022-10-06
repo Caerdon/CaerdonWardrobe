@@ -16,12 +16,9 @@ function VenturePlanMixin:Init()
     end
 end
 
-function VenturePlanMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local itemLink = item:GetItemLink()
-
-	if itemLink then
-		tooltip:SetHyperlink(itemLink)
-	end
+function VenturePlanMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
+	return tooltipInfo
 end
 
 function VenturePlanMixin:Refresh()

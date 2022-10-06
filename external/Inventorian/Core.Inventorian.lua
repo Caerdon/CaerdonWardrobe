@@ -20,16 +20,19 @@ function InventorianMixin:Init()
 	end
 end
 
-function InventorianMixin:SetTooltipItem(tooltip, item, locationInfo)
+function InventorianMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo
 	if locationInfo.isOffline then
 		if not item:IsItemEmpty() then
-			tooltip:SetHyperlink(item:GetItemLink())
+			tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
 		end
 	elseif locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
 	else
-		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
 	end
+
+	return tooltipInfo
 end
 
 function InventorianMixin:Refresh()
