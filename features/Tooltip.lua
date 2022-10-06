@@ -5,6 +5,8 @@ local TooltipMixin, Tooltip = {}
 --     Tooltip[event](Quest, ...)
 -- end)
 
+C_TooltipInfo.GM = {} -- TODO: Temp hack fix for world quest hover
+
 local SpecMap = {
     [250] = "Blood Death Knight",
     [251] = "Frost Death Knight",
@@ -194,6 +196,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local currencyIndex = unpack(tooltipInfo.getterArgs)
         local currencyInfo = C_CurrencyInfo.GetBackpackCurrencyInfo(currencyIndex);
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyInfo.currencyTypesID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetQuestLogItem" then
+        local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetQuestLogItemLink(rewardType, index, questID)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     else -- try and cover anything else I haven't added

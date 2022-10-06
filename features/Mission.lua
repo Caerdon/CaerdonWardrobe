@@ -15,9 +15,9 @@ function MissionMixin:ADDON_LOADED(name)
 	end
 end
 
-
-function MissionMixin:SetTooltipItem(tooltip, item, locationInfo)
-	tooltip:SetHyperlink(item:GetItemLink())
+function MissionMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
+	return tooltipInfo
 end
 
 function MissionMixin:Refresh()

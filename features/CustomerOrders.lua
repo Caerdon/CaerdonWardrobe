@@ -14,12 +14,12 @@ end
 
 function CustomerOrdersMixin:ADDON_LOADED(name)
     if name == "Blizzard_ProfessionsCustomerOrders" then
-        ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, self, false)
+        ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList, false)
         hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "Init", function (...) self:OnSchematicFormInit(...) end)
     end
 end
 
-function CustomerOrdersMixin:OnInitializedFrame(frame, elementData)
+function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
     local button = frame
     local outputItemData = C_TradeSkillUI.GetRecipeOutputItemData(elementData.option.spellID)
     local item = CaerdonItem:CreateFromItemLink(outputItemData.hyperlink)
@@ -40,15 +40,16 @@ function CustomerOrdersMixin:OnInitializedFrame(frame, elementData)
     })
 end
 
-function CustomerOrdersMixin:SetTooltipItem(tooltip, item, locationInfo)
+function CustomerOrdersMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
+	return tooltipInfo
+
 	-- local option = locationInfo.option
 	-- if option then
         -- local reagents = {};
         -- TODO: Do I need to get this somehow?  New link method seems fine...
         -- C_TradeSkillUI.SetTooltipRecipeResultItem(option.spellID, reagents);
         -- DevTools_Dump(tooltip)
-	-- else
-		tooltip:SetHyperlink(item:GetItemLink())
 	-- end
 end
 

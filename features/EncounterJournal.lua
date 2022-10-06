@@ -56,7 +56,7 @@ function EncounterJournalMixin:PLAYER_LOOT_SPEC_UPDATED()
 	self:Refresh()
 end
 
-function EncounterJournalMixin:SetTooltipItem(tooltip, item, locationInfo)
+function EncounterJournalMixin:GetTooltipInfo(tooltip, item, locationInfo)
 	local classID, specID = EJ_GetLootFilter();
 
 	if (specID == 0) then
@@ -68,7 +68,8 @@ function EncounterJournalMixin:SetTooltipItem(tooltip, item, locationInfo)
 		end
 	end
 
-    tooltip:SetHyperlink(item:GetItemLink(), classID, specID)
+	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink(), classID, specID);
+	return tooltipInfo
 end
 
 function EncounterJournalMixin:Refresh()

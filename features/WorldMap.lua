@@ -13,11 +13,9 @@ function WorldMapMixin:Init()
 	end)
 end
 
-function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local itemLink = item:GetItemLink()
-	if itemLink then
-		tooltip:SetHyperlink(itemLink)
-	end
+function WorldMapMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
+	return tooltipInfo
 end
 
 function WorldMapMixin:Refresh()
@@ -38,7 +36,7 @@ function WorldMapMixin:GetDisplayInfo(button, item, feature, locationInfo, optio
 end
 
 function WorldMapMixin:UpdatePin(pin)
-	QuestEventListener:AddCallback(pin.questID, function()
+		-- QuestEventListener:AddCallback(pin.questID, function()
 		local options = {
 			statusProminentSize = 30
 		}
@@ -85,7 +83,7 @@ function WorldMapMixin:UpdatePin(pin)
 			questID = pin.questID,
 			questItem
 		}, options)
-	end)
+	-- end)
 end
 
 CaerdonWardrobe:RegisterFeature(WorldMapMixin)

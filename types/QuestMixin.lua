@@ -2,7 +2,6 @@ CaerdonQuest = {}
 CaerdonQuestMixin = {}
 
 local version, build, date, tocversion = GetBuildInfo()
-local isShadowlands = tonumber(build) > 35700
 
 --[[static]] function CaerdonQuest:CreateFromCaerdonItem(caerdonItem)
 	if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
@@ -14,17 +13,89 @@ local isShadowlands = tonumber(build) > 35700
     return itemType
 end
 
+function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
+    local cancelFunc = function() end;
+
+    local item = self.item
+    local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
+    local questID = strsplit(":", linkOptions);
+    
+    local numQuestRewards
+    local numQuestChoices
+
+    local isWorldQuest = C_QuestLog.IsWorldQuest(questID)
+
+    local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
+    if isQuestLog then
+        numQuestRewards = GetNumQuestLogRewards(questID)
+        numQuestChoices = GetNumQuestLogChoices(questID)
+    else
+        numQuestRewards = GetNumQuestRewards()
+        numQuestChoices = GetNumQuestChoices()
+    end
+
+    if numQuestRewards == 0 and numQuestChoices == 0 then
+        callbackFunction()
+    else
+        local continuableContainer = ContinuableContainer:Create();
+        for i = 1, numQuestRewards do
+            local itemLink, name, texture, numItems, quality, isUsable, itemID
+            if isQuestLog then
+                name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID)
+            else
+                name, texture, numItems, quality, isUsable, itemID = GetQuestItemInfo("reward", i)
+            end
+
+            local item = Item:CreateFromItemID(itemID)
+            if not item:IsItemEmpty() then
+                continuableContainer:AddContinuable(item);
+            end
+        end
+
+        for i = 1, numQuestChoices do
+            local itemLink, name, texture, numItems, quality, isUsable, itemID
+            if isQuestLog then
+                name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
+            else
+                name, texture, numItems, quality, isUsable, itemID = GetQuestItemInfo("choice", i)
+            end
+
+            local item = Item:CreateFromItemID(itemID)
+            if not item:IsItemEmpty() then
+                continuableContainer:AddContinuable(item);
+            end
+        end
+
+        cancelFunc = continuableContainer:ContinueOnLoad(callbackFunction);
+    end
+
+    return cancelFunc
+end
+
+
+function CaerdonQuestMixin:ContinueOnItemDataLoad(callbackFunction)
+    if type(callbackFunction) ~= "function" then
+        error("Usage: ContinueOnItemDataLoad(callbackFunction)", 2);
+    end
+
+    self:LoadQuestRewardData(callbackFunction)
+end
+
+-- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
+function CaerdonQuestMixin:ContinueWithCancelOnItemDataLoad(callbackFunction)
+    if type(callbackFunction) ~= "function" then
+        error("Usage: ContinueWithCancelOnItemDataLoad(callbackFunction)", 2);
+    end
+
+    return self:LoadQuestRewardData(callbackFunction)
+end
+
 function CaerdonQuestMixin:GetQuestInfo()
     local item = self.item
     local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
     local questID = strsplit(":", linkOptions);
 
-    local questName
-    if isShadowlands then
-        questName = C_QuestLog.GetTitleForQuestID(questID)
-    else
-        questName = C_QuestLog.GetQuestInfo(questID)
-    end
+    local questName = C_QuestLog.GetTitleForQuestID(questID)
 
     local level = C_QuestLog.GetQuestDifficultyLevel(questID)
 
@@ -45,18 +116,9 @@ function CaerdonQuestMixin:GetQuestInfo()
     local isWorldQuest
     local isBonusObjective
 
-    if isShadowlands then
-        tagInfo = C_QuestLog.GetQuestTagInfo(questID)
-        isWorldQuest = C_QuestLog.IsWorldQuest(questID)
-        isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
-    else
-        local tagID, tagName, worldQuestType, rarity, isElite, tradeskillLineIndex, displayExpiration = GetQuestTagInfo(questID)
-        tagInfo = { tagID = tagID, tagName = tagName, worldQuestType = worldQuestType, rarity = rarity,
-            isElite = isElite, tradeskillLineIndex = tradeSkillLineIndex, displayExpiration = displayExpiration
-        }
-        isWorldQuest = worldQuestType ~= nil
-        isBonusObjective = IsQuestTask(questID) and not isWorldQuest
-    end
+    tagInfo = C_QuestLog.GetQuestTagInfo(questID)
+    isWorldQuest = C_QuestLog.IsWorldQuest(questID)
+    isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
 
     local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
     if isQuestLog then

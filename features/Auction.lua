@@ -22,21 +22,21 @@ end
 function AuctionMixin:AUCTION_HOUSE_SHOW()
 	if (self.shouldHookAuction) then
 		self.shouldHookAuction = false
-		ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.AuctionsFrame.AllAuctionsList.ScrollBox, function (...) self:OnAllAuctionsInitializedFrame(...) end, self, false)
-        ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox, function (...) self:OnInitializedFrame(...) end, self, false)
+		ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.AuctionsFrame.AllAuctionsList.ScrollBox, function (...) self:OnAllAuctionsInitializedFrame(...) end, AuctionHouseFrame.AuctionsFrame.AllAuctionsList, false)
+        ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox, function (...) self:OnInitializedFrame(...) end, AuctionHouseFrame.BrowseResultsFrame.ItemList, false)
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)
 		hooksecurefunc(AuctionHouseFrame.AuctionsFrame.ItemDisplay, "SetItemInternal", function(...) self:OnSetAuctionItemDisplay(...) end)
 	end
 end
 
-function AuctionMixin:OnAllAuctionsInitializedFrame(frame, elementData)
+function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, elementData)
 	local button = frame
 	local item
 
 	if not elementData then return end
 
-	local browseResult = AuctionHouseFrame.AuctionsFrame.AllAuctionsList.tableBuilder:GetDataProviderData(elementData)
+	local browseResult = auctionFrame.tableBuilder:GetDataProviderData(elementData)
 	local item = CaerdonItem:CreateFromItemLink(browseResult.itemLink)
 	local itemKey = browseResult.itemKey
 
@@ -55,7 +55,7 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(frame, elementData)
 	})
 end
 
-function AuctionMixin:OnInitializedFrame(frame, elementData)
+function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 	local button = frame
 	local item
 
@@ -86,13 +86,17 @@ function AuctionMixin:OnInitializedFrame(frame, elementData)
 	})
 end
 
-function AuctionMixin:SetTooltipItem(tooltip, item, locationInfo)
+function AuctionMixin:GetTooltipInfo(tooltip, item, locationInfo)
 	local itemKey = locationInfo.itemKey
+	local tooltipInfo
+
 	if itemKey then
-		tooltip:SetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+		tooltipInfo = MakeBaseTooltipInfo("GetItemKey", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
 	else
-		tooltip:SetHyperlink(item:GetItemLink())
+		tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink())
 	end
+
+	return tooltipInfo
 end
 
 function AuctionMixin:Refresh()

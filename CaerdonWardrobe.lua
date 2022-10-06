@@ -53,7 +53,7 @@ end
 
 local equipLocations = {}
 
-function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
+function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, button, options, tooltipData)
 	local itemID = item:GetItemID()
 	local itemLink = item:GetItemLink()
 	local itemData = item:GetItemData()
@@ -95,42 +95,42 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 		bindingStatus = nil
 	end
 
-	if tooltipInfo then
-		hasEquipEffect = tooltipInfo.hasEquipEffect
+	if tooltipData then
+		hasEquipEffect = tooltipData.hasEquipEffect
 
-		if tooltipInfo.isRelearn then
+		if tooltipData.isRelearn then
 			needsItem = false
 		end
 
 		if not bindingStatus then
-			bindingStatus = tooltipInfo.bindingStatus
+			bindingStatus = tooltipData.bindingStatus
 		end
 
-		if tooltipInfo.isKnownSpell then
+		if tooltipData.isKnownSpell then
 			needsItem = false
 		end
 
-		isLocked = tooltipInfo.isLocked
+		isLocked = tooltipData.isLocked
 
-		if tooltipInfo.supercedingSpellNotKnown then
+		if tooltipData.supercedingSpellNotKnown then
 			unusableItem = true
 			skillTooLow = true
 		end
 
-		if tooltipInfo.foundRedRequirements then
+		if tooltipData.foundRedRequirements then
 			unusableItem = true
 			skillTooLow = true
 		end
 
 		-- TODO: Can we scan the embedded item tooltip? Probably need to do something like EmbeddedItemTooltip_SetItemByID
 		-- This may only matter for recipes, so I may have to use LibRecipes if I can't get the recipe info for the created item.
-		if tooltipInfo.requiredTradeSkillMissingOrUnleveled then
+		if tooltipData.requiredTradeSkillMissingOrUnleveled then
 			unusableItem = true
 			-- if isBindOnPickup then -- assume all unknown not needed for now
 				needsItem = false
 			-- end
 		else
-			if tooltipInfo.requiredTradeSkillTooLow then
+			if tooltipData.requiredTradeSkillTooLow then
 				unusableItem = true
 				skillTooLow = true
 				needsItem = true -- still need this but need to rank up
@@ -660,7 +660,7 @@ function CaerdonWardrobeMixin:ItemIsSellable(itemID, itemLink)
 	return isSellable
 end
 
-function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options, tooltipData)
 	local mogStatus = nil
 
    	if not options then
@@ -684,7 +684,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 	local caerdonType = item:GetCaerdonItemType()
 	local itemData = item:GetItemData()
 
-	local bindingResult = self:GetBindingStatus(item, feature, locationInfo, button, options, tooltipInfo)
+	local bindingResult = self:GetBindingStatus(item, feature, locationInfo, button, options, tooltipData)
 	local bindingStatus = bindingResult.bindingStatus
 
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
@@ -725,14 +725,14 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 			if transmogInfo.isTransmog then
 				if transmogInfo.needsItem then
 					if not transmogInfo.isCompletionistItem then
-						if transmogInfo.hasMetRequirements and not tooltipInfo.foundRedRequirements then
+						if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
 							mogStatus = "own"
 						else
 							mogStatus = "lowSkill"
 						end
 					else
 						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-							if transmogInfo.hasMetRequirements and not tooltipInfo.foundRedRequirements then
+							if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
 								mogStatus = "ownPlus"
 							else
 								mogStatus = "lowSkillPlus"
@@ -935,8 +935,8 @@ function CaerdonWardrobeMixin:RegisterFeature(mixin)
 	end
 end
 
-function CaerdonWardrobeMixin:GetTooltipInfo(item)
-	local tooltipInfo = {
+function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
+	local tooltipData = {
 		hasEquipEffect = false,
 		isRelearn = false,
 		bindingStatus = nil,
@@ -953,87 +953,99 @@ function CaerdonWardrobeMixin:GetTooltipInfo(item)
 	-- Weird bug with scanning tooltips - have to disable showing
 	-- transmog info during the scan
 	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(false)
-	SetCVar("missingTransmogSourceInItemTooltips", 0)
-	local originalAlwaysCompareItems = GetCVarBool("alwaysCompareItems")
-	SetCVar("alwaysCompareItems", 0)
+	-- SetCVar("missingTransmogSourceInItemTooltips", 0)
+	-- local originalAlwaysCompareItems = GetCVarBool("alwaysCompareItems")
+	-- SetCVar("alwaysCompareItems", 0)
 
 	local scanTip = CaerdonWardrobeFrameTooltip
-	local numLines = scanTip:NumLines()
-	for lineIndex = 1, numLines do
-		local scanName = scanTip:GetName()
-		local line = _G[scanName .. "TextLeft" .. lineIndex]
-		local lineText = line:GetText()
-		if lineText then
-			-- TODO: Find a way to identify Equip Effects without tooltip scanning
-			if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
-				tooltipInfo.hasEquipEffect = true
-			end
+	local tooltipInfo = feature:GetTooltipInfo(scanTip, item, locationInfo)
+	if tooltipInfo then
+		scanTip:ProcessInfo(tooltipInfo);
+		local data = scanTip:GetTooltipData()
+		local lines = data.lines
+		-- DevTools_Dump(data)
 
-			-- TODO: Don't like matching this hard-coded string but not sure how else
-			-- to prevent the expensive books from showing as learnable when I don't
-			-- know how to tell if they have recipes you need.
-			local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
-			if isRecipe and strmatch(lineText, L["Use: Re%-learn .*"]) then
-				tooltipInfo.isRelearn = true
-			end
-
-			if not tooltipInfo.bindingStatus then
-				-- Check if account bound - TODO: Is there a non-scan way?
-				tooltipInfo.bindingStatus = bindTextTable[lineText]
-			end
-
-			if lineText == RETRIEVING_ITEM_INFO then
-				tooltipInfo.isRetrieving = true
-				break
-			elseif lineText == ITEM_SOULBOUND then
-				tooltipInfo.isSoulbound = true
-			elseif lineText == ITEM_SPELL_KNOWN then
-				tooltipInfo.isKnownSpell = true
-			elseif lineText == LOCKED then
-				tooltipInfo.isLocked = true
-			elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
-				tooltipInfo.supercedingSpellNotKnown = true
-			end
-
-			-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
-			local r, g, b = line:GetTextColor()
-			local hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
-			-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
-			-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
-			if hex == "fe1f1f" then
-				tooltipInfo.foundRedRequirements = true
-			end
-			if isRecipe then
-				-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
-				-- which toons could learn a recipe.
-
-				local replaceSkill = "%w"
-				
-				-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-				local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-				skillCheck = string.gsub(skillCheck, "2%$", "")
-				skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-				if GetLocale() == "zhCN" then
-					skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-				else
-					skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+		for lineIndex = 1, #lines do
+			-- local scanName = scanTip:GetName()
+			-- local line = _G[scanName .. "TextLeft" .. lineIndex]
+			local line = lines[lineIndex]
+			local lineText = line.leftText
+			if lineText then
+				-- TODO: Find a way to identify Equip Effects without tooltip scanning
+				if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
+					tooltipData.hasEquipEffect = true
 				end
-				if strmatch(lineText, skillCheck) then
-					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 
-					local hasSkillLine, meetsMinRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
-					tooltipInfo.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
-					tooltipInfo.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
-				end		
+				-- TODO: Don't like matching this hard-coded string but not sure how else
+				-- to prevent the expensive books from showing as learnable when I don't
+				-- know how to tell if they have recipes you need.
+				local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
+				if isRecipe and strmatch(lineText, L["Use: Re%-learn .*"]) then
+					tooltipData.isRelearn = true
+				end
+
+				if not tooltipData.bindingStatus then
+					-- Check if account bound - TODO: Is there a non-scan way?
+					tooltipData.bindingStatus = bindTextTable[lineText]
+				end
+
+				if lineText == RETRIEVING_ITEM_INFO then
+					tooltipData.isRetrieving = true
+					break
+				elseif lineText == ITEM_SOULBOUND then
+					tooltipData.isSoulbound = true
+				elseif lineText == ITEM_SPELL_KNOWN then
+					tooltipData.isKnownSpell = true
+				elseif lineText == LOCKED then
+					tooltipData.isLocked = true
+				elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+					tooltipData.supercedingSpellNotKnown = true
+				end
+
+				-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
+				-- local r, g, b = line:GetTextColor()
+				-- local hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
+				local hex = line.leftColor:GenerateHexColor()
+				-- TODO: Generated hex color includes alpha value so need to check for full red.
+				-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
+				-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
+				-- if hex == "fe1f1f" then -- TODO: this was old value... check to see if still needed for anything
+				if hex == "ffff2020" then
+					tooltipData.foundRedRequirements = true
+				end
+				if isRecipe then
+					-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
+					-- which toons could learn a recipe.
+
+					local replaceSkill = "%w"
+					
+					-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+					local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
+					skillCheck = string.gsub(skillCheck, "2%$", "")
+					skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+					if GetLocale() == "zhCN" then
+						skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+					else
+						skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+					end
+					if strmatch(lineText, skillCheck) then
+						local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+
+						local hasSkillLine, meetsMinRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+
+						tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
+						tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+					end		
+				end
 			end
 		end
 	end
 
 	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
-	SetCVar("missingTransmogSourceInItemTooltips", 1)
-	SetCVar("alwaysCompareItems", originalAlwaysCompareItems)
+	-- SetCVar("missingTransmogSourceInItemTooltips", 1)
+	-- SetCVar("alwaysCompareItems", originalAlwaysCompareItems)
 
-	return tooltipInfo
+	return tooltipData
 end
 
 function CaerdonWardrobeMixin:ClearButton(button)
@@ -1122,31 +1134,27 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 				local options = processInfo.options
 				
 				if feature:IsSameItem(button, item, locationInfo) and button.caerdonKey == locationKey then
-					local scanTip = CaerdonWardrobeFrameTooltip
-					scanTip:ClearLines()
-					feature:SetTooltipItem(scanTip, item, locationInfo)
-							
 					if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-						local tooltipInfo = self:GetTooltipInfo(item)
+						local tooltipData = self:GetTooltipData(item, feature, locationInfo)
 
 						-- This is lame, but tooltips end up not having all of their data
 						-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
 						-- Specifically, the Equip: line was missing on a fishing pole (and other items)
 						-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
 						-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
-						if tooltipInfo.isRetrieving then
+						if tooltipData.isRetrieving then
 							self:UpdateButton(button, item, feature, locationInfo, options)
 						else
-							self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+							self:ProcessItem(button, item, feature, locationInfo, options, tooltipData)
 						end
 					else
 						item:ContinueOnItemLoad(function ()
 							if button.caerdonKey == locationKey then
-								local tooltipInfo = self:GetTooltipInfo(item)
-								if tooltipInfo.isRetrieving then
+								local tooltipData = self:GetTooltipData(item, feature, locationInfo)
+								if tooltipData and tooltipData.isRetrieving then
 									self:UpdateButton(button, item, feature, locationInfo, options)
 								else
-									self:ProcessItem(button, item, feature, locationInfo, options, tooltipInfo)
+									self:ProcessItem(button, item, feature, locationInfo, options, tooltipData)
 								end
 							else
 								self:ClearButton(button)

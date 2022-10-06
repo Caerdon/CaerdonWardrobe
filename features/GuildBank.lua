@@ -14,8 +14,9 @@ function GuildBankMixin:ADDON_LOADED(name)
 	end
 end
 
-function GuildBankMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetGuildBankItem(locationInfo.tab, locationInfo.index)
+function GuildBankMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetGuildBankItem", locationInfo.tab, locationInfo.index);
+	return tooltipInfo
 end
 
 function GuildBankMixin:Refresh()

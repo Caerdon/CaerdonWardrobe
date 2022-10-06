@@ -36,8 +36,13 @@ function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
 	end
 end
 
-function BagsMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+function BagsMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
+	-- tooltipInfo.lineFilters = {
+	-- 		Enum.TooltipDataLineType.SellPrice,
+	-- 		Enum.TooltipDataLineType.ProfessionCraftingQuality,
+	-- };
+	return tooltipInfo
 end
 
 function BagsMixin:Refresh()

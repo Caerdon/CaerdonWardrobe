@@ -8,8 +8,9 @@ function ReagentBankMixin:Init()
     hooksecurefunc("BankFrameItemButton_Update", function(...) self:OnBankItemUpdate(...) end)
 end
 
-function ReagentBankMixin:SetTooltipItem(tooltip, item, locationInfo)
-    local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", ReagentBankButtonIDToInvSlotID(locationInfo.slot))
+function ReagentBankMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", ReagentBankButtonIDToInvSlotID(locationInfo.slot));
+	return tooltipInfo
 end
 
 function ReagentBankMixin:Refresh()

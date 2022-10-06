@@ -14,7 +14,7 @@ end
 function TradeSkillMixin:TRADE_SKILL_SHOW(name)
     if not self.isHooked then
         self.isHooked = true
-        ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, self, false)
+        ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
 
         -- ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self)
         hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
@@ -22,7 +22,7 @@ function TradeSkillMixin:TRADE_SKILL_SHOW(name)
     end
 end
 
-function TradeSkillMixin:OnInitializedFrame(frame, elementData)
+function TradeSkillMixin:OnInitializedFrame(listFrame, frame, elementData)
     -- DevTools_Dump(elementData)
     local button = frame
     local data = elementData:GetData();
@@ -95,8 +95,9 @@ function TradeSkillMixin:OnScrollBoxRangeChanged(sortPending)
     end)
 end
 
-function TradeSkillMixin:SetTooltipItem(tooltip, item, locationInfo)
-    tooltip:SetHyperlink(item:GetItemLink())
+function TradeSkillMixin:GetTooltipInfo(tooltip, item, locationInfo)
+	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
+	return tooltipInfo
 end
 
 function TradeSkillMixin:Refresh()
