@@ -16,6 +16,7 @@ CaerdonItemType = {
     Currency = "Currency",
     Equipment = "Equipment",
     Mount = "Mount",
+    Profession = "Profession",
     Recipe = "Recipe",
     Quest = "Quest",
     Toy = "Toy"
@@ -396,6 +397,8 @@ function CaerdonItemMixin:GetCaerdonItemType()
                 caerdonType = CaerdonItemType.Quest
             elseif typeID == Enum.ItemClass.Recipe then
                 caerdonType = CaerdonItemType.Recipe
+            elseif typeID == Enum.ItemClass.Profession then
+                caerdonType = CaerdonItemType.Profession
             else
                 print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
@@ -425,6 +428,8 @@ function CaerdonItemMixin:GetItemData()
             self.caerdonItemData = CaerdonEquipment:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Mount then
             self.caerdonItemData = CaerdonMount:CreateFromCaerdonItem(self)
+        elseif caerdonType == CaerdonItemType.Profession then
+            self.caerdonItemData = CaerdonProfession:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Quest then
             self.caerdonItemData = CaerdonQuest:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Recipe then

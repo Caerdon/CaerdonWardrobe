@@ -452,6 +452,17 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		alpha = 0.9
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-wow")
+	elseif status == "needForProfession" then
+		-- TODO: Need to improve to pass data for icon determination.
+		isProminent = true
+		if displayInfo and displayInfo.ownIcon.shouldShow then
+			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+			-- mogStatus:SetTexture("Interface\\WorldMap\\worldquest-icon-enchanting")
+			if status == "ownPlus" then
+				mogStatus:SetVertexColor(0.4, 1, 0)
+			end
+		end
 	elseif status == "own" or status == "ownPlus" then
 		isProminent = true
 		if displayInfo and displayInfo.ownIcon.shouldShow then
@@ -852,6 +863,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		local toyInfo = itemData:GetToyInfo()
 		if toyInfo.needsItem then
 			mogStatus = "own"
+		end
+	elseif caerdonType == CaerdonItemType.Profession then
+		local professionInfo = itemData:GetProfessionInfo()
+		if professionInfo.needsItem then
+			mogStatus = "needForProfession"
 		end
 	elseif bindingResult.needsItem then
 		if caerdonType == CaerdonItemType.Recipe then
