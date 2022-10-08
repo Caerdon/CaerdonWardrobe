@@ -976,11 +976,15 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 	local scanTip = CaerdonWardrobeFrameTooltip
 	local tooltipInfo = feature:GetTooltipInfo(scanTip, item, locationInfo)
 	if tooltipInfo then
+		local isBattlePetShown = BattlePetTooltip:IsShown()
 		scanTip:ProcessInfo(tooltipInfo);
+		-- ProcessInfo can cause the BattlePetTooltip to pop open, unfortunately.  Need to see if there's a better way to handle this.
+		if not isBattlePetShown then
+			BattlePetTooltip:Hide()
+		end
+
 		local data = scanTip:GetTooltipData()
 		local lines = data and data.lines or {}
-		-- DevTools_Dump(data)
-
 		for lineIndex = 1, #lines do
 			-- local scanName = scanTip:GetName()
 			-- local line = _G[scanName .. "TextLeft" .. lineIndex]

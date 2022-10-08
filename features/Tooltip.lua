@@ -66,18 +66,14 @@ end
 
 function TooltipMixin:OnLoad()
     -- TODO: Add Debug enable option setting
-
-    -- GameTooltip:HookScript("OnTooltipSetItem", function (...) Tooltip:OnTooltipSetItem(...) end)
-    -- ItemRefTooltip:HookScript("OnTooltipSetItem", function(...) Tooltip:OnTooltipSetItem(...) end)
-
     hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
     hooksecurefunc(ItemRefTooltip, "ItemRefSetHyperlink", function (...) Tooltip:OnItemRefSetHyperlink(...) end)
-    -- TODO (Check this): hooksecurefunc(GameTooltip, "SetQuestCurrency", function (...) Tooltip:OnTooltipSetQuestCurrency(...) end)
     hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
     hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
-    -- hooksecurefunc("GameTooltip_AddQuestRewardsToTooltip", function(...) Tooltip:OnGameTooltipAddQuestRewardsToTooltip(...) end)
-    -- For embedded items (for quests, at least)
-    -- hooksecurefunc("EmbeddedItemTooltip_OnTooltipSetItem", function(...) Tooltip:OnEmbeddedItemTooltipSetItem(...) end)
+    hooksecurefunc("EmbeddedItemTooltip_SetItemByQuestReward", function(...) Tooltip:OnEmbeddedItemTooltipSetItemByQuestReward(...) end)
+
+    -- TODO: Hack to ensure GameTooltip:SetPoint is called.  Otherwise, BattlePetTooltip can puke.
+    GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
 
     -- hooksecurefunc("TaskPOI_OnEnter", function(...) Tooltip:OnTaskPOIOnEnter(...) end)
     
@@ -170,7 +166,14 @@ function TooltipMixin:OnItemRefSetHyperlink(tooltip, itemLink)
 end
 
 function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
-    if tooltipInfo.getterName == "GetBackpackToken" then
+    if tooltipInfo.getterName == "GetAction" then
+        local actionID = unpack(tooltipInfo.getterArgs)
+        local actionType, id, actionSubType = GetActionInfo(actionID);
+        if actionType == "item" then -- ignoring summonmount, spell, flyout, and any others for now
+            local item = CaerdonItem:CreateFromItemID(id)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
+    elseif tooltipInfo.getterName == "GetBackpackToken" then
         local currencyIndex = unpack(tooltipInfo.getterArgs)
         local currencyInfo = C_CurrencyInfo.GetBackpackCurrencyInfo(currencyIndex);
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyInfo.currencyTypesID)
@@ -183,7 +186,7 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             Tooltip:ProcessTooltip(tooltip, item)
         end
     elseif tooltipInfo.getterName == "GetCurrencyByID" then
-        local currencyID = unpack(tooltipInfo.getterArgs)
+        local currencyID, amount = unpack(tooltipInfo.getterArgs)
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
@@ -192,20 +195,50 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink = C_CurrencyInfo.GetCurrencyListLink(tokenIndex)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetHyperlink" then
+        local itemLink, optionalArg1, optionalArg2, hideVendorPrice = unpack(tooltipInfo.getterArgs)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetInventoryItem" then
-        local target, slot = unpack(tooltipInfo.getterArgs)
+        local target, slot, hideUselessStats = unpack(tooltipInfo.getterArgs)
         if slot then
             local item = CaerdonItem:CreateFromEquipmentSlot(slot)
             Tooltip:ProcessTooltip(tooltip, item)
         end
+    elseif tooltipInfo.getterName == "GetItemByID" then
+        local itemID, quality = unpack(tooltipInfo.getterArgs) -- TODO: Do I need to include quality into CreateFromItemID somehow?
+        local item = CaerdonItem:CreateFromItemID(itemID)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetLootItem" then
         local slot = unpack(tooltipInfo.getterArgs)
         local itemLink = GetLootSlotLink(slot);
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetRecipeReagentItem" then
+        local recipeSpellID, dataSlotIndex = unpack(tooltipInfo.getterArgs)
+        local itemLink = C_TradeSkillUI.GetRecipeFixedReagentItemLink(recipeSpellID, dataSlotIndex)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetRecipeResultItem" then
+        local recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID = unpack(tooltipInfo.getterArgs)
+        -- TODO: Not sure why this method is missing...
+        -- local resultItem = GetRecipeResultItem(recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID)
+        local resultItem = C_TradeSkillUI.GetRecipeOutputItemData(recipeID, craftingReagents, recraftItemGUID)
+        local item = CaerdonItem:CreateFromItemLink(resultItem.hyperlink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetQuestItem" then
+        local rewardType, index, allowCollectionText = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetQuestItemLink(rewardType, index)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetQuestLogItem" then
         local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestLogItemLink(rewardType, index, questID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetQuestLogSpecialItem" then
+        local questIndex = unpack(tooltipInfo.getterArgs)
+        local itemLink, item, charges, showItemWhenComplete = GetQuestLogSpecialItemInfo(questIndex)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     else -- try and cover anything else I haven't added
@@ -221,21 +254,12 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     end
 end
 
--- function TooltipMixin:OnGameTooltipAddQuestRewardsToTooltip(tooltip, questID, style)
---     local itemLink = GetQuestLink(questID)
---     -- TODO: This happens with assault quests, at least... need to look into more
---     if itemLink then
---         local item = CaerdonItem:CreateFromItemLink(itemLink)
---         Tooltip:ProcessTooltip(tooltip, item)
---     end
--- end
-
--- function TooltipMixin:OnEmbeddedItemTooltipSetItem(tooltip)
---     if tooltip.itemID then
---         local item = CaerdonItem:CreateFromItemID(tooltip.itemID)
---         Tooltip:ProcessTooltip(tooltip.Tooltip, item, true)
---     end
--- end
+function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLogIndex, questID, rewardType, showCollectionText)
+    rewardType = rewardType or "reward";
+    local itemLink = GetQuestLogItemLink(rewardType, questLogIndex, questID)
+    local item = CaerdonItem:CreateFromItemLink(itemLink)
+    Tooltip:ProcessTooltip(tooltip.Tooltip, item, true)
+end
 
 -- function TooltipMixin:OnTooltipSetItem(tooltip)
 --     local itemName, itemLink = tooltip:GetItem()
@@ -267,13 +291,6 @@ end
 --             print(button:GetID())
 --         end)
 --     end
--- end
-
--- function TooltipMixin:OnBattlePetTooltipShow(speciesID, level, quality, health, power, speed, customName)
-    -- if BattlePetTooltip:IsShown() then
-    --     local item = CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName)
-    --     Tooltip:ProcessTooltip(BattlePetTooltip, item)
-    -- end
 -- end
 
 function TooltipMixin:AddTooltipData(tooltip, item, title, value, valueColor)

@@ -17,7 +17,9 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
     local cancelFunc = function() end;
 
     local item = self.item
-    local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
+    -- TODO: Temp... pulls out quality info to allow extract link to work - may need to consolidate and use elsewhere or figure out if there's a new way to parse.
+    local tempLink = self.item:GetItemLink():gsub(" |A:.*|a]", "]")
+    local linkType, linkOptions, name = LinkUtil.ExtractLink(tempLink);
     local questID = strsplit(":", linkOptions);
     
     local numQuestRewards
