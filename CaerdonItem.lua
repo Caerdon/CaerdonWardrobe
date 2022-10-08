@@ -338,7 +338,8 @@ function IsUnhandledType(typeID, subTypeID)
         typeID == Enum.ItemClass.Quiver or 
         typeID == Enum.ItemClass.Key or
         typeID == Enum.ItemClass.Glyph or
-        typeID == Enum.ItemClass.WoWToken
+        typeID == Enum.ItemClass.WoWToken or
+        typeID == nil
 end
 
 function CaerdonItemMixin:GetCaerdonItemType()
@@ -351,7 +352,8 @@ function CaerdonItemMixin:GetCaerdonItemType()
     -- if I want to support swapping the item out
     if not self.caerdonItemType then
         local caerdonType = CaerdonItemType.Unknown
-        local linkType, linkOptions, displayText = LinkUtil.ExtractLink(itemLink)
+        local tempLink = itemLink:gsub(" |A:.*|a]", "]") -- TODO: Temp hack to remove quality from link that breaks ExtractLink
+        local linkType, linkOptions, displayText = LinkUtil.ExtractLink(tempLink)
         local typeID = self:GetItemTypeID()
         local subTypeID = self:GetItemSubTypeID()
 
@@ -368,7 +370,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Quest
         elseif linkType == "currency" then
             caerdonType = CaerdonItemType.Currency
-        elseif linkType == "item" or linkType == nil then -- Assuming item if we don't have a linkType
+        elseif linkType == "item" then -- TODO: May have fixed this with the gsub hack: or linkType == nil then -- Assuming item if we don't have a linkType
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)
             -- Keep an eye on this
@@ -400,7 +402,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == Enum.ItemClass.Profession then
                 caerdonType = CaerdonItemType.Profession
             else
-                print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
+                print("Unknown item type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
         else
             print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)

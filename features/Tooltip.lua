@@ -205,6 +205,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             local item = CaerdonItem:CreateFromEquipmentSlot(slot)
             Tooltip:ProcessTooltip(tooltip, item)
         end
+    elseif tooltipInfo.getterName == "GetItemByGUID" then
+        local guid = unpack(tooltipInfo.getterArgs)
+        local item = CaerdonItem:CreateFromItemGUID(guid)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetItemByID" then
         local itemID, quality = unpack(tooltipInfo.getterArgs) -- TODO: Do I need to include quality into CreateFromItemID somehow?
         local item = CaerdonItem:CreateFromItemID(itemID)
@@ -221,11 +225,13 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetRecipeResultItem" then
         local recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID = unpack(tooltipInfo.getterArgs)
-        -- TODO: Not sure why this method is missing...
+        -- TODO: Not sure why this method is missing... but I'm not always get a full item back from GetRecipeOutputItemData so need to figure something out here. (See enchant Writ of Versatility)
         -- local resultItem = GetRecipeResultItem(recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID)
         local resultItem = C_TradeSkillUI.GetRecipeOutputItemData(recipeID, craftingReagents, recraftItemGUID)
-        local item = CaerdonItem:CreateFromItemLink(resultItem.hyperlink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if resultItem.hyperlink then
+            local item = CaerdonItem:CreateFromItemLink(resultItem.hyperlink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetQuestItem" then
         local rewardType, index, allowCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestItemLink(rewardType, index)
