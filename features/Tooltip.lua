@@ -170,16 +170,16 @@ function TooltipMixin:OnItemRefSetHyperlink(tooltip, itemLink)
 end
 
 function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
-    if tooltipInfo.getterName == "GetBagItem" then
+    if tooltipInfo.getterName == "GetBackpackToken" then
+        local currencyIndex = unpack(tooltipInfo.getterArgs)
+        local currencyInfo = C_CurrencyInfo.GetBackpackCurrencyInfo(currencyIndex);
+        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyInfo.currencyTypesID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetBagItem" then
         local bag, slot = unpack(tooltipInfo.getterArgs)
         if bag and slot then
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-            Tooltip:ProcessTooltip(tooltip, item)
-        end
-    elseif tooltipInfo.getterName == "GetInventoryItem" then
-        local target, slot = unpack(tooltipInfo.getterArgs)
-        if slot then
-            local item = CaerdonItem:CreateFromEquipmentSlot(slot)
             Tooltip:ProcessTooltip(tooltip, item)
         end
     elseif tooltipInfo.getterName == "GetCurrencyByID" then
@@ -192,10 +192,15 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink = C_CurrencyInfo.GetCurrencyListLink(tokenIndex)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
-    elseif tooltipInfo.getterName == "GetBackpackToken" then
-        local currencyIndex = unpack(tooltipInfo.getterArgs)
-        local currencyInfo = C_CurrencyInfo.GetBackpackCurrencyInfo(currencyIndex);
-        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyInfo.currencyTypesID)
+    elseif tooltipInfo.getterName == "GetInventoryItem" then
+        local target, slot = unpack(tooltipInfo.getterArgs)
+        if slot then
+            local item = CaerdonItem:CreateFromEquipmentSlot(slot)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
+    elseif tooltipInfo.getterName == "GetLootItem" then
+        local slot = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetLootSlotLink(slot);
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetQuestLogItem" then

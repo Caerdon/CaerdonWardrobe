@@ -978,7 +978,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 	if tooltipInfo then
 		scanTip:ProcessInfo(tooltipInfo);
 		local data = scanTip:GetTooltipData()
-		local lines = data.lines
+		local lines = data and data.lines or {}
 		-- DevTools_Dump(data)
 
 		for lineIndex = 1, #lines do

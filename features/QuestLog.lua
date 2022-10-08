@@ -65,7 +65,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 
 	if questID == 0 then return end -- quest abandoned
 
-	-- QuestEventListener:AddCallback(questID, function()
+	QuestEventListener:AddCallback(questID, function()
 		local questLink = GetQuestLink(questID)
 		if not questLink then
 			local questName = C_QuestLog.GetTitleForQuestID(questID)
@@ -181,7 +181,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				end
 			end
 		end)
-	-- end)
+	end)
 end
 
 CaerdonWardrobe:RegisterFeature(QuestLogMixin)
