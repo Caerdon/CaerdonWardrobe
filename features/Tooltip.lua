@@ -199,6 +199,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink, optionalArg1, optionalArg2, hideVendorPrice = unpack(tooltipInfo.getterArgs)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetInboxItem" then
+        local messageIndex, attachmentIndex = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetInboxItemLink(messageIndex, attachmentIndex or 1)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetInventoryItem" then
         local target, slot, hideUselessStats = unpack(tooltipInfo.getterArgs)
         if slot then
@@ -232,6 +237,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             local item = CaerdonItem:CreateFromItemLink(resultItem.hyperlink)
             Tooltip:ProcessTooltip(tooltip, item)
         end
+    elseif tooltipInfo.getterName == "GetSendMailItem" then
+        local attachmentIndex = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetSendMailItemLink(attachmentIndex)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetQuestItem" then
         local rewardType, index, allowCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestItemLink(rewardType, index)
@@ -393,6 +403,8 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
      end
 
     function continueLoad()
+        if not tooltip.info then return end -- tooltip needs access to tooltipInfo or things just break
+
         GameTooltip_AddBlankLineToTooltip(tooltip);
         GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe", LIGHTBLUE_FONT_COLOR);
 

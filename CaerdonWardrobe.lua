@@ -360,7 +360,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgrade" then
+		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgrade" or status == "readyToCombine" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -462,6 +462,25 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			if status == "ownPlus" then
 				mogStatus:SetVertexColor(0.4, 1, 0)
 			end
+		end
+	elseif status == "canCombine" then
+		isProminent = true
+		if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
+			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+			-- if status == "ownPlus" then
+			-- 	mogStatus:SetVertexColor(0.4, 1, 0)
+			-- end
+		end
+	elseif status == "readyToCombine" then
+		-- isProminent = true
+		if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
+			alpha = 0.9
+			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetTexture("Interface\\HELPFRAME\\ReportLagIcon-AuctionHouse")
+			-- if status == "ownPlus" then
+			-- 	mogStatus:SetVertexColor(0.4, 1, 0)
+			-- end
 		end
 	elseif status == "own" or status == "ownPlus" then
 		isProminent = true
@@ -869,6 +888,13 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		if professionInfo.needsItem then
 			mogStatus = "needForProfession"
 		end
+	elseif caerdonType == CaerdonItemType.Consumable then
+		if tooltipData.canCombine then
+			mogStatus = "canCombine"
+			if tooltipData.readyToCombine then
+				mogStatus = "readyToCombine"
+			end
+		end
 	elseif bindingResult.needsItem then
 		if caerdonType == CaerdonItemType.Recipe then
 			if bindingResult.unusableItem then
@@ -953,6 +979,7 @@ end
 
 function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 	local tooltipData = {
+		canCombine = false,
 		hasEquipEffect = false,
 		isRelearn = false,
 		bindingStatus = nil,
@@ -1002,6 +1029,20 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 				local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
 				if isRecipe and strmatch(lineText, L["Use: Re%-learn .*"]) then
 					tooltipData.isRelearn = true
+				end
+
+				if item:GetCaerdonItemType() == CaerdonItemType.Consumable and item:HasItemLocation() then
+					local location = item:GetItemLocation()
+					local maxStackCount = C_Item.GetItemMaxStackSize(location)
+					local currentStackCount = C_Item.GetStackCount(location)
+			
+					local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
+					if combineCount > 1 then
+						tooltipData.canCombine = true
+						if combineCount <= currentStackCount then
+							tooltipData.readyToCombine = true
+						end
+					end
 				end
 
 				if not tooltipData.bindingStatus then
