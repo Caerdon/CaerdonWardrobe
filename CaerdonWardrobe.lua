@@ -947,7 +947,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		local containerID = bag
 		local containerSlot = slot
 
-		local texture, itemCount, locked, quality, readable, lootable, _ = C_Container.GetContainerItemInfo(containerID, containerSlot);
+		local texture, itemCount, locked, quality, readable, lootable, _ = (C_Container and C_Container.GetContainerItemInfo and C_Container.GetContainerItemInfo(containerID, containerSlot)) or GetContainerItemInfo(containerID, containerSlot)
 		if lootable then
 			local startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
 			if duration > 0 and not isEnabled then
@@ -961,7 +961,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 			end
 		else
 			local isEquipped = false
-			local money, itemCount, refundSec, currencyCount, hasEnchants = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped);
+			local money, itemCount, refundSec, currencyCount, hasEnchants = (C_Container and C_Container.GetContainerItemPurchaseInfo and C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)) or GetContainerItemPurchaseInfo(bag, slot, isEquipped)
 			if refundSec then
 				mogStatus = "refundable"
 			end
@@ -1002,7 +1002,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 
 	-- SetCVar("missingTransmogSourceInItemTooltips", 0)
 
-	local data = feature:GetTooltipData(item, locationInfo)
+	local data = C_TooltipInfo and feature:GetTooltipData(item, locationInfo) or nil
 	if data then
 		local isBattlePetShown = BattlePetTooltip:IsShown()
 		local lines = data and data.lines or {}

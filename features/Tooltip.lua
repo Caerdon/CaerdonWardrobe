@@ -5,7 +5,9 @@ local TooltipMixin, Tooltip = {}
 --     Tooltip[event](Quest, ...)
 -- end)
 
-C_TooltipInfo.GM = {} -- TODO: Temp hack fix for world quest hover
+if C_TooltipInfo and not C_TooltipInfo.GM then
+    C_TooltipInfo.GM = {} -- TODO: Temp hack fix for world quest hover
+end
 
 local SpecMap = {
     [250] = "Blood Death Knight",
@@ -66,14 +68,17 @@ end
 
 function TooltipMixin:OnLoad()
     -- TODO: Add Debug enable option setting
-    hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
-    hooksecurefunc(ItemRefTooltip, "ItemRefSetHyperlink", function (...) Tooltip:OnItemRefSetHyperlink(...) end)
-    hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
-    hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
-    hooksecurefunc("EmbeddedItemTooltip_SetItemByQuestReward", function(...) Tooltip:OnEmbeddedItemTooltipSetItemByQuestReward(...) end)
+    if C_TooltipInfo then
+        hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
+        hooksecurefunc(ItemRefTooltip, "ItemRefSetHyperlink", function (...) Tooltip:OnItemRefSetHyperlink(...) end)
+        hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
+        hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
+        hooksecurefunc("EmbeddedItemTooltip_SetItemByQuestReward", function(...) Tooltip:OnEmbeddedItemTooltipSetItemByQuestReward(...) end)
+    end
 
     -- TODO: Hack to ensure GameTooltip:SetPoint is called.  Otherwise, BattlePetTooltip can puke.
-    GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
+    -- Shouldn't need now that I switched to C_TooltipInfo...
+    -- GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
 
     -- hooksecurefunc("TaskPOI_OnEnter", function(...) Tooltip:OnTaskPOIOnEnter(...) end)
     
