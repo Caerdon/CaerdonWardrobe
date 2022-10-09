@@ -947,7 +947,13 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		local containerID = bag
 		local containerSlot = slot
 
-		local texture, itemCount, locked, quality, readable, lootable, _ = (C_Container and C_Container.GetContainerItemInfo and C_Container.GetContainerItemInfo(containerID, containerSlot)) or GetContainerItemInfo(containerID, containerSlot)
+		local texture, itemCount, locked, quality, readable, lootable
+		if C_Container and C_Container.GetContainerItemInfo then
+			texture, itemCount, locked, quality, readable, lootable, _ = C_Container.GetContainerItemInfo(containerID, containerSlot)
+		else 
+			texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
+		end
+
 		if lootable then
 			local startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
 			if duration > 0 and not isEnabled then
@@ -961,7 +967,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 			end
 		else
 			local isEquipped = false
-			local money, itemCount, refundSec, currencyCount, hasEnchants = (C_Container and C_Container.GetContainerItemPurchaseInfo and C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)) or GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+			local money, itemCount, refundSec, currencyCount, hasEnchants
+			if C_Container and C_Container.GetContainerItemPurchaseInfo then
+				money, itemCount, refundSec, currencyCount, hasEnchants = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+			else
+				money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+			end
 			if refundSec then
 				mogStatus = "refundable"
 			end
