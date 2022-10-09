@@ -86,17 +86,13 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 	})
 end
 
-function AuctionMixin:GetTooltipInfo(tooltip, item, locationInfo)
+function AuctionMixin:GetTooltipData(item, locationInfo)
 	local itemKey = locationInfo.itemKey
-	local tooltipInfo
-
 	if itemKey then
-		tooltipInfo = MakeBaseTooltipInfo("GetItemKey", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+		return C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
 	else
-		tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink())
+		return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 	end
-
-	return tooltipInfo
 end
 
 function AuctionMixin:Refresh()

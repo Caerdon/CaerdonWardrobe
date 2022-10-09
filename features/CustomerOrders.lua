@@ -40,9 +40,8 @@ function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
     })
 end
 
-function CustomerOrdersMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
-	return tooltipInfo
+function CustomerOrdersMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 
 	-- local option = locationInfo.option
 	-- if option then

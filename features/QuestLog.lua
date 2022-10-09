@@ -12,7 +12,7 @@ function QuestLogMixin:Init()
 	return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE" }
 end
 
-function QuestLogMixin:GetTooltipInfo(tooltip, item, locationInfo)
+function QuestLogMixin:GetTooltipData(item, locationInfo)
 	local currentQuestID = self:GetQuestID()
 	local tooltipInfo
 
@@ -21,12 +21,10 @@ function QuestLogMixin:GetTooltipInfo(tooltip, item, locationInfo)
 	if currentQuestID ~= locationInfo.questID then return end
 
 	if QuestInfoFrame.questLog then
-		tooltipInfo = MakeBaseTooltipInfo("GetQuestLogItem", locationInfo.type, locationInfo.index, locationInfo.questID);
+		return C_TooltipInfo.GetQuestLogItem(locationInfo.type, locationInfo.index, locationInfo.questID)
 	else
-		tooltipInfo = MakeBaseTooltipInfo("GetQuestItem", locationInfo.type, locationInfo.index, locationInfo.questID);
+		return C_TooltipInfo.GetQuestItem(locationInfo.type, locationInfo.index, locationInfo.questID)
 	end
-
-	return tooltipInfo
 end
 
 function QuestLogMixin:Refresh()

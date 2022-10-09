@@ -95,9 +95,8 @@ function TradeSkillMixin:OnScrollBoxRangeChanged(sortPending)
     end)
 end
 
-function TradeSkillMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
-	return tooltipInfo
+function TradeSkillMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function TradeSkillMixin:Refresh()

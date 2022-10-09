@@ -35,9 +35,8 @@ end
 --     end)
 -- end
 
-function WorldQuestsListMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
-	return tooltipInfo
+function WorldQuestsListMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function WorldQuestsListMixin:Refresh()

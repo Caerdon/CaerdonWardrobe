@@ -23,15 +23,12 @@ function BankMixin:Init()
 	hooksecurefunc(ContainerFrame13, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 end
 
-function BankMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo
+function BankMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.bag == BANK_CONTAINER then
-		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
+		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
+		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
-
-	return tooltipInfo
 end
 
 function BankMixin:Refresh()

@@ -12,8 +12,8 @@ function CaerdonWardrobeFeatureMixin:Init()
 	error(format("Caerdon Wardrobe: Must provide Init implementation for %s", self:GetName()))
 end
 
-function CaerdonWardrobeFeatureMixin:GetTooltipInfo(scanTip, item, locationInfo)
-	error(format("Caerdon Wardrobe: Must provide GetTooltipInfo implementation for %s", self:GetName()))
+function CaerdonWardrobeFeatureMixin:GetTooltipData(item, locationInfo)
+	error(format("Caerdon Wardrobe: Must provide GetTooltipData implementation for %s", self:GetName()))
 end
 
 function CaerdonWardrobeFeatureMixin:Refresh()

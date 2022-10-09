@@ -13,9 +13,8 @@ function ZygorMixin:Init()
     hooksecurefunc(self.WorldQuests, 'QueueDetailsLoad', function(...) self:RefreshButtons(...) end)
 end
 
-function ZygorMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
-	return tooltipInfo
+function ZygorMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function ZygorMixin:Refresh()

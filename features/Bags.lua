@@ -36,13 +36,8 @@ function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
 	end
 end
 
-function BagsMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
-	-- tooltipInfo.lineFilters = {
-	-- 		Enum.TooltipDataLineType.SellPrice,
-	-- 		Enum.TooltipDataLineType.ProfessionCraftingQuality,
-	-- };
-	return tooltipInfo
+function BagsMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function BagsMixin:Refresh()

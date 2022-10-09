@@ -13,9 +13,8 @@ function WorldMapMixin:Init()
 	end)
 end
 
-function WorldMapMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
-	return tooltipInfo
+function WorldMapMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function WorldMapMixin:Refresh()

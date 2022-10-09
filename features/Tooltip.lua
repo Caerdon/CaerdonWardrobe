@@ -218,9 +218,24 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemID, quality = unpack(tooltipInfo.getterArgs) -- TODO: Do I need to include quality into CreateFromItemID somehow?
         local item = CaerdonItem:CreateFromItemID(itemID)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetItemKey" then
+        local itemID, itemLevel, itemSuffix, requiredLevel = unpack(tooltipInfo.getterArgs)
+        local itemKey = { itemID = itemID, itemLevel = itemLevel, itemSuffix = itemSuffix, requiredLevel = requiredLevel }
+        local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(itemKey)
+        if itemKeyInfo and itemKeyInfo.battlePetLink then
+            item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
+        else
+            item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+        end
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetLootItem" then
         local slot = unpack(tooltipInfo.getterArgs)
         local itemLink = GetLootSlotLink(slot);
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetMerchantItem" then
+        local slot = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetMerchantItemLink(slot);
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetRecipeReagentItem" then
@@ -250,8 +265,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetQuestLogItem" then
         local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestLogItemLink(rewardType, index, questID)
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetQuestLogSpecialItem" then
         local questIndex = unpack(tooltipInfo.getterArgs)
         local itemLink, item, charges, showItemWhenComplete = GetQuestLogSpecialItemInfo(questIndex)

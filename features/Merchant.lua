@@ -15,19 +15,16 @@ function MerchantMixin:MERCHANT_UPDATE()
 	self:Refresh()
 end
 
-function MerchantMixin:GetTooltipInfo(tooltip, item, locationInfo)
-    local tooltipInfo
+function MerchantMixin:GetTooltipData(item, locationInfo)
     if MerchantFrame.selectedTab == 1 then
         if locationInfo.slot == "buybackbutton" then
-            tooltipInfo = MakeBaseTooltipInfo("GetBuybackItem", GetNumBuybackItems());
+            return C_TooltipInfo.GetBuybackItem(GetNumBuybackItems())
         else
-            tooltipInfo = MakeBaseTooltipInfo("GetMerchantItem", locationInfo.slot);
+            return C_TooltipInfo.GetMerchantItem(locationInfo.slot)
         end
     else
-        tooltip:SetBuybackItem(locationInfo.slot)
+        return C_TooltipInfo.GetBuybackItem(locationInfo.slot)
     end
-
-	return tooltipInfo
 end
 
 function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)

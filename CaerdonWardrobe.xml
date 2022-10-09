@@ -4,9 +4,6 @@
 	<Script file="ItemDataMixin.lua" />
 	<Script file="CaerdonWardrobe.lua" />
 
-	<!-- This is derived from GameTooltip in GameTooltip.xml -->
-	<GameTooltip name="CaerdonWardrobeFrameTooltip" mixin="TooltipDataHandlerMixin" inherits="SharedTooltipTemplate" hidden="true" />
-
 	<Frame name="CaerdonWardrobe" secureMixin="CaerdonWardrobeMixin">
 		<Scripts>
 			<OnLoad method="OnLoad"/>

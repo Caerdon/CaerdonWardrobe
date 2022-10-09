@@ -14,9 +14,8 @@ function BlackMarketMixin:ADDON_LOADED(name)
 	end
 end
 
-function BlackMarketMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
-	return tooltipInfo
+function BlackMarketMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function BlackMarketMixin:Refresh()

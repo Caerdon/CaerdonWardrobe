@@ -882,6 +882,13 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		local toyInfo = itemData:GetToyInfo()
 		if toyInfo.needsItem then
 			mogStatus = "own"
+		else
+			mogStatus = "collected"
+			-- TODO: This is used a few times... need to fix to pass in dynamic data
+			local newOptions = {}
+			CaerdonAPI:MergeTable(newOptions, options)
+			options = newOptions
+			options.isSellable = true
 		end
 	elseif caerdonType == CaerdonItemType.Profession then
 		local professionInfo = itemData:GetProfessionInfo()
@@ -993,118 +1000,121 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 		requiredTradeSkillTooLow = false
 	}
 
-	-- Weird bug with scanning tooltips - have to disable showing
-	-- transmog info during the scan
-	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(false)
 	-- SetCVar("missingTransmogSourceInItemTooltips", 0)
-	-- local originalAlwaysCompareItems = GetCVarBool("alwaysCompareItems")
-	-- SetCVar("alwaysCompareItems", 0)
 
-	local scanTip = CaerdonWardrobeFrameTooltip
-	local tooltipInfo = feature:GetTooltipInfo(scanTip, item, locationInfo)
-	if tooltipInfo then
+	local data = feature:GetTooltipData(item, locationInfo)
+	if data then
 		local isBattlePetShown = BattlePetTooltip:IsShown()
-		scanTip:ProcessInfo(tooltipInfo);
-		-- ProcessInfo can cause the BattlePetTooltip to pop open, unfortunately.  Need to see if there's a better way to handle this.
-		if not isBattlePetShown then
-			BattlePetTooltip:Hide()
-		end
-
-		local data = scanTip:GetTooltipData()
 		local lines = data and data.lines or {}
-		for lineIndex = 1, #lines do
-			-- local scanName = scanTip:GetName()
-			-- local line = _G[scanName .. "TextLeft" .. lineIndex]
-			local line = lines[lineIndex]
-			local lineText = line.leftText
-			if lineText then
-				-- TODO: Find a way to identify Equip Effects without tooltip scanning
-				if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
-					tooltipData.hasEquipEffect = true
-				end
+		for lineIndex, line in ipairs(data.lines) do
+			local args = {}
+			for argIndex, arg in ipairs(line.args) do
+				args[arg.field] = arg.stringVal or arg.intVal or arg.floatVal or arg.boolVal or arg.colorVal or arg.guidVal
+			end
 
-				-- TODO: Don't like matching this hard-coded string but not sure how else
-				-- to prevent the expensive books from showing as learnable when I don't
-				-- know how to tell if they have recipes you need.
-				local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
-				if isRecipe and strmatch(lineText, L["Use: Re%-learn .*"]) then
-					tooltipData.isRelearn = true
-				end
+			if args.type == Enum.TooltipDataLineType.Generic then
+				local lineText = args.leftText
+				if lineText then
+					-- TODO: Find a way to identify Equip Effects without tooltip scanning
+					if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
+						tooltipData.hasEquipEffect = true
+					end
 
-				if item:GetCaerdonItemType() == CaerdonItemType.Consumable and item:HasItemLocation() then
-					local location = item:GetItemLocation()
-					local maxStackCount = C_Item.GetItemMaxStackSize(location)
-					local currentStackCount = C_Item.GetStackCount(location)
-			
-					local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
-					if combineCount > 1 then
-						tooltipData.canCombine = true
-						if combineCount <= currentStackCount then
-							tooltipData.readyToCombine = true
+					local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
+					if isRecipe then
+						-- TODO: Don't like matching this hard-coded string but not sure how else
+						-- to prevent the expensive books from showing as learnable when I don't
+						-- know how to tell if they have recipes you need.
+						if strmatch(lineText, L["Use: Re%-learn .*"]) then
+							tooltipData.isRelearn = true
+						end
+
+						-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
+						-- which toons could learn a recipe.
+
+						local replaceSkill = "%w"
+						
+						-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+						local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
+						skillCheck = string.gsub(skillCheck, "2%$", "")
+						skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+						if GetLocale() == "zhCN" then
+							skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+						else
+							skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+						end
+						if strmatch(lineText, skillCheck) then
+							local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+
+							local hasSkillLine, meetsMinRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+
+							tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
+							tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+						end		
+					end
+
+					if item:GetCaerdonItemType() == CaerdonItemType.Consumable and item:HasItemLocation() then
+						local location = item:GetItemLocation()
+						local maxStackCount = C_Item.GetItemMaxStackSize(location)
+						local currentStackCount = C_Item.GetStackCount(location)
+				
+						local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
+						if combineCount > 1 then
+							tooltipData.canCombine = true
+							if combineCount <= currentStackCount then
+								tooltipData.readyToCombine = true
+							end
 						end
 					end
-				end
 
-				if not tooltipData.bindingStatus then
-					-- Check if account bound - TODO: Is there a non-scan way?
-					tooltipData.bindingStatus = bindTextTable[lineText]
-				end
-
-				if lineText == RETRIEVING_ITEM_INFO then
-					tooltipData.isRetrieving = true
-					break
-				elseif lineText == ITEM_SOULBOUND then
-					tooltipData.isSoulbound = true
-				elseif lineText == ITEM_SPELL_KNOWN then
-					tooltipData.isKnownSpell = true
-				elseif lineText == LOCKED then
-					tooltipData.isLocked = true
-				elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
-					tooltipData.supercedingSpellNotKnown = true
-				end
-
-				-- TODO: Should possibly only look for "Classes:" but could have other reasons for not being usable
-				-- local r, g, b = line:GetTextColor()
-				-- local hex = string.format("%02x%02x%02x", r*255, g*255, b*255)
-				local hex = line.leftColor:GenerateHexColor()
-				-- TODO: Generated hex color includes alpha value so need to check for full red.
-				-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
-				-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
-				-- if hex == "fe1f1f" then -- TODO: this was old value... check to see if still needed for anything
-				if hex == "ffff2020" then
-					tooltipData.foundRedRequirements = true
-				end
-				if isRecipe then
-					-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
-					-- which toons could learn a recipe.
-
-					local replaceSkill = "%w"
-					
-					-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-					local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-					skillCheck = string.gsub(skillCheck, "2%$", "")
-					skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-					if GetLocale() == "zhCN" then
-						skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-					else
-						skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+					if not tooltipData.bindingStatus then
+						-- Check if account bound - TODO: Is there a non-scan way?
+						tooltipData.bindingStatus = bindTextTable[lineText]
 					end
-					if strmatch(lineText, skillCheck) then
-						local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 
-						local hasSkillLine, meetsMinRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
-
-						tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
-						tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
-					end		
+					if lineText == RETRIEVING_ITEM_INFO then
+						tooltipData.isRetrieving = true
+						break
+					elseif lineText == ITEM_SOULBOUND then
+						tooltipData.isSoulbound = true
+					elseif lineText == ITEM_SPELL_KNOWN then
+						tooltipData.isKnownSpell = true
+					elseif lineText == LOCKED then
+						tooltipData.isLocked = true
+					elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+						tooltipData.supercedingSpellNotKnown = true
+					end
 				end
+
+					local hex = args.leftColor:GenerateHexColor()
+					-- TODO: Generated hex color includes alpha value so need to check for full red.
+					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
+					-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
+					-- if hex == "fe1f1f" then -- TODO: this was old value... check to see if still needed for anything
+					if hex == "ffff2020" then
+						tooltipData.foundRedRequirements = true
+					end
+			elseif args.type == Enum.TooltipDataLineType.Blank then
+			-- elseif args.type == Enum.TooltipDataLineType.UnitName then
+			elseif args.type == Enum.TooltipDataLineType.GemSocket then
+			-- elseif args.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
+			-- elseif args.type == Enum.TooltipDataLineType.AzeriteEssencePower then
+			-- elseif args.type == Enum.TooltipDataLineType.LearnableSpell then
+			-- elseif args.type == Enum.TooltipDataLineType.UnitThreat then
+			-- elseif args.type == Enum.TooltipDataLineType.QuestObjective then
+			-- elseif args.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
+			-- elseif args.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
+			elseif args.type == Enum.TooltipDataLineType.SellPrice then
+			elseif args.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
+			-- elseif args.type == Enum.TooltipDataLineType.SpellName then
+			else
+				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink())
+				DevTools_Dump(args)
 			end
 		end
 	end
 
-	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
 	-- SetCVar("missingTransmogSourceInItemTooltips", 1)
-	-- SetCVar("alwaysCompareItems", originalAlwaysCompareItems)
 
 	return tooltipData
 end

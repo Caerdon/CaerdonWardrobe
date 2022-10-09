@@ -14,16 +14,12 @@ function CargBagsMixin:Init()
 	hooksecurefunc(cbNivaya, "UpdateSlot", function(...) self:UpdateSlot(...) end)
 end
 
-function CargBagsMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo
+function CargBagsMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
+		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
+		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
-
-	return tooltipInfo
 end
 
 function CargBagsMixin:Refresh()

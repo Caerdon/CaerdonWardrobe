@@ -14,9 +14,8 @@ function GuildBankMixin:ADDON_LOADED(name)
 	end
 end
 
-function GuildBankMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetGuildBankItem", locationInfo.tab, locationInfo.index);
-	return tooltipInfo
+function GuildBankMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
 
 function GuildBankMixin:Refresh()

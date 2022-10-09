@@ -8,9 +8,8 @@ function LootMixin:Init()
 	LootFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self)
 end
 
-function LootMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo = MakeBaseTooltipInfo("GetLootItem", locationInfo.elementData.slotIndex);
-	return tooltipInfo
+function LootMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetLootItem(locationInfo.elementData.slotIndex)
 end
 
 function LootMixin:Refresh()

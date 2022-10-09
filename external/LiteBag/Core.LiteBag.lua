@@ -13,15 +13,12 @@ function LiteBagMixin:Init()
     LiteBag_AddUpdateEvent('TRANSMOG_COLLECTION_UPDATED')
 end
 
-function LiteBagMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo
+function LiteBagMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.bag == BANK_CONTAINER then
-		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
+		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
+		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
-
-	return tooltipInfo
 end
 
 function LiteBagMixin:Refresh()

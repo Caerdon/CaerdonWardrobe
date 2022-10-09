@@ -9,21 +9,18 @@ function BagnonMixin:Init()
 	hooksecurefunc(Bagnon.Item, "Update", function(...) self:OnUpdateSlot(...) end)
 end
 
-function BagnonMixin:GetTooltipInfo(tooltip, item, locationInfo)
-	local tooltipInfo
+function BagnonMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.isOffline then
 		if not item:IsItemEmpty() then
-			tooltipInfo = MakeBaseTooltipInfo("GetHyperlink", item:GetItemLink());
+			return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 		end
 	elseif not item:HasItemLocationBankOrBags() then
-		tooltipInfo = MakeBaseTooltipInfo("GetGuildBankItem", locationInfo.tab, locationInfo.index);
+		return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 	elseif locationInfo.bag == BANK_CONTAINER then
-		tooltipInfo = MakeBaseTooltipInfo("GetInventoryItem", "player", BankButtonIDToInvSlotID(locationInfo.slot));
+		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		tooltipInfo = MakeBaseTooltipInfo("GetBagItem", locationInfo.bag, locationInfo.slot);
+		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
-
-	return tooltipInfo
 end
 
 function BagnonMixin:Refresh()
