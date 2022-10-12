@@ -171,6 +171,11 @@ function TooltipMixin:OnItemRefSetHyperlink(tooltip, itemLink)
 end
 
 function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
+    if not CaerdonWardrobeConfig.Debug.Enabled then
+        -- Not doing anything other than debug for tooltips right now
+        return
+    end
+
     if tooltipInfo.getterName == "GetAction" then
         local actionID = unpack(tooltipInfo.getterArgs)
         local actionType, id, actionSubType = GetActionInfo(actionID);
@@ -190,6 +195,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
             Tooltip:ProcessTooltip(tooltip, item)
         end
+    elseif tooltipInfo.getterName == "GetBuybackItem" then
+        local index = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetBuybackItemLink(index)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetCurrencyByID" then
         local currencyID, amount = unpack(tooltipInfo.getterArgs)
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
