@@ -955,7 +955,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		end
 
 		if lootable then
-			local startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
+			local startTime, duration, isEnabled
+			if C_Container and C_Container.GetContainerItemCooldown then
+				startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
+			else
+				startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
+			end
 			if duration > 0 and not isEnabled then
 				mogStatus = "refundable" -- Can't open yet... show timer
 			else

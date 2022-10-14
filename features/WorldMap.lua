@@ -54,7 +54,7 @@ function WorldMapMixin:UpdatePin(pin)
 			return
 		end
 		
-		local questInfo = itemData:GetQuestInfo()
+		-- local questInfo = itemData:GetQuestInfo()
 
 		-- TODO: Review if necessary to iterate through rewards and find unknown ones...
 		local bestIndex, bestType = QuestUtils_GetBestQualityItemRewardIndex(pin.questID)

@@ -3,16 +3,25 @@ CaerdonWardrobeConfigEncounterJournalMixin = CreateFromMixins(CaerdonWardrobeCon
 local ADDON_NAME, NS = ...
 local L = NS.L
 
-CAERDON_ENCOUNTERJOURNAL_LABEL = L["Encounter Journal"]
-CAERDON_ENCOUNTERJOURNAL_SUBTEXT = L["These are settings that apply to the Encounter Journal."]
-
-function CaerdonWardrobeConfigEncounterJournalMixin:OnLoad()
-    self.name = "Encounter Journal"
-    self.parent = "Caerdon Wardrobe"
-	self.options = {
-        -- TODO: Option was around, but it wasn't actually used so disabling panel for now
-        -- showLearnableByOther = { text = "Show items learnable for a different toon", tooltip = "Highlights items that can be learned and used for transmog but not by your current toon.", default = NS:GetDefaultConfig().Icon.ShowLearnableByOther.EncounterJournal and "1" or "0" },
-	}
-
-	-- InterfaceOptionsPanel_OnLoad(self);
+function CaerdonWardrobeConfigEncounterJournalMixin:GetTitle()
+    return "Encounter Journal"
 end
+
+function CaerdonWardrobeConfigEncounterJournalMixin:Register()
+    self:Init()
+
+    -- TODO: These aren't implemented right now.
+    -- self.options = {
+    --     showLearnable = { key = "showLearnable", text = "Show items learnable for current toon", tooltip = "Highlights items that can be learned and used for transmog by your current toon.", configSection="Icon", configSubsection="ShowLearnable", configValue="EncounterJournal" },
+    --     showLearnableByOther = { key = "showLearnableByOther", text = "Show items learnable for a different toon", tooltip = "Highlights items that can be learned and used for transmog but not by your current toon.", configSection="Icon", configSubsection="ShowLearnableByOther", configValue="EncounterJournal" },
+    --     showBindingText = { key = "showBindingText", text = "Show binding text", tooltip = "Show binding text on items based on General configuration.", configSection="Binding", configSubsection="ShowStatus", configValue="EncounterJournal" },
+	-- }
+
+    -- self:ConfigureSection(self:GetTitle(), "EncounterJournalSection")
+
+    -- self:ConfigureCheckboxNew(self.options["showLearnable"])
+    -- self:ConfigureCheckboxNew(self.options["showLearnableByOther"])
+    -- self:ConfigureCheckboxNew(self.options["showBindingText"])
+end
+
+-- SettingsRegistrar:AddRegistrant(function () CaerdonWardrobeConfigBankAndBagsMixin:Register() end)

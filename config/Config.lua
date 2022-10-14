@@ -29,8 +29,9 @@ function CaerdonWardrobeConfigMixin:OnLoad()
 	self.OnDefault = self.default;
 	self.OnRefresh = self.refresh;
 
-	InterfaceOptions_AddCategory(self)
-	local category, layout = Settings.RegisterCanvasLayoutCategory(self, self.name);
+	local category, layout = Settings.RegisterCanvasLayoutCategory(self, self.name, self.name);
+	category.ID = self.name;
+	Settings.RegisterAddOnCategory(category);
 
 	-- Any anchors assigned to the frame will be disposed. Intended anchors need to be provided through
 	-- the layout object. If no anchor points are provided, the frame will be anchored to TOPLEFT (0,0)
