@@ -353,6 +353,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
     if not self.caerdonItemType then
         local caerdonType = CaerdonItemType.Unknown
         local tempLink = itemLink:gsub(" |A:.*|a]", "]") -- TODO: Temp hack to remove quality from link that breaks ExtractLink
+
         local linkType, linkOptions, displayText = LinkUtil.ExtractLink(tempLink)
         local typeID = self:GetItemTypeID()
         local subTypeID = self:GetItemSubTypeID()
@@ -370,6 +371,8 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Quest
         elseif linkType == "currency" then
             caerdonType = CaerdonItemType.Currency
+        elseif linkType == "mount" then
+            caerdonType = CaerdonItemType.Mount
         elseif linkType == "item" or linkType == nil then -- Assuming item if we don't have a linkType
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)

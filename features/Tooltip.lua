@@ -198,6 +198,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             Tooltip:ProcessTooltip(tooltip, item)
         end
+    elseif tooltipInfo.getterName == "GetCompanionPet" then
+        local petGUID = unpack(tooltipInfo.getterArgs)
+        local itemLink = C_PetJournal.GetBattlePetLink(petGUID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetCurrencyByID" then
         local currencyID, amount = unpack(tooltipInfo.getterArgs)
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
@@ -206,6 +211,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetCurrencyToken" then
         local tokenIndex = unpack(tooltipInfo.getterArgs)
         local itemLink = C_CurrencyInfo.GetCurrencyListLink(tokenIndex)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetHeirloomByItemID" then
+        local itemID = unpack(tooltipInfo.getterArgs)
+        local itemLink = C_Heirloom.GetHeirloomLink(itemID)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetHyperlink" then
@@ -261,6 +271,13 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink = GetMerchantItemLink(slot);
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetMountBySpellID" then
+        local spellID, checkIndoors = unpack(tooltipInfo.getterArgs)
+        local itemLink = C_MountJournal.GetMountLink(spellID)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetRecipeReagentItem" then
         local recipeSpellID, dataSlotIndex = unpack(tooltipInfo.getterArgs)
         local itemLink = C_TradeSkillUI.GetRecipeFixedReagentItemLink(recipeSpellID, dataSlotIndex)
@@ -278,6 +295,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetSendMailItem" then
         local attachmentIndex = unpack(tooltipInfo.getterArgs)
         local itemLink = GetSendMailItemLink(attachmentIndex)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetToyByItemID" then
+        local itemID = unpack(tooltipInfo.getterArgs)
+        local itemLink = C_ToyBox.GetToyLink(itemID)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetQuestItem" then
@@ -481,7 +503,16 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         end
 
         self:AddTooltipData(tooltip, item, "Identified Type", identifiedType, identifiedColor)
-        self:AddTooltipDoubleData(tooltip, item, "Link Type", forDebugUse and forDebugUse.linkType or "Missing", "Options", forDebugUse and forDebugUse.linkOptions or "Missing")
+        if forDebugUse then
+            local optionsLength = strlen(forDebugUse.linkOptions or "")
+            local optionsEnd = ""
+            if optionsLength > 30 then
+                optionsEnd = "..."
+            end
+
+            self:AddTooltipDoubleData(tooltip, item, "Link Type", forDebugUse.linkType or "Missing", "Options", (strsub(forDebugUse.linkOptions or "", 1, 30) .. optionsEnd) or "Missing")
+        end
+
         if item:GetItemQuality() then
             self:AddTooltipData(tooltip, item, "Quality", _G[format("ITEM_QUALITY%d_DESC", item:GetItemQuality())], item:GetItemQualityColor().color)
         end
