@@ -302,6 +302,12 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink = C_ToyBox.GetToyLink(itemID)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetQuestCurrency" then
+        local itemType, currencyIndex = unpack(tooltipInfo.getterArgs)
+        local currencyID = GetQuestCurrencyID(itemType, currencyIndex)
+        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetQuestItem" then
         local rewardType, index, allowCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestItemLink(rewardType, index)

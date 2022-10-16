@@ -1113,7 +1113,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 			elseif args.type == Enum.TooltipDataLineType.Blank then
 			-- elseif args.type == Enum.TooltipDataLineType.UnitName then
 			elseif args.type == Enum.TooltipDataLineType.GemSocket then
-			-- elseif args.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
+			elseif args.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
 			-- elseif args.type == Enum.TooltipDataLineType.AzeriteEssencePower then
 			-- elseif args.type == Enum.TooltipDataLineType.LearnableSpell then
 			-- elseif args.type == Enum.TooltipDataLineType.UnitThreat then
