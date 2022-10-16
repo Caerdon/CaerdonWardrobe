@@ -370,7 +370,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Quest
         elseif linkType == "currency" then
             caerdonType = CaerdonItemType.Currency
-        elseif linkType == "item" then -- TODO: May have fixed this with the gsub hack: or linkType == nil then -- Assuming item if we don't have a linkType
+        elseif linkType == "item" or linkType == nil then -- Assuming item if we don't have a linkType
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)
             -- Keep an eye on this

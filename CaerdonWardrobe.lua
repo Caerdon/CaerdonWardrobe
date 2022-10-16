@@ -1028,7 +1028,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 				args[arg.field] = arg.stringVal or arg.intVal or arg.floatVal or arg.boolVal or arg.colorVal or arg.guidVal
 			end
 
-			if args.type == Enum.TooltipDataLineType.Generic then
+			if args.type == Enum.TooltipDataLineType.None then
 				local lineText = args.leftText
 				if lineText then
 					-- TODO: Find a way to identify Equip Effects without tooltip scanning
@@ -1124,8 +1124,8 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 			elseif args.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
 			-- elseif args.type == Enum.TooltipDataLineType.SpellName then
 			else
-				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink())
-				DevTools_Dump(args)
+				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink() .. ", type: " .. tostring(args.type))
+				-- DevTools_Dump(args)
 			end
 		end
 	end

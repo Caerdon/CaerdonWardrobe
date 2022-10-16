@@ -5,10 +5,6 @@ local TooltipMixin, Tooltip = {}
 --     Tooltip[event](Quest, ...)
 -- end)
 
-if C_TooltipInfo and not C_TooltipInfo.GM then
-    C_TooltipInfo.GM = {} -- TODO: Temp hack fix for world quest hover
-end
-
 local SpecMap = {
     [250] = "Blood Death Knight",
     [251] = "Frost Death Knight",
@@ -198,8 +194,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetBuybackItem" then
         local index = unpack(tooltipInfo.getterArgs)
         local itemLink = GetBuybackItemLink(index)
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetCurrencyByID" then
         local currencyID, amount = unpack(tooltipInfo.getterArgs)
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
@@ -243,9 +241,19 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             item = CaerdonItem:CreateFromItemID(itemKey.itemID)
         end
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetLootCurrency" then
+        local slot = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetLootSlotLink(slot);
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetLootItem" then
         local slot = unpack(tooltipInfo.getterArgs)
         local itemLink = GetLootSlotLink(slot);
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetMerchantCostItem" then
+        local slot, costIndex = unpack(tooltipInfo.getterArgs)
+        local itemTexture, itemValue, itemLink, currencyName = GetMerchantItemCostItem(slot, costIndex);
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetMerchantItem" then
@@ -275,8 +283,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetQuestItem" then
         local rewardType, index, allowCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestItemLink(rewardType, index)
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetQuestLogItem" then
         local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestLogItemLink(rewardType, index, questID)
@@ -297,6 +307,16 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
                 print("MISSING HANDLER FOR " .. tooltipInfo.getterName)
                 local item = CaerdonItem:CreateFromItemID(tooltipData.id)
                 Tooltip:ProcessTooltip(tooltip, item)
+            elseif tooltipData.type == Enum.TooltipDataType.Spell then
+            elseif tooltipData.type == Enum.TooltipDataType.Unit then
+            elseif tooltipData.type == Enum.TooltipDataType.Corpse then
+            elseif tooltipData.type == Enum.TooltipDataType.Object then
+            elseif tooltipData.type == Enum.TooltipDataType.UnitAura then
+            elseif tooltipData.type == Enum.TooltipDataType.PetAction then
+            elseif tooltipData.type == Enum.TooltipDataType.MinimapMouseover then
+            elseif tooltipData.type == Enum.TooltipDataType.QuestPartyProgress then
+            else
+                print("MISSING HANDLER FOR " .. tooltipInfo.getterName .. ", type: " .. tostring(tooltipData.type))
             end
         end
     end
