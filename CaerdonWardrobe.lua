@@ -901,6 +901,13 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		if professionInfo.needsItem then
 			mogStatus = "needForProfession"
 		end
+	elseif caerdonType == CaerdonItemType.Quest then
+		if tooltipData.canCombine then
+			mogStatus = "canCombine"
+			if tooltipData.readyToCombine then
+				mogStatus = "readyToCombine"
+			end
+		end
 	elseif caerdonType == CaerdonItemType.Consumable then
 		if tooltipData.canCombine then
 			mogStatus = "canCombine"
@@ -968,11 +975,13 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		local texture, itemCount, locked, quality, readable, lootable
 		if C_Container and C_Container.GetContainerItemInfo then
 			local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
-			itemCount = containerItemInfo.stackCount
-			locked = containerItemInfo.isLocked
-			quality = containerItemInfo.quality
-			readable = containerItemInfo.isReadable
-			lootable = containerItemInfo.hasLoot
+			if containerItemInfo then
+				itemCount = containerItemInfo.stackCount
+				locked = containerItemInfo.isLocked
+				quality = containerItemInfo.quality
+				readable = containerItemInfo.isReadable
+				lootable = containerItemInfo.hasLoot
+			end
 		else 
 			texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
 		end
@@ -1101,7 +1110,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 						end		
 					-- end
 
-					if item:GetCaerdonItemType() == CaerdonItemType.Consumable and item:HasItemLocation() then
+					if (item:GetCaerdonItemType() == CaerdonItemType.Consumable or item:GetCaerdonItemType() == CaerdonItemType.Quest) and item:HasItemLocation() then
 						local location = item:GetItemLocation()
 						local maxStackCount = C_Item.GetItemMaxStackSize(location)
 						local currentStackCount = C_Item.GetStackCount(location)

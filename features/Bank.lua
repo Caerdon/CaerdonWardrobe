@@ -26,7 +26,13 @@ function BankMixin:Init()
 end
 
 function BankMixin:TOOLTIP_DATA_UPDATE()
-	self:Refresh()
+	if self.refreshTimer then
+		self.refreshTimer:Cancel()
+	end
+
+	self.refreshTimer = C_Timer.NewTimer(0.1, function ()
+		self:Refresh()
+	end, 1)
 end
 
 function BankMixin:GetTooltipData(item, locationInfo)
