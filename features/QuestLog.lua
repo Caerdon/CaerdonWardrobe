@@ -9,7 +9,17 @@ end
 function QuestLogMixin:Init()
 	hooksecurefunc("QuestInfo_Display", function(...) self:OnQuestInfoDisplay(...) end)
 
-	return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE" }
+	return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE", "TOOLTIP_DATA_UPDATE" }
+end
+
+function QuestLogMixin:TOOLTIP_DATA_UPDATE()
+	if self.refreshTimer then
+		self.refreshTimer:Cancel()
+	end
+
+	self.refreshTimer = C_Timer.NewTimer(0.1, function ()
+		self:Refresh()
+	end, 1)
 end
 
 function QuestLogMixin:GetTooltipData(item, locationInfo)
@@ -28,6 +38,9 @@ function QuestLogMixin:GetTooltipData(item, locationInfo)
 end
 
 function QuestLogMixin:Refresh()
+	if QuestInfoFrame.rewardsFrame:IsShown() then
+		self:OnQuestInfoShowRewards()
+	end
 end
 
 function QuestLogMixin:QUEST_ITEM_UPDATE()
@@ -41,7 +54,10 @@ end
 function QuestLogMixin:OnQuestInfoDisplay(template, parentFrame)
 	local i = 1
 	while template.elements[i] do
-		if template.elements[i] == QuestInfo_ShowRewards then self:OnQuestInfoShowRewards() return end
+		if template.elements[i] == QuestInfo_ShowRewards then
+			self:OnQuestInfoShowRewards()
+			return
+		end
 		i = i + 3
 	end
 end

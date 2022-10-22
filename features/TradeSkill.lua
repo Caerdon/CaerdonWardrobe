@@ -57,8 +57,8 @@ function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
 
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             CaerdonWardrobe:UpdateButton(button, item, self, { 
-                locationKey = format("selectedrecipe%d", recipeInfo.recipeID),  -- item:GetItemID()),
-                selectedRecipeID =  recipeInfo.recipeID
+                locationKey = format("selectedrecipe%d", currentRecipeInfo.recipeID),  -- item:GetItemID()),
+                selectedRecipeID =  currentRecipeInfo.recipeID
             }, options)
         else
             CaerdonWardrobe:ClearButton(button)

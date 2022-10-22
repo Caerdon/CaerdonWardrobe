@@ -319,9 +319,20 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         end
     elseif tooltipInfo.getterName == "GetQuestLogCurrency" then
         local itemType, currencyIndex, questID = unpack(tooltipInfo.getterArgs)
-        local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID)
-        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        if not questID then
+            if ( QuestInfoFrame.questLog ) then
+                questID = C_QuestLog.GetSelectedQuest()
+            else
+                questID = GetQuestID()
+            end
+        end
+
+        if questID then
+            local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID, itemType == "choice")
+            local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetQuestLogItem" then
         local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestLogItemLink(rewardType, index, questID)
