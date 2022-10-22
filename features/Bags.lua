@@ -1,4 +1,5 @@
 local BagsMixin = {}
+local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function BagsMixin:GetName()
 	return "Bags"
@@ -21,7 +22,11 @@ function BagsMixin:Init()
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 
-	return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
+	if isDragonflight then
+		return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
+	else
+		return { "UNIT_SPELLCAST_SUCCEEDED" }
+	end
 end
 
 function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)

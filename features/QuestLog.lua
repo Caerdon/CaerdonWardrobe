@@ -1,6 +1,6 @@
 local QuestLogMixin = {}
 
-local version, build, date, tocversion = GetBuildInfo()
+local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function QuestLogMixin:GetName()
 	return "QuestLog"
@@ -9,7 +9,11 @@ end
 function QuestLogMixin:Init()
 	hooksecurefunc("QuestInfo_Display", function(...) self:OnQuestInfoDisplay(...) end)
 
-	return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE", "TOOLTIP_DATA_UPDATE" }
+	if isDragonflight then
+		return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE", "TOOLTIP_DATA_UPDATE" }
+	else
+		return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE" }
+	end
 end
 
 function QuestLogMixin:TOOLTIP_DATA_UPDATE()

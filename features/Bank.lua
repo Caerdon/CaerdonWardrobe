@@ -1,4 +1,5 @@
 local BankMixin = {}
+local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function BankMixin:GetName()
 	return "Bank"
@@ -22,7 +23,11 @@ function BankMixin:Init()
 	hooksecurefunc(ContainerFrame13, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrame13, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 
-	return { "TOOLTIP_DATA_UPDATE" }
+	if isDragonflight then
+		return { "TOOLTIP_DATA_UPDATE" }
+	else
+		return {}
+	end
 end
 
 function BankMixin:TOOLTIP_DATA_UPDATE()

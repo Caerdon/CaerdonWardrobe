@@ -742,7 +742,11 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 		xOffset = xOffset * -1
 	end
 
-	bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
+	if options and options.relativeFrame then
+		bindsOnText:SetAllPoints(options.relativeFrame, xOffset, yOffset)
+	else
+		bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
+	end
 
 	if(options.bindingScale) then
 		bindsOnText:SetScale(options.bindingScale)
