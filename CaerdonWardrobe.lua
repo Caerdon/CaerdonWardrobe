@@ -224,6 +224,12 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 		xOffset = xOffset * -1
 	end
 
+	local background = icon.mogStatusBackground
+	if background then
+		background:ClearAllPoints()
+		background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+	end
+
 	icon:ClearAllPoints()
 	icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
 end
@@ -250,9 +256,13 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
 	if button then
 		local mogStatus = button.mogStatus
 		if mogStatus then
+			local mogStatusBackground = mogStatus.mogStatusBackground
+
 			if isFiltered then
+				mogStatusBackground:SetAlpha(0.3)
 				mogStatus:SetAlpha(0.3)
 			else
+				mogStatusBackground:SetAlpha(mogStatus.assignedAlpha)
 				mogStatus:SetAlpha(mogStatus.assignedAlpha)
 			end
 		end
@@ -307,7 +317,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	-- NOTE: Added logic above that hopefully addresses this more sanely...
 	-- button:SetFrameLevel(originalButton:GetFrameLevel() + 100)
 
+	local iconBackgroundAdjustment = 0
 	local mogStatus = button.mogStatus
+	local mogStatusBackground
+	if mogStatus then
+		mogStatusBackground = mogStatus.mogStatusBackground
+	end
 	local mogAnim = button.mogAnim
 	local iconPosition, showSellables, isSellable
 
@@ -325,7 +340,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	if not mogStatus then
-		mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 1)
+		mogStatusBackground = button:CreateTexture(nil, "ARTWORK", nil, 1)
+		mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 2)
+		mogStatus.mogStatusBackground = mogStatusBackground
 		button.mogStatus = mogStatus
 	end
 
@@ -418,6 +435,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	local alpha = 1
+
+	mogStatusBackground:SetVertexColor(1, 1, 1)
+	mogStatusBackground:SetTexture("")
+	mogStatusBackground:SetTexCoord(0, 1, 0, 1)
+
 	mogStatus:SetVertexColor(1, 1, 1)
 	mogStatus:SetTexture("")
 	mogStatus:SetTexCoord(0, 1, 0, 1)
@@ -483,8 +505,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
 			-- options.statusProminentSize = 256
 
-			mogStatus:SetTexCoord((512-23)/512, (512-7)/512, (172-18)/512, (172-3)/512)
-			mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
+			-- mogStatus:SetTexCoord((512-23)/512, (512-7)/512, (172-18)/512, (172-3)/512)
+			-- mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
+
+			mogStatus:SetTexCoord(91/1024, (91+30)/1024, 987/1024, (987+30)/1024)
+			mogStatus:SetTexture("Interface\\Store\\ServicesAtlas")
+
 			-- if status == "ownPlus" then
 			-- 	mogStatus:SetVertexColor(0.4, 1, 0)
 			-- end
@@ -492,11 +518,27 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	elseif status == "readyToCombine" then
 		-- isProminent = true
 		if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
-			alpha = 0.9
+			-- alpha = 0.9
 
-			mogStatus:SetTexCoord((512-23)/512, (512-7)/512, 172/512, (172+15)/512)
-			mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
-			
+			-- mogStatus:SetTexCoord((512-23)/512, (512-7)/512, 172/512, (172+15)/512)
+			-- mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
+
+			iconBackgroundAdjustment = 4
+
+			-- mogStatusBackground:SetTexCoord(455/512, (455+28)/512, 1/256, (1+28)/256)
+			-- mogStatusBackground:SetTexture("Interface\\Store\\Shop")
+
+			-- mogStatusBackground:SetTexCoord(180/512, (180+46)/512, 5/512, (5+46)/512)
+			mogStatusBackground:SetTexCoord((512-46-31)/512, (512-31)/512, 5/512, (5+46)/512)
+			mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+			-- mogStatusBackground:SetVertexColor(0, 1, 0)
+			mogStatusBackground:SetVertexColor(80/256, 252/256, 80/256, 253/256)
+
+			mogStatus:SetTexCoord(305/512, (305+116)/512, 141/512, (141+116)/512)
+			mogStatus:SetTexture("Interface\\Animations\\PowerSwirlAnimation")
+			-- mogStatus:SetVertexColor(0, 1, 0)
+			mogStatus:SetVertexColor(80/256, 252/256, 80/256, 253/256)
+
 			-- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			-- mogStatus:SetTexture("Interface\\HELPFRAME\\ReportLagIcon-AuctionHouse")
 
@@ -564,19 +606,24 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	if isProminent then
-		mogStatus:SetSize(iconSize, iconSize)
+		mogStatusBackground:SetSize(iconSize, iconSize)
+		mogStatus:SetSize(iconSize - iconBackgroundAdjustment, iconSize - iconBackgroundAdjustment)
 	else
 		iconSize = iconSize * ICON_SIZE_DIFFERENTIAL
-		mogStatus:SetSize(iconSize, iconSize)
+		mogStatusBackground:SetSize(iconSize, iconSize)
+		mogStatus:SetSize(iconSize - iconBackgroundAdjustment, iconSize - iconBackgroundAdjustment)
 	end
 
 	self:SetStatusIconPosition(mogStatus, originalButton, item, feature, locationInfo, options, status, bindingStatus)
+
+	mogStatusBackground:SetAlpha(alpha)
 
 	mogStatus:SetAlpha(alpha)
 	mogStatus.assignedAlpha = alpha
 
 	C_Timer.After(0, function() 
 		if(button.searchOverlay and button.searchOverlay:IsShown()) then
+			mogStatusBackground:SetAlpha(0.3)
 			mogStatus:SetAlpha(0.3)
 		end
 	end)
