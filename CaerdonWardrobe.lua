@@ -223,7 +223,7 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 	end
 
 	icon:ClearAllPoints()
-	icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+	icon:SetPoint("CENTER", button, statusPosition, xOffset, yOffset)
 end
 
 function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
@@ -247,13 +247,13 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
 	local button = originalButton.caerdonButton
 	if button then
 		local mogStatus = button.mogStatus
-		if mogStatus then
-			if isFiltered then
-				mogStatus:SetAlpha(0.3)
-			else
-				mogStatus:SetAlpha(mogStatus.assignedAlpha)
-			end
-		end
+		-- if mogStatus then
+		-- 	if isFiltered then
+		-- 		mogStatus:SetAlpha(0.3)
+		-- 	else
+		-- 		mogStatus:SetAlpha(mogStatus.assignedAlpha)
+		-- 	end
+		-- end
 
 		local bindsOnText = button.bindsOnText
 		if bindsOnText then
@@ -270,8 +270,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	local button = originalButton.caerdonButton
 
 	if not button then
-		button = CreateFrame("Frame", nil, originalButton)
-		button.searchOverlay = originalButton.searchOverlay
+		button = {}
+		-- button = CreateFrame("Frame", nil, originalButton)
+		-- button.searchOverlay = originalButton.searchOverlay
 		originalButton.caerdonButton = button
 	end
 
@@ -286,18 +287,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	if levelCheckFrame then
-		button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
-		button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
+		-- button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
+		-- button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
 	end
 
-	button:ClearAllPoints()
-	button:SetSize(0,0)
+	-- button:ClearAllPoints()
+	-- button:SetSize(0,0)
 
-	if options and options.relativeFrame then
-		button:SetAllPoints(options.relativeFrame)
-	else
-		button:SetAllPoints(originalButton)
-	end
+	-- if options and options.relativeFrame then
+	-- 	button:SetAllPoints(options.relativeFrame)
+	-- else
+	-- 	button:SetAllPoints(originalButton)
+	-- end
 
 	-- Had some addons messing with frame level resulting in this getting covered by the parent button.
 	-- Haven't seen any negative issues with bumping it up, yet, but keep an eye on it if
@@ -323,7 +324,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	end
 
 	if not mogStatus then
-		mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 1)
+		mogStatus = originalButton:CreateTexture(nil, "OVERLAY")
+		mogStatus:SetDrawLayer("OVERLAY", 7);
 		button.mogStatus = mogStatus
 	end
 
@@ -527,8 +529,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	elseif status == "collected" then
 		if not IsGearSetStatus(bindingStatus, item) and showSellables and isSellable and displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
 			alpha = 0.9
-			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
+			-- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetAtlas("Interface\\Store\\category-icon-bag", TextureKitConstants.UseAtlasSize);
+
+			-- mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
 		elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
 			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
@@ -556,14 +560,14 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
 	self:SetStatusIconPosition(mogStatus, originalButton, item, feature, locationInfo, options, status, bindingStatus)
 
-	mogStatus:SetAlpha(alpha)
-	mogStatus.assignedAlpha = alpha
+	-- mogStatus:SetAlpha(alpha)
+	-- mogStatus.assignedAlpha = alpha
 
-	C_Timer.After(0, function() 
-		if(button.searchOverlay and button.searchOverlay:IsShown()) then
-			mogStatus:SetAlpha(0.3)
-		end
-	end)
+	-- C_Timer.After(0, function() 
+	-- 	if(button.searchOverlay and button.searchOverlay:IsShown()) then
+	-- 		mogStatus:SetAlpha(0.3)
+	-- 	end
+	-- end)
 
 	if showAnim and CaerdonWardrobeConfig.Icon.EnableAnimation then
 		if mogAnim and not mogAnim:IsPlaying() then
@@ -593,7 +597,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 
 	if not bindsOnText then
-		bindsOnText = caerdonButton:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small")
+		bindsOnText = button:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small")
 		caerdonButton.bindsOnText = bindsOnText
 	end
 
