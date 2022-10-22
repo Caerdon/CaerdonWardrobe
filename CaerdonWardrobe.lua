@@ -1,3 +1,5 @@
+EQUIPPED_LAST=500 -- TODO: Temp fix for bag opening
+
 local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 82800
 local ADDON_NAME, NS = ...
@@ -362,7 +364,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgrade" or status == "readyToCombine" then
+		if status == "readyToCombine" or status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgrade" or status == "readyToCombine" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -378,10 +380,14 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			if not mogAnim then
 				mogAnim = mogStatus:CreateAnimationGroup()
 
-				self:AddRotation(mogAnim, 1, 110, 0.2, "OUT")
-				self:AddRotation(mogAnim, 2, -155, 0.2, "OUT")
-				self:AddRotation(mogAnim, 3, 60, 0.2, "OUT")
-				self:AddRotation(mogAnim, 4, -15, 0.1, "OUT", 0, 2)
+				if status == "readyToCombine" then
+					self:AddRotation(mogAnim, 1, 360, 0.75, "NONE")
+				else
+					self:AddRotation(mogAnim, 1, 110, 0.2, "OUT")
+					self:AddRotation(mogAnim, 2, -155, 0.2, "OUT")
+					self:AddRotation(mogAnim, 3, 60, 0.2, "OUT")
+					self:AddRotation(mogAnim, 4, -15, 0.1, "OUT", 0, 2)
+				end
 
 			    mogAnim:SetLooping("REPEAT")
 				button.mogAnim = mogAnim
@@ -469,11 +475,16 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			end
 		end
 	elseif status == "canCombine" then
-		isProminent = true
+		-- isProminent = true
 		if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
 			-- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			-- mogStatus:SetTexture("Interface\\PaperDollInfoFrame\\Character-Plus")
-			mogStatus:SetTexture("Interface\\BUTTONS\\UI-PlusButton-Up")
+			-- mogStatus:SetTexture("Interface\\BUTTONS\\UI-PlusButton-Up")
+
+			-- options.statusProminentSize = 256
+
+			mogStatus:SetTexCoord((512-23)/512, (512-7)/512, (172-18)/512, (172-3)/512)
+			mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
 			-- if status == "ownPlus" then
 			-- 	mogStatus:SetVertexColor(0.4, 1, 0)
 			-- end
@@ -482,8 +493,13 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		-- isProminent = true
 		if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
 			alpha = 0.9
-			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-			mogStatus:SetTexture("Interface\\HELPFRAME\\ReportLagIcon-AuctionHouse")
+
+			mogStatus:SetTexCoord((512-23)/512, (512-7)/512, 172/512, (172+15)/512)
+			mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
+			
+			-- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			-- mogStatus:SetTexture("Interface\\HELPFRAME\\ReportLagIcon-AuctionHouse")
+
 			-- if status == "ownPlus" then
 			-- 	mogStatus:SetVertexColor(0.4, 1, 0)
 			-- end
@@ -593,7 +609,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 
 	if not bindsOnText then
-		bindsOnText = caerdonButton:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small")
+		bindsOnText = button:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") -- TODO: Note: placing directly on button to enable search fade - need to check on other addons
 		caerdonButton.bindsOnText = bindsOnText
 	end
 
