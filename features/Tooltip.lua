@@ -269,8 +269,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetMerchantItem" then
         local slot = unpack(tooltipInfo.getterArgs)
         local itemLink = GetMerchantItemLink(slot);
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetMountBySpellID" then
         local spellID, checkIndoors = unpack(tooltipInfo.getterArgs)
         local itemLink = C_MountJournal.GetMountLink(spellID)
@@ -315,6 +317,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             Tooltip:ProcessTooltip(tooltip, item)
         end
+    elseif tooltipInfo.getterName == "GetQuestLogCurrency" then
+        local itemType, currencyIndex, questID = unpack(tooltipInfo.getterArgs)
+        local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID)
+        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
     elseif tooltipInfo.getterName == "GetQuestLogItem" then
         local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
         local itemLink = GetQuestLogItemLink(rewardType, index, questID)

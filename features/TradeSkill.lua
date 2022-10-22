@@ -15,8 +15,6 @@ function TradeSkillMixin:TRADE_SKILL_SHOW(name)
     if not self.isHooked then
         self.isHooked = true
         ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
-
-        -- ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self)
         hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
         -- hooksecurefunc(ProfessionsFrame, "Refresh", function (...) self:Refresh(...) end)
     end
@@ -40,7 +38,7 @@ function TradeSkillMixin:OnInitializedFrame(listFrame, frame, elementData)
 
         local item = CaerdonItem:CreateFromItemLink(data.recipeInfo.hyperlink)
         CaerdonWardrobe:UpdateButton(button, item, self, { 
-            locationKey = format("recipe%d",  item:GetItemID()), -- data.recipeInfo.recipeID),
+            locationKey = format("recipe%d",  data.recipeInfo.recipeID), --item:GetItemID()), -- 
             selectedRecipeID =  data.recipeInfo.recipeID
         }, options)
     else
@@ -59,35 +57,8 @@ function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
 
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             CaerdonWardrobe:UpdateButton(button, item, self, { 
-                locationKey = format("selectedrecipe%d",  item:GetItemID()),
+                locationKey = format("selectedrecipe%d", recipeInfo.recipeID),  -- item:GetItemID()),
                 selectedRecipeID =  recipeInfo.recipeID
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(button)
-        end
-    end)
-end
-
-function TradeSkillMixin:OnScrollBoxRangeChanged(sortPending)
-	local scrollBox = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox
-	scrollBox:ForEachFrame(function(button, elementData)
-        local data = elementData:GetData();
-
-        if data.recipeInfo and data.recipeInfo.hyperlink then
-            local options = {
-                statusProminentSize = 15,
-                statusOffsetX = 2,
-                statusOffsetY = 9,
-                bindingScale = 0.8,
-                overrideBindingPosition = "RIGHT",
-                bindingOffsetY = 0,
-                bindingOffsetX = 0
-            }
-
-            local item = CaerdonItem:CreateFromItemLink(data.recipeInfo.hyperlink)
-            CaerdonWardrobe:UpdateButton(button, item, self, { 
-                locationKey = format("recipe%d",  item:GetItemID()), -- data.recipeInfo.recipeID),
-                selectedRecipeID =  data.recipeInfo.recipeID
             }, options)
         else
             CaerdonWardrobe:ClearButton(button)
@@ -100,7 +71,6 @@ function TradeSkillMixin:GetTooltipData(item, locationInfo)
 end
 
 function TradeSkillMixin:Refresh()
-    -- self:OnScrollBoxRangeChanged(false)
 end
 
 function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)

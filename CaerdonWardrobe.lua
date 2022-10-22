@@ -70,6 +70,7 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 	local skillTooLow = false
 	local foundRedRequirements = false
 	local isLocked = false
+	local isOpenable = false
 	
 	local isCollectionItem = IsCollectibleLink(item)
 	local isPetLink = caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet
@@ -111,6 +112,7 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 		end
 
 		isLocked = tooltipData.isLocked
+		isOpenable = tooltipData.isOpenable
 
 		if tooltipData.supercedingSpellNotKnown then
 			unusableItem = true
@@ -431,6 +433,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		isProminent = true
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Store\\category-icon-free")
+	elseif status == "readable" then
+		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+		mogStatus:SetTexture("Interface\\Store\\category-icon-services")
 	elseif status == "lowSkill" or status == "lowSkillPlus" then
 		mogStatus:SetTexCoord(6/64, 58/64, 6/64, 58/64)
 		mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
@@ -466,8 +471,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	elseif status == "canCombine" then
 		isProminent = true
 		if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
-			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+			-- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			-- mogStatus:SetTexture("Interface\\PaperDollInfoFrame\\Character-Plus")
+			mogStatus:SetTexture("Interface\\BUTTONS\\UI-PlusButton-Up")
 			-- if status == "ownPlus" then
 			-- 	mogStatus:SetVertexColor(0.4, 1, 0)
 			-- end
@@ -901,6 +907,18 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 			if tooltipData.readyToCombine then
 				mogStatus = "readyToCombine"
 			end
+		elseif tooltipData.canLearn then
+			if bindingResult.skillTooLow then
+				mogStatus = "lowSkill"
+			else
+				mogStatus = "own"
+			end
+		end
+	elseif tooltipData.canLearn then
+		if bindingResult.skillTooLow then
+			mogStatus = "lowSkill"
+		else
+			mogStatus = "own"
 		end
 	elseif bindingResult.needsItem then
 		if caerdonType == CaerdonItemType.Recipe then
@@ -949,7 +967,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 
 		local texture, itemCount, locked, quality, readable, lootable
 		if C_Container and C_Container.GetContainerItemInfo then
-			texture, itemCount, locked, quality, readable, lootable, _ = C_Container.GetContainerItemInfo(containerID, containerSlot)
+			local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
+			itemCount = containerItemInfo.stackCount
+			locked = containerItemInfo.isLocked
+			quality = containerItemInfo.quality
+			readable = containerItemInfo.isReadable
+			lootable = containerItemInfo.hasLoot
 		else 
 			texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
 		end
@@ -970,6 +993,8 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 					mogStatus = "openable"
 				end
 			end
+		elseif readable then
+			mogStatus = "readable"
 		else
 			local isEquipped = false
 			local money, itemCount, refundSec, currencyCount, hasEnchants
@@ -1002,6 +1027,7 @@ end
 
 function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 	local tooltipData = {
+		canLearn = false,
 		canCombine = false,
 		hasEquipEffect = false,
 		isRelearn = false,
@@ -1010,6 +1036,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 		isSoulbound = false,
 		isKnownSpell = false,
 		isLocked = false,
+		isOpenable = false,
 		supercedingSpellNotKnown = false,
 		foundRedRequirements = false,
 		requiredTradeSkillMissingOrUnleveled = false,
@@ -1037,13 +1064,14 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 					end
 
 					local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
-					if isRecipe then
+					-- if isRecipe then
 						-- TODO: Don't like matching this hard-coded string but not sure how else
 						-- to prevent the expensive books from showing as learnable when I don't
 						-- know how to tell if they have recipes you need.
 						if strmatch(lineText, L["Use: Re%-learn .*"]) then
 							tooltipData.isRelearn = true
 						end
+						
 
 						-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
 						-- which toons could learn a recipe.
@@ -1066,8 +1094,12 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 
 							tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
 							tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+
+							if not hasSkillLine then
+								tooltipData.canLearn = false
+							end
 						end		
-					end
+					-- end
 
 					if item:GetCaerdonItemType() == CaerdonItemType.Consumable and item:HasItemLocation() then
 						local location = item:GetItemLocation()
@@ -1088,7 +1120,15 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 						tooltipData.bindingStatus = bindTextTable[lineText]
 					end
 
-					if lineText == RETRIEVING_ITEM_INFO then
+					if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
+						tooltipData.canLearn = true
+					elseif strmatch(lineText, L["Use: Marks your map with the location"]) then
+						tooltipData.canLearn = true
+					elseif strmatch(lineText, L["Use: Unlocks this customization"]) then
+						tooltipData.canLearn = true
+					elseif strmatch(lineText, L["Use: Study to increase your"]) then
+						tooltipData.canLearn = true
+					elseif lineText == RETRIEVING_ITEM_INFO then
 						tooltipData.isRetrieving = true
 						break
 					elseif lineText == ITEM_SOULBOUND then
@@ -1097,6 +1137,8 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 						tooltipData.isKnownSpell = true
 					elseif lineText == LOCKED then
 						tooltipData.isLocked = true
+					elseif lineText == ITEM_OPENABLE then
+						tooltipData.isOpenable = true
 					elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
 						tooltipData.supercedingSpellNotKnown = true
 					end
