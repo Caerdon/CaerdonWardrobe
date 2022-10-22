@@ -181,12 +181,15 @@ local TradeSkillLines = {
 function CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
     local hasSkillLine = false
     local meetsMinRank = false
+    local rank, maxRank
 
     for skillLineID, data in pairs(TradeSkillLines) do
         local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skillLineID)
         if requiredSkill == professionInfo.professionName then
             if professionInfo.skillLevel and professionInfo.skillLevel > 0 then
                 hasSkillLine = true
+                rank = professionInfo.skillLevel
+                maxRank = professionInfo.maxSkillLevel
             else
                 -- TODO: Fallback if TradeSkill UI hasn't been opened, yet - keep looking for a way to solve this.
                 local parentSkillLine
@@ -199,7 +202,7 @@ function CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
 
                 -- TODO: This is so ugly... sort out how to throw into an array.
                 local matchingProfession
-                local name, texture, rank, maxRank, numSpells, spelloffset, skillLine, rankModifier, specializationIndex, specializationOffset, skillLineName
+                local name, texture, numSpells, spelloffset, skillLine, rankModifier, specializationIndex, specializationOffset, skillLineName
                 if prof1 then
                     name, texture, rank, maxRank, numSpells, spelloffset, skillLine, rankModifier, specializationIndex, specializationOffset, skillLineName = GetProfessionInfo(prof1);
                     if skillLine == skillLineID or skillLine == data.parentID then
@@ -252,7 +255,7 @@ function CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
         end
     end
 
-    return hasSkillLine, meetsMinRank
+    return hasSkillLine, meetsMinRank, rank, maxRank
 end
 
 

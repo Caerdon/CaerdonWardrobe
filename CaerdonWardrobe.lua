@@ -1090,12 +1090,12 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 						if strmatch(lineText, skillCheck) then
 							local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 
-							local hasSkillLine, meetsMinRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+							local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
 
 							tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
 							tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
 
-							if not hasSkillLine then
+							if not hasSkillLine or rank == maxRank then
 								tooltipData.canLearn = false
 							end
 						end		

@@ -21,7 +21,7 @@ function BagsMixin:Init()
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 
-	return { "UNIT_SPELLCAST_SUCCEEDED" }
+	return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
 end
 
 function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
@@ -36,6 +36,10 @@ function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
 	end
 end
 
+function BagsMixin:TOOLTIP_DATA_UPDATE()
+	self:Refresh()
+end
+
 function BagsMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
@@ -46,6 +50,10 @@ function BagsMixin:Refresh()
 		if ( frame:IsShown() ) then
 			self:OnUpdateItems(frame)
 		end
+	end
+
+	if ContainerFrameCombinedBags:IsShown() then
+		self:OnUpdateItems(ContainerFrameCombinedBags)
 	end
 end
 

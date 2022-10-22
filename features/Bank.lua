@@ -21,6 +21,12 @@ function BankMixin:Init()
 	hooksecurefunc(ContainerFrame12, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 	hooksecurefunc(ContainerFrame13, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrame13, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+
+	return { "TOOLTIP_DATA_UPDATE" }
+end
+
+function BankMixin:TOOLTIP_DATA_UPDATE()
+	self:Refresh()
 end
 
 function BankMixin:GetTooltipData(item, locationInfo)
