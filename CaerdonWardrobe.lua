@@ -1,4 +1,4 @@
-EQUIPPED_LAST=500 -- TODO: Temp fix for bag opening
+-- EQUIPPED_LAST=500 -- TODO: Temp fix for bag opening
 
 local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 82800

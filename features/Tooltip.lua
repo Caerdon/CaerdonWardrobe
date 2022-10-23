@@ -175,10 +175,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     if tooltipInfo.getterName == "GetAction" then
         local actionID = unpack(tooltipInfo.getterArgs)
         local actionType, id, actionSubType = GetActionInfo(actionID);
-        if actionType == "item" then -- ignoring summonmount, spell, flyout, and any others for now
-            local item = CaerdonItem:CreateFromItemID(id)
-            Tooltip:ProcessTooltip(tooltip, item)
-        end
+        -- TODO: Might be causing taint... commenting out for now.
+        -- if actionType == "item" then -- ignoring summonmount, spell, flyout, and any others for now
+        --     local item = CaerdonItem:CreateFromItemID(id)
+        --     Tooltip:ProcessTooltip(tooltip, item)
+        -- end
     elseif tooltipInfo.getterName == "GetBackpackToken" then
         local currencyIndex = unpack(tooltipInfo.getterArgs)
         local currencyInfo = C_CurrencyInfo.GetBackpackCurrencyInfo(currencyIndex);
@@ -330,8 +331,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         if questID then
             local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID, itemType == "choice")
             local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
-            Tooltip:ProcessTooltip(tooltip, item)
+            if itemLink then
+                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                Tooltip:ProcessTooltip(tooltip, item)
+            end
         end
     elseif tooltipInfo.getterName == "GetQuestLogItem" then
         local rewardType, index, questID, showCollectionText = unpack(tooltipInfo.getterArgs)
