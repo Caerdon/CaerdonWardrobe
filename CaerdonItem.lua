@@ -38,13 +38,15 @@ local function CreateItem()
     )
 end
 
---[[static]] function CaerdonItem:CreateFromItemLink(itemLink)
+--[[static]] function CaerdonItem:CreateFromItemLink(itemLink, extraData)
 	if type(itemLink) ~= "string" then
 		error("Usage: CaerdonItem:CreateFromItemLink(itemLinkString)", 2);
 	end
 
     local item = CreateItem()
-    item:SetItemLink(itemLink)    
+    item:SetItemLink(itemLink)
+    item.extraData = extraData
+    
 	return item;
 end
 

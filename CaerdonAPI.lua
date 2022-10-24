@@ -47,12 +47,22 @@ function CaerdonAPIMixin:GetItemDetails(item)
         itemResults = itemData:GetBattlePetInfo()
     elseif caerdonType == CaerdonItemType.CompanionPet then
         itemResults = itemData:GetCompanionPetInfo()
+    elseif caerdonType == CaerdonItemType.Conduit then
+        itemResults = itemData:GetConduitInfo()
+    elseif caerdonType == CaerdonItemType.Consumable then
+        -- TODO
     elseif caerdonType == CaerdonItemType.Equipment then
-            itemResults = itemData:GetTransmogInfo()
+        itemResults = itemData:GetTransmogInfo()
+    elseif caerdonType == CaerdonItemType.Mount then
+        itemResults = itemData:GetMountInfo()
+    elseif caerdonType == CaerdonItemType.Profession then
+        itemResults = itemData:GetProfessionInfo()
     elseif caerdonType == CaerdonItemType.Quest then
         itemResults = itemData:GetQuestInfo()
     elseif caerdonType == CaerdonItemType.Recipe then
         itemResults = itemData:GetRecipeInfo()
+    elseif caerdonType == CaerdonItemType.Toy then
+        itemResults = itemData:GetToyInfo()
     end
 
     return {

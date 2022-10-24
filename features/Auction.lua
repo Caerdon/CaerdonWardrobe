@@ -88,8 +88,9 @@ end
 
 function AuctionMixin:GetTooltipData(item, locationInfo)
 	local itemKey = locationInfo.itemKey
-	if itemKey then
-		return C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix)
+	if itemKey and itemKey.itemID and itemKey.itemLevel and itemKey.itemSuffix then
+		local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
+		return C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
 	else
 		return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 	end

@@ -126,8 +126,6 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 			skillTooLow = true
 		end
 
-		-- TODO: Can we scan the embedded item tooltip? Probably need to do something like EmbeddedItemTooltip_SetItemByID
-		-- This may only matter for recipes, so I may have to use LibRecipes if I can't get the recipe info for the created item.
 		if tooltipData.requiredTradeSkillMissingOrUnleveled then
 			unusableItem = true
 			-- if isBindOnPickup then -- assume all unknown not needed for now
@@ -452,6 +450,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 	-- TempleofKotmogu_ball_orange.PNG
 	-- TempleofKotmogu_ball_purple.PNG
 	-- MINIMAP/TRACKING/OBJECTICONS.PNG
+
+	if item and item.extraData and item.extraData.recipeInfo then
+		-- TODO: Marking recipe skill ups here for now... need to figure out how to refactor
+		if item.extraData.recipeInfo.firstCraft then
+			iconBackgroundAdjustment = 2
+			mogStatusBackground:SetTexCoord(91/1024, (91+30)/1024, 987/1024, (987+30)/1024)
+			mogStatusBackground:SetTexture("Interface\\Store\\ServicesAtlas")
+		end
+	end
 
 	-- TODO: Add options to hide these statuses
 	if status == "refundable" then
@@ -822,7 +829,47 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 		mogStatus = "quest"
 	end
 
-	if caerdonType == CaerdonItemType.Equipment then
+
+	if caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
+		local petInfo = 
+			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
+			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
+		if petInfo.needsItem then
+			if bindingResult.unusableItem then
+				mogStatus = "other"
+			else
+				mogStatus = "own"
+			end
+		end
+	elseif caerdonType == CaerdonItemType.Conduit then
+		if bindingResult.needsItem then
+			local conduitInfo = itemData:GetConduitInfo()
+			if conduitInfo.isUpgrade then
+				mogStatus = "upgrade"
+			else
+				mogStatus = "own"
+			end
+		elseif tooltipData.canLearn then
+			if bindingResult.skillTooLow then
+				mogStatus = "lowSkill"
+			else
+				mogStatus = "own"
+			end
+		end
+	elseif caerdonType == CaerdonItemType.Consumable then
+		if tooltipData.canCombine then
+			mogStatus = "canCombine"
+			if tooltipData.readyToCombine then
+				mogStatus = "readyToCombine"
+			end
+		elseif tooltipData.canLearn then
+			if bindingResult.skillTooLow then
+				mogStatus = "lowSkill"
+			else
+				mogStatus = "own"
+			end
+		end
+	elseif caerdonType == CaerdonItemType.Equipment then
 		local transmogInfo = itemData:GetTransmogInfo()
 		if transmogInfo then
 			if transmogInfo.isTransmog then
@@ -924,17 +971,6 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				end
 			end
 		end
-	elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
-		local petInfo = 
-			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
-			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
-		if petInfo.needsItem then
-			if bindingResult.unusableItem then
-				mogStatus = "other"
-			else
-				mogStatus = "own"
-			end
-		end
 	elseif caerdonType == CaerdonItemType.Mount then
 		local mountInfo = itemData:GetMountInfo()
 		if mountInfo.needsItem then
@@ -951,18 +987,6 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				mogStatus = "other"
 			end
 		end
-	elseif caerdonType == CaerdonItemType.Toy then
-		local toyInfo = itemData:GetToyInfo()
-		if toyInfo.needsItem then
-			mogStatus = "own"
-		else
-			mogStatus = "collected"
-			-- TODO: This is used a few times... need to fix to pass in dynamic data
-			local newOptions = {}
-			CaerdonAPI:MergeTable(newOptions, options)
-			options = newOptions
-			options.isSellable = true
-		end
 	elseif caerdonType == CaerdonItemType.Profession then
 		local professionInfo = itemData:GetProfessionInfo()
 		if professionInfo.needsItem then
@@ -975,27 +999,8 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				mogStatus = "readyToCombine"
 			end
 		end
-	elseif caerdonType == CaerdonItemType.Consumable then
-		if tooltipData.canCombine then
-			mogStatus = "canCombine"
-			if tooltipData.readyToCombine then
-				mogStatus = "readyToCombine"
-			end
-		elseif tooltipData.canLearn then
-			if bindingResult.skillTooLow then
-				mogStatus = "lowSkill"
-			else
-				mogStatus = "own"
-			end
-		end
-	elseif tooltipData.canLearn then
-		if bindingResult.skillTooLow then
-			mogStatus = "lowSkill"
-		else
-			mogStatus = "own"
-		end
-	elseif bindingResult.needsItem then
-		if caerdonType == CaerdonItemType.Recipe then
+	elseif caerdonType == CaerdonItemType.Recipe then
+		if bindingResult.needsItem then
 			if bindingResult.unusableItem then
 				if bindingResult.skillTooLow then
 					mogStatus = "lowSkill"
@@ -1022,13 +1027,34 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 					mogStatus = nil
 				end
 			end
-		elseif caerdonType == CaerdonItemType.Conduit then
-			local conduitInfo = itemData:GetConduitInfo()
-			if conduitInfo.isUpgrade then
-				mogStatus = "upgrade"
-			else
-				mogStatus = "own"
+		else
+			local recipeInfo = itemData:GetRecipeInfo()
+
+			if tooltipData.canLearn then
+				if bindingResult.skillTooLow then
+					mogStatus = "lowSkill"
+				else
+					mogStatus = "own"
+				end
 			end
+		end
+	elseif caerdonType == CaerdonItemType.Toy then
+		local toyInfo = itemData:GetToyInfo()
+		if toyInfo.needsItem then
+			mogStatus = "own"
+		else
+			mogStatus = "collected"
+			-- TODO: This is used a few times... need to fix to pass in dynamic data
+			local newOptions = {}
+			CaerdonAPI:MergeTable(newOptions, options)
+			options = newOptions
+			options.isSellable = true
+		end
+	elseif tooltipData.canLearn then
+		if bindingResult.skillTooLow then
+			mogStatus = "lowSkill"
+		else
+			mogStatus = "own"
 		end
 	end
 

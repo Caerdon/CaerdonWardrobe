@@ -364,21 +364,26 @@ end
 
 function CaerdonRecipeMixin:GetRecipeInfo()
     local item = self.item
+    local schematic, firstCraft, learned, createdItem, canLearn
 
-    local schematic = C_TradeSkillUI.GetRecipeSchematic(self.recipe.recipeID, false)
+    if self.recipe then
+        schematic = C_TradeSkillUI.GetRecipeSchematic(self.recipe.recipeID, false)
 
-    local learned = self.recipe.learned or false
-    local createdItem = nil
-    local canLearn = C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
+        firstCraft = self.recipe.firstCraft
+        learned = self.recipe.learned or false
+        createdItem = nil
+        canLearn = C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
 
-    if schematic.outputItemID ~= nil then
-        createdItem = CaerdonItem:CreateFromItemID(schematic.outputItemID)
+        if schematic.outputItemID ~= nil then
+            createdItem = CaerdonItem:CreateFromItemID(schematic.outputItemID)
+        end
     end
 
     -- TODO: Still lots that could likely be evaluated / added here
     -- DevTools_Dump(self.recipe)
     -- DevTools_Dump(C_TradeSkillUI.GetCategoryInfo(self.recipe.categoryID))
     return {
+        firstCraft = firstCraft,
         learned = learned,
         createdItem = createdItem,
         canLearn = canLearn

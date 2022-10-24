@@ -1,4 +1,5 @@
 local MerchantMixin = {}
+local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function MerchantMixin:GetName()
     return "Merchant"
@@ -8,11 +9,25 @@ function MerchantMixin:Init()
     hooksecurefunc("MerchantFrame_UpdateMerchantInfo", function(...) self:OnMerchantUpdate(...) end)
     hooksecurefunc("MerchantFrame_UpdateBuybackInfo", function(...) self:OnBuybackUpdate(...) end)
 
-    return { "MERCHANT_UPDATE" }
+    if isDragonflight then
+        return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE" }
+    else
+        return { "MERCHANT_UPDATE" }
+    end
 end
 
 function MerchantMixin:MERCHANT_UPDATE()
 	self:Refresh()
+end
+
+function MerchantMixin:TOOLTIP_DATA_UPDATE()
+	if self.refreshTimer then
+		self.refreshTimer:Cancel()
+	end
+
+	self.refreshTimer = C_Timer.NewTimer(0.1, function ()
+		self:Refresh()
+	end, 1)
 end
 
 function MerchantMixin:GetTooltipData(item, locationInfo)

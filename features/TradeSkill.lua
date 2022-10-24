@@ -26,17 +26,28 @@ function TradeSkillMixin:OnInitializedFrame(listFrame, frame, elementData)
     local data = elementData:GetData();
 
     if data.recipeInfo and data.recipeInfo.hyperlink then
+        local recipeInfo
+
         local options = {
-            statusProminentSize = 15,
-            statusOffsetX = 2,
-            statusOffsetY = 9,
+            statusProminentSize = 13,
+            statusOffsetX = 16,
+            statusOffsetY = 5,
             bindingScale = 0.8,
             overrideBindingPosition = "RIGHT",
             bindingOffsetY = 0,
             bindingOffsetX = 0
         }
 
-        local item = CaerdonItem:CreateFromItemLink(data.recipeInfo.hyperlink)
+        if not C_TradeSkillUI.IsTradeSkillGuild() then
+            local professionInfo = C_TradeSkillUI.GetChildProfessionInfo();
+            local isNPCCrafting = C_TradeSkillUI.IsNPCCrafting() and professionInfo.maxSkillLevel == 0;
+            if not isNPCCrafting then
+                recipeInfo = data.recipeInfo
+            end
+        end
+
+        local item = CaerdonItem:CreateFromItemLink(data.recipeInfo.hyperlink, { recipeInfo = recipeInfo })
+
         CaerdonWardrobe:UpdateButton(button, item, self, { 
             locationKey = format("recipe%d",  data.recipeInfo.recipeID), --item:GetItemID()), -- 
             selectedRecipeID =  data.recipeInfo.recipeID
