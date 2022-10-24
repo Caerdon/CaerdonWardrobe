@@ -113,6 +113,8 @@ function CaerdonQuestMixin:GetQuestInfo()
     local totalXp, baseXp
     local honorAmount
     local rewardMoney
+    local majorFactionRepRewards
+    local skillName, skillIcon, skillPoints
 
     local tagInfo
     local isWorldQuest
@@ -125,12 +127,14 @@ function CaerdonQuestMixin:GetQuestInfo()
     local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
     if isQuestLog then
         numQuestRewards = GetNumQuestLogRewards(questID)
-        numQuestChoices = GetNumQuestLogChoices(questID)
+        numQuestChoices = GetNumQuestLogChoices(questID, true)
         numQuestSpellRewards = GetNumQuestLogRewardSpells(questID)
         numQuestCurrencies = GetNumQuestLogRewardCurrencies(questID)
         totalXp, baseXp = GetQuestLogRewardXP(questID)
         honorAmount = GetQuestLogRewardHonor(questID)
         rewardMoney = GetQuestLogRewardMoney(questID)
+        majorFactionRepRewards = C_QuestLog.GetQuestLogMajorFactionReputationRewards(questID);
+        skillName, skillIcon, skillPoints = GetQuestLogRewardSkillPoints(questID);
     else
         numQuestRewards = GetNumQuestRewards()
         numQuestChoices = GetNumQuestChoices()
@@ -139,6 +143,8 @@ function CaerdonQuestMixin:GetQuestInfo()
         totalXp, baseXp = GetRewardXP()
         honorAmount = GetRewardHonor()
         rewardMoney = GetRewardMoney()
+        majorFactionRepRewards = C_QuestOffer.GetQuestOfferMajorFactionReputationRewards();
+        skillName, skillIcon, skillPoints = GetRewardSkillPoints();
     end
 
     for i = 1, numQuestRewards do

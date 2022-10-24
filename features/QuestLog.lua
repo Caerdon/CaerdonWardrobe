@@ -98,9 +98,8 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				CaerdonWardrobe:ClearButton(pin)
 				return
 			end
-	
+
 			local questInfo = itemData:GetQuestInfo()
-	
 			local choiceCount = #questInfo.choices
 			for i = 1, choiceCount do
 				local questLogIndex = i
@@ -115,6 +114,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				if reward.itemLink then
 					rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 				end
+
 				-- if reward.itemLink then
 				-- 	rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 				-- elseif reward.itemID then
@@ -146,6 +146,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				if reward.itemLink then
 					rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 				end
+
 				-- if reward.itemLink then
 				-- 	rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 				-- elseif reward.itemID then
@@ -177,7 +178,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				if reward.itemLink then
 					rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
 				end
-	
+
 				-- local name, texture, quality, amount, currencyID;
 				-- if ( QuestInfoFrame.questLog ) then
 				-- 	name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(index, questItem.questID, isChoice);
