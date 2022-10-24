@@ -8,12 +8,23 @@ function VenturePlanMixin:GetName()
     return addonName
 end
 
+local function hookOrAssign(t, key, hookFunc)
+	if type(t[key]) == "function" then
+		hooksecurefunc(t, key, hookFunc)
+	else
+		t[key] = hookFunc
+	end
+end
+
 function VenturePlanMixin:Init()
-    -- Have to expose this from VenturePlan by editing Widgets.lua in VenturePlan right now
-    -- so just don't hook up if it's not available.  :(
-    if RewardButton_SetReward then
-        hooksecurefunc('RewardButton_SetReward', function(...) self:UpdateButton(...) end)
-    end
+	local function OnSetReward(...)
+		self:UpdateButton(...)
+	end
+	hookOrAssign(_G, "VPEX_OnUIObjectCreated", function(objectType, widget)
+		if objectType == "RewardFrame" or objectType == "InlineRewardFrame" then
+			hookOrAssign(widget, "OnSetReward", OnSetReward)
+		end
+	end)
 end
 
 function VenturePlanMixin:GetTooltipData(item, locationInfo)
@@ -23,7 +34,7 @@ end
 function VenturePlanMixin:Refresh()
 end
 
-function VenturePlanMixin:UpdateButton(button, rew, isOvermax, pw)
+function VenturePlanMixin:UpdateButton(button)
 	local options = {
 		showMogIcon=true, 
 		showBindStatus=true,
@@ -32,12 +43,12 @@ function VenturePlanMixin:UpdateButton(button, rew, isOvermax, pw)
         overrideBindingPosition = "CENTER"
 	}
 
-    if rew and rew.itemLink then
-        local item = CaerdonItem:CreateFromItemLink(rew.itemLink)
-        CaerdonWardrobe:UpdateButton(button, item, self, { reward = rew, locationKey = tostring(button) }, options)
-    elseif rew and rew.itemID then
-        local item = CaerdonItem:CreateFromItemID(rew.itemID)
-        CaerdonWardrobe:UpdateButton(button, item, self, { reward = rew, locationKey = tostring(button) }, options)
+	if button.itemLink then
+		local item = CaerdonItem:CreateFromItemLink(button.itemLink)
+		CaerdonWardrobe:UpdateButton(button, item, self, { locationKey = tostring(button) }, options)
+	elseif button.itemID then
+		local item = CaerdonItem:CreateFromItemID(button.itemID)
+		CaerdonWardrobe:UpdateButton(button, item, self, { locationKey = tostring(button) }, options)
     else
         CaerdonWardrobe:ClearButton(button)
     end
