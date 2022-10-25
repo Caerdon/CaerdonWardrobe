@@ -61,7 +61,7 @@ function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
     C_Timer.After(0, function ()
         local button = ProfessionsFrame.CraftingPage.SchematicForm.OutputIcon
         local currentRecipeInfo = ProfessionsFrame.CraftingPage.SchematicForm:GetRecipeInfo();
-        local itemLink = currentRecipeInfo.hyperlink
+        local itemLink = currentRecipeInfo and currentRecipeInfo.hyperlink
         if itemLink then
             local options = {
             }

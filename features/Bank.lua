@@ -63,7 +63,14 @@ end
 
 function BankMixin:OnUpdateSearchResults(frame)
 	for i, button in frame:EnumerateValidItems() do
-		local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
+		local isFiltered
+		if C_Container and C_Container.GetContainerItemInfo then
+			local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
+			isFiltered = itemInfo.isFiltered
+		else
+			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(button:GetBagID(), button:GetID())
+		end
+
 		-- local slot, bag = button:GetSlotAndBagID()
 		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
 		if button.caerdonButton then

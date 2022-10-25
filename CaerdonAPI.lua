@@ -66,14 +66,65 @@ function CaerdonAPIMixin:GetItemDetails(item)
     end
 
     return {
+        caerdonType = caerdonType,
         forDebugUse = item:GetForDebugUse(),
         itemResults = itemResults
     }
 end
 
 function CaerdonAPIMixin:DumpMouseoverLinkDetails()
-    local link = select(2, GameTooltip:GetItem())
-    self:DumpLinkDetails(link)
+    local tooltipData = self:ProcessTooltipData(GameTooltip:GetTooltipData())
+    if tooltipData then
+        if tooltipData.hyperlink then
+            self:DumpLinkDetails(tooltipData.hyperlink)
+        end
+
+        if tooltipData.additionalHyperlink then
+            self:DumpLinkDetails(tooltipData.additionalHyperlink)
+        end
+    end
+end
+
+function CaerdonAPIMixin:ProcessTooltipData(tooltipData)
+    if not tooltipData then return end
+
+    local data = {
+        type = tooltipData.type,
+        lines = {}
+    }
+
+    local k,v
+    for k,v in pairs(tooltipData.args) do
+        local key = v.field
+        if v.field == "hyperlink" and data.hyperlink then -- already has a hyperlink... assuming for now that first hyperlink is a recipe / creator of this one
+            if data.additionalHyperlink then
+                error("Please report error - Unexpected additional hyperlink for " .. data.hyperlink)
+            end
+            
+            key = "additionalHyperlink"
+        end
+
+        if v.colorVal then
+            data[key] = v.colorVal:GenerateHexColor()
+        else
+            data[key] = v.stringVal or v.intVal or v.floatVal or v.colorVal or v.guidVal or v.boolVal 
+        end
+    end
+
+    for kLine, vLine in pairs(tooltipData.lines) do
+        data.lines[kLine] = {}
+
+        for k,v in pairs(vLine.args) do
+
+            if v.colorVal then
+                data.lines[kLine][v.field] = v.colorVal:GenerateHexColor()
+            else
+                data.lines[kLine][v.field] = v.stringVal or v.intVal or v.floatVal or v.colorVal or v.guidVal or v.boolVal 
+            end
+        end
+    end
+
+    return data
 end
 
 function CaerdonAPIMixin:CopyLink(itemLink)

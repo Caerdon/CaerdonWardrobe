@@ -24,6 +24,7 @@ CaerdonItemType = {
 
 CaerdonItemBind = {
     None = "None",
+    BindOnAccount = "Bind on Account",
     BindOnPickup = "Bind on Pickup",
     BindOnEquip = "Bind on Equip",
     BindOnUse = "Bind on Use",
@@ -287,6 +288,10 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
             binding = CaerdonItemBind.BindOnUse
         elseif bindType == 4 then -- Quest
             binding = CaerdonItemBind.QuestItem
+        elseif bindType == 8 then -- BoA, apparently
+            binding = CaerdonItemBind.BindOnAccount
+        else
+            print(self:GetItemLink() .. ": Please report - Unknown binding type " .. tostring(bindType))
         end
 
         return binding

@@ -268,49 +268,58 @@ end
     local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonRecipeMixin)
     itemType.item = caerdonItem
 
-    -- You would think this one... but no.
-    -- local recipeName, recipeID = GetItemSpell(item:GetItemID())
-    local recipeName = string.gsub(caerdonItem:GetItemName(), "Recipe: ", "")
-    recipeName = string.gsub(recipeName, "Schematic: ", "")
-    recipeName = string.gsub(recipeName, "Design: ", "")
-    recipeName = string.gsub(recipeName, "Plans: ", "")
+    -- You would think one of these... but no.
+    -- local recipeName, recipeID = GetItemSpell(caerdonItem:GetItemID())
+    -- local recipeName, recipeID = GetItemSpell(caerdonItem:GetItemLink())
+    -- print(recipeName or "" .. ": " .. tostring(recipeID))
 
-    itemType.recipe = nil
-
-    -- TODO: This is not ideal, but I haven't identified a great way to get the recipe spell ID from the item ID.
-    -- local loaded, reason = LoadAddOn("Blizzard_Professions")
-    -- print("Loaded: " .. tostring(loaded) .. ", " .. tostring(reason))
-    -- C_TradeSkillUI.CloseTradeSkill()
-
-    -- C_TradeSkillUI.SetProfessionChildSkillLineID(professionInfo.professionID)
-
-    -- local currBaseProfessionInfo = C_TradeSkillUI.GetBaseProfessionInfo();
-    -- if currBaseProfessionInfo == nil or currBaseProfessionInfo.professionID ~= skillLineID then
-    --     C_TradeSkillUI.OpenTradeSkill(185);
-    -- end
-
-    -- TODO: Doesn't return secondary profession info
-    -- local tradeSkillLineIDs = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
-
-    -- local tradeSkillIndex
-    -- for tradeSkillIndex = 1, #tradeSkillLineIDs do
-    --     local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(tradeSkillLineIDs[tradeSkillIndex])
-    --     print(professionInfo.professionName)
-    -- end
-
-    for skill, data in pairs(TradeSkillLines) do
-        local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skill)
-        -- print(professionInfo.professionName)
+    if caerdonItem.extraData and caerdonItem.extraData.recipeInfo then
+        itemType.recipe = caerdonItem.extraData.recipeInfo
     end
 
-    local recipeIDs = C_TradeSkillUI.GetAllRecipeIDs();
-    local recipeIndex
-    for recipeIndex = 1, #recipeIDs do
-      local checkRecipe = C_TradeSkillUI.GetRecipeInfo(recipeIDs[recipeIndex]);
-      if checkRecipe.name == recipeName then
-        itemType.recipe = checkRecipe;
-        break
-      end
+    if not itemType.recipe then
+        local recipeName = string.gsub(caerdonItem:GetItemName(), "Recipe: ", "")
+        recipeName = string.gsub(recipeName, "Schematic: ", "")
+        recipeName = string.gsub(recipeName, "Design: ", "")
+        recipeName = string.gsub(recipeName, "Plans: ", "")
+
+        itemType.recipe = nil
+
+        -- TODO: This is not ideal, but I haven't identified a great way to get the recipe spell ID from the item ID.
+        -- local loaded, reason = LoadAddOn("Blizzard_Professions")
+        -- print("Loaded: " .. tostring(loaded) .. ", " .. tostring(reason))
+        -- C_TradeSkillUI.CloseTradeSkill()
+
+        -- C_TradeSkillUI.SetProfessionChildSkillLineID(professionInfo.professionID)
+
+        -- local currBaseProfessionInfo = C_TradeSkillUI.GetBaseProfessionInfo();
+        -- if currBaseProfessionInfo == nil or currBaseProfessionInfo.professionID ~= skillLineID then
+        --     C_TradeSkillUI.OpenTradeSkill(185);
+        -- end
+
+        -- TODO: Doesn't return secondary profession info
+        -- local tradeSkillLineIDs = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
+
+        -- local tradeSkillIndex
+        -- for tradeSkillIndex = 1, #tradeSkillLineIDs do
+        --     local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(tradeSkillLineIDs[tradeSkillIndex])
+        --     print(professionInfo.professionName)
+        -- end
+
+        -- for skill, data in pairs(TradeSkillLines) do
+        --     local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skill)
+        --     -- print(professionInfo.professionName)
+        -- end
+
+        local recipeIDs = C_TradeSkillUI.GetAllRecipeIDs();
+        local recipeIndex
+        for recipeIndex = 1, #recipeIDs do
+        local checkRecipe = C_TradeSkillUI.GetRecipeInfo(recipeIDs[recipeIndex]);
+        if checkRecipe.name == recipeName then
+            itemType.recipe = checkRecipe;
+            break
+        end
+        end
     end
 
     return itemType
@@ -328,7 +337,7 @@ function CaerdonRecipeMixin:LoadCreatedItems(callbackFunction)
         -- C_TradeSkillUI.GetFactionSpecificOutputItem
         -- DevTools_Dump(schematic)
 
-        if not schematic or not schematic.outputItemID then
+        if not schematic or not schematic.outputItemID or schematic.outputItemID == item:GetItemID() then -- Some recipes that didn't craft items were self-referential for some reason...
             callbackFunction()
         else
             local item = CaerdonItem:CreateFromItemID(schematic.outputItemID)
@@ -364,28 +373,31 @@ end
 
 function CaerdonRecipeMixin:GetRecipeInfo()
     local item = self.item
-    local schematic, firstCraft, learned, createdItem, canLearn
+    local result = {
+        schematic = nil,
+        firstCraft = false,
+        learned = false,
+        createdItem = nil,
+        canLearn = false
+    }
 
     if self.recipe then
-        schematic = C_TradeSkillUI.GetRecipeSchematic(self.recipe.recipeID, false)
+        result.schematic = C_TradeSkillUI.GetRecipeSchematic(self.recipe.recipeID, false)
 
-        firstCraft = self.recipe.firstCraft
-        learned = self.recipe.learned or false
-        createdItem = nil
-        canLearn = C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
+        result.firstCraft = self.recipe.firstCraft
+        result.learned = self.recipe.learned or false
+        result.createdItem = nil
+        result.canLearn = C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
 
-        if schematic.outputItemID ~= nil then
-            createdItem = CaerdonItem:CreateFromItemID(schematic.outputItemID)
+        if result.schematic.outputItemID ~= nil then
+            result.createdItem = CaerdonItem:CreateFromItemID(result.schematic.outputItemID)
         end
+    else
+        result = nil
     end
 
     -- TODO: Still lots that could likely be evaluated / added here
     -- DevTools_Dump(self.recipe)
     -- DevTools_Dump(C_TradeSkillUI.GetCategoryInfo(self.recipe.categoryID))
-    return {
-        firstCraft = firstCraft,
-        learned = learned,
-        createdItem = createdItem,
-        canLearn = canLearn
-    }
+    return result
 end

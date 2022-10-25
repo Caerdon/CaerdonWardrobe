@@ -35,14 +35,14 @@ function CaerdonWardrobeMixin:OnLoad()
 	hooksecurefunc(BankFrame, "UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
 end
 
-local bindTextTable = {
-	[ITEM_ACCOUNTBOUND]        = L["BoA"],
-	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
-	[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
-	[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"],
-	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
-	-- [ITEM_BIND_ON_USE]         = L["BoE"]
-}
+-- local bindTextTable = {
+-- 	[ITEM_ACCOUNTBOUND]        = L["BoA"],
+-- 	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
+-- 	[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
+-- 	[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
+-- 	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
+-- 	-- [ITEM_BIND_ON_USE]         = L["BoE"]
+-- }
 
 local function IsCollectibleLink(item)
 	local caerdonType = item:GetCaerdonItemType()
@@ -61,7 +61,6 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 	local itemData = item:GetItemData()
 	local caerdonType = item:GetCaerdonItemType()
 
-	local binding
 	local bindingStatus
 	local needsItem = true
 	local hasEquipEffect = false
@@ -81,16 +80,21 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 	isCraftingReagent = GetItemInfo(itemLink)
 
-	isBindOnPickup = bindType == 1
-	if bindType == 1 then -- BoP
-		isBindOnPickup = true
-	elseif bindType == 2 then -- BoE
-		bindingStatus = "BoE"
-	elseif bindType == 3 then -- BoU
-		isBindOnUse = true
-		bindingStatus = "BoE"
-	elseif bindType == 4 then -- Quest
+	local binding = item:GetBinding()
+
+	if binding == CaerdonItemBind.None then
 		bindingStatus = ""
+	elseif binding == CaerdonItemBind.BindOnPickup then
+		isBindOnPickup = true
+	elseif binding == CaerdonItemBind.BindOnEquip then
+		bindingStatus = L["BoE"]
+	elseif binding == CaerdonItemBind.BindOnUse then
+		isBindOnUse = true
+		bindingStatus = L["BoE"]
+	elseif binding == CaerdonItemBind.QuestItem then
+		bindingStatus = ""
+	elseif binding == CaerdonItemBind.BindOnAccount then
+		bindingStatus = L["BoA"]
 	end
 
 	if item:IsSoulbound() then
@@ -109,19 +113,23 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 			bindingStatus = tooltipData.bindingStatus
 		end
 
+		if caerdonType ~= CaerdonItemType.Recipe then -- ignore red on recipes for now... should be handling correctly through the recipe checks
+			if tooltipData.foundRedRequirements then -- TODO: See about getting rid of this eventually and having specific checks (if possible)
+				unusableItem = true
+				skillTooLow = true
+			end
+		end
+
 		if tooltipData.isKnownSpell then
 			needsItem = false
+			unusableItem = true
+			skillTooLow = false
 		end
 
 		isLocked = tooltipData.isLocked
 		isOpenable = tooltipData.isOpenable
 
 		if tooltipData.supercedingSpellNotKnown then
-			unusableItem = true
-			skillTooLow = true
-		end
-
-		if tooltipData.foundRedRequirements then
 			unusableItem = true
 			skillTooLow = true
 		end
@@ -145,20 +153,25 @@ function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, butt
 	if not bindingStatus and (isCollectionItem or isLocked or isOpenable) then
 		-- TODO: This can be useful on everything but needs to be configurable per type before doing so
 		if not isBindOnPickup then
-			bindingStatus = "BoE"
+			bindingStatus = L["BoE"]
 		end
 	end
 
 	if caerdonType == CaerdonItemType.Conduit then
 		local conduitInfo = itemData:GetConduitInfo()
 		needsItem = conduitInfo.needsItem
-	end
-	
-	if caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
+	elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
 		local petInfo = 
 			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
 			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
 		needsItem = petInfo.needsItem
+	elseif caerdonType == CaerdonItemType.Recipe then
+		local recipeInfo = itemData:GetRecipeInfo()
+		if recipeInfo and recipeInfo.learned then -- TODO: This still ends up flagging a few of the weird self-referential ones that aren't learned... look into later.
+			needsItem = false
+		elseif tooltipData.isKnownSpell then
+			needsItem = false
+		end
 	end
 
 	-- Haven't seen a reason for this, yet, and should be handled in each type
@@ -1027,16 +1040,16 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 					mogStatus = nil
 				end
 			end
-		else
-			local recipeInfo = itemData:GetRecipeInfo()
+		-- else
+		-- 	local recipeInfo = itemData:GetRecipeInfo()
 
-			if tooltipData.canLearn then
-				if bindingResult.skillTooLow then
-					mogStatus = "lowSkill"
-				else
-					mogStatus = "own"
-				end
-			end
+		-- 	if tooltipData.canLearn then
+		-- 		if bindingResult.skillTooLow then
+		-- 			mogStatus = "lowSkill"
+		-- 		else
+		-- 			mogStatus = "own"
+		-- 		end
+		-- 	end
 		end
 	elseif caerdonType == CaerdonItemType.Toy then
 		local toyInfo = itemData:GetToyInfo()
@@ -1149,16 +1162,13 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 
 	local data = C_TooltipInfo and feature:GetTooltipData(item, locationInfo) or nil
 	if data then
-		local isBattlePetShown = BattlePetTooltip:IsShown()
-		local lines = data and data.lines or {}
-		for lineIndex, line in ipairs(data.lines) do
-			local args = {}
-			for argIndex, arg in ipairs(line.args) do
-				args[arg.field] = arg.stringVal or arg.intVal or arg.floatVal or arg.boolVal or arg.colorVal or arg.guidVal
-			end
+		data = CaerdonAPI:ProcessTooltipData(data)
 
-			if args.type == Enum.TooltipDataLineType.None then
-				local lineText = args.leftText
+		local isBattlePetShown = BattlePetTooltip:IsShown()
+		local lines = data.lines or {}
+		for lineIndex, line in ipairs(data.lines) do
+			if line.type == Enum.TooltipDataLineType.None then
+				local lineText = line.leftText
 				if lineText then
 					-- TODO: Find a way to identify Equip Effects without tooltip scanning
 					if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
@@ -1166,6 +1176,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 					end
 
 					local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
+					
 					-- if isRecipe then
 						-- TODO: Don't like matching this hard-coded string but not sure how else
 						-- to prevent the expensive books from showing as learnable when I don't
@@ -1197,8 +1208,10 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 							tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
 							tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
 
-							if not hasSkillLine or rank == maxRank then
+							if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
 								tooltipData.canLearn = false
+							else
+								tooltipData.canLearn = true
 							end
 						end		
 					-- end
@@ -1217,10 +1230,10 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 						end
 					end
 
-					if not tooltipData.bindingStatus then
-						-- Check if account bound - TODO: Is there a non-scan way?
-						tooltipData.bindingStatus = bindTextTable[lineText]
-					end
+					-- if not tooltipData.bindingStatus then
+					-- 	-- Check binding status - TODO: Is there a non-scan way?
+					-- 	tooltipData.bindingStatus = bindTextTable[lineText]
+					-- end
 
 					if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
 						tooltipData.canLearn = true
@@ -1246,7 +1259,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 					end
 				end
 
-					local hex = args.leftColor:GenerateHexColor()
+					local hex = line.leftColor
 					-- TODO: Generated hex color includes alpha value so need to check for full red.
 					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
 					-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
@@ -1254,22 +1267,22 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 					if hex == "ffff2020" then
 						tooltipData.foundRedRequirements = true
 					end
-			elseif args.type == Enum.TooltipDataLineType.Blank then
+			elseif line.type == Enum.TooltipDataLineType.Blank then
 			-- elseif args.type == Enum.TooltipDataLineType.UnitName then
-			elseif args.type == Enum.TooltipDataLineType.GemSocket then
-			elseif args.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
-			-- elseif args.type == Enum.TooltipDataLineType.AzeriteEssencePower then
-			-- elseif args.type == Enum.TooltipDataLineType.LearnableSpell then
-			-- elseif args.type == Enum.TooltipDataLineType.UnitThreat then
-			-- elseif args.type == Enum.TooltipDataLineType.QuestObjective then
-			-- elseif args.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
-			-- elseif args.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
-			elseif args.type == Enum.TooltipDataLineType.SellPrice then
-			elseif args.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
-			-- elseif args.type == Enum.TooltipDataLineType.SpellName then
+			elseif line.type == Enum.TooltipDataLineType.GemSocket then
+			elseif line.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
+			-- elseif line.type == Enum.TooltipDataLineType.AzeriteEssencePower then
+			-- elseif line.type == Enum.TooltipDataLineType.LearnableSpell then
+			-- elseif line.type == Enum.TooltipDataLineType.UnitThreat then
+			-- elseif line.type == Enum.TooltipDataLineType.QuestObjective then
+			-- elseif line.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
+			-- elseif line.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
+			elseif line.type == Enum.TooltipDataLineType.SellPrice then
+			elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
+			-- elseif line.type == Enum.TooltipDataLineType.SpellName then
 			else
-				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink() .. ", type: " .. tostring(args.type))
-				-- DevTools_Dump(args)
+				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink() .. ", type: " .. tostring(line.type))
+				-- DevTools_Dump(line)
 			end
 		end
 	end
@@ -1493,7 +1506,14 @@ function CaerdonWardrobeMixin:OnContainerFrameUpdateSearchResults(frame)
 	
 	for i=1, frame.size, 1 do
 		itemButton = _G[name..i] or frame["Item"..i];
-		_, _, _, _, _, _, _, isFiltered = C_Container.GetContainerItemInfo(id, itemButton:GetID())
+
+		if C_Container and C_Container.GetContainerItemInfo then
+			local itemInfo = C_Container.GetContainerItemInfo(id, itemButton:GetID())
+			isFiltered = itemInfo.isFiltered
+		else
+			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(id, itemButton:GetID())
+		end
+
 		self:SetItemButtonMogStatusFilter(itemButton, isFiltered)
 	end
 end
