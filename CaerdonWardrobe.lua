@@ -15,13 +15,13 @@ local registeredFeatures = {}
 CaerdonWardrobeMixin = {}
 
 function CaerdonWardrobeMixin:OnLoad()
-	AddonCompartmentFrame:RegisterAddon({
-		text = 'Caerdon Wardrobe',
-		func = function ()
-			print("Do your thing here")
-		end,
-		icon = "Interface\\Store\\category-icon-featured"
-	})
+	-- AddonCompartmentFrame:RegisterAddon({
+	-- 	text = 'Caerdon Wardrobe',
+	-- 	func = function ()
+	-- 		print("Do your thing here")
+	-- 	end,
+	-- 	icon = "Interface\\Store\\category-icon-featured"
+	-- })
 
 	self.waitingToProcess = {}
 
