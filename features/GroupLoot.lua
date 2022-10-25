@@ -11,8 +11,8 @@ function GroupLootMixin:Init()
     GroupLootFrame4:HookScript("OnShow", function(...) self:OnGroupLootFrameShow(...) end)
 end
 
-function GroupLootMixin:SetTooltipItem(tooltip, item, locationInfo)
-    tooltip:SetLootRollItem(locationInfo.index)
+function GroupLootMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetLootRollItem(locationInfo.index)
 end
 
 function GroupLootMixin:Refresh()

@@ -1,12 +1,32 @@
 local BagsMixin = {}
+local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function BagsMixin:GetName()
 	return "Bags"
 end
 
 function BagsMixin:Init()
-	hooksecurefunc("ContainerFrame_Update", function(...) self:OnContainerFrame_Update(...) end)
-	return { "UNIT_SPELLCAST_SUCCEEDED" }
+	-- TODO: Review for better hooks
+	hooksecurefunc(ContainerFrame1, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame1, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame2, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame2, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame3, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame3, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame4, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame4, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame5, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame5, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrame6, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrame6, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+	hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+	hooksecurefunc(ContainerFrameCombinedBags, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+
+	if isDragonflight then
+		return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
+	else
+		return { "UNIT_SPELLCAST_SUCCEEDED" }
+	end
 end
 
 function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
@@ -21,23 +41,73 @@ function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
 	end
 end
 
-function BagsMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+function BagsMixin:TOOLTIP_DATA_UPDATE()
+	if self.refreshTimer then
+		self.refreshTimer:Cancel()
+	end
+
+	self.refreshTimer = C_Timer.NewTimer(0.1, function ()
+		self:Refresh()
+	end, 1)
+end
+
+function BagsMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function BagsMixin:Refresh()
-	for i = 1, NUM_CONTAINER_FRAMES, 1 do
+	for i = 1, NUM_TOTAL_BAG_FRAMES + 1, 1 do
 		local frame = _G["ContainerFrame"..i]
 		if ( frame:IsShown() ) then
-			self:OnContainerFrame_Update(frame)
+			self:OnUpdateItems(frame)
+		end
+	end
+
+	if ContainerFrameCombinedBags:IsShown() then
+		self:OnUpdateItems(ContainerFrameCombinedBags)
+	end
+end
+
+function BagsMixin:OnUpdateSearchResults(frame)
+	for i, button in frame:EnumerateValidItems() do
+		local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
+		-- local slot, bag = button:GetSlotAndBagID()
+		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		if button.caerdonButton then
+			if isFiltered then
+				button.caerdonButton.mogStatus:Hide()
+				if button.caerdonButton.bindsOnText then
+					button.caerdonButton.bindsOnText:Hide()
+				end
+			else
+				button.caerdonButton.mogStatus:Show()
+				if button.caerdonButton.bindsOnText then
+					button.caerdonButton.bindsOnText:Show()
+				end
+			end
 		end
 	end
 end
 
-function BagsMixin:OnContainerFrame_Update(frame)
-	local bag = frame:GetID()
-	if bag >= BACKPACK_CONTAINER and bag <= NUM_BAG_SLOTS then
-		local size = ContainerFrame_GetContainerNumSlots(bag)
+function BagsMixin:OnUpdateItems(frame)
+	if frame:IsCombinedBagContainer() then
+		for i, button in frame:EnumerateValidItems() do
+			-- local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
+			-- button:SetMatchesSearch(not isFiltered);
+			local slot, bag = button:GetSlotAndBagID()
+			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				bag = bag, 
+				slot = slot
+			}, { 
+				showMogIcon = true, 
+				showBindStatus = true, 
+				showSellables = true
+			})
+		end
+	else
+		local bag = frame:GetID()
+		local size = C_Container.GetContainerNumSlots(bag)
 		for buttonIndex = 1, size do
 			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
 			local slot = button:GetID()

@@ -13,11 +13,8 @@ function WorldQuestTabMixin:Init()
 	WQT_WorldQuestFrame:RegisterCallback('MapPinPlaced', function(...) self:UpdatePin(...) end)
 end
 
-function WorldQuestTabMixin:SetTooltipItem(tooltip, item, locationInfo, button)
-	local itemLink = item:GetItemLink()
-	if itemLink then
-		tooltip:SetHyperlink(itemLink)
-	end
+function WorldQuestTabMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function WorldQuestTabMixin:Refresh()

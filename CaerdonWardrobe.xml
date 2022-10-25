@@ -4,28 +4,6 @@
 	<Script file="ItemDataMixin.lua" />
 	<Script file="CaerdonWardrobe.lua" />
 
-	<!-- This is derived from GameTooltip in GameTooltip.xml -->
-	<GameTooltip name="CaerdonWardrobeFrameShoppingTooltip1" hidden="true" />	
-	<GameTooltip name="CaerdonWardrobeFrameShoppingTooltip2" hidden="true" />
-
-	<GameTooltip name="CaerdonWardrobeFrameTooltip" inherits="GameTooltipTemplate">
-		<Frames>
-			<Frame parentKey="ItemTooltip" inherits="InternalEmbeddedItemTooltipTemplate" hidden="true">
-				<Scripts>
-					<OnLoad>
-						self.Tooltip.shoppingTooltips = { CaerdonWardrobeFrameShoppingTooltip1, CaerdonWardrobeFrameShoppingTooltip2 };
-					</OnLoad>
-				</Scripts>
-			</Frame>
-		</Frames>
-		<Scripts>
-			<OnLoad>
-				self:SetOwner(WorldFrame, "ANCHOR_NONE")
-				self.shoppingTooltips = { CaerdonWardrobeFrameShoppingTooltip1, CaerdonWardrobeFrameShoppingTooltip2 };
-			</OnLoad>
-		</Scripts>
-	</GameTooltip>
-
 	<Frame name="CaerdonWardrobe" secureMixin="CaerdonWardrobeMixin">
 		<Scripts>
 			<OnLoad method="OnLoad"/>
@@ -41,6 +19,7 @@
 	<Script file="features\Bags.lua" />
 	<Script file="features\Bank.lua" />
 	<Script file="features\BlackMarket.lua" />
+	<Script file="features\CustomerOrders.lua" />
 	<Script file="features\EncounterJournal.lua" />
 	<Script file="features\GroupLoot.lua" />
 	<Script file="features\GuildBank.lua" />
@@ -75,6 +54,7 @@
 	<Script file="types\ConsumableMixin.lua" />
 	<Script file="types\EquipmentMixin.lua" />
 	<Script file="types\MountMixin.lua" />
+	<Script file="types\ProfessionMixin.lua" />
 	<Script file="types\QuestMixin.lua" />
 	<Script file="types\RecipeMixin.lua" />
 	<Script file="types\ToyMixin.lua" />	

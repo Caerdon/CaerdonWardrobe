@@ -13,19 +13,50 @@ end
 
 function EncounterJournalMixin:ADDON_LOADED(name)
 	if name == "Blizzard_EncounterJournal" then
-		hooksecurefunc("EncounterJournal_SetLootButton", function (...) self:OnEncounterJournalSetLootButton(...) end)
-		hooksecurefunc("EncounterJournal_BuildLootItemList", function (...) self:OnEncounterJournalBuildLootItemList(...) end)
-		hooksecurefunc("EncounterJournal_SearchUpdate", function (...) self:OnEncounterJournalSearchUpdate(...) end)
-		EncounterJournal.searchResults.scrollFrame.scrollBar:HookScript("OnValueChanged", function(...) self:OnEncounterJournalSearchUpdate(...) end)
+		-- TODO: Probably the line below when item sets are enabled / working
+		hooksecurefunc(EncounterJournal.LootJournalItems.ItemSetsFrame, "ConfigureItemButton", function (...) self:OnConfigureItemButton(...) end)
+		EncounterJournal.searchResults.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnSearchResultsScrollBoxRangeChanged, self);
+		EncounterJournal.encounter.info.LootContainer.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnLootContainerScrollBoxRangeChanged, self);
 		hooksecurefunc("EncounterJournal_UpdateSearchPreview", function (...) self:OnEncounterJournalUpdateSearchPreview(...) end)
+		hooksecurefunc("EJSuggestFrame_UpdateRewards", function (...) self:OnEJSuggestFrame_UpdateRewards(...) end)
 	end
+end
+
+function EncounterJournalMixin:UpdateScrollBox(scrollBox, key, sortPending)
+	local index = 1
+	scrollBox:ForEachFrame(function(button)
+		local options = {
+			relativeFrame = button.icon,
+			statusOffsetX = 8,
+			statusOffsetY = 7
+		}
+
+		local itemLink = button.link
+		if itemLink then
+			local item = CaerdonItem:CreateFromItemLink(itemLink)
+			CaerdonWardrobe:UpdateButton(button, item, self, { 
+				locationKey = format(key .. "%d", index)
+			}, options)
+		else
+			CaerdonWardrobe:ClearButton(button)
+		end
+		index = index + 1
+	end)
+end
+
+function EncounterJournalMixin:OnLootContainerScrollBoxRangeChanged(sortPending)
+	self:UpdateScrollBox(EncounterJournal.encounter.info.LootContainer.ScrollBox, "lootItems", sortPending)
+end
+
+function EncounterJournalMixin:OnSearchResultsScrollBoxRangeChanged(sortPending)
+	self:UpdateScrollBox(EncounterJournal.searchResults.ScrollBox, "searchResults", sortPending)
 end
 
 function EncounterJournalMixin:PLAYER_LOOT_SPEC_UPDATED()
 	self:Refresh()
 end
 
-function EncounterJournalMixin:SetTooltipItem(tooltip, item, locationInfo)
+function EncounterJournalMixin:GetTooltipData(item, locationInfo)
 	local classID, specID = EJ_GetLootFilter();
 
 	if (specID == 0) then
@@ -37,7 +68,7 @@ function EncounterJournalMixin:SetTooltipItem(tooltip, item, locationInfo)
 		end
 	end
 
-    tooltip:SetHyperlink(item:GetItemLink(), classID, specID)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink(), classID, specID)
 end
 
 function EncounterJournalMixin:Refresh()
@@ -46,117 +77,52 @@ function EncounterJournalMixin:Refresh()
 	end
 end
 
+function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
+	local button = suggestion.reward
+	local rewardData = suggestion.reward.data;
 
-local itemLootCount;
+	-- TODO: Check out rewardData content to determine if I can hook into this.
+	-- Right now have only seen currency (currencyType, currencyQuantity, currencyIcon)
+	-- Assuming I may have itemLink based on some other code for now.
+	-- DevTools_Dump(rewardData)
 
-local itemInfoList = {};
-
--- function EncounterJournalMixin:OnEncounterJournalLootUpdate()
-function EncounterJournalMixin:OnEncounterJournalBuildLootItemList()
-	itemLootCount = EJ_GetNumLoot()
-	itemInfoList = {}
-	local bonusItemInfoList = {};
-
-	for i = 1, itemLootCount do
-		local itemInfo = C_EncounterJournal.GetLootInfoByIndex(i);
-		itemInfo.lootIndex = i;
-		if itemInfo.displayAsPerPlayerLoot then
-			tinsert(bonusItemInfoList, itemInfo);
-		else
-			tinsert(itemInfoList, itemInfo);
-		end
-	end
-
-	local lootDividerItem = {
-		name = BONUS_LOOT_TOOLTIP_TITLE,
-		icon = nil,
-		slot = nil,
-		armorType = nil,
-		boss = nil,
-		type = "divider",
+	local options = {
+		relativeFrame = button.icon,
+		statusOffsetX = 8,
+		statusOffsetY = 7
 	}
 
-	local lootDividerIndex
-
-	if #bonusItemInfoList > 0 then
-		tinsert(itemInfoList, lootDividerItem);
-
-		itemLootCount = itemLootCount + 1;
-
-		lootDividerIndex = #itemInfoList;
-
-		tAppendAll(itemInfoList, bonusItemInfoList);
-	else
-		lootDividerIndex = nil;
-	end
-end
-
-function EncounterJournalMixin:OnEncounterJournalSetLootButton(button)
-	-- C_Timer.After(0, function ()
-		local itemID, encounterID, name, icon, slot, armorType, itemLink;
-		local itemInfo = itemInfoList[button.index];
-		-- local itemInfo = C_EncounterJournal.GetLootInfoByIndex(button.index)
-		if itemInfo.type and itemInfo.type == "divider" then
-			-- Ignore, so it will clear
-		elseif itemInfo and itemInfo.name then
-			-- TODO: There are a few more here if they matter once in Shadowlands
-			itemID = itemInfo.itemID
-			encounterID = itemInfo.encounterID
-			name = itemInfo.name
-			icon = itemInfo.icon
-			slot = itemInfo.slot
-			armorType = itemInfo.armorType
-			itemLink = itemInfo.link
-		end
-		
-		local options = {
-			relativeFrame = button.icon,
-			statusOffsetX = 8,
-			statusOffsetY = 7
-		}
-
+	if rewardData then
+		local itemLink = rewardData.itemLink
 		if itemLink then
 			local item = CaerdonItem:CreateFromItemLink(itemLink)
 			CaerdonWardrobe:UpdateButton(button, item, self, { 
-				locationKey = format("%d", button.index)
+				locationKey = format("suggestion%d", suggestion.index)
 			}, options)
 		else
 			CaerdonWardrobe:ClearButton(button)
 		end
-	-- end)
+	else
+		CaerdonWardrobe:ClearButton(button)
+	end
 end
 
-function EncounterJournalMixin:OnEncounterJournalSearchUpdate()
-	local scrollFrame = EncounterJournal.searchResults.scrollFrame;
-	local offset = HybridScrollFrame_GetOffset(scrollFrame);
-	local results = scrollFrame.buttons;
-	local result, index;
+function EncounterJournalMixin:OnConfigureItemButton(button)
+	local options = {
+		relativeFrame = button.icon,
+		statusOffsetX = 8,
+		statusOffsetY = 7
+	}
 
-
-	local numResults = EJ_GetNumSearchResults();
-
-	for i = 1,#results do
-		result = results[i];
-		index = offset + i;
-		if index <= numResults then
-			local spellID, name, icon, path, typeText, displayInfo, itemID, stype, itemLink = EncounterJournal_GetSearchDisplay(index);
-			if itemLink then
-				local options = {
-					relativeFrame = result.icon,
-					statusOffsetX = 5,
-					statusOffsetY = 5
-				}
-			
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(result, item, self, { 
-					locationKey = format("search%d", index)
-				}, options)
-			else
-				CaerdonWardrobe:ClearButton(result)
-			end
-		else
-			CaerdonWardrobe:ClearButton(result)
-		end
+	-- TODO: Confirm once this is turned on and check if button has an index instead.
+	local itemLink = button.itemLink
+	if itemLink then
+		local item = CaerdonItem:CreateFromItemLink(itemLink)
+		CaerdonWardrobe:UpdateButton(button, item, self, { 
+			locationKey = format("itemSets%d", button.itemID)
+		}, options)
+	else
+		CaerdonWardrobe:ClearButton(button)
 	end
 end
 

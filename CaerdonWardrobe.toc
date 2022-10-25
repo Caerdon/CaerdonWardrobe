@@ -1,12 +1,12 @@
-## Interface: 90207
-## X-Compatible-With: 90207
+## Interface: 100000
+## X-Compatible-With: 100002
 ## X-Curse-Project-ID: 101123
 ## X-WoWI-ID: 26357
 ## X-Wago-ID: pkNMoqKz
 ## Title: Caerdon Wardrobe
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v2.23.0
+## Version: v3.0.0
 ## SavedVariables: CaerdonWardrobeConfig
 ## OptionalDeps: WagoAnalytics, WoWUnit, AdiBags, ArkInventory, Bagnon, BaudBag, cargBags_Nivaya, Combuctor, ElvUI, Inventorian, KkthnxUI, LiteBag, VenturePlan, WorldQuestsList, WorldQuestTab, ZygorGuidesViewer
 
@@ -19,3 +19,4 @@ localization\deDE.lua
 
 CaerdonWardrobe.xml
 config\Config.xml
+# config\ConfigNew.lua

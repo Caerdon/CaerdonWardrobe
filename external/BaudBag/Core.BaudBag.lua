@@ -12,15 +12,15 @@ function BaudBagMixin:Init()
     hooksecurefunc(BaudBag, "ItemSlot_Updated", function(...) self:ItemSlotUpdated(...) end)
 end
 
-function BaudBagMixin:SetTooltipItem(tooltip, item, locationInfo)
+function BaudBagMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.isOffline then
 		if not item:IsItemEmpty() then
-			tooltip:SetHyperlink(item:GetItemLink())
+            return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 		end
 	elseif locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+        return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+        return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
 end
 

@@ -27,9 +27,13 @@ function CaerdonAPIMixin:DumpLinkDetails(link)
     if link then
         local originalValue = CaerdonWardrobeConfig.Debug.Enabled
         CaerdonWardrobeConfig.Debug.Enabled = true
-    
+
+        local originalMax = DEVTOOLS_MAX_ENTRY_CUTOFF
+        DEVTOOLS_MAX_ENTRY_CUTOFF = 300
+
         SlashCmdList.DUMP(format("CaerdonAPI:GetItemDetails(CaerdonItem:CreateFromItemLink(\"%s\"))", link))
 
+        DEVTOOLS_MAX_ENTRY_CUTOFF = originalMax
         CaerdonWardrobeConfig.Debug.Enabled = originalValue
     end
 end
@@ -43,10 +47,22 @@ function CaerdonAPIMixin:GetItemDetails(item)
         itemResults = itemData:GetBattlePetInfo()
     elseif caerdonType == CaerdonItemType.CompanionPet then
         itemResults = itemData:GetCompanionPetInfo()
+    elseif caerdonType == CaerdonItemType.Conduit then
+        itemResults = itemData:GetConduitInfo()
+    elseif caerdonType == CaerdonItemType.Consumable then
+        -- TODO
     elseif caerdonType == CaerdonItemType.Equipment then
-            itemResults = itemData:GetTransmogInfo()
+        itemResults = itemData:GetTransmogInfo()
+    elseif caerdonType == CaerdonItemType.Mount then
+        itemResults = itemData:GetMountInfo()
+    elseif caerdonType == CaerdonItemType.Profession then
+        itemResults = itemData:GetProfessionInfo()
     elseif caerdonType == CaerdonItemType.Quest then
         itemResults = itemData:GetQuestInfo()
+    elseif caerdonType == CaerdonItemType.Recipe then
+        itemResults = itemData:GetRecipeInfo()
+    elseif caerdonType == CaerdonItemType.Toy then
+        itemResults = itemData:GetToyInfo()
     end
 
     return {

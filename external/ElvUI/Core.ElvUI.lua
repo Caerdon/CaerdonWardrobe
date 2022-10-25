@@ -13,15 +13,15 @@ function ElvUIMixin:Init()
 	hooksecurefunc(self.ElvUIBags, "UpdateSlot", function(...) self:OnUpdateSlot(...) end)
 end
 
-function ElvUIMixin:SetTooltipItem(tooltip, item, locationInfo)
+function ElvUIMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.isOffline then
 		if not item:IsItemEmpty() then
-			tooltip:SetHyperlink(item:GetItemLink())
+			return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 		end
 	elseif locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
 end
 
@@ -30,7 +30,7 @@ function ElvUIMixin:Refresh()
 end
 
 function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
-	if (frame.Bags[bagID] and frame.Bags[bagID].numSlots ~= GetContainerNumSlots(bagID)) or not frame.Bags[bagID] or not frame.Bags[bagID][slotID] then
+	if (frame.Bags[bagID] and frame.Bags[bagID].numSlots ~= C_Container.GetContainerNumSlots(bagID)) or not frame.Bags[bagID] or not frame.Bags[bagID][slotID] then
 		return
 	end
 

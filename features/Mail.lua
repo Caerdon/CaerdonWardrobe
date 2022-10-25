@@ -10,13 +10,13 @@ function MailMixin:Init()
     hooksecurefunc("InboxFrame_Update", function(...) self:OnInboxFrameUpdate(...) end)
 end
 
-function MailMixin:SetTooltipItem(tooltip, item, locationInfo)
+function MailMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.type == "open" then
-		local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInboxItem(InboxFrame.openMailID, locationInfo.index)
+		return C_TooltipInfo.GetInboxItem(InboxFrame.openMailID, locationInfo.index)
 	elseif locationInfo.type == "send" then
-		local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetSendMailItem(locationInfo.index)
+		return C_TooltipInfo.GetSendMailItem(locationInfo.index)
 	elseif locationInfo.type == "inbox" then
-		local hasCooldown, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInboxItem(locationInfo.index);
+		return C_TooltipInfo.GetInboxItem(locationInfo.index)
 	else
 		error(format("Unknown mail type: %s", locationInfo.type))
 	end

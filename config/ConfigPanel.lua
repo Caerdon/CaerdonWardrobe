@@ -3,10 +3,160 @@ CaerdonWardrobeConfigPanelMixin = {}
 local ADDON_NAME, NS = ...
 local L = NS.L
 
+local DEPENDS_ADJUSTMENT = 16
+local LINE_HEIGHT = 36
+
+function CaerdonWardrobeConfigPanelMixin:GetTitle()
+    error("GetTitle not implemented")
+end
+
+function CaerdonWardrobeConfigPanelMixin:Init()
+    self.nextPoint = -16
+    self.parent = "Caerdon Wardrobe"
+
+    -- TODO: Review using VerticalLayoutFrame: https://discord.com/channels/168296152670797824/218957301111848962/1021406980029550642
+
+    local frame = CreateFrame("Frame")
+    -- self.scrollChild = CreateFrame("Frame")
+    self.scrollChild = frame
+
+    local category = Settings.GetCategory(self.parent);
+    local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(category, frame, self:GetTitle());
+
+    -- local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate");
+    -- local scrollFrame = CreateFrame("ScrollFrame", "CaerdonConfigGeneralFrame", frame, "UIPanelScrollFrameTemplate2")
+    -- scrollFrame:SetPoint("TOPLEFT", 8, -4)
+    -- scrollFrame:SetPoint("BOTTOMRIGHT", -27, 4)
+    -- scrollFrame:SetScrollChild(scrollChild)
+    -- scrollChild:SetPoint("LEFT", 0)
+    -- scrollChild:SetPoint("RIGHT", 0)
+    -- scrollChild:SetHeight(1) 
+   
+end
+
+function CaerdonWardrobeConfigPanelMixin:ConfigureSection(title, key)
+    local frame = self.scrollChild
+
+    local sectionFrame = CreateFrame("Frame", "CaerdonWardrobe" .. key, frame)
+    sectionFrame.key = key
+    local titleString = sectionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	titleString:SetText(title)
+	sectionFrame:SetPoint("LEFT", 16)
+    sectionFrame:SetPoint("TOP", 0, self.nextPoint)
+	titleString:SetPoint("LEFT", 16)
+    titleString:SetPoint("TOP", 0, 0)
+    self.nextPoint = self.nextPoint - LINE_HEIGHT
+end
+
+function CaerdonWardrobeConfigPanelMixin:ConfigureCheckboxNew(info)
+    local frame = self.scrollChild
+
+    local section = info.configSection and info.configSubsection and CaerdonWardrobeConfig[info.configSection][info.configSubsection] or info.configSection and CaerdonWardrobeConfig[info.configSection]
+    local defaultSection = info.configSection and info.configSubsection and NS:GetDefaultConfig()[info.configSection][info.configSubsection] or info.configSection and NS:GetDefaultConfig()[info.configSection]
+
+    local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, frame, "InterfaceOptionsCheckButtonTemplate")
+    checkbox.key = info.key
+
+    local dependsOn = nil
+    if info.dependsOn then
+        dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
+    end
+
+    if dependsOn then
+        checkbox:SetPoint("LEFT", dependsOn, "LEFT", 16, 0)
+        self.nextPoint = self.nextPoint + DEPENDS_ADJUSTMENT
+        checkbox:SetPoint("TOP", 0, self.nextPoint)
+        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    else
+        checkbox:SetPoint("LEFT", 16)
+        checkbox:SetPoint("TOP", 0, self.nextPoint)
+        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    end
+
+    checkbox:SetScript("OnClick", function(checkbox)
+        local checked = checkbox:GetChecked()
+        section[info.configValue] = checked
+
+        if checked then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+        else
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+        end
+    end)
+    checkbox.label = _G[checkbox:GetName() .. "Text"]
+    checkbox.label:SetText(info.text)
+    checkbox:SetChecked(section[info.configValue] or defaultSection[info.configValue])
+end
+
+function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValues)
+    local frame = self.scrollChild
+
+    local section = info.configSection and info.configSubsection and CaerdonWardrobeConfig[info.configSection][info.configSubsection] or info.configSection and CaerdonWardrobeConfig[info.configSection]
+    local defaultSection = info.configSection and info.configSubsection and NS:GetDefaultConfig()[info.configSection][info.configSubsection] or info.configSection and NS:GetDefaultConfig()[info.configSection]
+
+	local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, frame, "UIDropDownMenuTemplate")
+    dropdown.key = info.key
+
+    local label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	label:SetPoint("TOPLEFT", 5, 12)
+	label:SetJustifyH("LEFT")
+	label:SetText(info.text)
+
+    local dependsOn = nil
+    if info.dependsOn then
+        dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
+    end
+
+    if dependsOn then
+        dropdown:SetPoint("LEFT", dependsOn, "LEFT", 16, 0)
+        self.nextPoint = self.nextPoint - 16 + DEPENDS_ADJUSTMENT
+        checkbox:SetPoint("TOP", 0, self.nextPoint)
+        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    else
+        dropdown:SetPoint("LEFT", 16)
+        self.nextPoint = self.nextPoint - 16
+        dropdown:SetPoint("TOP", 0, self.nextPoint)
+        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    end
+
+    local selectedTitle = nil
+    local text =  _G[dropdown:GetName() .. "Text"]
+    text:SetText(info.text)
+
+    for _, dropdownValue in ipairs(dropdownValues) do
+        if dropdownValue.value == section[info.configValue] then
+            text:SetText(dropdownValue.title)
+        end
+    end
+
+    dropdown.initialize = function(dropdown)
+        local dropdownInfo = {}
+		for _, dropdownValue in ipairs(dropdownValues) do
+			dropdownInfo.text = dropdownValue.title
+			dropdownInfo.value = dropdownValue.value
+            dropdownInfo.checked = function() return dropdownValue.value == section[info.configValue] end
+
+            dropdownInfo.func = function(dropdown)
+                section[info.configValue] = dropdown.value
+				text:SetText(dropdown:GetText())
+			end
+			UIDropDownMenu_AddButton(dropdownInfo)
+		end
+	end
+end
+
 function CaerdonWardrobeConfigPanelMixin:ConfigureCheckbox(checkbox, label, configSection, configSubsection, configValue)
     checkbox.type = CONTROLTYPE_CHECKBOX;
-    checkbox.label = label;
-    checkbox.Text:SetWidth(230)
+
+    checkbox.label = _G[checkbox:GetName() .. "Text"]
+    if checkbox.label then
+        checkbox.label:SetText(label)
+    end
+    -- checkbox.Text:SetText(label)
+    -- checkbox.Text:SetWidth(230)
+
+    -- check.tooltipText = label
+    -- check.tooltipRequirement = description
 
     local dependsOn, dependsOnControl
     if checkbox.dependentOn then
@@ -23,9 +173,9 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureCheckbox(checkbox, label, conf
         section[configValue] = value == "1"
     end
 
-    BlizzardOptionsPanel_RegisterControl(checkbox, self);
+    -- BlizzardOptionsPanel_RegisterControl(checkbox, self);
     if dependsOnControl then
-        BlizzardOptionsPanel_SetupDependentControl(dependsOnControl, checkbox)
+        -- BlizzardOptionsPanel_SetupDependentControl(dependsOnControl, checkbox)
     end
 end
 
@@ -84,7 +234,7 @@ function CaerdonWardrobeConfigPanelMixin:InitializeDropdown(dropdown, label, con
             end);
         end
 
-    BlizzardOptionsPanel_RegisterControl(dropdown, self);
+    -- BlizzardOptionsPanel_RegisterControl(dropdown, self);
 
     UIDropDownMenu_SetWidth(dropdown, 136);
     dropdown:RefreshValue()

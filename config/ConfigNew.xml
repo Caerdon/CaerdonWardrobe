@@ -1,6 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\..\FrameXML\UI.xsd">
-	<Script file="Config.lua"/>
+	<Script file="ConfigNew.lua"/>
 
 	<Frame name="CaerdonWardrobeConfigFrame" hidden="true" secureMixin="CaerdonWardrobeConfigMixin">
        <Layers>
@@ -36,11 +36,12 @@
         </Scripts>
     </Frame>
 
-    <Include file="ConfigPanel.lua" />
-	<Include file="General.lua" />
-	<Include file="BankAndBags.lua" />
-	<Include file="GuildBank.lua" />
-	<Include file="Merchant.lua" />
-	<Include file="Auction.lua" />
-	<Include file="EncounterJournal.lua" />
+    <!-- <Include file="ConfigPanel.xml" /> -->
+	<!-- <Include file="General.xml" /> -->
+	<!-- <Include file="BankAndBags.xml" />
+	<Include file="GuildBank.xml" />
+	<Include file="Merchant.xml" />
+	<Include file="Auction.xml" />
+	<Include file="EncounterJournal.xml" /> -->
+
 </Ui>

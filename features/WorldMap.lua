@@ -1,6 +1,5 @@
 local WorldMapMixin = {}
 local version, build, date, tocversion = GetBuildInfo()
-local isShadowlands = tonumber(build) > 35700
 
 function WorldMapMixin:GetName()
 	return "WorldMap"
@@ -14,11 +13,8 @@ function WorldMapMixin:Init()
 	end)
 end
 
-function WorldMapMixin:SetTooltipItem(tooltip, item, locationInfo)
-	local itemLink = item:GetItemLink()
-	if itemLink then
-		tooltip:SetHyperlink(itemLink)
-	end
+function WorldMapMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function WorldMapMixin:Refresh()
@@ -39,20 +35,14 @@ function WorldMapMixin:GetDisplayInfo(button, item, feature, locationInfo, optio
 end
 
 function WorldMapMixin:UpdatePin(pin)
-	QuestEventListener:AddCallback(pin.questID, function()
+		-- QuestEventListener:AddCallback(pin.questID, function()
 		local options = {
 			statusProminentSize = 30
 		}
 
 		local questLink = GetQuestLink(pin.questID)
 		if not questLink then 
-			local questName
-			if isShadowlands then
-				questName = C_QuestLog.GetTitleForQuestID(pin.questID)
-			else
-				questName = C_QuestLog.GetQuestInfo(pin.questID)
-			end
-
+			local questName = C_QuestLog.GetTitleForQuestID(pin.questID)
 			local questLevel = C_QuestLog.GetQuestDifficultyLevel(pin.questID)
 			questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", pin.questID, questLevel, questName)
 		end
@@ -64,16 +54,16 @@ function WorldMapMixin:UpdatePin(pin)
 			return
 		end
 		
-		local questInfo = itemData:GetQuestInfo()
+		-- local questInfo = itemData:GetQuestInfo()
 
 		-- TODO: Review if necessary to iterate through rewards and find unknown ones...
 		local bestIndex, bestType = QuestUtils_GetBestQualityItemRewardIndex(pin.questID)
-		local reward
-		if bestType == "reward" then
-			reward = questInfo.rewards[bestIndex]
-		elseif bestType == "choice" then
-			reward = questInfo.choices[bestIndex]
-		end
+		-- local reward
+		-- if bestType == "reward" then
+		-- 	reward = questInfo.rewards[bestIndex]
+		-- elseif bestType == "choice" then
+		-- 	reward = questInfo.choices[bestIndex]
+		-- end
 
 		if not bestType then 
 			CaerdonWardrobe:ClearButton(pin)
@@ -92,7 +82,7 @@ function WorldMapMixin:UpdatePin(pin)
 			questID = pin.questID,
 			questItem
 		}, options)
-	end)
+	-- end)
 end
 
 CaerdonWardrobe:RegisterFeature(WorldMapMixin)

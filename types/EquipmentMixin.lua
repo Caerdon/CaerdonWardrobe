@@ -118,15 +118,18 @@ end
 -- Wowhead Transmog Guide - https://www.wowhead.com/transmogrification-overview-frequently-asked-questions
 function CaerdonEquipmentMixin:GetTransmogInfo()
     local item = self.item
-    local itemParamType = type(item)
-    if itemParamType == "string" then
-        item = gsub(item, "\124\124", "\124")
-        item = CaerdonItem:CreateFromItemLink(item)
-    elseif itemParamType == "number" then
-        item = CaerdonItem:CreateFromItemID(item)
-    elseif itemParamType ~= "table" then
-        error("Must specify itemLink, itemID, or CaerdonItem for GetTransmogInfo")
-    end
+    -- TODO: Pretty sure this doesn't matter anymore as it should always be a CaerdonItem
+    -- local itemParamType = type(item)
+    -- if itemParamType == "string" then
+    --     item = gsub(item, "\124\124", "\124")
+    --     item = CaerdonItem:CreateFromItemLink(item)
+    --     print("Creating from link: " .. item)
+    -- elseif itemParamType == "number" then
+    --     item = CaerdonItem:CreateFromItemID(item)
+    --     print("Creating from ID: " .. item)
+    -- elseif itemParamType ~= "table" then
+    --     error("Must specify itemLink, itemID, or CaerdonItem for GetTransmogInfo")
+    -- end
 
     local itemLink = item:GetItemLink()
     if not itemLink then
@@ -160,7 +163,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- Sets can have multiple appearances (normal vs mythic, etc.)
     local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
     if not sourceID then
-        -- TODO: Not sure why this is the case?  EncounterJournal links aren't returning source info
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(item:GetItemID())
     end
 
@@ -180,7 +182,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         isTransmog = true
 
         -- If canCollect, then the current toon can learn it (but may already know it)
-        isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+        -- isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+        isInfoReady, canCollect = CollectionWardrobeUtil.PlayerCanCollectSource(sourceID)
+
         -- hasItemData, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
 
         -- if not isInfoReady then
@@ -224,7 +228,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 local sourceIndex, source
                 local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
                 for sourceIndex, source in pairs(appearanceSourceIDs) do
-                    local isInfoReadySearch, canCollectSearch = C_TransmogCollection.PlayerCanCollectSource(source)
+                    -- local isInfoReadySearch, canCollectSearch = C_TransmogCollection.PlayerCanCollectSource(source)
+                    local isInfoReadySearch, canCollectSearch = CollectionWardrobeUtil.PlayerCanCollectSource(sourceID)
                     -- if not isInfoReadySearch then
                     --     print('Search Info not ready - source ID ' .. tostring(source) .. ' for ' .. itemLink)
                     -- end

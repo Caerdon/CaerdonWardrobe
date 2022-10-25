@@ -13,11 +13,11 @@ function LiteBagMixin:Init()
     LiteBag_AddUpdateEvent('TRANSMOG_COLLECTION_UPDATED')
 end
 
-function LiteBagMixin:SetTooltipItem(tooltip, item, locationInfo)
+function LiteBagMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.bag == BANK_CONTAINER then
-		local hasItem, hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
+		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
-		local hasCooldown, repairCost, speciesID, level, breedQuality, maxHealth, power, speed, name = tooltip:SetBagItem(locationInfo.bag, locationInfo.slot)
+		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
 end
 

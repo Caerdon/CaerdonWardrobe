@@ -1,5 +1,3 @@
---  TradeSkillFrame.DetailsFrame  RefreshDisplay
-
 local TradeSkillMixin = {}
 
 local version, build, date, tocversion = GetBuildInfo()
@@ -10,29 +8,80 @@ function TradeSkillMixin:GetName()
 end
 
 function TradeSkillMixin:Init()
-	return { "ADDON_LOADED", "PLAYER_LOOT_SPEC_UPDATED" }
+    return { "TRADE_SKILL_SHOW" }
 end
 
-function TradeSkillMixin:ADDON_LOADED(name)
-	if name == "Blizzard_TradeSkillUI" then
-		hooksecurefunc(TradeSkillFrame.DetailsFrame, "RefreshDisplay", function (...) self:OnTradeSkillDetailsRefreshDisplay(...) end)
-		hooksecurefunc(TradeSkillFrame.RecipeList, "RefreshDisplay", function (...) self:OnTradeSkillRecipeListRefreshDisplay(...) end)
-		TradeSkillFrame.RecipeList.scrollBar:HookScript("OnValueChanged", function(...) self:OnRecipeListUpdate(...) end)
+function TradeSkillMixin:TRADE_SKILL_SHOW(name)
+    if not self.isHooked then
+        self.isHooked = true
+        ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
+        hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
+        -- hooksecurefunc(ProfessionsFrame, "Refresh", function (...) self:Refresh(...) end)
     end
 end
 
-function TradeSkillMixin:PLAYER_LOOT_SPEC_UPDATED()
-	self:Refresh()
+function TradeSkillMixin:OnInitializedFrame(listFrame, frame, elementData)
+    -- DevTools_Dump(elementData)
+    local button = frame
+    local data = elementData:GetData();
+
+    if data.recipeInfo and data.recipeInfo.hyperlink then
+        local recipeInfo
+
+        local options = {
+            statusProminentSize = 13,
+            statusOffsetX = 16,
+            statusOffsetY = 5,
+            bindingScale = 0.8,
+            overrideBindingPosition = "RIGHT",
+            bindingOffsetY = 0,
+            bindingOffsetX = 0
+        }
+
+        if not C_TradeSkillUI.IsTradeSkillGuild() then
+            local professionInfo = C_TradeSkillUI.GetChildProfessionInfo();
+            local isNPCCrafting = C_TradeSkillUI.IsNPCCrafting() and professionInfo.maxSkillLevel == 0;
+            if not isNPCCrafting then
+                recipeInfo = data.recipeInfo
+            end
+        end
+
+        local item = CaerdonItem:CreateFromItemLink(data.recipeInfo.hyperlink, { recipeInfo = recipeInfo })
+
+        CaerdonWardrobe:UpdateButton(button, item, self, { 
+            locationKey = format("recipe%d",  data.recipeInfo.recipeID), --item:GetItemID()), -- 
+            selectedRecipeID =  data.recipeInfo.recipeID
+        }, options)
+    else
+        CaerdonWardrobe:ClearButton(button)
+    end
 end
 
-function TradeSkillMixin:SetTooltipItem(tooltip, item, locationInfo)
-    tooltip:SetHyperlink(item:GetItemLink())
+function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
+    C_Timer.After(0, function ()
+        local button = ProfessionsFrame.CraftingPage.SchematicForm.OutputIcon
+        local currentRecipeInfo = ProfessionsFrame.CraftingPage.SchematicForm:GetRecipeInfo();
+        local itemLink = currentRecipeInfo.hyperlink
+        if itemLink then
+            local options = {
+            }
+
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            CaerdonWardrobe:UpdateButton(button, item, self, { 
+                locationKey = format("selectedrecipe%d", currentRecipeInfo.recipeID),  -- item:GetItemID()),
+                selectedRecipeID =  currentRecipeInfo.recipeID
+            }, options)
+        else
+            CaerdonWardrobe:ClearButton(button)
+        end
+    end)
+end
+
+function TradeSkillMixin:GetTooltipData(item, locationInfo)
+	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function TradeSkillMixin:Refresh()
-	if TradeSkillFrame and TradeSkillFrame:IsShown() then
-        self:OnTradeSkillRecipeListRefreshDisplay(TradeSkillFrame.RecipeList)
-	end
 end
 
 function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
@@ -56,70 +105,6 @@ function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, opt
             shouldShow = false
         }
 	}
-end
-
-function TradeSkillMixin:OnRecipeListUpdate()
-    self:Refresh()
-end
-
-function TradeSkillMixin:OnTradeSkillRecipeListRefreshDisplay(recipeList)
-	local offset = HybridScrollFrame_GetOffset(recipeList);
-
-	for i, button in ipairs(recipeList.buttons) do
-		local dataIndex = offset + i;
-		local tradeSkillInfo = recipeList.dataList[dataIndex];
-		if tradeSkillInfo then
-			if tradeSkillInfo.type == "recipe" and tradeSkillInfo.recipeID ~= nil then
-                local options = {
-                    relativeFrame = button.icon,
-                    statusProminentSize = 15,
-                    statusOffsetX = 9,
-                    statusOffsetY = 8,
-                    bindingScale = 0.8,
-                    overrideBindingPosition = "LEFT",
-                    bindingOffsetY = 0,
-                    bindingOffsetX = 25
-                }
-        
-                local itemLink = C_TradeSkillUI.GetRecipeItemLink(tradeSkillInfo.recipeID);
-                if itemLink then
-                    local item = CaerdonItem:CreateFromItemLink(itemLink)
-                    CaerdonWardrobe:UpdateButton(button, item, self, { 
-                        locationKey = format("recipe%d", tradeSkillInfo.recipeID),
-                        selectedRecipeID = tradeSkillInfo.recipeID
-                    }, options)
-                else
-                    CaerdonWardrobe:ClearButton(button)
-                end
-            else
-                CaerdonWardrobe:ClearButton(button)
-            end
-		else
-			CaerdonWardrobe:ClearButton(button)
-		end
-	end
-end
-
-function TradeSkillMixin:OnTradeSkillDetailsRefreshDisplay(detailsFrame)
-    local button = detailsFrame.Contents.ResultIcon
-    local options = {
-        relativeFrame = button.icon
-    }
-
-    if detailsFrame.selectedRecipeID then
-        local itemLink = C_TradeSkillUI.GetRecipeItemLink(detailsFrame.selectedRecipeID);
-        if itemLink then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
-            CaerdonWardrobe:UpdateButton(button, item, self, { 
-                locationKey = format("SelectedRecipe%d", detailsFrame.selectedRecipeID),
-                selectedRecipeID = detailsFrame.selectedRecipeID
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(button)
-        end
-    else
-        CaerdonWardrobe:ClearButton(button)
-    end
 end
 
 CaerdonWardrobe:RegisterFeature(TradeSkillMixin)

@@ -16,6 +16,7 @@ CaerdonItemType = {
     Currency = "Currency",
     Equipment = "Equipment",
     Mount = "Mount",
+    Profession = "Profession",
     Recipe = "Recipe",
     Quest = "Quest",
     Toy = "Toy"
@@ -37,13 +38,15 @@ local function CreateItem()
     )
 end
 
---[[static]] function CaerdonItem:CreateFromItemLink(itemLink)
+--[[static]] function CaerdonItem:CreateFromItemLink(itemLink, extraData)
 	if type(itemLink) ~= "string" then
 		error("Usage: CaerdonItem:CreateFromItemLink(itemLinkString)", 2);
 	end
 
     local item = CreateItem()
-    item:SetItemLink(itemLink)    
+    item:SetItemLink(itemLink)
+    item.extraData = extraData
+    
 	return item;
 end
 
@@ -96,6 +99,17 @@ end
     return CaerdonItem:CreateFromItemLink(itemLink)
 end
 
+--[[static]] function CaerdonItem:CreateFromItemGUID(itemGUID)
+    if type(itemGUID) ~= "string" then
+        error("Usage: CaerdonItem:CreateFromItemGUID(itemGUIDString)", 2);
+    end
+
+    local item = CreateItem();
+    item:SetItemGUID(itemGUID);
+    return item;
+end
+
+
 function CaerdonItemMixin:Clear()
     ItemMixin.Clear(self)
     self.caerdonItemType = nil
@@ -104,48 +118,94 @@ end
 
 -- Add a callback to be executed when item data is loaded, if the item data is already loaded then execute it immediately
 function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
-    if type(callbackFunction) ~= "function" or self:IsItemEmpty() then
-        error("Usage: NonEmptyItem:ContinueOnLoad(callbackFunction)", 2);
+    if type(callbackFunction) ~= "function" then
+        error("Usage: ContinueOnLoad(callbackFunction)", 2);
     end
 
-    ItemEventListener:AddCallback(self:GetItemID(), function ()
-        -- TODO: Update things and delay callback if needed for tooltip data
-        -- Make sure any dependent data is loaded
-        local itemData = self:GetItemData()
+    if not self:IsItemEmpty() then
+        ItemEventListener:AddCallback(self:GetItemID(), function ()
+            -- TODO: Update things and delay callback if needed for tooltip data
+            -- Make sure any dependent data is loaded
+            local itemData = self:GetItemData()
 
-        -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
-        if itemData then
-            itemData:ContinueOnItemDataLoad(callbackFunction)
-        else
-            callbackFunction()
-        end
-    end);
+            -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
+            if itemData then
+                itemData:ContinueOnItemDataLoad(callbackFunction)
+            else
+                callbackFunction()
+            end
+        end)
+    elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
+        local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
+        local questID = tonumber(strsplit(":", linkOptions), 10)
+        QuestEventListener:AddCallback(questID, function ()
+            -- TODO: Update things and delay callback if needed for tooltip data
+            -- Make sure any dependent data is loaded
+            local itemData = self:GetItemData()
+
+            -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
+            if itemData then
+                itemData:ContinueOnItemDataLoad(callbackFunction)
+            else
+                callbackFunction()
+            end
+        end)
+    else
+        callbackFunction()
+    end
 end
 
 -- Same as ContinueOnItemLoad, except it returns a function that when called will cancel the continue
 function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
-    if type(callbackFunction) ~= "function" or self:IsItemEmpty() then
-        error("Usage: NonEmptyItem:ContinueWithCancelOnItemLoad(callbackFunction)", 2);
+    if type(callbackFunction) ~= "function" then
+        error("Usage: ContinueWithCancelOnItemLoad(callbackFunction)", 2);
     end
 
-    local itemDataCancel
-    local itemCancel = ItemEventListener:AddCancelableCallback(self:GetItemID(), function ()
-        -- TODO: Update things and delay callback if needed for tooltip data
-        local itemData = self:GetItemData()
-        if itemData then
-            itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(callbackFunction)
-        else
-            callbackFunction()
-        end
-    end);
+    if not self:IsItemEmpty() then
+        local itemDataCancel
+        local itemCancel = ItemEventListener:AddCancelableCallback(self:GetItemID(), function ()
+            -- TODO: Update things and delay callback if needed for tooltip data
+            local itemData = self:GetItemData()
+            if itemData then
+                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(callbackFunction)
+            else
+                callbackFunction()
+            end
+        end);
 
-    return function()
-        if itemDataCancel then
-            itemDataCancel()
-        end
+        return function()
+            if type(itemDataCancel) == "function" then
+                itemDataCancel()
+            end
 
-        itemCancel()
-    end;
+            itemCancel()
+        end;
+    elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
+        local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
+        local questID = tonumber(strsplit(":", linkOptions), 10);
+
+        local itemDataCancel
+        local itemCancel = QuestEventListener:AddCancelableCallback(questID, function ()
+            -- TODO: Update things and delay callback if needed for tooltip data
+            local itemData = self:GetItemData()
+            if itemData then
+                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(callbackFunction)
+            else
+                callbackFunction()
+            end
+        end);
+
+        return function()
+            if type(itemDataCancel) == "function" then
+                itemDataCancel()
+            end
+
+            itemCancel()
+        end;
+    else
+        callbackFunction()
+        return function () end
+    end
 end
 
 function CaerdonItemMixin:SetItemLink(itemLink)
@@ -280,7 +340,8 @@ function IsUnhandledType(typeID, subTypeID)
         typeID == Enum.ItemClass.Quiver or 
         typeID == Enum.ItemClass.Key or
         typeID == Enum.ItemClass.Glyph or
-        typeID == Enum.ItemClass.WoWToken
+        typeID == Enum.ItemClass.WoWToken or
+        typeID == nil
 end
 
 function CaerdonItemMixin:GetCaerdonItemType()
@@ -293,7 +354,9 @@ function CaerdonItemMixin:GetCaerdonItemType()
     -- if I want to support swapping the item out
     if not self.caerdonItemType then
         local caerdonType = CaerdonItemType.Unknown
-        local linkType, linkOptions, displayText = LinkUtil.ExtractLink(itemLink)
+        local tempLink = itemLink:gsub(" |A:.*|a]", "]") -- TODO: Temp hack to remove quality from link that breaks ExtractLink
+
+        local linkType, linkOptions, displayText = LinkUtil.ExtractLink(tempLink)
         local typeID = self:GetItemTypeID()
         local subTypeID = self:GetItemSubTypeID()
 
@@ -304,7 +367,15 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Toy
         elseif isConduit then
             caerdonType = CaerdonItemType.Conduit
-        elseif linkType == "item" then
+        elseif linkType == "battlepet" then
+            caerdonType = CaerdonItemType.BattlePet
+        elseif linkType == "quest" then
+            caerdonType = CaerdonItemType.Quest
+        elseif linkType == "currency" then
+            caerdonType = CaerdonItemType.Currency
+        elseif linkType == "mount" then
+            caerdonType = CaerdonItemType.Mount
+        elseif linkType == "item" or linkType == nil then -- Assuming item if we don't have a linkType
             -- TODO: Switching to just checking type for equipment 
             -- instead of using GetEquipLocation (since containers are equippable)
             -- Keep an eye on this
@@ -333,13 +404,13 @@ function CaerdonItemMixin:GetCaerdonItemType()
                 caerdonType = CaerdonItemType.Quest
             elseif typeID == Enum.ItemClass.Recipe then
                 caerdonType = CaerdonItemType.Recipe
+            elseif typeID == Enum.ItemClass.Profession then
+                caerdonType = CaerdonItemType.Profession
+            else
+                print("Unknown item type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
-        elseif linkType == "battlepet" then
-            caerdonType = CaerdonItemType.BattlePet
-        elseif linkType == "quest" then
-            caerdonType = CaerdonItemType.Quest
-        elseif linkType == "currency" then
-            caerdonType = CaerdonItemType.Currency
+        else
+            print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
         end
 
         self.caerdonItemType = caerdonType
@@ -364,6 +435,8 @@ function CaerdonItemMixin:GetItemData()
             self.caerdonItemData = CaerdonEquipment:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Mount then
             self.caerdonItemData = CaerdonMount:CreateFromCaerdonItem(self)
+        elseif caerdonType == CaerdonItemType.Profession then
+            self.caerdonItemData = CaerdonProfession:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Quest then
             self.caerdonItemData = CaerdonQuest:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Recipe then
