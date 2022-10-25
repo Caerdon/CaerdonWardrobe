@@ -202,8 +202,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetCompanionPet" then
         local petGUID = unpack(tooltipInfo.getterArgs)
         local itemLink = C_PetJournal.GetBattlePetLink(petGUID)
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetCurrencyByID" then
         local currencyID, amount = unpack(tooltipInfo.getterArgs)
         local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
@@ -356,6 +358,7 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
                 print("MISSING HANDLER FOR " .. tooltipInfo.getterName)
                 local item = CaerdonItem:CreateFromItemID(tooltipData.id)
                 Tooltip:ProcessTooltip(tooltip, item)
+            elseif tooltipData.type == Enum.TooltipDataType.Achievement then
             elseif tooltipData.type == Enum.TooltipDataType.Spell then
             elseif tooltipData.type == Enum.TooltipDataType.Unit then
             elseif tooltipData.type == Enum.TooltipDataType.Corpse then
