@@ -115,7 +115,13 @@ function BagsMixin:OnUpdateItems(frame)
 		end
 	else
 		local bag = frame:GetID()
-		local size = C_Container.GetContainerNumSlots(bag)
+		local size
+		if C_Container and C_Container.GetContainerNumSlots then
+			size = C_Container.GetContainerNumSlots(bag)
+		else
+			size = GetContainerNumSlots(bag)
+		end
+
 		for buttonIndex = 1, size do
 			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
 			local slot = button:GetID()
