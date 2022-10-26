@@ -615,9 +615,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		alpha = 0.5
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
-	elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
-		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-		mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
+	-- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+	-- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+	-- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 	end
 
 	local iconSize = ICON_PROMINENT_SIZE
@@ -681,7 +681,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 
 	local bindingText = ""
-	if IsGearSetStatus(bindingStatus) then -- is gear set
+	if IsGearSetStatus(bindingStatus, item) then -- is gear set
 		if CaerdonWardrobeConfig.Binding.ShowGearSets then
 			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
 		end
