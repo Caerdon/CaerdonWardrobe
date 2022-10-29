@@ -414,6 +414,8 @@ function CaerdonItemMixin:GetCaerdonItemType()
             else
                 print("Unknown item type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
+        elseif linkType == "keystone" then
+            caerdonType = CaerdonItemType.Unhandled
         else
             print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
         end
