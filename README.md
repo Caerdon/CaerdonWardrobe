@@ -22,7 +22,6 @@
 </ul>
 </li>
 </ul>
-<p>Note that for the Adventure Guide, Legion instances are currently not returning the data. I haven't looked into it, yet, but I'm guessing that will change when Legion goes live.</p>
 <ul>
 <li>Provides separate indicators for items specific to your class vs. something you'd need to send to and / or learn on an alt.</li>
 <li>Show bag icon for items that you have learned for transmog that don't have an on-use or on-equip effect (sell those things!)</li>
