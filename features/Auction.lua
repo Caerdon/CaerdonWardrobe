@@ -60,6 +60,7 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 	local item
 
 	if not elementData then return end
+	if not frame.rowData then return end
 
 	local itemKey = frame.rowData.itemKey
 	local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(itemKey)
