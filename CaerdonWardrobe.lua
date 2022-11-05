@@ -35,14 +35,14 @@ function CaerdonWardrobeMixin:OnLoad()
 	hooksecurefunc(BankFrame, "UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
 end
 
--- local bindTextTable = {
--- 	[ITEM_ACCOUNTBOUND]        = L["BoA"],
--- 	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
--- 	[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
--- 	[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
--- 	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
--- 	-- [ITEM_BIND_ON_USE]         = L["BoE"]
--- }
+local bindTextTable = {
+	[ITEM_ACCOUNTBOUND]        = L["BoA"],
+	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
+	[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
+	[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
+	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
+	-- [ITEM_BIND_ON_USE]         = L["BoE"]
+}
 
 local function IsCollectibleLink(item)
 	local caerdonType = item:GetCaerdonItemType()
@@ -929,10 +929,18 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 					if transmogInfo.needsItem then
 						if transmogInfo.matchesLootSpec then
 							if not transmogInfo.isCompletionistItem then
-								mogStatus = "own"
+								if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
+									mogStatus = "own"
+								else
+									mogStatus = "lowSkill"
+								end
 							else
 								if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-									mogStatus = "ownPlus"
+									if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
+										mogStatus = "ownPlus"
+									else
+										mogStatus = "lowSkillPlus"
+									end
 								end
 							end
 						else
@@ -1167,7 +1175,9 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 		local isBattlePetShown = BattlePetTooltip:IsShown()
 		local lines = data.lines or {}
 		for lineIndex, line in ipairs(data.lines) do
-			if line.type == Enum.TooltipDataLineType.None then
+			if line.type == Enum.TooltipDataLineType.None or
+			   line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent or
+				 line.type == Enum.TooltipDataLineType.ItemBinding then
 				local lineText = line.leftText
 				if lineText then
 					-- TODO: Find a way to identify Equip Effects without tooltip scanning
@@ -1230,10 +1240,10 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 						end
 					end
 
-					-- if not tooltipData.bindingStatus then
-					-- 	-- Check binding status - TODO: Is there a non-scan way?
-					-- 	tooltipData.bindingStatus = bindTextTable[lineText]
-					-- end
+					if not tooltipData.bindingStatus then
+						-- Check binding status - TODO: Is there a non-scan way?
+						tooltipData.bindingStatus = bindTextTable[lineText]
+					end
 
 					if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
 						tooltipData.canLearn = true
@@ -1280,6 +1290,7 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 			elseif line.type == Enum.TooltipDataLineType.SellPrice then
 			elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
 			-- elseif line.type == Enum.TooltipDataLineType.SpellName then
+			elseif line.type == Enum.TooltipDataLineType.NestedBlock then
 			else
 				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink() .. ", type: " .. tostring(line.type))
 				-- DevTools_Dump(line)
@@ -1288,6 +1299,11 @@ function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
 	end
 
 	-- SetCVar("missingTransmogSourceInItemTooltips", 1)
+
+	-- if item:GetItemID() == 199683 or item:GetItemID() == 199658 then
+	-- 	print(item:GetItemLink())
+	-- 	DevTools_Dump(tooltipData)
+	-- end
 
 	return tooltipData
 end

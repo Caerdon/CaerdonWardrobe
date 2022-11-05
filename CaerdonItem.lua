@@ -276,7 +276,6 @@ end
 function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
     if not self:IsItemEmpty() then
         local bindType = (select(14, GetItemInfo(self:GetItemLink())))
-
         local binding = CaerdonItemBind.Unknown
         if bindType == 0 then
             binding = CaerdonItemBind.None
@@ -289,6 +288,7 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
         elseif bindType == 4 then -- Quest
             binding = CaerdonItemBind.QuestItem
         elseif bindType == 8 then -- BoA, apparently
+            -- TODO: This was working... and then seemingly not... keep an eye out.
             binding = CaerdonItemBind.BindOnAccount
         elseif bindType ~= nil then
             print(self:GetItemLink() .. ": Please report - Unknown binding type " .. tostring(bindType))
