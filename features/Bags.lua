@@ -74,7 +74,7 @@ function BagsMixin:OnUpdateSearchResults(frame)
 
 		if C_Container and C_Container.GetContainerItemInfo then
 			local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
-			isFiltered = itemInfo.isFiltered
+			isFiltered = itemInfo and itemInfo.isFiltered
 		else
 			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(button:GetBagID(), button:GetID())
 		end

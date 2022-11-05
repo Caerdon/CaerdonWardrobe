@@ -15,7 +15,7 @@ end
 function CustomerOrdersMixin:ADDON_LOADED(name)
     if name == "Blizzard_ProfessionsCustomerOrders" then
         ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList, false)
-        hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "Init", function (...) self:OnSchematicFormInit(...) end)
+        hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "InitSchematic", function (...) self:OnSchematicFormInit(...) end)
     end
 end
 
@@ -78,25 +78,32 @@ function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo,
 	}
 end
 
-function CustomerOrdersMixin:OnSchematicFormInit(frame, recipeInfo)
+function CustomerOrdersMixin:OnSchematicFormInit(frame)
+    -- DevTools_Dump(frame)
+    -- print("=====================")
+    -- DevTools_Dump(frame.transaction)
+    -- if not frame.transaction then return end
+
     C_Timer.After(0, function ()
-        local button = ProfessionsCustomerOrdersFrame.Form.OutputIcon
-        local recipeID = ProfessionsCustomerOrdersFrame.Form.order.transaction:GetRecipeID();
+        local button = frame.OutputIcon
+        local recipeID = frame.transaction:GetRecipeID();
+        -- local recipeID = frame.order.spellID
 		local reagents = nil;
-		local outputItemInfo = C_TradeSkillUI.GetRecipeOutputItemData(recipeID, reagents, recipeInfo.transaction:GetRecraftAllocation());
+		local outputItemInfo = C_TradeSkillUI.GetRecipeOutputItemData(recipeID, reagents, frame.transaction:GetRecraftAllocation());
 
         local options = {
         }
 
         local itemLink = outputItemInfo.hyperlink
         if itemLink then
+            print(itemLink)
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             CaerdonWardrobe:UpdateButton(button, item, self, { 
                 locationKey = format("selectedrecipe%d",  item:GetItemID()),
                 selectedRecipeID =  recipeID
             }, options)
         else
-            local recipeSchematic = ProfessionsCustomerOrdersFrame.Form.order.transaction:GetRecipeSchematic()
+            local recipeSchematic = ProfessionsCustomerOrdersFrame.Form.transaction:GetRecipeSchematic()
             local item = CaerdonItem:CreateFromItemID(recipeSchematic.outputItemID)
             CaerdonWardrobe:UpdateButton(button, item, self, { 
                 locationKey = format("selectedrecipe%d",  item:GetItemID()),
