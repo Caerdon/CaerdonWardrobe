@@ -37,6 +37,12 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 	if not elementData then return end
 
 	local browseResult = auctionFrame.tableBuilder:GetDataProviderData(elementData)
+	
+	if not browseResult.itemLink then
+		CaerdonWardrobe:ClearButton(button)
+		return
+	end
+
 	local item = CaerdonItem:CreateFromItemLink(browseResult.itemLink)
 	local itemKey = browseResult.itemKey
 
