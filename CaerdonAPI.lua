@@ -124,6 +124,10 @@ function CaerdonAPIMixin:ProcessTooltipData(tooltipData)
         end
     end
 
+    if data.guid and not data.hyperlink then
+        data.hyperlink = C_Item.GetItemLinkByGUID(data.guid);
+    end
+
     return data
 end
 

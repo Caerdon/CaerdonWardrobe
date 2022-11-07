@@ -903,7 +903,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 						end
 					end
 				elseif transmogInfo.otherNeedsItem then
-					if not transmogInfo.isBindOnPickup then
+					if not bindingResult.isBindOnPickup then
 						if not transmogInfo.isCompletionistItem then
 							mogStatus = "other"
 						else
@@ -953,7 +953,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 							end
 						end
 					elseif transmogInfo.otherNeedsItem then
-						if transmogInfo.isBindOnPickup then
+						if bindingResult.isBindOnPickup then
 							if not transmogInfo.isCompletionistItem then
 								mogStatus = "otherNoLoot"
 							else
