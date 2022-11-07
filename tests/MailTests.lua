@@ -36,7 +36,7 @@ end
 
 function Tests:WarpscaleLegguardsCompletionist()
     local item = CaerdonItem:CreateFromItemLink("|cff1eff00|Hitem:106552::::::::20:64:512:29:2:3854:107:120:::|h[Warpscale Legguards of the Quickblade]|h|r")
-    print("Test:", item:GetItemLink())
+    -- print("Test:", item:GetItemLink())
     
     local data = item:GetItemData()
     local info = data:GetTransmogInfo()
