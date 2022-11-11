@@ -21,7 +21,9 @@ function SortedMixin:Init()
             overrideStatusPosition = "CENTER",
             statusOffsetX = -0.60,
             statusOffsetY = -0.60,
-            statusProminentSize = statusProminentSize
+            statusProminentSize = statusProminentSize,
+            isFiltered = data.filtered,
+            filterColor = data.tinted
 		}
 
         if data.caerdonItem then

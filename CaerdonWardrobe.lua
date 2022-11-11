@@ -647,6 +647,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		end
 	end)
 
+	if options.isFiltered then
+		if options.filterColor then
+			mogStatus:SetDesaturated(true)
+			mogStatus:SetVertexColor(options.filterColor:GetRGB())
+		else
+			mogStatusBackground:SetAlpha(0.3)
+			mogStatus:SetAlpha(0.3)
+		end
+	else
+		mogStatus:SetDesaturated(false)
+	end
+
 	if showAnim and CaerdonWardrobeConfig.Icon.EnableAnimation then
 		if mogAnim and not mogAnim:IsPlaying() then
 			mogAnim:Play()
