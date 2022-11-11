@@ -33,9 +33,6 @@ function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
             statusProminentSize = 13,
             statusOffsetX = 3,
             statusOffsetY = 0,
-            showMogIcon=true, 
-            showBindStatus=true,
-            showSellables=false,
             -- relativeFrame=cell.Icon
     })
 end

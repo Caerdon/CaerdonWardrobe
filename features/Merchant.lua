@@ -86,7 +86,6 @@ end
 
 function MerchantMixin:OnMerchantUpdate()
     local options = { 
-        showMogIcon=true, showBindStatus=true, showSellables=false
     }
 
 	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
@@ -142,7 +141,7 @@ function MerchantMixin:OnBuybackUpdate()
                 CaerdonWardrobe:UpdateButton(button, item, self, {
                     locationKey = format("buybackitem-%d", slot),
                     slot = slot
-                }, { showMogIcon=true, showBindStatus=true, showSellables=false})
+                }, { })
             else
                 CaerdonWardrobe:ClearButton(button)
             end

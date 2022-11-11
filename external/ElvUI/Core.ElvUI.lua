@@ -66,9 +66,6 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
 		}, {
 			hasCount = hasCount,
 			relativeFrame = button.icon,
-			showMogIcon = true,
-			showBindStatus = true,
-			showSellables = true,
 			statusProminentSize = iconSize,
 			bindingScale = bindingScale, 
 			itemCountOffset = (12 * (numberFontSize / 14))  / bindingScale

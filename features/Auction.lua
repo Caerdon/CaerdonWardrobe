@@ -54,10 +54,7 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 		overrideStatusPosition = "LEFT",
 		statusProminentSize = 13,
 		statusOffsetX = 7,
-		statusOffsetY = 0,
-		showMogIcon=true, 
-		showBindStatus=false,
-		showSellables=false,
+		statusOffsetY = 0
 	})
 end
 
@@ -86,9 +83,6 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 		statusProminentSize = 13,
 		statusOffsetX = 7,
 		statusOffsetY = 0,
-		showMogIcon=true, 
-		showBindStatus=false,
-		showSellables=false,
 		-- relativeFrame=cell.Icon
 	})
 end
@@ -159,10 +153,7 @@ function AuctionMixin:OnSetAuctionItemDisplay(frame, itemDisplayItem)
 	{
 		statusProminentSize = 24,
 		statusOffsetX = 5,
-		statusOffsetY = 5,
-		showMogIcon=true, 
-		showBindStatus=false,
-		showSellables=false
+		statusOffsetY = 5
 	})
 end
 
@@ -244,9 +235,6 @@ end
 -- 							statusProminentSize = 13,
 -- 							statusOffsetX = -4,
 -- 							statusOffsetY = 0,
--- 							showMogIcon=true, 
--- 							showBindStatus=false,
--- 							showSellables=false,
 -- 							relativeFrame=cell.Icon
 -- 						})
 -- 					end
@@ -275,10 +263,7 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 	{
 		statusProminentSize = 24,
 		statusOffsetX = 5,
-		statusOffsetY = 5,
-		showMogIcon=true, 
-		showBindStatus=false,
-		showSellables=false
+		statusOffsetY = 5
 	})
 end
 
@@ -297,10 +282,7 @@ function AuctionMixin:OnSetPostItem(frame, itemLocation)
 		{
 			statusProminentSize = 24,
 			statusOffsetX = 5,
-			statusOffsetY = 5,
-			showMogIcon=true, 
-			showBindStatus=false,
-			showSellables=false
+			statusOffsetY = 5
 		})
 	elseif displayMode == AuctionHouseFrameDisplayMode.CommoditiesSell then
 		CaerdonWardrobe:ClearButton(itemSellButton)
@@ -310,10 +292,7 @@ function AuctionMixin:OnSetPostItem(frame, itemLocation)
 		{
 			statusProminentSize = 24,
 			statusOffsetX = 5,
-			statusOffsetY = 5,
-			showMogIcon=true, 
-			showBindStatus=false,
-			showSellables=false
+			statusOffsetY = 5
 		})
 	else
 		CaerdonWardrobe:ClearButton(commoditiesSellButton)

@@ -44,9 +44,6 @@ function BaudBagMixin:ProcessItem(bag, slot, button)
             end
         else
             local options = {
-                showMogIcon=true,
-                showBindStatus=true,
-                showSellables=true
             }
 
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)

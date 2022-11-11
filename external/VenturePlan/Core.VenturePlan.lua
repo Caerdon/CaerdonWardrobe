@@ -36,9 +36,6 @@ end
 
 function VenturePlanMixin:UpdateButton(button)
 	local options = {
-		showMogIcon=true, 
-		showBindStatus=true,
-		showSellables=true,
         overrideStatusPosition = "TOPRIGHT",
         overrideBindingPosition = "CENTER"
 	}

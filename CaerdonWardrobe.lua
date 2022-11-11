@@ -335,10 +335,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatusBackground = mogStatus.mogStatusBackground
 	end
 	local mogAnim = button.mogAnim
-	local iconPosition, showSellables, isSellable
+	local isSellable
 
 	if options then 
-		showSellables = options.showSellables
 		isSellable = options.isSellable
 	else
 		options = {}
@@ -603,7 +602,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
 		mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
 	elseif status == "collected" then
-		if not IsGearSetStatus(bindingStatus, item) and showSellables and isSellable and displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
+		if not IsGearSetStatus(bindingStatus, item) and isSellable and displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
 			alpha = 0.9
 			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
@@ -789,10 +788,6 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
    	if not options then
    		options = {}
    	end
-
-	local showMogIcon = options.showMogIcon
-	local showBindStatus = options.showBindStatus
-	local showSellables = options.showSellables
 
 	local itemLink = item:GetItemLink()
 	if not itemLink then

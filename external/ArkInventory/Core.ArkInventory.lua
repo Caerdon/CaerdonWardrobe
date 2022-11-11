@@ -78,9 +78,6 @@ function ArkInventoryMixin:OnFrameItemUpdate(frame, loc_id, bag_id, slot_id)
 		local slot = slot_id
 
 		local options = {
-			showMogIcon=true, 
-			showBindStatus=true,
-			showSellables=true
 		}
 		
 		if not ArkInventory.API.LocationIsOffline(loc_id) then

@@ -29,10 +29,6 @@ end
 function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
 	local button = frame:GetButton(bagID, slotID)
 	local options = {
-		showMogIcon=true, 
-		showBindStatus=true,
-		showSellables=true,
-		iconPosition="TOPRIGHT" 
 	}
 
 	if button then

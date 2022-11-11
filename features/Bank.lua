@@ -104,7 +104,7 @@ function BankMixin:OnUpdateItems(frame)
 		local slot = button:GetID()
 
 		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true })
+		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { })
 	end
 end
 
@@ -117,7 +117,7 @@ function BankMixin:OnBankItemUpdate(button)
 	end
 
 	local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-	CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { showMogIcon=true, showBindStatus=true, showSellables=true })
+	CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { })
 end
 
 CaerdonWardrobe:RegisterFeature(BankMixin)

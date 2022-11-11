@@ -63,9 +63,6 @@ function GuildBankMixin:OnGuildBankFrameUpdate()
 			button = GuildBankFrame.Columns[column].Buttons[index];
 
 			local options = {
-				showMogIcon = true,
-				showBindStatus = true,
-				showSellables = true
 			}
 
 			local itemLink = GetGuildBankItemLink(tab, i)
