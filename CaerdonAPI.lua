@@ -121,6 +121,9 @@ function CaerdonAPIMixin:ProcessTooltipData(tooltipData)
                 data.lines[kLine][v.field] = v.colorVal:GenerateHexColor()
             else
                 data.lines[kLine][v.field] = v.stringVal or v.intVal or v.floatVal or v.colorVal or v.guidVal or v.boolVal 
+                if v.stringVal == RETRIEVING_ITEM_INFO then -- tooltip data isn't loaded, yet
+                    data.isRetrieving = true
+                end
             end
         end
     end
