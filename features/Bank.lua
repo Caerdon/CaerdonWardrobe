@@ -66,7 +66,9 @@ function BankMixin:OnUpdateSearchResults(frame)
 		local isFiltered
 		if C_Container and C_Container.GetContainerItemInfo then
 			local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
-			isFiltered = itemInfo.isFiltered
+			if itemInfo then
+				isFiltered = itemInfo.isFiltered
+			end
 		else
 			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(button:GetBagID(), button:GetID())
 		end

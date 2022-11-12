@@ -90,7 +90,8 @@ function CaerdonAPIMixin:ProcessTooltipData(tooltipData)
 
     local data = {
         type = tooltipData.type,
-        lines = {}
+        lines = {},
+        isCaerdonProcessed = true
     }
 
     local k,v

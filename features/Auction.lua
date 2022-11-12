@@ -62,6 +62,14 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 	local button = frame
 	local item
 
+	local options = {
+		overrideStatusPosition = "LEFT",
+		statusProminentSize = 13,
+		statusOffsetX = 7,
+		statusOffsetY = 0,
+		-- relativeFrame=cell.Icon
+	}
+
 	if not elementData then return end
 	if not frame.rowData then return end
 
@@ -70,21 +78,17 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 
 	if itemKeyInfo and itemKeyInfo.battlePetLink then
 		item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = format("pet-%s", itemKeyInfo.battlePetLink),
+			itemKey = itemKey
+		}, options)
 	else
 		item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
+			itemKey = itemKey
+		}, options)
 	end
-
-	CaerdonWardrobe:UpdateButton(button, item, self, {
-		locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
-		itemKey = itemKey
-	},  
-	{
-		overrideStatusPosition = "LEFT",
-		statusProminentSize = 13,
-		statusOffsetX = 7,
-		statusOffsetY = 0,
-		-- relativeFrame=cell.Icon
-	})
 end
 
 function AuctionMixin:GetTooltipData(item, locationInfo)

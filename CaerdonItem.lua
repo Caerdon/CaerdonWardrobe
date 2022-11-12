@@ -429,6 +429,172 @@ function CaerdonItemMixin:GetCaerdonItemType()
     return self.caerdonItemType
 end
 
+function CaerdonItemMixin:GetTooltipData(data)
+	if not data then
+		data = C_TooltipInfo.GetHyperlink(self:GetItemLink())
+	end
+
+	if not data then return end
+
+	local bindTextTable = {
+		[ITEM_ACCOUNTBOUND]        = L["BoA"],
+		[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
+		[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
+		[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
+		-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
+		-- [ITEM_BIND_ON_USE]         = L["BoE"]
+	}
+
+	local tooltipData = {
+		canLearn = false,
+		canCombine = false,
+		hasEquipEffect = false,
+		isRelearn = false,
+		bindingStatus = nil,
+		isRetrieving = false,
+		isSoulbound = false,
+		isKnownSpell = false,
+		isLocked = false,
+		isOpenable = false,
+		supercedingSpellNotKnown = false,
+		foundRedRequirements = false,
+		requiredTradeSkillMissingOrUnleveled = false,
+		requiredTradeSkillTooLow = false
+	}
+
+	if not data.isCaerdonProcessed then
+		data = CaerdonAPI:ProcessTooltipData(data)
+	end
+
+	local isBattlePetShown = BattlePetTooltip:IsShown()
+	local lines = data.lines or {}
+	for lineIndex, line in ipairs(data.lines) do
+		if line.type == Enum.TooltipDataLineType.None or
+			line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent or
+				line.type == Enum.TooltipDataLineType.ItemBinding then
+			local lineText = line.leftText
+			if lineText then
+				-- TODO: Find a way to identify Equip Effects without tooltip scanning
+				if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
+					tooltipData.hasEquipEffect = true
+				end
+
+				-- NOTE: I had removed the check for isRecipe for some reason... but then things like Reaves would get flagged as canLearn.
+				-- Keep an eye out and figure out what to do if needed
+				local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
+				if isRecipe then
+					-- TODO: Don't like matching this hard-coded string but not sure how else
+					-- to prevent the expensive books from showing as learnable when I don't
+					-- know how to tell if they have recipes you need.
+					if strmatch(lineText, L["Use: Re%-learn .*"]) then
+						tooltipData.isRelearn = true
+					end
+					
+
+					-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
+					-- which toons could learn a recipe.
+
+					local replaceSkill = "%w"
+					
+					-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+					local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
+					skillCheck = string.gsub(skillCheck, "2%$", "")
+					skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+					if GetLocale() == "zhCN" then
+						skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+					else
+						skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+					end
+					if strmatch(lineText, skillCheck) then
+						local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+
+						local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+
+						tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
+						tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+
+						if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
+							tooltipData.canLearn = false
+						else
+							tooltipData.canLearn = true
+						end
+					end		
+				end
+
+				if (self:GetCaerdonItemType() == CaerdonItemType.Consumable or self:GetCaerdonItemType() == CaerdonItemType.Quest) and self:HasItemLocation() then
+					local location = self:GetItemLocation()
+					local maxStackCount = C_Item.GetItemMaxStackSize(location)
+					local currentStackCount = C_Item.GetStackCount(location)
+			
+					local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
+					if combineCount > 1 then
+						tooltipData.canCombine = true
+						if combineCount <= currentStackCount then
+							tooltipData.readyToCombine = true
+						end
+					end
+				end
+
+				if not tooltipData.bindingStatus then
+					-- Check binding status - TODO: Is there a non-scan way?
+					tooltipData.bindingStatus = bindTextTable[lineText]
+				end
+
+				if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
+					tooltipData.canLearn = true
+				elseif strmatch(lineText, L["Use: Marks your map with the location"]) then
+					tooltipData.canLearn = true
+				elseif strmatch(lineText, L["Use: Unlocks this customization"]) then
+					tooltipData.canLearn = true
+				elseif strmatch(lineText, L["Use: Study to increase your"]) then
+					tooltipData.canLearn = true
+				elseif lineText == RETRIEVING_ITEM_INFO then
+					tooltipData.isRetrieving = true
+					break
+				elseif lineText == ITEM_SOULBOUND then
+					tooltipData.isSoulbound = true
+				elseif lineText == ITEM_SPELL_KNOWN then
+					tooltipData.isKnownSpell = true
+				elseif lineText == LOCKED then
+					tooltipData.isLocked = true
+				elseif lineText == ITEM_OPENABLE then
+					tooltipData.isOpenable = true
+				elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+					tooltipData.supercedingSpellNotKnown = true
+				end
+			end
+
+				local hex = line.leftColor
+				-- TODO: Generated hex color includes alpha value so need to check for full red.
+				-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
+				-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
+				-- if hex == "fe1f1f" then -- TODO: this was old value... check to see if still needed for anything
+				if hex == "ffff2020" then
+					tooltipData.foundRedRequirements = true
+				end
+		elseif line.type == Enum.TooltipDataLineType.Blank then
+		-- elseif args.type == Enum.TooltipDataLineType.UnitName then
+		elseif line.type == Enum.TooltipDataLineType.GemSocket then
+		elseif line.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
+		-- elseif line.type == Enum.TooltipDataLineType.AzeriteEssencePower then
+		-- elseif line.type == Enum.TooltipDataLineType.LearnableSpell then
+		-- elseif line.type == Enum.TooltipDataLineType.UnitThreat then
+		-- elseif line.type == Enum.TooltipDataLineType.QuestObjective then
+		-- elseif line.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
+		-- elseif line.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
+		elseif line.type == Enum.TooltipDataLineType.SellPrice then
+		elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
+		-- elseif line.type == Enum.TooltipDataLineType.SpellName then
+		elseif line.type == Enum.TooltipDataLineType.NestedBlock then
+		else
+			print("TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
+			-- DevTools_Dump(line)
+		end
+	end
+
+	return tooltipData
+end
+
 function CaerdonItemMixin:IsSellable()
     local itemID = self:GetItemID()
 	local isSellable = itemID ~= nil
@@ -468,7 +634,6 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 	local isOpenable = false
 	
 	local isCollectionItem = self:IsCollectible()
-	local isPetLink = caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet
 
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
@@ -586,11 +751,23 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 	}
 end
 
-function CaerdonItemMixin:GetCaerdonStatus(tooltipData) -- TODO: tooltipData needs moved in here - just temp while refactoring
+function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need to remove feature/locationInfo but keeping it for now in case refactor to GetHyperlink causes any issues - also need to remove the GetTooltipData calls
 	local itemLink = self:GetItemLink()
 	if not itemLink then
 		-- Requiring an itemLink for now unless I find a reason not to
 		return
+	end
+
+
+	local data = nil
+	-- If something goes wrong with refactor, can switch back to this:
+	-- data = C_TooltipInfo and feature and feature:GetTooltipData(item, locationInfo) or nil
+
+	local tooltipData = self:GetTooltipData(data)
+
+	if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
+		isReady = false
+		return isReady
 	end
 
     local itemID = self:GetItemID()
@@ -607,6 +784,7 @@ function CaerdonItemMixin:GetCaerdonStatus(tooltipData) -- TODO: tooltipData nee
 	local playerLevel = UnitLevel("player")
 
     local mogStatus = ""
+	local isReady = true
 
     if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit then
 		local expansionID = expacID
@@ -812,7 +990,7 @@ function CaerdonItemMixin:GetCaerdonStatus(tooltipData) -- TODO: tooltipData nee
 		else
 			mogStatus = "sellable"
 		end
-	elseif tooltipData.canLearn then
+	elseif tooltipData and tooltipData.canLearn then
 		if bindingResult.skillTooLow then
 			mogStatus = "lowSkill"
 		else
@@ -820,7 +998,65 @@ function CaerdonItemMixin:GetCaerdonStatus(tooltipData) -- TODO: tooltipData nee
 		end
 	end
 
-    return mogStatus, bindingStatus, bindingResult
+	if self:HasItemLocationBankOrBags() then
+		local itemLocation = self:GetItemLocation()
+		local bag, slot = itemLocation:GetBagAndSlot()
+		
+		local containerID = bag
+		local containerSlot = slot
+
+		local texture, itemCount, locked, quality, readable, lootable
+		if C_Container and C_Container.GetContainerItemInfo then
+			local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
+			if containerItemInfo then
+				itemCount = containerItemInfo.stackCount
+				locked = containerItemInfo.isLocked
+				quality = containerItemInfo.quality
+				readable = containerItemInfo.isReadable
+				lootable = containerItemInfo.hasLoot
+			end
+		else 
+			texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
+		end
+
+		if lootable then
+			local startTime, duration, isEnabled
+			if C_Container and C_Container.GetContainerItemCooldown then
+				startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
+			else
+				startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
+			end
+			if duration > 0 and not isEnabled then
+				mogStatus = "refundable" -- Can't open yet... show timer
+			else
+				if bindingResult.isLocked then
+					mogStatus = "locked"
+				else
+					mogStatus = "openable"
+				end
+			end
+		elseif readable then
+			mogStatus = "readable"
+		else
+			local isEquipped = false
+			local money, itemCount, refundSec, currencyCount, hasEnchants
+			if C_Container and C_Container.GetContainerItemPurchaseInfo then
+				local info = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+				money = info and info.money
+				itemCount = info and info.itemCount
+				refundSec = info and info.refundSeconds
+				currencyCount = info and info.currencyCount
+				hasEnchants = info and info.hasEnchants
+			else
+				money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+			end
+			if refundSec then
+				mogStatus = "refundable"
+			end
+		end
+	end
+
+    return isReady, mogStatus, bindingStatus, bindingResult
 end
 
 function CaerdonItemMixin:GetItemData()

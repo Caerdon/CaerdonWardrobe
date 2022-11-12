@@ -77,6 +77,29 @@ function EncounterJournalMixin:Refresh()
 	end
 end
 
+function EncounterJournalMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = true
+		},
+		ownIcon = {
+			shouldShow = true
+		},
+		otherIcon = {
+			shouldShow = true
+		},
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = true
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
 	local button = suggestion.reward
 	local rewardData = suggestion.reward.data;
