@@ -36,10 +36,6 @@ function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
 	local iconSize = KkthnxUI[2].Inventory.IconSize * 0.6
 	local button = frame:GetButton(bagID, slotID)
 	local options = {
-		showMogIcon = true,
-		showBindStatus = true,
-		showSellables = true,
-		iconPosition = "TOPRIGHT",
 		statusProminentSize = iconSize,
 	}
 

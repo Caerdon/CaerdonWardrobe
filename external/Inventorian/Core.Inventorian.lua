@@ -54,10 +54,6 @@ function InventorianMixin:UpdateSlot(button, bag, slot)
 	if button then
 		local icon, count, locked, quality, readable, lootable, itemLink, noValue, itemID = button:GetInfo()
 		local options = {
-			showMogIcon=true, 
-			showBindStatus=true,
-			showSellables=true,
-			iconPosition="TOPRIGHT" 
 		}
 
 		if button:IsCached() then

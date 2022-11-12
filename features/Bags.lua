@@ -108,9 +108,6 @@ function BagsMixin:OnUpdateItems(frame)
 				bag = bag, 
 				slot = slot
 			}, { 
-				showMogIcon = true, 
-				showBindStatus = true, 
-				showSellables = true
 			})
 		end
 	else
@@ -131,9 +128,6 @@ function BagsMixin:OnUpdateItems(frame)
 				bag = bag, 
 				slot = slot
 			}, { 
-				showMogIcon = true, 
-				showBindStatus = true, 
-				showSellables = true
 			})
 		end
 	end

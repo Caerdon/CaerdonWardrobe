@@ -30,10 +30,6 @@ function LiteBagMixin:UpdateButton(button)
 	local slot = button:GetID()
 
 	local options = {
-		showMogIcon=true, 
-		showBindStatus=true,
-		showSellables=true,
-		iconPosition="TOPRIGHT" 
 	}
 
 	local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)

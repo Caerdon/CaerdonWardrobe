@@ -23,10 +23,6 @@ function AdiBagsMixin:Init()
 		local slot = button.slot
 
 		local options = {
-			showMogIcon=true, 
-			showBindStatus=true,
-			showSellables=true,
-			iconPosition="TOPRIGHT" 
 		}
 
 		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)

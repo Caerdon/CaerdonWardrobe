@@ -35,165 +35,9 @@ function CaerdonWardrobeMixin:OnLoad()
 	hooksecurefunc(BankFrame, "UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
 end
 
-local bindTextTable = {
-	[ITEM_ACCOUNTBOUND]        = L["BoA"],
-	[ITEM_BNETACCOUNTBOUND]    = L["BoA"],
-	[ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
-	[ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
-	-- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
-	-- [ITEM_BIND_ON_USE]         = L["BoE"]
-}
-
-local function IsCollectibleLink(item)
-	local caerdonType = item:GetCaerdonItemType()
-	return caerdonType == CaerdonItemType.BattlePet or
-		caerdonType == CaerdonItemType.CompanionPet or
-		caerdonType == CaerdonItemType.Mount or
-		caerdonType == CaerdonItemType.Recipe or
-		caerdonType == CaerdonItemType.Toy
-end
-
-local equipLocations = {}
-
-function CaerdonWardrobeMixin:GetBindingStatus(item, feature, locationInfo, button, options, tooltipData)
-	local itemID = item:GetItemID()
-	local itemLink = item:GetItemLink()
-	local itemData = item:GetItemData()
-	local caerdonType = item:GetCaerdonItemType()
-
-	local bindingStatus
-	local needsItem = true
-	local hasEquipEffect = false
-
-	local isBindOnPickup = false
-	local isBindOnUse = false
-	local unusableItem = false
-	local skillTooLow = false
-	local foundRedRequirements = false
-	local isLocked = false
-	local isOpenable = false
-	
-	local isCollectionItem = IsCollectibleLink(item)
-	local isPetLink = caerdonType == CaerdonItemType.BattlePet or caerdonType == CaerdonItemType.CompanionPet
-
-	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-	isCraftingReagent = GetItemInfo(itemLink)
-
-	local binding = item:GetBinding()
-
-	if binding == CaerdonItemBind.None then
-		bindingStatus = ""
-	elseif binding == CaerdonItemBind.BindOnPickup then
-		isBindOnPickup = true
-	elseif binding == CaerdonItemBind.BindOnEquip then
-		bindingStatus = L["BoE"]
-	elseif binding == CaerdonItemBind.BindOnUse then
-		isBindOnUse = true
-		bindingStatus = L["BoE"]
-	elseif binding == CaerdonItemBind.QuestItem then
-		bindingStatus = ""
-	elseif binding == CaerdonItemBind.BindOnAccount then
-		bindingStatus = L["BoA"]
-	end
-
-	if item:IsSoulbound() then
-		isBindOnPickup = true
-		bindingStatus = nil
-	end
-
-	if tooltipData then
-		hasEquipEffect = tooltipData.hasEquipEffect
-
-		if tooltipData.isRelearn then
-			needsItem = false
-		end
-
-		if not bindingStatus then
-			bindingStatus = tooltipData.bindingStatus
-		end
-
-		if caerdonType ~= CaerdonItemType.Recipe then -- ignore red on recipes for now... should be handling correctly through the recipe checks
-			if tooltipData.foundRedRequirements then -- TODO: See about getting rid of this eventually and having specific checks (if possible)
-				unusableItem = true
-				skillTooLow = true
-			end
-		end
-
-		if tooltipData.isKnownSpell then
-			needsItem = false
-			unusableItem = true
-			skillTooLow = false
-		end
-
-		isLocked = tooltipData.isLocked
-		isOpenable = tooltipData.isOpenable
-
-		if tooltipData.supercedingSpellNotKnown then
-			unusableItem = true
-			skillTooLow = true
-		end
-
-		if tooltipData.requiredTradeSkillMissingOrUnleveled then
-			unusableItem = true
-			-- if isBindOnPickup then -- assume all unknown not needed for now
-				needsItem = false
-			-- end
-		else
-			if tooltipData.requiredTradeSkillTooLow then
-				unusableItem = true
-				skillTooLow = true
-				needsItem = true -- still need this but need to rank up
-			else
-				needsItem = true
-			end
-		end
-	end
-
-	if not bindingStatus and (isCollectionItem or isLocked or isOpenable) then
-		-- TODO: This can be useful on everything but needs to be configurable per type before doing so
-		if not isBindOnPickup then
-			bindingStatus = L["BoE"]
-		end
-	end
-
-	if caerdonType == CaerdonItemType.Conduit then
-		local conduitInfo = itemData:GetConduitInfo()
-		needsItem = conduitInfo.needsItem
-	elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
-		local petInfo = 
-			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
-			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
-		needsItem = petInfo.needsItem
-	elseif caerdonType == CaerdonItemType.Recipe then
-		local recipeInfo = itemData:GetRecipeInfo()
-		if recipeInfo and recipeInfo.learned then -- TODO: This still ends up flagging a few of the weird self-referential ones that aren't learned... look into later.
-			needsItem = false
-		elseif tooltipData.isKnownSpell then
-			needsItem = false
-		end
-	end
-
-	-- Haven't seen a reason for this, yet, and should be handled in each type
-	-- if isCollectionItem and unusableItem then
-	-- 	if not isRecipe then
-	-- 		needsItem = false
-	-- 	end
-	-- end
-
-	return { 
-		bindingStatus = bindingStatus, 
-		needsItem = needsItem, 
-		hasEquipEffect = hasEquipEffect,
-		isBindOnPickup = isBindOnPickup, 
-		unusableItem = unusableItem, 
-		isLocked = isLocked, 
-		skillTooLow = skillTooLow
-	}
-end
-
+-- TODO: Pretty sure I don't need to do this... get setID from GetItemInfo?
 local function IsGearSetStatus(status, item)
-	return status and status ~= L["BoA"] and status ~= L["BoE"]
+	return status and status ~= "" and status ~= L["BoA"] and status ~= L["BoE"]
 end
 
 local ICON_PROMINENT_SIZE = 20
@@ -335,12 +179,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatusBackground = mogStatus.mogStatusBackground
 	end
 	local mogAnim = button.mogAnim
-	local iconPosition, showSellables, isSellable
 
-	if options then 
-		showSellables = options.showSellables
-		isSellable = options.isSellable
-	else
+	if not options then 
 		options = {}
 	end
 
@@ -512,9 +352,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
 			-- mogStatus:SetTexture("Interface\\WorldMap\\worldquest-icon-enchanting")
-			if status == "ownPlus" then
-				mogStatus:SetVertexColor(0.4, 1, 0)
-			end
 		end
 	elseif status == "canCombine" then
 		-- isProminent = true
@@ -603,13 +440,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
 		mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
 	elseif status == "collected" then
-		if not IsGearSetStatus(bindingStatus, item) and showSellables and isSellable and displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
+		if IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
+			mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
+		end
+	elseif status == "sellable" then
+		if displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
 			alpha = 0.9
 			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
-		elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
-			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-			mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 		end
 	elseif status == "waiting" then
 		alpha = 0.5
@@ -647,6 +486,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			mogStatus:SetAlpha(0.3)
 		end
 	end)
+
+	if options.isFiltered then
+		if options.filterColor then
+			mogStatus:SetDesaturated(true)
+			mogStatus:SetVertexColor(options.filterColor:GetRGB())
+		else
+			mogStatusBackground:SetAlpha(0.3)
+			mogStatus:SetAlpha(0.3)
+		end
+	else
+		mogStatus:SetDesaturated(false)
+	end
 
 	if showAnim and CaerdonWardrobeConfig.Icon.EnableAnimation then
 		if mogAnim and not mogAnim:IsPlaying() then
@@ -773,178 +624,34 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 	end
 end
 
-function CaerdonWardrobeMixin:ItemIsSellable(itemID, itemLink)
-	local isSellable = itemID ~= nil
-	if itemID == 23192 then -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
-		isSellable = false
-	elseif itemID == 116916 then -- Gorepetal's Gentle Grasp allows faster herbalism in Draenor
-		isSellable = false
-	end
-	return isSellable
-end
-
-function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options, tooltipData)
+function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options)
 	local mogStatus = nil
+	local bindingStatus = nil
+	local bindingResult = nil
 
    	if not options then
    		options = {}
    	end
 
-	local showMogIcon = options.showMogIcon
-	local showBindStatus = options.showBindStatus
-	local showSellables = options.showSellables
-
-	local itemLink = item:GetItemLink()
-	if not itemLink then
-		-- Requiring an itemLink for now unless I find a reason not to
-		return
-	end
-
-	-- local printable = gsub(itemLink, "\124", "\124\124");
-	-- print(printable)
-
-	local itemID = item:GetItemID()
 	local caerdonType = item:GetCaerdonItemType()
 	local itemData = item:GetItemData()
 
-	local bindingResult = self:GetBindingStatus(item, feature, locationInfo, button, options, tooltipData)
-	local bindingStatus = bindingResult.bindingStatus
-
-	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-	isCraftingReagent = GetItemInfo(itemLink)
-
-	local playerLevel = UnitLevel("player")
-
-	if not IsCollectibleLink(item) and caerdonType ~= CaerdonItemType.Conduit then
-		local expansionID = expacID
-		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
-			local shouldShowExpansion = false
-
-			if expansionID > 0 or CaerdonWardrobeConfig.Icon.ShowOldExpansion.Unknown then
-				if isCraftingReagent and CaerdonWardrobeConfig.Icon.ShowOldExpansion.Reagents then
-					shouldShowExpansion = true
-				elseif item:GetHasUse() and CaerdonWardrobeConfig.Icon.ShowOldExpansion.Usable then
-					shouldShowExpansion = true
-				elseif not isCraftingReagent and not item:GetHasUse() and CaerdonWardrobeConfig.Icon.ShowOldExpansion.Other then
-					shouldShowExpansion = true
-				end
-			end
-
-			if shouldShowExpansion then
-				mogStatus = "oldexpansion"
-			end
-		end
+	isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
+	if not isReady then
+		self:UpdateButton(button, item, feature, locationInfo, options)
+		return
 	end
 
-	local isQuestItem = itemClassID == Enum.ItemClass.Questitem
-	if isQuestItem and CaerdonWardrobeConfig.Icon.ShowQuestItems then
-		mogStatus = "quest"
-	end
-
-
-	if caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
-		local petInfo = 
-			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
-			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
-		if petInfo.needsItem then
-			if bindingResult.unusableItem then
-				mogStatus = "other"
-			else
-				mogStatus = "own"
-			end
-		end
-	elseif caerdonType == CaerdonItemType.Conduit then
-		if bindingResult.needsItem then
-			local conduitInfo = itemData:GetConduitInfo()
-			if conduitInfo.isUpgrade then
-				mogStatus = "upgrade"
-			else
-				mogStatus = "own"
-			end
-		elseif tooltipData.canLearn then
-			if bindingResult.skillTooLow then
-				mogStatus = "lowSkill"
-			else
-				mogStatus = "own"
-			end
-		end
-	elseif caerdonType == CaerdonItemType.Consumable then
-		if tooltipData.canCombine then
-			mogStatus = "canCombine"
-			if tooltipData.readyToCombine then
-				mogStatus = "readyToCombine"
-			end
-		elseif tooltipData.canLearn then
-			if bindingResult.skillTooLow then
-				mogStatus = "lowSkill"
-			else
-				mogStatus = "own"
-			end
-		end
-	elseif caerdonType == CaerdonItemType.Equipment then
+	if caerdonType == CaerdonItemType.Equipment then
 		local transmogInfo = itemData:GetTransmogInfo()
 		if transmogInfo then
 			if transmogInfo.isTransmog then
-				if transmogInfo.needsItem then
-					if not transmogInfo.isCompletionistItem then
-						if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-							mogStatus = "own"
-						else
-							mogStatus = "lowSkill"
-						end
-					else
-						if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-							if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-								mogStatus = "ownPlus"
-							else
-								mogStatus = "lowSkillPlus"
-							end
-						end
-					end
-				elseif transmogInfo.otherNeedsItem then
-					if not bindingResult.isBindOnPickup then
-						if not transmogInfo.isCompletionistItem then
-							mogStatus = "other"
-						else
-							if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-								mogStatus = "otherPlus"
-							end
-						end
-					else
-						mogStatus = "collected"
-					end
-				else
-					if transmogInfo.hasMetRequirements then
-						mogStatus = "collected"
-					-- Don't mark as lowSkill for equipment if it's known but not the right level... too much noise
-					-- else
-					-- 	mogStatus = "lowSkill"
-					end
-				end
-
 				-- TODO: Exceptions need to be broken out
-				-- TODO: Instead:  if plugin:ShouldShowNeedOtherAsInvalid() then
+				-- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
 				if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" or feature:GetName() == "CustomerOrders" then
 					if transmogInfo.needsItem then
-						if transmogInfo.matchesLootSpec then
-							if not transmogInfo.isCompletionistItem then
-								if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-									mogStatus = "own"
-								else
-									mogStatus = "lowSkill"
-								end
-							else
-								if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-									if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-										mogStatus = "ownPlus"
-									else
-										mogStatus = "lowSkillPlus"
-									end
-								end
-							end
-						else
-							if not transmogInfo.isCompletionistItem then
+						if not transmogInfo.matchesLootSpec then
+							if mogStatus == "own" or mogStatus == "lowSkill" then
 								mogStatus = "otherSpecPlus"
 							else
 								if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
@@ -953,7 +660,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 							end
 						end
 					elseif transmogInfo.otherNeedsItem then
-						if bindingResult.isBindOnPickup then
+						if bindingResult and bindingResult.isBindOnPickup then
 							if not transmogInfo.isCompletionistItem then
 								mogStatus = "otherNoLoot"
 							else
@@ -962,172 +669,6 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 						end
 					end
 				end
-			else
-				if not transmogInfo.hasMetRequirements then
-					mogStatus = "lowSkill"
-				else
-					mogStatus = "collected"
-				end
-			end
-
-			local equipmentSets = itemData:GetEquipmentSets()
-			if equipmentSets then
-				if #equipmentSets > 1 then
-					bindingStatus = "*" .. equipmentSets[1]
-				else
-					bindingStatus = equipmentSets[1]
-				end
-			else
-				if mogStatus == "collected" and 
-				self:ItemIsSellable(itemID, itemLink) and 
-				not item:GetHasUse() and
-				not item:GetSetID() and
-				not bindingResult.hasEquipEffect then
-					-- Set up new options, so we don't change the shared one
-					-- TODO: Should probably come up with a new way to pass in calculated data
-					local newOptions = {}
-					CaerdonAPI:MergeTable(newOptions, options)
-					options = newOptions
-					options.isSellable = true
-				end
-			end
-		end
-	elseif caerdonType == CaerdonItemType.Mount then
-		local mountInfo = itemData:GetMountInfo()
-		if mountInfo.needsItem then
-			local factionGroup = nil
-			local playerFactionGroup = nil
-			if mountInfo.isFactionSpecific then
-				factionGroup = PLAYER_FACTION_GROUP[mountInfo.factionID]
-				playerFactionGroup = UnitFactionGroup("player")
-			end
-
-			if (not itemMinLevel or playerLevel >= itemMinLevel) and (factionGroup == playerFactionGroup) then
-				mogStatus = "own"
-			else
-				mogStatus = "other"
-			end
-		end
-	elseif caerdonType == CaerdonItemType.Profession then
-		local professionInfo = itemData:GetProfessionInfo()
-		if professionInfo.needsItem then
-			mogStatus = "needForProfession"
-		end
-	elseif caerdonType == CaerdonItemType.Quest then
-		if tooltipData.canCombine then
-			mogStatus = "canCombine"
-			if tooltipData.readyToCombine then
-				mogStatus = "readyToCombine"
-			end
-		end
-	elseif caerdonType == CaerdonItemType.Recipe then
-		if bindingResult.needsItem then
-			if bindingResult.unusableItem then
-				if bindingResult.skillTooLow then
-					mogStatus = "lowSkill"
-				end
-				-- Don't show these for now
-				-- mogStatus = "other"
-			else
-				mogStatus = "own"
-			end
-
-			-- Let's just ignore the Librams for now until I decide what to do about them
-			if itemID == 11732 or 
-			   itemID == 11733 or
-			   itemID == 11734 or 
-			   itemID == 11736 or 
-			   itemID == 11737 or
-			   itemID == 18332 or
-			   itemID == 18333 or
-			   itemID == 18334 or
-			   itemID == 21288 then
-				if CaerdonWardrobeConfig.Icon.ShowOldExpansion.Usable then
-					mogStatus = "oldexpansion"
-				else
-					mogStatus = nil
-				end
-			end
-		-- else
-		-- 	local recipeInfo = itemData:GetRecipeInfo()
-
-		-- 	if tooltipData.canLearn then
-		-- 		if bindingResult.skillTooLow then
-		-- 			mogStatus = "lowSkill"
-		-- 		else
-		-- 			mogStatus = "own"
-		-- 		end
-		-- 	end
-		end
-	elseif caerdonType == CaerdonItemType.Toy then
-		local toyInfo = itemData:GetToyInfo()
-		if toyInfo.needsItem then
-			mogStatus = "own"
-		else
-			mogStatus = "collected"
-			-- TODO: This is used a few times... need to fix to pass in dynamic data
-			local newOptions = {}
-			CaerdonAPI:MergeTable(newOptions, options)
-			options = newOptions
-			options.isSellable = true
-		end
-	elseif tooltipData.canLearn then
-		if bindingResult.skillTooLow then
-			mogStatus = "lowSkill"
-		else
-			mogStatus = "own"
-		end
-	end
-
-	if item:HasItemLocationBankOrBags() then
-		local itemLocation = item:GetItemLocation()
-		local bag, slot = itemLocation:GetBagAndSlot()
-		
-		local containerID = bag
-		local containerSlot = slot
-
-		local texture, itemCount, locked, quality, readable, lootable
-		if C_Container and C_Container.GetContainerItemInfo then
-			local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
-			if containerItemInfo then
-				itemCount = containerItemInfo.stackCount
-				locked = containerItemInfo.isLocked
-				quality = containerItemInfo.quality
-				readable = containerItemInfo.isReadable
-				lootable = containerItemInfo.hasLoot
-			end
-		else 
-			texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
-		end
-
-		if lootable then
-			local startTime, duration, isEnabled
-			if C_Container and C_Container.GetContainerItemCooldown then
-				startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
-			else
-				startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
-			end
-			if duration > 0 and not isEnabled then
-				mogStatus = "refundable" -- Can't open yet... show timer
-			else
-				if bindingResult.isLocked then
-					mogStatus = "locked"
-				else
-					mogStatus = "openable"
-				end
-			end
-		elseif readable then
-			mogStatus = "readable"
-		else
-			local isEquipped = false
-			local money, itemCount, refundSec, currencyCount, hasEnchants
-			if C_Container and C_Container.GetContainerItemPurchaseInfo then
-				money, itemCount, refundSec, currencyCount, hasEnchants = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
-			else
-				money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot, isEquipped)
-			end
-			if refundSec then
-				mogStatus = "refundable"
 			end
 		end
 	end
@@ -1146,166 +687,6 @@ function CaerdonWardrobeMixin:RegisterFeature(mixin)
 	else
 		error(format("Caerdon Wardrobe: Feature name collision: %s already exists", name))
 	end
-end
-
-function CaerdonWardrobeMixin:GetTooltipData(item, feature, locationInfo)
-	local tooltipData = {
-		canLearn = false,
-		canCombine = false,
-		hasEquipEffect = false,
-		isRelearn = false,
-		bindingStatus = nil,
-		isRetrieving = false,
-		isSoulbound = false,
-		isKnownSpell = false,
-		isLocked = false,
-		isOpenable = false,
-		supercedingSpellNotKnown = false,
-		foundRedRequirements = false,
-		requiredTradeSkillMissingOrUnleveled = false,
-		requiredTradeSkillTooLow = false
-	}
-
-	-- SetCVar("missingTransmogSourceInItemTooltips", 0)
-
-	local data = C_TooltipInfo and feature:GetTooltipData(item, locationInfo) or nil
-	if data then
-		data = CaerdonAPI:ProcessTooltipData(data)
-
-		local isBattlePetShown = BattlePetTooltip:IsShown()
-		local lines = data.lines or {}
-		for lineIndex, line in ipairs(data.lines) do
-			if line.type == Enum.TooltipDataLineType.None or
-			   line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent or
-				 line.type == Enum.TooltipDataLineType.ItemBinding then
-				local lineText = line.leftText
-				if lineText then
-					-- TODO: Find a way to identify Equip Effects without tooltip scanning
-					if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
-						tooltipData.hasEquipEffect = true
-					end
-
-					local isRecipe = item:GetCaerdonItemType() == CaerdonItemType.Recipe
-					
-					-- if isRecipe then
-						-- TODO: Don't like matching this hard-coded string but not sure how else
-						-- to prevent the expensive books from showing as learnable when I don't
-						-- know how to tell if they have recipes you need.
-						if strmatch(lineText, L["Use: Re%-learn .*"]) then
-							tooltipData.isRelearn = true
-						end
-						
-
-						-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
-						-- which toons could learn a recipe.
-
-						local replaceSkill = "%w"
-						
-						-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-						local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-						skillCheck = string.gsub(skillCheck, "2%$", "")
-						skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-						if GetLocale() == "zhCN" then
-							skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-						else
-							skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-						end
-						if strmatch(lineText, skillCheck) then
-							local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
-
-							local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
-
-							tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
-							tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
-
-							if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
-								tooltipData.canLearn = false
-							else
-								tooltipData.canLearn = true
-							end
-						end		
-					-- end
-
-					if (item:GetCaerdonItemType() == CaerdonItemType.Consumable or item:GetCaerdonItemType() == CaerdonItemType.Quest) and item:HasItemLocation() then
-						local location = item:GetItemLocation()
-						local maxStackCount = C_Item.GetItemMaxStackSize(location)
-						local currentStackCount = C_Item.GetStackCount(location)
-				
-						local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
-						if combineCount > 1 then
-							tooltipData.canCombine = true
-							if combineCount <= currentStackCount then
-								tooltipData.readyToCombine = true
-							end
-						end
-					end
-
-					if not tooltipData.bindingStatus then
-						-- Check binding status - TODO: Is there a non-scan way?
-						tooltipData.bindingStatus = bindTextTable[lineText]
-					end
-
-					if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
-						tooltipData.canLearn = true
-					elseif strmatch(lineText, L["Use: Marks your map with the location"]) then
-						tooltipData.canLearn = true
-					elseif strmatch(lineText, L["Use: Unlocks this customization"]) then
-						tooltipData.canLearn = true
-					elseif strmatch(lineText, L["Use: Study to increase your"]) then
-						tooltipData.canLearn = true
-					elseif lineText == RETRIEVING_ITEM_INFO then
-						tooltipData.isRetrieving = true
-						break
-					elseif lineText == ITEM_SOULBOUND then
-						tooltipData.isSoulbound = true
-					elseif lineText == ITEM_SPELL_KNOWN then
-						tooltipData.isKnownSpell = true
-					elseif lineText == LOCKED then
-						tooltipData.isLocked = true
-					elseif lineText == ITEM_OPENABLE then
-						tooltipData.isOpenable = true
-					elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
-						tooltipData.supercedingSpellNotKnown = true
-					end
-				end
-
-					local hex = line.leftColor
-					-- TODO: Generated hex color includes alpha value so need to check for full red.
-					-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
-					-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
-					-- if hex == "fe1f1f" then -- TODO: this was old value... check to see if still needed for anything
-					if hex == "ffff2020" then
-						tooltipData.foundRedRequirements = true
-					end
-			elseif line.type == Enum.TooltipDataLineType.Blank then
-			-- elseif args.type == Enum.TooltipDataLineType.UnitName then
-			elseif line.type == Enum.TooltipDataLineType.GemSocket then
-			elseif line.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
-			-- elseif line.type == Enum.TooltipDataLineType.AzeriteEssencePower then
-			-- elseif line.type == Enum.TooltipDataLineType.LearnableSpell then
-			-- elseif line.type == Enum.TooltipDataLineType.UnitThreat then
-			-- elseif line.type == Enum.TooltipDataLineType.QuestObjective then
-			-- elseif line.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
-			-- elseif line.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
-			elseif line.type == Enum.TooltipDataLineType.SellPrice then
-			elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
-			-- elseif line.type == Enum.TooltipDataLineType.SpellName then
-			elseif line.type == Enum.TooltipDataLineType.NestedBlock then
-			else
-				print("TOOLTIP PROCESSING NEEDED: " .. item:GetItemLink() .. ", type: " .. tostring(line.type))
-				-- DevTools_Dump(line)
-			end
-		end
-	end
-
-	-- SetCVar("missingTransmogSourceInItemTooltips", 1)
-
-	-- if item:GetItemID() == 199683 or item:GetItemID() == 199658 then
-	-- 	print(item:GetItemLink())
-	-- 	DevTools_Dump(tooltipData)
-	-- end
-
-	return tooltipData
 end
 
 function CaerdonWardrobeMixin:ClearButton(button)
@@ -1395,27 +776,11 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 				
 				if feature:IsSameItem(button, item, locationInfo) and button.caerdonKey == locationKey then
 					if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-						local tooltipData = self:GetTooltipData(item, feature, locationInfo)
-
-						-- This is lame, but tooltips end up not having all of their data
-						-- until a round of "Set*Item" has occurred in certain cases (usually right on login).
-						-- Specifically, the Equip: line was missing on a fishing pole (and other items)
-						-- TODO: Move tooltip into CaerdonItem and handle in ContinueOnItemLoad if possible
-						-- Probably can't store the actual data there (need to retrieve live) due to changing info like locked status
-						if tooltipData.isRetrieving then
-							self:UpdateButton(button, item, feature, locationInfo, options)
-						else
-							self:ProcessItem(button, item, feature, locationInfo, options, tooltipData)
-						end
+						self:ProcessItem(button, item, feature, locationInfo, options)
 					else
 						item:ContinueOnItemLoad(function ()
 							if button.caerdonKey == locationKey then
-								local tooltipData = self:GetTooltipData(item, feature, locationInfo)
-								if tooltipData and tooltipData.isRetrieving then
-									self:UpdateButton(button, item, feature, locationInfo, options)
-								else
-									self:ProcessItem(button, item, feature, locationInfo, options, tooltipData)
-								end
+								self:ProcessItem(button, item, feature, locationInfo, options)
 							else
 								self:ClearButton(button)
 							end

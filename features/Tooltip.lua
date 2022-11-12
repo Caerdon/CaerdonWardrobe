@@ -359,6 +359,7 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
                 local item = CaerdonItem:CreateFromItemID(tooltipData.id)
                 Tooltip:ProcessTooltip(tooltip, item)
             elseif tooltipData.type == Enum.TooltipDataType.Achievement then
+            elseif tooltipData.type == Enum.TooltipDataType.EquipmentSet then
             elseif tooltipData.type == Enum.TooltipDataType.Spell then
             elseif tooltipData.type == Enum.TooltipDataType.Unit then
             elseif tooltipData.type == Enum.TooltipDataType.Corpse then

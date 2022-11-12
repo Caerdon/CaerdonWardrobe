@@ -76,7 +76,7 @@ function BagnonMixin:OnUpdateSlot(bagnonItem)
 			CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { 
 				locationKey = format("bag%d-slot%d", bag, slot),
 				isOffline = true
-			}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+			}, { } )
 		else
 			CaerdonWardrobe:ClearButton(bagnonItem)
 		end
@@ -91,13 +91,13 @@ function BagnonMixin:OnUpdateSlot(bagnonItem)
 						locationKey = format("tab%d-index%d", tab, slot),
 						tab = tab,
 						index = slot
-					}, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+					}, { } )
 				else
 					CaerdonWardrobe:ClearButton(bagnonItem)
 				end
 			else
 				local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-				CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { bag = bag, slot = slot }, { showMogIcon = true, showBindStatus = true, showSellables = true } )
+				CaerdonWardrobe:UpdateButton(bagnonItem, item, self, { bag = bag, slot = slot }, { } )
 			end
 		end
 	end

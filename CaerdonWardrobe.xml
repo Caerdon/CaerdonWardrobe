@@ -43,6 +43,7 @@
 	<Script file="external\ElvUI\Core.ElvUI.lua" />
 	<Script file="external\Inventorian\Core.Inventorian.lua" />
 	<Script file="external\KkthnxUI\Core.KkthnxUI.lua" />
+	<Script file="external\Sorted\Core.Sorted.lua" />
 	<Script file="external\VenturePlan\Core.VenturePlan.lua" />
 	<Script file="external\WorldQuestList\Core.WorldQuestsList.lua" />
 	<Script file="external\WorldQuestTab\Core.WorldQuestTab.lua" />
