@@ -431,10 +431,10 @@ end
 
 function CaerdonItemMixin:GetTooltipData(data)
 	if not data then
-		data = C_TooltipInfo.GetHyperlink(self:GetItemLink())
+		data = C_TooltipInfo and C_TooltipInfo.GetHyperlink(self:GetItemLink()) or nil
 	end
 
-	if not data then return end
+	if not data then return {} end
 
 	local bindTextTable = {
 		[ITEM_ACCOUNTBOUND]        = L["BoA"],
