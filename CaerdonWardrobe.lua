@@ -697,7 +697,10 @@ function CaerdonWardrobeMixin:ClearButton(button)
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
-	if not item or (item:IsItemEmpty() and item:GetCaerdonItemType() == CaerdonItemType.Empty) then
+	if item == nil then
+		self:ClearButton(button)
+		return
+	elseif item:IsItemEmpty() and item:GetCaerdonItemType() == CaerdonItemType.Empty then
 		self:ClearButton(button)
 		return
 	end

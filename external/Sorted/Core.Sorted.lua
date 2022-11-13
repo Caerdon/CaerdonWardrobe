@@ -18,21 +18,28 @@ function SortedMixin:Init()
     local CreateElement = function(f)
     end
 
-    local UpdateElement = function(button, data)
+    local UpdateElement = function(button, itemData)
 		local options = {
             overrideStatusPosition = "CENTER",
             statusOffsetX = -0.60,
             statusOffsetY = -0.60,
             statusProminentSize = statusProminentSize,
-            isFiltered = data.filtered,
-            filterColor = data.tinted
+            isFiltered = itemData.filtered,
+            filterColor = itemData.tinted
 		}
 
-        if data.caerdonItem then
+        local item
+        if Sorted.IsPlayingCharacterSelected() then
+            item = CaerdonItem:CreateFromBagAndSlot(itemData.bag, itemData.slot)
+        else
+            item = CaerdonItem:CreateFromItemLink(itemData.link)
+        end
+
+        if item then
             if Sorted.IsPlayingCharacterSelected() then
-    		    CaerdonWardrobe:UpdateButton(button, data.caerdonItem, self, { bag = data.bag, slot = data.slot }, options)
+    		    CaerdonWardrobe:UpdateButton(button, item, self, { bag = itemData.bag, slot = itemData.slot }, options)
             else
-    		    CaerdonWardrobe:UpdateButton(button, data.caerdonItem, self, { locationKey = format("%s-%d-%d", data.link, data.bag, data.slot) }, options)
+    		    CaerdonWardrobe:UpdateButton(button, item, self, { locationKey = format("%s-%d-%d", itemData.link, itemData.bag, itemData.slot) }, options)
             end
         else
             CaerdonWardrobe:ClearButton(button)
@@ -104,14 +111,15 @@ function SortedMixin:Init()
     -- Sorted:AddSortMethod("CAERDONWARDROBE", "|TInterface\\Store\\category-icon-bag:18:18:0:0:32:32:0:32:0:32|t", Sort, false)
     
     local PreSort = function(itemData)
+        local item
         if Sorted.IsPlayingCharacterSelected() then
-            itemData.caerdonItem = CaerdonItem:CreateFromBagAndSlot(itemData.bag, itemData.slot)
+            item = CaerdonItem:CreateFromBagAndSlot(itemData.bag, itemData.slot)
         else
-            itemData.caerdonItem = CaerdonItem:CreateFromItemLink(itemData.link)
+            item = CaerdonItem:CreateFromItemLink(itemData.link)
         end
 
-        if not itemData.caerdonItem:IsItemDataCached() then
-            itemData.caerdonItem:ContinueOnItemLoad(function ()
+        if not item:IsItemDataCached() then
+            item:ContinueOnItemLoad(function ()
                 if refreshTimer then
                     refreshTimer:Cancel()
                 end
@@ -121,7 +129,7 @@ function SortedMixin:Init()
                 end, 1)
             end)
         else
-            local isReady, mogStatus, bindingStatus, bindingResult = itemData.caerdonItem:GetCaerdonStatus(feature, locationInfo)
+            local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
             itemData.caerdonStatus = mogStatus
         end
     end
