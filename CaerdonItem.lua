@@ -585,6 +585,10 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.SellPrice then
 		elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
 		-- elseif line.type == Enum.TooltipDataLineType.SpellName then
+		elseif line.type == Enum.TooltipDataLineType.CurrencyTotal then
+		-- elseif line.type == Enum.TooltipDataLineType.UnitOwner then
+		-- elseif line.type == Enum.TooltipDataLineType.QuestTitle then
+		-- elseif line.type == Enum.TooltipDataLineType.QuestPlayer then
 		elseif line.type == Enum.TooltipDataLineType.NestedBlock then
 		else
 			print("TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
@@ -594,6 +598,29 @@ function CaerdonItemMixin:GetTooltipData(data)
 
 	return tooltipData
 end
+
+
+-- { Name = "None", Type = "TooltipDataLineType", EnumValue = 0 },
+-- { Name = "Blank", Type = "TooltipDataLineType", EnumValue = 1 },
+-- { Name = "UnitName", Type = "TooltipDataLineType", EnumValue = 2 },
+-- { Name = "GemSocket", Type = "TooltipDataLineType", EnumValue = 3 },
+-- { Name = "AzeriteEssenceSlot", Type = "TooltipDataLineType", EnumValue = 4 },
+-- { Name = "AzeriteEssencePower", Type = "TooltipDataLineType", EnumValue = 5 },
+-- { Name = "LearnableSpell", Type = "TooltipDataLineType", EnumValue = 6 },
+-- { Name = "UnitThreat", Type = "TooltipDataLineType", EnumValue = 7 },
+-- { Name = "QuestObjective", Type = "TooltipDataLineType", EnumValue = 8 },
+-- { Name = "AzeriteItemPowerDescription", Type = "TooltipDataLineType", EnumValue = 9 },
+-- { Name = "RuneforgeLegendaryPowerDescription", Type = "TooltipDataLineType", EnumValue = 10 },
+-- { Name = "SellPrice", Type = "TooltipDataLineType", EnumValue = 11 },
+-- { Name = "ProfessionCraftingQuality", Type = "TooltipDataLineType", EnumValue = 12 },
+-- { Name = "SpellName", Type = "TooltipDataLineType", EnumValue = 13 },
+-- { Name = "CurrencyTotal", Type = "TooltipDataLineType", EnumValue = 14 },
+-- { Name = "ItemEnchantmentPermanent", Type = "TooltipDataLineType", EnumValue = 15 },
+-- { Name = "UnitOwner", Type = "TooltipDataLineType", EnumValue = 16 },
+-- { Name = "QuestTitle", Type = "TooltipDataLineType", EnumValue = 17 },
+-- { Name = "QuestPlayer", Type = "TooltipDataLineType", EnumValue = 18 },
+-- { Name = "NestedBlock", Type = "TooltipDataLineType", EnumValue = 19 },
+-- { Name = "ItemBinding", Type = "TooltipDataLineType", EnumValue = 20 },
 
 function CaerdonItemMixin:IsSellable()
     local itemID = self:GetItemID()
