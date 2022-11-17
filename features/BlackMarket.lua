@@ -21,6 +21,29 @@ end
 function BlackMarketMixin:Refresh()
 end
 
+function BlackMarketMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = true
+		},
+		ownIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Auction
+		},
+		otherIcon = {
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction
+		},
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
 	if BlackMarketFrame:IsShown() then
 		-- self:UpdateBlackMarketItems()

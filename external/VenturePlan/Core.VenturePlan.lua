@@ -34,6 +34,29 @@ end
 function VenturePlanMixin:Refresh()
 end
 
+function VenturePlanMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = true
+		},
+		ownIcon = {
+			shouldShow = true
+		},
+		otherIcon = {
+			shouldShow = true
+		},
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function VenturePlanMixin:UpdateButton(button)
 	local options = {
         overrideStatusPosition = "TOPRIGHT",

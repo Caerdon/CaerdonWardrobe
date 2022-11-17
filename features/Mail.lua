@@ -25,6 +25,29 @@ end
 function MailMixin:Refresh()
 end
 
+function MailMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = true
+		},
+		ownIcon = {
+			shouldShow = true
+		},
+		otherIcon = {
+			shouldShow = true
+		},
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
 	for i=1, ATTACHMENTS_MAX_RECEIVE do
 		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];

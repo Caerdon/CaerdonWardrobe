@@ -47,6 +47,29 @@ function QuestLogMixin:Refresh()
 	end
 end
 
+function QuestLogMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = true
+		},
+		ownIcon = {
+			shouldShow = true
+		},
+		otherIcon = {
+			shouldShow = true
+		},
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = true
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function QuestLogMixin:QUEST_ITEM_UPDATE()
 	self:OnQuestInfoShowRewards()
 end

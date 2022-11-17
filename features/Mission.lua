@@ -22,6 +22,29 @@ end
 function MissionMixin:Refresh()
 end
 
+function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	return {
+		bindingStatus = {
+			shouldShow = true
+		},
+		ownIcon = {
+			shouldShow = true
+		},
+		otherIcon = {
+			shouldShow = true
+		},
+		questIcon = {
+			shouldShow = true
+		},
+		oldExpansionIcon = {
+			shouldShow = false
+		},
+        sellableIcon = {
+            shouldShow = false
+        }
+	}
+end
+
 function MissionMixin:OnCovenantMissionScrollBoxRangeChanged(sortPending)
 	local scrollBox = CovenantMissionFrameMissions.ScrollBox
 	scrollBox:ForEachFrame(function(missionButton, elementData)
