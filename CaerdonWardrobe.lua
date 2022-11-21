@@ -79,10 +79,20 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 		xOffset = xOffset * -1
 	end
 
+	local xBackgroundOffset = 0
+	if options.statusBackgroundOffsetX ~= nil then
+		xBackgroundOffset = options.statusBackgroundOffsetX
+	end
+
+	local yBackgroundOffset = 0
+	if options.statusBackgroundOffsetY ~= nil then
+		yBackgroundOffset = options.statusBackgroundOffsetY
+	end
+
 	local background = icon.mogStatusBackground
 	if background then
 		background:ClearAllPoints()
-		background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+		background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset + xBackgroundOffset, yOffset + yBackgroundOffset)
 	end
 
 	icon:ClearAllPoints()
@@ -451,9 +461,17 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		end
 	elseif status == "otherNoLoot" or status == "otherPlusNoLoot" then
 		if displayInfo and displayInfo.otherIcon.shouldShow then
+			iconBackgroundAdjustment = 0
+			options.statusBackgroundOffsetX = -0.5
+			options.statusBackgroundOffsetY = -0.5
+			mogStatusBackground:SetTexCoord((512-46-31)/512, (512-31)/512, 5/512, (5+46)/512)
+			mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+			mogStatus:SetVertexColor(1, 1, 0)
+
 			mogStatus:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-			if status == "otherPlus" then
-				mogStatus:SetVertexColor(0.4, 1, 0)
+
+			if status == "otherPlusNoLoot" then
+				mogStatusBackground:SetVertexColor(0.4, 1, 0)
 			end
 		end
 	elseif status == "otherSpec" or status == "otherSpecPlus" then
@@ -677,7 +695,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 				-- TODO: Exceptions need to be broken out
 				-- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
 				if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" or feature:GetName() == "CustomerOrders" then
-					if transmogInfo.needsItem then
+					if transmogInfo.needsItem and not feature:GetName() == "Merchant" then
 						if not transmogInfo.matchesLootSpec then
 							if mogStatus == "own" or mogStatus == "lowSkill" then
 								mogStatus = "otherSpecPlus"
