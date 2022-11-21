@@ -264,6 +264,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink = GetLootSlotLink(slot);
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetLootRollItem" then
+        local rollID = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetLootRollItemLink(rollID)
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetMerchantCostItem" then
         local slot, costIndex = unpack(tooltipInfo.getterArgs)
         local itemTexture, itemValue, itemLink, currencyName = GetMerchantItemCostItem(slot, costIndex);
@@ -355,10 +360,11 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local tooltipData = tooltip:GetTooltipData();
         if tooltipData then
             if tooltipData.type == Enum.TooltipDataType.Item then
-                print("MISSING HANDLER FOR " .. tooltipInfo.getterName)
+                print("Caerdon: MISSING HANDLER FOR " .. tooltipInfo.getterName)
                 local item = CaerdonItem:CreateFromItemID(tooltipData.id)
                 Tooltip:ProcessTooltip(tooltip, item)
             elseif tooltipData.type == Enum.TooltipDataType.Achievement then
+            elseif tooltipData.type == Enum.TooltipDataType.EnhancedConduit then
             elseif tooltipData.type == Enum.TooltipDataType.EquipmentSet then
             elseif tooltipData.type == Enum.TooltipDataType.Spell then
             elseif tooltipData.type == Enum.TooltipDataType.Unit then
@@ -369,7 +375,7 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             elseif tooltipData.type == Enum.TooltipDataType.MinimapMouseover then
             elseif tooltipData.type == Enum.TooltipDataType.QuestPartyProgress then
             else
-                print("MISSING HANDLER FOR " .. tooltipInfo.getterName .. ", type: " .. tostring(tooltipData.type))
+                print("Caerdon: MISSING HANDLER FOR " .. tooltipInfo.getterName .. ", type: " .. tostring(tooltipData.type))
             end
         end
     end
@@ -378,8 +384,10 @@ end
 function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLogIndex, questID, rewardType, showCollectionText)
     rewardType = rewardType or "reward";
     local itemLink = GetQuestLogItemLink(rewardType, questLogIndex, questID)
-    local item = CaerdonItem:CreateFromItemLink(itemLink)
-    Tooltip:ProcessTooltip(tooltip.Tooltip, item, true)
+    if itemLink then
+        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        Tooltip:ProcessTooltip(tooltip.Tooltip, item, true)
+    end
 end
 
 -- function TooltipMixin:OnTooltipSetItem(tooltip)

@@ -232,7 +232,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			button.isWaitingIcon = true
 		end
 	else
-		if status == "readyToCombine" or status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgrade" or status == "readyToCombine" then
+		if status == "readyToCombine" or status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgradeNonEquipment" or status == "readyToCombine" then
 			showAnim = true
 
 			if mogAnim and button.isWaitingIcon then
@@ -333,10 +333,38 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		-- mogStatus:SetTexture("Interface\\QUESTFRAME\\SkillUp-BG")
 		-- mogStatus:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
 		-- mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-	elseif status == "upgrade" then
+	elseif status == "upgradeNonEquipment" then
 		isProminent = false
+		iconBackgroundAdjustment = 4
+		mogStatusBackground:SetTexCoord((512-46-31)/512, (512-31)/512, 5/512, (5+46)/512)
+		mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+		mogStatusBackground:SetVertexColor(0, 1, 1)
+
 		mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
 		mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+	elseif status == "upgrade" then
+		isProminent = false
+		if displayInfo and displayInfo.upgradeIcon.shouldShow then		
+			iconBackgroundAdjustment = 4
+			mogStatusBackground:SetTexCoord((512-46-31)/512, (512-31)/512, 5/512, (5+46)/512)
+			mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+			mogStatusBackground:SetVertexColor(0, 1, 1)
+
+			mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
+			mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+		end
+	elseif status == "upgradeLowSkill" then
+		isProminent = false
+		if displayInfo and displayInfo.upgradeIcon.shouldShow then		
+			iconBackgroundAdjustment = 4
+			mogStatusBackground:SetTexCoord((512-46-31)/512, (512-31)/512, 5/512, (5+46)/512)
+			mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+			mogStatusBackground:SetVertexColor(0.4, 1, 0)
+
+			mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
+			mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+			mogStatus:SetVertexColor(0.4, 1, 0)
+		end
 	elseif status == "locked" then
 		isProminent = true
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)

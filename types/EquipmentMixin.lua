@@ -361,7 +361,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         end
     end
 
+    local isUpgrade = nil
+
+    if PawnShouldItemLinkHaveUpgradeArrow then
+        isUpgrade = PawnShouldItemLinkHaveUpgradeArrow(item:GetItemLink(), false)
+    end
+
     return {
+        isUpgrade = isUpgrade,
         isTransmog = isTransmog,
         isBindOnPickup = isBindOnPickup,
         appearanceID = appearanceID,

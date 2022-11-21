@@ -375,7 +375,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Toy
         elseif isConduit then
             caerdonType = CaerdonItemType.Conduit
-        elseif linkType == "battlepet" then
+		elseif linkType == "battlepet" then
             caerdonType = CaerdonItemType.BattlePet
         elseif linkType == "quest" then
             caerdonType = CaerdonItemType.Quest
@@ -415,12 +415,18 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == Enum.ItemClass.Profession then
                 caerdonType = CaerdonItemType.Profession
             else
-                print("Unknown item type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
+                print("Caerdon: Unknown item type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
+		elseif linkType == "achievement" then
+            caerdonType = CaerdonItemType.Unhandled
+		elseif linkType == "journal" then
+            caerdonType = CaerdonItemType.Unhandled
         elseif linkType == "keystone" then
             caerdonType = CaerdonItemType.Unhandled
+		elseif linkType == "spell" then
+            caerdonType = CaerdonItemType.Unhandled
         else
-            print("Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
+            print("Caerdon: Unknown type " .. tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
         end
 
         self.caerdonItemType = caerdonType
@@ -573,25 +579,25 @@ function CaerdonItemMixin:GetTooltipData(data)
 					tooltipData.foundRedRequirements = true
 				end
 		elseif line.type == Enum.TooltipDataLineType.Blank then
-		-- elseif args.type == Enum.TooltipDataLineType.UnitName then
+		elseif line.type == Enum.TooltipDataLineType.UnitName then
 		elseif line.type == Enum.TooltipDataLineType.GemSocket then
 		elseif line.type == Enum.TooltipDataLineType.AzeriteEssenceSlot then
-		-- elseif line.type == Enum.TooltipDataLineType.AzeriteEssencePower then
+		elseif line.type == Enum.TooltipDataLineType.AzeriteEssencePower then
 		-- elseif line.type == Enum.TooltipDataLineType.LearnableSpell then
-		-- elseif line.type == Enum.TooltipDataLineType.UnitThreat then
-		-- elseif line.type == Enum.TooltipDataLineType.QuestObjective then
-		-- elseif line.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
-		-- elseif line.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
+		elseif line.type == Enum.TooltipDataLineType.UnitThreat then
+		elseif line.type == Enum.TooltipDataLineType.QuestObjective then
+		elseif line.type == Enum.TooltipDataLineType.AzeriteItemPowerDescription then
+		elseif line.type == Enum.TooltipDataLineType.RuneforgeLegendaryPowerDescription then
 		elseif line.type == Enum.TooltipDataLineType.SellPrice then
 		elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
-		-- elseif line.type == Enum.TooltipDataLineType.SpellName then
+		elseif line.type == Enum.TooltipDataLineType.SpellName then
 		elseif line.type == Enum.TooltipDataLineType.CurrencyTotal then
-		-- elseif line.type == Enum.TooltipDataLineType.UnitOwner then
-		-- elseif line.type == Enum.TooltipDataLineType.QuestTitle then
-		-- elseif line.type == Enum.TooltipDataLineType.QuestPlayer then
+		elseif line.type == Enum.TooltipDataLineType.UnitOwner then
+		elseif line.type == Enum.TooltipDataLineType.QuestTitle then
+		elseif line.type == Enum.TooltipDataLineType.QuestPlayer then
 		elseif line.type == Enum.TooltipDataLineType.NestedBlock then
 		else
-			print("TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
+			print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
 			-- DevTools_Dump(line)
 		end
 	end
@@ -854,7 +860,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		if bindingResult.needsItem then
 			local conduitInfo = itemData:GetConduitInfo()
 			if conduitInfo.isUpgrade then
-				mogStatus = "upgrade"
+				mogStatus = "upgradeNonEquipment"
 			else
 				mogStatus = "own"
 			end
@@ -910,6 +916,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 					else
 						mogStatus = "collected"
 					end
+				elseif transmogInfo.isUpgrade then
+					if transmogInfo.hasMetRequirements then
+						mogStatus = "upgrade"
+					else
+						mogStatus = "upgradeLowSkill"
+					end
 				else
 					if transmogInfo.hasMetRequirements then
 						mogStatus = "collected"
@@ -917,6 +929,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 					-- else
 					-- 	mogStatus = "lowSkill"
 					end
+				end
+			elseif transmogInfo.isUpgrade then
+				if transmogInfo.hasMetRequirements then
+					mogStatus = "upgrade"
+				else
+					mogStatus = "upgradeLowSkill"
 				end
 			else
 				if not transmogInfo.hasMetRequirements then

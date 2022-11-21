@@ -65,7 +65,7 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 21,
+		Version = 22,
 		
 		Debug = {
 			Enabled = false
@@ -82,6 +82,10 @@ function NS:GetDefaultConfig()
 				Auction = true,
 				SameLookDifferentItem = false,
 				SameLookDifferentLevel = true
+			},
+
+			ShowUpgrades = {
+				BankAndBags = true
 			},
 
 			ShowLearnableByOther = {
