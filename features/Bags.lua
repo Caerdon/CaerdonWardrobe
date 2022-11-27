@@ -124,6 +124,9 @@ function BagsMixin:OnUpdateItems(frame)
 			local slot = button:GetID()
 
 			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+
+			CaerdonAPI:CompareCIMI(self, item, bag, slot)
+
 			CaerdonWardrobe:UpdateButton(button, item, self, {
 				bag = bag, 
 				slot = slot

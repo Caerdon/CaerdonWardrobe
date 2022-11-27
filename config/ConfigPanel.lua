@@ -85,7 +85,13 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureCheckboxNew(info)
     end)
     checkbox.label = _G[checkbox:GetName() .. "Text"]
     checkbox.label:SetText(info.text)
-    checkbox:SetChecked(section[info.configValue] or defaultSection[info.configValue])
+
+    local isChecked = section[info.configValue]
+    if isChecked == nil then
+        isChecked = defaultSection[info.configValue]
+    end
+
+    checkbox:SetChecked(isChecked)
 end
 
 function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValues)

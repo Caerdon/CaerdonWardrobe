@@ -49,6 +49,7 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
 		self:UnregisterEvent(event);
 
 		if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+			print("Caerdon: Old settings detected - updating to defaults.  Please check your settings!")
 			CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
 		end
 	

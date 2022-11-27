@@ -6,11 +6,13 @@ end
 
 -- TODO: Look into ScrollUtil.AddAcquiredFrameCallback and friends for all the ScrollBox integrations
 function AuctionMixin:Init(frame)
+	self.waitingForItemKeyInfo = {}
 	self.auctionContinuableContainer = ContinuableContainer:Create()
 	self.shouldHookAuction = true
 
 	return {
 		"AUCTION_HOUSE_SHOW",
+		"ITEM_KEY_ITEM_INFO_RECEIVED"
 		-- "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
 		-- "OWNED_AUCTIONS_UPDATED"
 	}
@@ -27,6 +29,20 @@ function AuctionMixin:AUCTION_HOUSE_SHOW()
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)
 		hooksecurefunc(AuctionHouseFrame.AuctionsFrame.ItemDisplay, "SetItemInternal", function(...) self:OnSetAuctionItemDisplay(...) end)
+	end
+end
+
+function AuctionMixin:ITEM_KEY_ITEM_INFO_RECEIVED(itemID)
+	local processQueue = self.waitingForItemKeyInfo[itemID]
+	if processQueue then
+		for locationKey, processInfo in pairs(processQueue) do
+			local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(processInfo.itemKey)
+			if itemKeyInfo then
+				self:ProcessItemKeyInfo(processInfo.itemKey, itemKeyInfo, processInfo.frame)
+			end
+		end
+
+		self.waitingForItemKeyInfo[itemID] = nil
 	end
 end
 
@@ -58,9 +74,9 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 	})
 end
 
-function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
-	local button = frame
+function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 	local item
+	local rowData = button.rowData
 
 	local options = {
 		overrideStatusPosition = "LEFT",
@@ -70,25 +86,69 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 		-- relativeFrame=cell.Icon
 	}
 
-	if not elementData then return end
-	if not frame.rowData then return end
-
-	local itemKey = frame.rowData.itemKey
-	local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(itemKey)
-
 	if itemKeyInfo and itemKeyInfo.battlePetLink then
 		item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
 		CaerdonWardrobe:UpdateButton(button, item, self, {
 			locationKey = format("pet-%s", itemKeyInfo.battlePetLink),
 			itemKey = itemKey
 		}, options)
+	elseif rowData.appearanceLink then
+		-- Using appearance link if it's available due to not getting full item link from AH in any other way right now.
+		-- This fixes Nimble Hexweave Cloak, for example, but doesn't fix Ceremonious Greaves (which doesn't have appearanceLink)
+		local appearanceSourceID = string.match(rowData.appearanceLink, ".*transmogappearance:(%d*)")
+		local category, itemAppearanceID, canHaveIllusion, icon, isCollected, itemLink, transmoglink, sourceType, itemSubClass = 
+			C_TransmogCollection.GetAppearanceSourceInfo(appearanceSourceID)
+		item = CaerdonItem:CreateFromItemLink(itemLink, { appearanceSourceID = appearanceSourceID, appearanceID = itemAppearanceID })
+
+		CaerdonAPI:CompareCIMI(self, item)
+
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
+			itemKey = itemKey
+		}, options)
 	else
-		item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+		-- local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
+		-- local tooltipInfo = C_TooltipInfo and C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
+		-- local tooltipData = CaerdonAPI:ProcessTooltipData(tooltipInfo)
+		local tooltipData = nil
+
+		if tooltipData then
+			if tooltipData.isRetrieving then -- shouldn't hit here because of previous check on GetItemKeyInfo... but just in case.
+				C_Timer.After(0.1, function () -- TODO: Switch to a waiting to process queue tied to TOOLTIP_DATA_UPDATE
+					self:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
+				end)
+				return
+			elseif tooltipData.hyperlink then
+				item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink)
+			end
+		else
+			item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+		end
+
+		CaerdonAPI:CompareCIMI(self, item)
+
 		CaerdonWardrobe:UpdateButton(button, item, self, {
 			locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
 			itemKey = itemKey
 		}, options)
 	end
+end
+
+function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
+	if not elementData then return end
+	if not frame.rowData then return end
+
+	local itemKey = frame.rowData.itemKey
+	local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(itemKey)
+	if not itemKeyInfo then
+		local processKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, itemKey.battlePetSpeciesID)
+		self.waitingForItemKeyInfo[itemKey.itemID] = self.waitingForItemKeyInfo[itemKey.itemID] or {}
+		self.waitingForItemKeyInfo[itemKey.itemID][processKey] = { itemKey = itemKey, frame = frame }
+		CaerdonWardrobe:ClearButton(frame)
+		return
+	end
+
+	self:ProcessItemKeyInfo(itemKey, itemKeyInfo, frame)
 end
 
 function AuctionMixin:GetTooltipData(item, locationInfo)
