@@ -22,10 +22,18 @@ function BagsMixin:Init()
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 
+	EventRegistry:RegisterCallback("ContainerFrame.OpenBag", self.BagOpened, self)
+
 	if isDragonflight then
 		return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
 	else
 		return { "UNIT_SPELLCAST_SUCCEEDED" }
+	end
+end
+
+function BagsMixin:BagOpened(frame, too)
+	for i, button in frame:EnumerateValidItems() do
+		CaerdonWardrobe:SetItemButtonMogStatusFilter(button, false)
 	end
 end
 
@@ -74,26 +82,14 @@ function BagsMixin:OnUpdateSearchResults(frame)
 
 		if C_Container and C_Container.GetContainerItemInfo then
 			local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
-			isFiltered = itemInfo and itemInfo.isFiltered
+			if itemInfo then
+				isFiltered = itemInfo.isFiltered
+			end
 		else
 			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(button:GetBagID(), button:GetID())
 		end
 
-		-- local slot, bag = button:GetSlotAndBagID()
-		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		if button.caerdonButton then
-			if isFiltered then
-				button.caerdonButton.mogStatus:Hide()
-				if button.caerdonButton.bindsOnText then
-					button.caerdonButton.bindsOnText:Hide()
-				end
-			else
-				button.caerdonButton.mogStatus:Show()
-				if button.caerdonButton.bindsOnText then
-					button.caerdonButton.bindsOnText:Show()
-				end
-			end
-		end
+		CaerdonWardrobe:SetItemButtonMogStatusFilter(button, isFiltered)
 	end
 end
 

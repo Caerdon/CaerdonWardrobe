@@ -939,7 +939,9 @@ function CaerdonWardrobeMixin:OnContainerFrameUpdateSearchResults(frame)
 
 		if C_Container and C_Container.GetContainerItemInfo then
 			local itemInfo = C_Container.GetContainerItemInfo(id, itemButton:GetID())
-			isFiltered = itemInfo.isFiltered
+			if itemInfo then
+				isFiltered = itemInfo.isFiltered
+			end
 		else
 			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(id, itemButton:GetID())
 		end

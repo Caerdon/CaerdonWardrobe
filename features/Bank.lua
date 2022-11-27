@@ -1,5 +1,4 @@
 local BankMixin = {}
-local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function BankMixin:GetName()
 	return "Bank"
@@ -23,11 +22,7 @@ function BankMixin:Init()
 	hooksecurefunc(ContainerFrame13, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrame13, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 
-	if isDragonflight then
-		return { "TOOLTIP_DATA_UPDATE" }
-	else
-		return {}
-	end
+	return { "TOOLTIP_DATA_UPDATE" }
 end
 
 function BankMixin:TOOLTIP_DATA_UPDATE()
@@ -64,6 +59,7 @@ end
 function BankMixin:OnUpdateSearchResults(frame)
 	for i, button in frame:EnumerateValidItems() do
 		local isFiltered
+
 		if C_Container and C_Container.GetContainerItemInfo then
 			local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
 			if itemInfo then
@@ -73,21 +69,7 @@ function BankMixin:OnUpdateSearchResults(frame)
 			_, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(button:GetBagID(), button:GetID())
 		end
 
-		-- local slot, bag = button:GetSlotAndBagID()
-		-- local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		if button.caerdonButton then
-			if isFiltered then
-				button.caerdonButton.mogStatus:Hide()
-				if button.caerdonButton.bindsOnText then
-					button.caerdonButton.bindsOnText:Hide()
-				end
-			else
-				button.caerdonButton.mogStatus:Show()
-				if button.caerdonButton.bindsOnText then
-					button.caerdonButton.bindsOnText:Show()
-				end
-			end
-		end
+		CaerdonWardrobe:SetItemButtonMogStatusFilter(button, isFiltered)
 	end
 end
 
