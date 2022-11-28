@@ -1,6 +1,37 @@
 CaerdonEquipment = {}
 CaerdonEquipmentMixin = {}
 
+local slotTable = {
+    INVTYPE_HEAD = 1,
+    INVTYPE_NECK = 2,
+    INVTYPE_SHOULDER = 3,
+    INVTYPE_BODY = 4,
+    INVTYPE_CHEST = 5,
+    INVTYPE_WAIST = 6,
+    INVTYPE_LEGS = 7,
+    INVTYPE_FEET = 8,
+    INVTYPE_WRIST = 9,
+    INVTYPE_HAND = 10,
+    INVTYPE_FINGER = 11,
+    INVTYPE_TRINKET = 13,
+    INVTYPE_WEAPON = 16,
+    INVTYPE_SHIELD = 17,
+    INVTYPE_RANGED = 16,
+    INVTYPE_CLOAK = 15,
+    INVTYPE_2HWEAPON = 16,
+    INVTYPE_BAG = 0,
+    INVTYPE_TABARD = 19,
+    INVTYPE_ROBE = 5,
+    INVTYPE_WEAPONMAINHAND = 16,
+    INVTYPE_WEAPONOFFHAND = 16,
+    INVTYPE_HOLDABLE = 17,
+    INVTYPE_AMMO = 0,
+    INVTYPE_THROWN = 16,
+    INVTYPE_RANGEDRIGHT = 17,
+    INVTYPE_QUIVER = 0,
+    INVTYPE_RELIC = 0
+}
+
 --[[static]] function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
 	if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
 		error("Usage: CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)", 2)
@@ -169,8 +200,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     else
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
         if not sourceID and C_Item.IsDressableItemByID(item:GetItemID()) then -- not finding via transmog collection so need to do the DressUp hack
-            -- local slotName = item:GetInventoryTypeName()
-            local slotID = C_Item.GetItemInventoryTypeByID(item:GetItemLink())
+            local inventoryType = item:GetInventoryTypeName()
+            local slotID = slotTable[inventoryType]
 
             -- print(item:GetItemLink() .. " is dressable")
 
@@ -179,14 +210,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 self.dressUp:SetUnit('player')
             end
 
-            self.dressUp:Undress()
-            self.dressUp:TryOn(itemLink, slotID)
-            -- print("CHECKING FOR SLOT: " .. tostring(slotID))
-            local transmogInfo = self.dressUp:GetItemTransmogInfo(slotID)
-            if transmogInfo then
-                sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
-                if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
-                    appearanceID = select(2, C_TransmogCollection.GetAppearanceSourceInfo(sourceID))
+            if slotID and slotID > 0 then
+                self.dressUp:Undress()
+                self.dressUp:TryOn(itemLink, slotID)
+                -- print("CHECKING FOR SLOT: " .. tostring(slotID))
+                local transmogInfo = self.dressUp:GetItemTransmogInfo(slotID)
+
+                if transmogInfo then
+                    sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
+                    if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
+                        appearanceID = select(2, C_TransmogCollection.GetAppearanceSourceInfo(sourceID))
+                    end
                 end
             end
         end

@@ -272,8 +272,10 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetMerchantCostItem" then
         local slot, costIndex = unpack(tooltipInfo.getterArgs)
         local itemTexture, itemValue, itemLink, currencyName = GetMerchantItemCostItem(slot, costIndex);
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetMerchantItem" then
         local slot = unpack(tooltipInfo.getterArgs)
         local itemLink = GetMerchantItemLink(slot);
