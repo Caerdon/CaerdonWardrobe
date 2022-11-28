@@ -205,16 +205,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
             -- print(item:GetItemLink() .. " is dressable")
 
-            if not self.dressUp then
-                self.dressUp = CreateFrame("DressUpModel")
-                self.dressUp:SetUnit('player')
+            if not CaerdonWardrobe.dressUp then
+                CaerdonWardrobe.dressUp = CreateFrame("DressUpModel")
+                CaerdonWardrobe.dressUp:SetUnit('player')
             end
 
             if slotID and slotID > 0 then
-                self.dressUp:Undress()
-                self.dressUp:TryOn(itemLink, slotID)
+                -- Don't think I need to do this unless weapons cause some sort of problem?
+                -- CaerdonWardrobe.dressUp:Undress()
+                CaerdonWardrobe.dressUp:TryOn(itemLink, slotID)
                 -- print("CHECKING FOR SLOT: " .. tostring(slotID))
-                local transmogInfo = self.dressUp:GetItemTransmogInfo(slotID)
+                local transmogInfo = CaerdonWardrobe.dressUp:GetItemTransmogInfo(slotID)
 
                 if transmogInfo then
                     sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
@@ -280,7 +281,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             -- --     shouldSearchSources = true
             -- end
 
-            if shouldSearchSources then
+            if appearanceID and shouldSearchSources then
                 local sourceIndex, source
                 local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
                 for sourceIndex, source in pairs(appearanceSourceIDs) do
