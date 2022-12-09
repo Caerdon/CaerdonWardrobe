@@ -819,7 +819,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     local mogStatus = ""
 	local isReady = true
 
-    if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit then
+    if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit and caerdonType ~= CaerdonItemType.Equipment then
 		local expansionID = expacID
 		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
 			local shouldShowExpansion = false
@@ -923,12 +923,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 						mogStatus = "upgradeLowSkill"
 					end
 				else
-					if transmogInfo.hasMetRequirements then
+					-- if transmogInfo.hasMetRequirements then
 						mogStatus = "collected"
 					-- Don't mark as lowSkill for equipment if it's known but not the right level... too much noise
 					-- else
 					-- 	mogStatus = "lowSkill"
-					end
+					-- end
 				end
 			elseif transmogInfo.isUpgrade then
 				if transmogInfo.hasMetRequirements then
