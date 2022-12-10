@@ -221,6 +221,13 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemLink = C_Heirloom.GetHeirloomLink(itemID)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
+    elseif tooltipInfo.getterName == "GetGuildBankItem" then
+        local tab, slot = unpack(tooltipInfo.getterArgs)
+        local itemLink = GetGuildBankItemLink(tab, slot)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetHyperlink" then
         local itemLink, optionalArg1, optionalArg2, hideVendorPrice = unpack(tooltipInfo.getterArgs)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
