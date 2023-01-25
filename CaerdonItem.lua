@@ -599,7 +599,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.NestedBlock then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedRaceClass then
 		-- elseif line.type == Enum.TooltipDataLineType.RestrictedFaction then
-		-- elseif line.type == Enum.TooltipDataLineType.RestrictedSkill then
+		elseif line.type == Enum.TooltipDataLineType.RestrictedSkill then
 		-- elseif line.type == Enum.TooltipDataLineType.RestrictedPvPMedal then
 		-- elseif line.type == Enum.TooltipDataLineType.RestrictedReputation then
 		-- elseif line.type == Enum.TooltipDataLineType.RestrictedSpellKnown then
