@@ -592,10 +592,20 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.ProfessionCraftingQuality then
 		elseif line.type == Enum.TooltipDataLineType.SpellName then
 		elseif line.type == Enum.TooltipDataLineType.CurrencyTotal then
+		-- elseif line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent then
 		elseif line.type == Enum.TooltipDataLineType.UnitOwner then
 		elseif line.type == Enum.TooltipDataLineType.QuestTitle then
 		elseif line.type == Enum.TooltipDataLineType.QuestPlayer then
 		elseif line.type == Enum.TooltipDataLineType.NestedBlock then
+		elseif line.type == Enum.TooltipDataLineType.RestrictedRaceClass then
+		-- elseif line.type == Enum.TooltipDataLineType.RestrictedFaction then
+		-- elseif line.type == Enum.TooltipDataLineType.RestrictedSkill then
+		-- elseif line.type == Enum.TooltipDataLineType.RestrictedPvPMedal then
+		-- elseif line.type == Enum.TooltipDataLineType.RestrictedReputation then
+		-- elseif line.type == Enum.TooltipDataLineType.RestrictedSpellKnown then
+		-- elseif line.type == Enum.TooltipDataLineType.RestrictedLevel then
+		elseif line.type == Enum.TooltipDataLineType.EquipSlot then
+		elseif line.type == Enum.TooltipDataLineType.ItemName then
 		else
 			print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
 			-- DevTools_Dump(line)
