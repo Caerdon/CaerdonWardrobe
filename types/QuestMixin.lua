@@ -130,7 +130,6 @@ function CaerdonQuestMixin:GetQuestInfo()
     if isQuestLog then
         numQuestRewards = GetNumQuestLogRewards(questID)
         numQuestChoices = GetNumQuestLogChoices(questID, true)
-        numQuestSpellRewards = GetNumQuestLogRewardSpells(questID)
         numQuestCurrencies = GetNumQuestLogRewardCurrencies(questID)
         totalXp, baseXp = GetQuestLogRewardXP(questID)
         honorAmount = GetQuestLogRewardHonor(questID)
@@ -140,7 +139,6 @@ function CaerdonQuestMixin:GetQuestInfo()
     else
         numQuestRewards = GetNumQuestRewards()
         numQuestChoices = GetNumQuestChoices()
-        numQuestSpellRewards = GetNumRewardSpells()
         numQuestCurrencies = GetNumRewardCurrencies()
         totalXp, baseXp = GetRewardXP()
         honorAmount = GetRewardHonor()
@@ -189,23 +187,31 @@ function CaerdonQuestMixin:GetQuestInfo()
         }
     end
 
-    for i = 1, numQuestSpellRewards do
-        local texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID
-        if isQuestLog then
-            texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetQuestLogRewardSpell(i, questID)
-        else
-            texture, name, isTradeskillSpell, isSpellLearned, hideSpellLearnText, isBoostSpell, garrisonFollowerID, genericUnlock, spellID = GetRewardSpell(i)
-        end
+    local spellRewards = C_QuestInfoSystem.GetQuestRewardSpells(questID) or {};
+	for i, spellID in ipairs(spellRewards) do
+		if spellID and spellID > 0 then
+			local spellInfo = C_QuestInfoSystem.GetQuestRewardSpellInfo(questID, spellID);
+			local knownSpell = IsSpellKnownOrOverridesKnown(spellID);
+            local canLearn = false;
 
-        spellRewards[i] = {
-            name = name,
-            isTradeskillSpell = isTradeskillSpell,
-            isSpellLearned = isSpellLearned,
-            isBoostSpell = isBoostSpell,
-            garrisonFollowerID = garrisonFollowerID,
-            spellID = spellID,
-            genericUnlock = genericUnlock
-        }
+			-- only allow the spell reward if user can learn it
+			if spellInfo and spellInfo.texture and not knownSpell and (not spellInfo.isBoostSpell or IsCharacterNewlyBoosted()) and (not spellInfo.garrFollowerID or not C_Garrison.IsFollowerCollected(spellInfo.garrFollowerID)) then
+                canLearn = true
+            end
+
+            spellRewards[i] = {
+                name = spellInfo.name,
+                isTradeskillSpell = spellInfo.isTradeskill,
+                isSpellLearned = spellInfo.isSpellLearned,
+                canLearn = canLearn,
+                isBoostSpell = spellInfo.isBoostSpell,
+                garrisonFollowerID = spellInfo.garrFollowerID,
+                spellID = spellID,
+                genericUnlock = spellInfo.genericUnlock,
+                type = spellInfo.type
+            }
+    
+        end
     end
 
     for i = 1, numQuestCurrencies do

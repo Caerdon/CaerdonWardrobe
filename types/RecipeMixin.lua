@@ -314,11 +314,11 @@ end
         local recipeIDs = C_TradeSkillUI.GetAllRecipeIDs();
         local recipeIndex
         for recipeIndex = 1, #recipeIDs do
-        local checkRecipe = C_TradeSkillUI.GetRecipeInfo(recipeIDs[recipeIndex]);
-        if checkRecipe.name == recipeName then
-            itemType.recipe = checkRecipe;
-            break
-        end
+            local checkRecipe = C_TradeSkillUI.GetRecipeInfo(recipeIDs[recipeIndex]);
+            if checkRecipe.name == recipeName then
+                itemType.recipe = checkRecipe;
+                break
+            end
         end
     end
 

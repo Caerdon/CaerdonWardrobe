@@ -73,7 +73,7 @@ function CaerdonAPIMixin:GetItemDetails(item)
 end
 
 function CaerdonAPIMixin:DumpMouseoverLinkDetails()
-    local tooltipData = self:ProcessTooltipData(GameTooltip:GetTooltipData())
+    local tooltipData = GameTooltip:GetPrimaryTooltipData()
     if tooltipData then
         if tooltipData.hyperlink then
             self:DumpLinkDetails(tooltipData.hyperlink)
@@ -83,56 +83,6 @@ function CaerdonAPIMixin:DumpMouseoverLinkDetails()
             self:DumpLinkDetails(tooltipData.additionalHyperlink)
         end
     end
-end
-
-function CaerdonAPIMixin:ProcessTooltipData(tooltipData)
-    if not tooltipData then return end
-
-    local data = {
-        type = tooltipData.type,
-        lines = {},
-        isCaerdonProcessed = true
-    }
-
-    local k,v
-    for k,v in pairs(tooltipData.args) do
-        local key = v.field
-        if v.field == "hyperlink" and data.hyperlink then -- already has a hyperlink... assuming for now that first hyperlink is a recipe / creator of this one
-            if data.additionalHyperlink then
-                error("Please report error - Unexpected additional hyperlink for " .. data.hyperlink)
-            end
-            
-            key = "additionalHyperlink"
-        end
-
-        if v.colorVal then
-            data[key] = v.colorVal:GenerateHexColor()
-        else
-            data[key] = v.stringVal or v.intVal or v.floatVal or v.colorVal or v.guidVal or v.boolVal 
-        end
-    end
-
-    for kLine, vLine in pairs(tooltipData.lines) do
-        data.lines[kLine] = {}
-
-        for k,v in pairs(vLine.args) do
-
-            if v.colorVal then
-                data.lines[kLine][v.field] = v.colorVal:GenerateHexColor()
-            else
-                data.lines[kLine][v.field] = v.stringVal or v.intVal or v.floatVal or v.colorVal or v.guidVal or v.boolVal 
-                if v.stringVal == RETRIEVING_ITEM_INFO then -- tooltip data isn't loaded, yet
-                    data.isRetrieving = true
-                end
-            end
-        end
-    end
-
-    if data.guid and not data.hyperlink then
-        data.hyperlink = C_Item.GetItemLinkByGUID(data.guid);
-    end
-
-    return data
 end
 
 function CaerdonAPIMixin:CopyLink(itemLink)

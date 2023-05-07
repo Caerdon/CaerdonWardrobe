@@ -468,17 +468,14 @@ function CaerdonItemMixin:GetTooltipData(data)
 		requiredTradeSkillTooLow = false
 	}
 
-	if not data.isCaerdonProcessed then
-		data = CaerdonAPI:ProcessTooltipData(data)
-	end
-
+	local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
 	local isBattlePetShown = BattlePetTooltip:IsShown()
 	local lines = data.lines or {}
 	for lineIndex, line in ipairs(data.lines) do
+		local lineText = line.leftText
 		if line.type == Enum.TooltipDataLineType.None or
 			line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent or
 				line.type == Enum.TooltipDataLineType.ItemBinding then
-			local lineText = line.leftText
 			if lineText then
 				-- TODO: Find a way to identify Equip Effects without tooltip scanning
 				if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
@@ -487,7 +484,6 @@ function CaerdonItemMixin:GetTooltipData(data)
 
 				-- NOTE: I had removed the check for isRecipe for some reason... but then things like Reaves would get flagged as canLearn.
 				-- Keep an eye out and figure out what to do if needed
-				local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
 				if isRecipe then
 					-- TODO: Don't like matching this hard-coded string but not sure how else
 					-- to prevent the expensive books from showing as learnable when I don't
@@ -495,36 +491,6 @@ function CaerdonItemMixin:GetTooltipData(data)
 					if strmatch(lineText, L["Use: Re%-learn .*"]) then
 						tooltipData.isRelearn = true
 					end
-					
-
-					-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
-					-- which toons could learn a recipe.
-
-					local replaceSkill = "%w"
-					
-					-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-					local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-					skillCheck = string.gsub(skillCheck, "2%$", "")
-					skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-					if GetLocale() == "zhCN" then
-						skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-					else
-						skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-					end
-					if strmatch(lineText, skillCheck) then
-						local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
-
-						local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
-
-						tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
-						tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
-
-						if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
-							tooltipData.canLearn = false
-						else
-							tooltipData.canLearn = true
-						end
-					end		
 				end
 
 				if (self:GetCaerdonItemType() == CaerdonItemType.Consumable or self:GetCaerdonItemType() == CaerdonItemType.Quest) and self:HasItemLocation() then
@@ -570,7 +536,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 				end
 			end
 
-				local hex = line.leftColor
+				local hex = line.leftColor:GenerateHexColor()
 				-- TODO: Generated hex color includes alpha value so need to check for full red.
 				-- TODO: Provide option to show stars on BoE recipes that aren't for current toon
 				-- TODO: Surely there's a better way than checking hard-coded color values for red-like things
@@ -600,6 +566,36 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.RestrictedRaceClass then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedFaction then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedSkill then
+			if isRecipe then
+				-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
+				-- which toons could learn a recipe.
+
+				local replaceSkill = "%w"
+				
+				-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+				local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
+				skillCheck = string.gsub(skillCheck, "2%$", "")
+				skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+				if GetLocale() == "zhCN" then
+					skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+				else
+					skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+				end
+				if strmatch(lineText, skillCheck) then
+					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+
+					local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+
+					tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
+					tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+
+					if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
+						tooltipData.canLearn = false
+					else
+						tooltipData.canLearn = true
+					end
+				end		
+			end
 		elseif line.type == Enum.TooltipDataLineType.RestrictedPvPMedal then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedReputation then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedSpellKnown then
@@ -718,7 +714,9 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 		if caerdonType ~= CaerdonItemType.Recipe then -- ignore red on recipes for now... should be handling correctly through the recipe checks
 			if tooltipData.foundRedRequirements then -- TODO: See about getting rid of this eventually and having specific checks (if possible)
 				unusableItem = true
-				skillTooLow = true
+				if caerdonType ~= CaerdonItemType.Recipe then
+					skillTooLow = true
+				end
 			end
 		end
 
@@ -813,23 +811,23 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		return isReady
 	end
 
-    local itemID = self:GetItemID()
-    local caerdonType = self:GetCaerdonItemType()
+	local itemID = self:GetItemID()
+	local caerdonType = self:GetCaerdonItemType()
 	local itemData = self:GetItemData()
 
-    local bindingResult = self:GetBindingStatus(tooltipData)
+	local bindingResult = self:GetBindingStatus(tooltipData)
 	local bindingStatus = bindingResult.bindingStatus
 
-    local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
 	isCraftingReagent = GetItemInfo(itemLink)
 
 	local playerLevel = UnitLevel("player")
 
-    local mogStatus = ""
+	local mogStatus = ""
 	local isReady = true
 
-    if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit and caerdonType ~= CaerdonItemType.Equipment then
+	if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit and caerdonType ~= CaerdonItemType.Equipment then
 		local expansionID = expacID
 		if expansionID and expansionID >= 0 and expansionID < GetExpansionLevel() then 
 			local shouldShowExpansion = false
