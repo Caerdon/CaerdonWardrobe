@@ -112,10 +112,12 @@ function SortedMixin:Init()
     
     local PreSort = function(itemData)
         local item
-        if Sorted.IsPlayingCharacterSelected() then
+        if Sorted.IsPlayingCharacterSelected() and itemData.bag and itemData.slot then
             item = CaerdonItem:CreateFromBagAndSlot(itemData.bag, itemData.slot)
-        else
+        elseif itemData.link then
             item = CaerdonItem:CreateFromItemLink(itemData.link)
+        else
+            itemData.caerdonStatus = nil
         end
 
         if not item:IsItemDataCached() then
