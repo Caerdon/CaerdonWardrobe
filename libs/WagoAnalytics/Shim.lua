@@ -1,5 +1,9 @@
 local WagoAnalyticsShim = LibStub:NewLibrary("WagoAnalytics", 2)
 
+if not WagoAnalyticsShim then
+	return
+end
+
 function WagoAnalyticsShim:Register(wagoID)
 	local WagoAnalytics = WagoAnalytics
 	if WagoAnalytics then
