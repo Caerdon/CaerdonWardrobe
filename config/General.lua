@@ -23,6 +23,7 @@ function CaerdonWardrobeConfigGeneral:Register()
         showQuestItems = { key = "showQuestItems", text = "Show Quest Items", tooltip = "Adds an icon to any items that are tied to a quest", configSection="Icon", configValue="ShowQuestItems"},
         showGearSetsAsIcon = { key = "showGearSetsAsIcon", text = "Show Gear Set Icon", tooltip = "Show an icon on items associated with a gear set", configSection="Binding", configValue="ShowGearSetsAsIcon"},
         showBoA = { key = "showBoA", text = "Show Bind on Account", tooltip = "Shows BoA on items that are bind on account", configSection="Binding", configValue="ShowBoA"},
+        showBoARepItems = { key = "showBoARepItems", text = "Show Bind on Account Reputation Items", tooltip = "Shows BoA on items that are bind on account reputation items", configSection="Binding", configValue="ShowBoARepItems"},
         showBoE = { key = "showBoE", text = "Show Bind on Equip", tooltip = "Shows BoE on items that are bind on equip", configSection="Binding", configValue="ShowBoE"},
         showGearSets = { key = "showGearSets", text = "Show Gear Sets", tooltip = "Shows gear set text on items associated with a gear set", configSection="Binding", configValue="ShowGearSets"},
         bindingPosition = { key = "bindingPosition", text = "Select Binding Position", tooltip = "Configures placement of the binding text", configSection="Binding", configValue="Position"},
@@ -49,6 +50,7 @@ function CaerdonWardrobeConfigGeneral:Register()
     self:ConfigureCheckboxNew(self.options["showQuestItems"])
     self:ConfigureCheckboxNew(self.options["showGearSetsAsIcon"])
     self:ConfigureCheckboxNew(self.options["showBoA"])
+    self:ConfigureCheckboxNew(self.options["showBoARepItems"])
     self:ConfigureCheckboxNew(self.options["showBoE"])
     self:ConfigureCheckboxNew(self.options["showGearSets"])
     self:ConfigureDropdownNew(self.options["bindingPosition"], { 

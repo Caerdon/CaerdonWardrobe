@@ -64,13 +64,24 @@ end
 
 function TooltipMixin:OnLoad()
     -- TODO: Add Debug enable option setting
-    if C_TooltipInfo then
-        hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
-        hooksecurefunc(ItemRefTooltip, "ItemRefSetHyperlink", function (...) Tooltip:OnItemRefSetHyperlink(...) end)
-        hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
-        hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
-        hooksecurefunc("EmbeddedItemTooltip_SetItemByQuestReward", function(...) Tooltip:OnEmbeddedItemTooltipSetItemByQuestReward(...) end)
-    end
+    -- TODO: Figure out how to get Pet/Toy/Mount links working
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(...) Tooltip:OnTooltipSetItem(...) end)
+    -- TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Mount, function(...) Tooltip:OnTooltipSetItem(...) end)
+    -- TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Toy, function(...) Tooltip:OnTooltipSetItem(...) end)
+
+    -- ItemRefTooltip:HookScript("OnTooltipSetItem", function(tooltip, ...)
+    --     local name, link = tooltip:GetItem()
+    --     local item = CaerdonItem:CreateFromItemLink(itemLink)
+    --     Tooltip:ProcessTooltip(tooltip, item)
+    -- end)
+
+    -- if C_TooltipInfo then
+        -- hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
+    --     hooksecurefunc(ItemRefTooltip, "ItemRefSetHyperlink", function (...) Tooltip:OnItemRefSetHyperlink(...) end)
+        -- hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
+        -- hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
+    --     hooksecurefunc("EmbeddedItemTooltip_SetItemByQuestReward", function(...) Tooltip:OnEmbeddedItemTooltipSetItemByQuestReward(...) end)
+    -- end
 
     -- TODO: Hack to ensure GameTooltip:SetPoint is called.  Otherwise, BattlePetTooltip can puke.
     -- Shouldn't need now that I switched to C_TooltipInfo...
@@ -399,9 +410,9 @@ function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLo
     end
 end
 
--- function TooltipMixin:OnTooltipSetItem(tooltip)
---     local itemName, itemLink = tooltip:GetItem()
---     if itemLink and itemName then
+function TooltipMixin:OnTooltipSetItem(tooltip)
+    local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
+    if itemLink and itemName then
 --         local id = string.match(itemLink, "item:(%d*)")
 --         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
 --             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
@@ -413,13 +424,13 @@ end
 --             end
 --         end
 
---         if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
---             tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
---         end
+        if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+            tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+        end
 
---         Tooltip:ProcessTooltip(tooltip, tooltipItem)
---     end
--- end
+        Tooltip:ProcessTooltip(tooltip, tooltipItem)
+    end
+end
 
 -- This works but can't seem to do anything useful to get item info with the index (yet)
 -- function TooltipMixin:OnClassTrainerFrameSetServiceButton(skillButton, skillIndex, playerMoney, selected, isTradeSkill)
@@ -512,7 +523,7 @@ end
 
 local cancelFuncs = {}
 function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
-    if not tooltip.info then return end -- tooltip needs access to tooltipInfo or things just break
+    -- if not tooltip.info then return end -- tooltip needs access to tooltipInfo or things just break
 
     if not CaerdonWardrobeConfig.Debug.Enabled then
         -- Not doing anything other than debug for tooltips right now
@@ -525,8 +536,6 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
      end
 
     function continueLoad()
-        if not tooltip.info then return end -- tooltip needs access to tooltipInfo or things just break
-
         GameTooltip_AddBlankLineToTooltip(tooltip);
         GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe", LIGHTBLUE_FONT_COLOR);
 

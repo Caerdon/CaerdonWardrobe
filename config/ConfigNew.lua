@@ -209,6 +209,7 @@ securecall(SettingsRegistrar.AddRegistrant, SettingsRegistrar, Register)
 -- 			},
 
 -- 			ShowBoA = true,
+--			ShowBoARepItems = false,
 -- 			ShowBoE = true,
 -- 			ShowGearSets = true,
 -- 			ShowGearSetsAsIcon = false,

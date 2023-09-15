@@ -121,6 +121,7 @@ function NS:GetDefaultConfig()
 			},
 
 			ShowBoA = true,
+			ShowBoARepItems = false,
 			ShowBoE = true,
 			ShowGearSets = true,
 			ShowGearSetsAsIcon = false,

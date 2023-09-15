@@ -513,7 +513,9 @@ function CaerdonItemMixin:GetTooltipData(data)
 				end
 
 				if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
-					tooltipData.canLearn = true
+					if CaerdonWardrobeConfig.Binding.ShowBoARepItems then
+						tooltipData.canLearn = true
+					end
 				elseif strmatch(lineText, L["Use: Marks your map with the location"]) then
 					tooltipData.canLearn = true
 				elseif strmatch(lineText, L["Use: Unlocks this customization"]) then
@@ -603,8 +605,10 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.EquipSlot then
 		elseif line.type == Enum.TooltipDataLineType.ItemName then
 		else
-			print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
-			-- DevTools_Dump(line)
+			if CaerdonWardrobeConfig.Debug.Enabled then
+				print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
+				-- DevTools_Dump(line)
+			end
 		end
 	end
 
