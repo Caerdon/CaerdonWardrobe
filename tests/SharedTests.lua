@@ -3,7 +3,7 @@ local CustomEventTrigger = "CAERDON_SHARED_TESTS_DATA_LOADED"
 local Tests
 local frame
 
-if IsAddOnLoaded("WoWUnit") then
+if C_AddOns.IsAddOnLoaded("WoWUnit") then
     frame = CreateFrame("frame")
     AreEqual, Exists, Replace, IsTrue, IsFalse = WoWUnit.AreEqual, WoWUnit.Exists, WoWUnit.Replace, WoWUnit.IsTrue, WoWUnit.IsFalse
     Tests = WoWUnit("Shared Tests", CustomEventTrigger)

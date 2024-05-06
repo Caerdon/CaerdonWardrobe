@@ -221,24 +221,24 @@ function CaerdonItemMixin:SetItemID(itemID)
     ItemMixin.SetItemID(self, itemID)
 end
 
--- local itemID, itemType, itemSubType, itemEquipLoc, icon, itemTypeID, itemSubClassID = GetItemInfoInstant(self:GetStaticBackingItem())
+-- local itemID, itemType, itemSubType, itemEquipLoc, icon, itemTypeID, itemSubClassID = C_Item.GetItemInfoInstant(self:GetStaticBackingItem())
 
 -- TODO: Find lint rule - always need parens around select to reduce to single value
 function CaerdonItemMixin:GetItemType()
     if not self:IsItemEmpty() then
-        return (select(2, GetItemInfoInstant(self:GetItemID())))
+        return (select(2, C_Item.GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetItemSubType()
     if not self:IsItemEmpty() then
-        return (select(3, GetItemInfoInstant(self:GetItemID())))
+        return (select(3, C_Item.GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetEquipLocation()
     if not self:IsItemEmpty() then
-        local equipLocation = (select(4, GetItemInfoInstant(self:GetItemID())))
+        local equipLocation = (select(4, C_Item.GetItemInfoInstant(self:GetItemID())))
         if equipLocation == "" then
             return nil
         end
@@ -250,35 +250,35 @@ end
 
 function CaerdonItemMixin:GetItemTypeID()
     if not self:IsItemEmpty() then
-        return (select(6, GetItemInfoInstant(self:GetItemID())))
+        return (select(6, C_Item.GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetItemSubTypeID()
     if not self:IsItemEmpty() then
-        return (select(7, GetItemInfoInstant(self:GetItemID())))
+        return (select(7, C_Item.GetItemInfoInstant(self:GetItemID())))
     end
 end
 
 function CaerdonItemMixin:GetHasUse() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        local spellName, spellID = GetItemSpell(self:GetItemID())
+        local spellName, spellID = C_Item.GetItemSpell(self:GetItemID())
         return spellID ~= nil
     end
 end
 
 -- local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 -- itemEquipLoc, iconFileDataID, itemSellPrice, itemTypeID, itemSubTypeID, bindType, expacID, itemSetID, 
--- isCraftingReagent = GetItemInfo(self:GetItemLink())
+-- isCraftingReagent = C_Item.GetItemInfo(self:GetItemLink())
 function CaerdonItemMixin:GetMinLevel() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        return (select(5, GetItemInfo(self:GetItemLink())))
+        return (select(5, C_Item.GetItemInfo(self:GetItemLink())))
     end
 end
 
 function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        local bindType = (select(14, GetItemInfo(self:GetItemLink())))
+        local bindType = (select(14, C_Item.GetItemInfo(self:GetItemLink())))
         local binding = CaerdonItemBind.Unknown
         if bindType == 0 then
             binding = CaerdonItemBind.None
@@ -320,19 +320,19 @@ end
 
 function CaerdonItemMixin:GetExpansionID() -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        return (select(15, GetItemInfo(self:GetItemLink())))
+        return (select(15, C_Item.GetItemInfo(self:GetItemLink())))
     end
 end
 
 function CaerdonItemMixin:GetSetID()
     if not self:IsItemEmpty() then
-        return (select(16, GetItemInfo(self:GetItemLink())))
+        return (select(16, C_Item.GetItemInfo(self:GetItemLink())))
     end
 end
 
 function CaerdonItemMixin:GetIsCraftingReagent()  -- requires item data to be loaded
     if not self:IsItemEmpty() then
-        return (select(17, GetItemInfo(self:GetItemLink())))
+        return (select(17, C_Item.GetItemInfo(self:GetItemLink())))
     else
         return false
     end
@@ -493,26 +493,27 @@ function CaerdonItemMixin:GetTooltipData(data)
 					end
 				end
 
-				if (self:GetCaerdonItemType() == CaerdonItemType.Consumable or self:GetCaerdonItemType() == CaerdonItemType.Quest) and self:HasItemLocation() then
-					local location = self:GetItemLocation()
-					local maxStackCount = C_Item.GetItemMaxStackSize(location)
-					local currentStackCount = C_Item.GetStackCount(location)
+				-- TODO: Keeping for a bit but I have this handled at my overrides at the end that check usable spells from items
+				-- if (self:GetCaerdonItemType() == CaerdonItemType.Consumable or self:GetCaerdonItemType() == CaerdonItemType.Quest) and self:HasItemLocation() then
+				-- 	local location = self:GetItemLocation()
+				-- 	local maxStackCount = C_Item.GetItemMaxStackSize(location)
+				-- 	local currentStackCount = C_Item.GetStackCount(location)
 			
-					local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
-					if combineCount > 1 then
-						tooltipData.canCombine = true
-						if combineCount <= currentStackCount then
-							tooltipData.readyToCombine = true
-						end
-					end
-				end
+				-- 	local combineCount = tonumber((strmatch(lineText, L["Use: Combine (%d+)"]) or 0))
+				-- 	if combineCount > 1 then
+				-- 		tooltipData.canCombine = true
+				-- 		if combineCount <= currentStackCount then
+				-- 			tooltipData.readyToCombine = true
+				-- 		end
+				-- 	end
+				-- end
 
 				if not tooltipData.bindingStatus then
 					-- Check binding status - TODO: Is there a non-scan way?
 					tooltipData.bindingStatus = bindTextTable[lineText]
 				end
 
-				if strmatch(lineText, L["Use: Grants (%d+) reputation"]) then
+				if strmatch(lineText, L["Use: .* ([%d,]+) reputation"]) then
 					if CaerdonWardrobeConfig.Binding.ShowBoARepItems then
 						tooltipData.canLearn = true
 					end
@@ -680,7 +681,7 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-	isCraftingReagent = GetItemInfo(itemLink)
+	isCraftingReagent = C_Item.GetItemInfo(itemLink)
 
 	local binding = self:GetBinding()
 
@@ -818,13 +819,14 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 	local itemID = self:GetItemID()
 	local caerdonType = self:GetCaerdonItemType()
 	local itemData = self:GetItemData()
+	local itemLocation = self:GetItemLocation()
 
 	local bindingResult = self:GetBindingStatus(tooltipData)
 	local bindingStatus = bindingResult.bindingStatus
 
 	local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
 	itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID, 
-	isCraftingReagent = GetItemInfo(itemLink)
+	isCraftingReagent = C_Item.GetItemInfo(itemLink)
 
 	local playerLevel = UnitLevel("player")
 
@@ -956,22 +958,22 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 				end
 			end
 
-            local equipmentSets = itemData:GetEquipmentSets()
-            if equipmentSets then
-                if #equipmentSets > 1 then
-                    bindingStatus = "*" .. equipmentSets[1]
-                else
-                    bindingStatus = equipmentSets[1]
-                end
-            else
-                if mogStatus == "collected" and 
-                    self:IsSellable() and 
-                    not self:GetHasUse() and
-                    not self:GetSetID() and
-                    not bindingResult.hasEquipEffect then
-                        mogStatus = "sellable"
-                end
-            end
+			local equipmentSets = itemData:GetEquipmentSets()
+			if equipmentSets then
+					if #equipmentSets > 1 then
+							bindingStatus = "*" .. equipmentSets[1]
+					else
+							bindingStatus = equipmentSets[1]
+					end
+			else
+					if mogStatus == "collected" and 
+							self:IsSellable() and 
+							not self:GetHasUse() and
+							not self:GetSetID() and
+							not bindingResult.hasEquipEffect then
+									mogStatus = "sellable"
+					end
+			end
 		end
 	elseif caerdonType == CaerdonItemType.Mount then
 		local mountInfo = itemData:GetMountInfo()
@@ -1056,7 +1058,6 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 	end
 
 	if self:HasItemLocationBankOrBags() then
-		local itemLocation = self:GetItemLocation()
 		local bag, slot = itemLocation:GetBagAndSlot()
 		
 		local containerID = bag
@@ -1113,7 +1114,37 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		end
 	end
 
-    return isReady, mogStatus, bindingStatus, bindingResult
+	local spellName, spellID = C_Item.GetItemSpell(self:GetItemLink())
+	if spellID then
+		local spellDescription = GetSpellDescription(spellID)
+		local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
+		local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
+		if isCollectDescription and IsUsableSpell(spellID) then
+			mogStatus = "own"
+		elseif self:HasItemLocationBankOrBags() and (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
+			-- TODO: Better to figure out a way to identify spells that create currency if possible
+			mogStatus = "own"
+		elseif isCombineDescription then -- and mogStatus == "" then
+			if IsUsableSpell(spellID) then
+				local maxStackCount = C_Item.GetItemMaxStackSize(itemLocation)
+				local currentStackCount = C_Item.GetStackCount(itemLocation)
+		
+				local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or 0))
+				if combineCount > 1 then
+					mogStatus = "canCombine"
+					if combineCount <= currentStackCount then
+						mogStatus = "readyToCombine"
+					end
+				else
+					mogStatus = "readyToCombine"
+				end
+			else
+				mogStatus = "canCombine"
+			end
+		end
+	end
+
+	return isReady, mogStatus, bindingStatus, bindingResult
 end
 
 function CaerdonItemMixin:GetItemData()

@@ -195,22 +195,23 @@ function CaerdonQuestMixin:GetQuestInfo()
             local canLearn = false;
 
 			-- only allow the spell reward if user can learn it
-			if spellInfo and spellInfo.texture and not knownSpell and (not spellInfo.isBoostSpell or IsCharacterNewlyBoosted()) and (not spellInfo.garrFollowerID or not C_Garrison.IsFollowerCollected(spellInfo.garrFollowerID)) then
-                canLearn = true
-            end
+			if spellInfo then
+                if spellInfo.texture and not knownSpell and (not spellInfo.isBoostSpell or IsCharacterNewlyBoosted()) and (not spellInfo.garrFollowerID or not C_Garrison.IsFollowerCollected(spellInfo.garrFollowerID)) then
+                    canLearn = true
+                end
 
-            spellRewards[i] = {
-                name = spellInfo.name,
-                isTradeskillSpell = spellInfo.isTradeskill,
-                isSpellLearned = spellInfo.isSpellLearned,
-                canLearn = canLearn,
-                isBoostSpell = spellInfo.isBoostSpell,
-                garrisonFollowerID = spellInfo.garrFollowerID,
-                spellID = spellID,
-                genericUnlock = spellInfo.genericUnlock,
-                type = spellInfo.type
-            }
-    
+                spellRewards[i] = {
+                    name = spellInfo.name,
+                    isTradeskillSpell = spellInfo.isTradeskill,
+                    isSpellLearned = spellInfo.isSpellLearned,
+                    canLearn = canLearn,
+                    isBoostSpell = spellInfo.isBoostSpell,
+                    garrisonFollowerID = spellInfo.garrFollowerID,
+                    spellID = spellID,
+                    genericUnlock = spellInfo.genericUnlock,
+                    type = spellInfo.type
+                }
+            end
         end
     end
 

@@ -258,7 +258,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
          -- that no other class can use, so we actually need the item rather than just completionist
         shouldSearchSources = true
 
-        sourceSpecs = GetItemSpecInfo(itemLink)
+        sourceSpecs = C_Item.GetItemSpecInfo(itemLink)
 
         -- Only returns for sources that can be transmogged by current toon right now
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
@@ -315,12 +315,12 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 if appearanceSources then
                     local sourceIndex, source
                     for sourceIndex, source in pairs(appearanceSources) do
-                        local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = GetItemInfoInstant(source.itemID)
+                        local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item.GetItemInfoInstant(source.itemID)
                         -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
                         source.itemSubTypeID = sourceSubTypeID -- stuff it in here (mostly for debug)
-                        source.specs = GetItemSpecInfo(source.itemID) -- also this
+                        source.specs = C_Item.GetItemSpecInfo(source.itemID) -- also this
 
-                        local sourceMinLevel = (select(5, GetItemInfo(source.itemID)))
+                        local sourceMinLevel = (select(5, C_Item.GetItemInfo(source.itemID)))
                         if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
                             lowestLevelFound = sourceMinLevel
                         end
@@ -338,8 +338,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                             end
 
                             -- If this item covers classes that aren't already covered by another source, we want to learn it... 
-                            -- EXCEPT TODO: This doesn't work because GetItemSpecInfo appears to at least sometimes return just your own class specs for an item...
+                            -- EXCEPT TODO: This doesn't work because C_Item.GetItemSpecInfo appears to at least sometimes return just your own class specs for an item...
                             -- Weapons may be accurate but also spec doesn't seem to matter for them to show up.
+                            -- ALSO TODO: Check C_Item.DoesItemContainSpec to see if it would help
                             -- local sourceSpecIndex, sourceSpec
                             -- if sourceSpecs and #sourceSpecs > 0 and source.specs and #source.specs > 0 then
                             --     local itemClasses = {}

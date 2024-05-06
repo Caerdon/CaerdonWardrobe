@@ -269,8 +269,8 @@ end
     itemType.item = caerdonItem
 
     -- You would think one of these... but no.
-    -- local recipeName, recipeID = GetItemSpell(caerdonItem:GetItemID())
-    -- local recipeName, recipeID = GetItemSpell(caerdonItem:GetItemLink())
+    -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemID())
+    -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
     -- print(recipeName or "" .. ": " .. tostring(recipeID))
 
     if caerdonItem.extraData and caerdonItem.extraData.recipeInfo then
@@ -286,7 +286,7 @@ end
         itemType.recipe = nil
 
         -- TODO: This is not ideal, but I haven't identified a great way to get the recipe spell ID from the item ID.
-        -- local loaded, reason = LoadAddOn("Blizzard_Professions")
+        -- local loaded, reason = C_AddOns.LoadAddOn("Blizzard_Professions")
         -- print("Loaded: " .. tostring(loaded) .. ", " .. tostring(reason))
         -- C_TradeSkillUI.CloseTradeSkill()
 

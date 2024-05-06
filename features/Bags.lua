@@ -49,7 +49,7 @@ function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
 	end
 end
 
-function BagsMixin:TOOLTIP_DATA_UPDATE()
+function BagsMixin:TOOLTIP_DATA_UPDATE(dataInstanceID)
 	if self.refreshTimer then
 		self.refreshTimer:Cancel()
 	end
@@ -60,7 +60,8 @@ function BagsMixin:TOOLTIP_DATA_UPDATE()
 end
 
 function BagsMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
+	local tooltipInfo = C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
+	return tooltipInfo
 end
 
 function BagsMixin:Refresh()

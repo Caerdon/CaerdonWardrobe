@@ -40,14 +40,14 @@ end
 local Version = nil
 local isActive = false
 
-if select(4, GetAddOnInfo(addonName)) then
-	if IsAddOnLoaded(addonName) then
-		local global = GetAddOnMetadata(addonName, "X-cargBags")
+if select(4, C_AddOns.GetAddOnInfo(addonName)) then
+	if C_AddOns.IsAddOnLoaded(addonName) then
+		local global = C_AddOns.GetAddOnMetadata(addonName, "X-cargBags")
 		if global then
 			cargBags = _G[global]
 		end
 
-		Version = GetAddOnMetadata(addonName, "Version")
+		Version = C_AddOns.GetAddOnMetadata(addonName, "Version")
 		if not Version then
 			Version = "Unknown"
 		end

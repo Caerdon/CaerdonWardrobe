@@ -132,9 +132,9 @@ end
 local Version = nil
 local isActive = false
 
-if select(4, GetAddOnInfo(addonName)) then
-	if IsAddOnLoaded(addonName) then
-	    Version = GetAddOnMetadata(addonName, "Version")
+if select(4, C_AddOns.GetAddOnInfo(addonName)) then
+	if C_AddOns.IsAddOnLoaded(addonName) then
+	    Version = C_AddOns.GetAddOnMetadata(addonName, "Version")
 		CaerdonWardrobe:RegisterFeature(ZygorMixin)
 		isActive = true
 	end
