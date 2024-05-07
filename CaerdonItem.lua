@@ -1121,25 +1121,27 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
 		if isCollectDescription and IsUsableSpell(spellID) then
 			mogStatus = "own"
-		elseif self:HasItemLocationBankOrBags() and (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
-			-- TODO: Better to figure out a way to identify spells that create currency if possible
-			mogStatus = "own"
-		elseif isCombineDescription then -- and mogStatus == "" then
-			if IsUsableSpell(spellID) then
-				local maxStackCount = C_Item.GetItemMaxStackSize(itemLocation)
-				local currentStackCount = C_Item.GetStackCount(itemLocation)
-		
-				local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or 0))
-				if combineCount > 1 then
-					mogStatus = "canCombine"
-					if combineCount <= currentStackCount then
+		elseif self:HasItemLocationBankOrBags() then
+			if (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
+				-- TODO: Better to figure out a way to identify spells that create currency if possible
+				mogStatus = "own"
+			elseif isCombineDescription then -- and mogStatus == "" then
+				if IsUsableSpell(spellID) then
+					local maxStackCount = C_Item.GetItemMaxStackSize(itemLocation)
+					local currentStackCount = C_Item.GetStackCount(itemLocation)
+			
+					local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or 0))
+					if combineCount > 1 then
+						mogStatus = "canCombine"
+						if combineCount <= currentStackCount then
+							mogStatus = "readyToCombine"
+						end
+					else
 						mogStatus = "readyToCombine"
 					end
 				else
-					mogStatus = "readyToCombine"
+					mogStatus = "canCombine"
 				end
-			else
-				mogStatus = "canCombine"
 			end
 		end
 	end
