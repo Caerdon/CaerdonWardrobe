@@ -183,6 +183,15 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         return
     end
 
+    -- local tooltipData
+    -- if tooltipInfo.getterArgs then
+    --     tooltipData = C_TooltipInfo[tooltipInfo.getterName](unpack(tooltipInfo.getterArgs));
+    -- else
+    --     tooltipData = C_TooltipInfo[tooltipInfo.getterName]();
+    -- end
+
+    -- print(tooltipInfo.getterName .. tooltipData.hyperlink)
+
     if tooltipInfo.getterName == "GetAction" then
         local actionID = unpack(tooltipInfo.getterArgs)
         local actionType, id, actionSubType = GetActionInfo(actionID);
@@ -428,7 +437,16 @@ function TooltipMixin:OnTooltipSetItem(tooltip)
             tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
         end
 
-        Tooltip:ProcessTooltip(tooltip, tooltipItem)
+        -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
+        -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
+        local tooltipData = tooltip:GetPrimaryTooltipData()
+        if tooltipData.id ~= tooltipItem:GetItemID() then
+            local parentItem = CaerdonItem:CreateFromItemID(tooltipData.id)
+            Tooltip:ProcessTooltip(tooltip, parentItem, false)
+            Tooltip:ProcessTooltip(tooltip, tooltipItem, true)
+        else
+            Tooltip:ProcessTooltip(tooltip, tooltipItem, false)
+        end
     end
 end
 
@@ -537,7 +555,7 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
 
     function continueLoad()
         GameTooltip_AddBlankLineToTooltip(tooltip);
-        GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe", LIGHTBLUE_FONT_COLOR);
+        GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe " .. (isEmbedded and "Associated Item" or ""), LIGHTBLUE_FONT_COLOR);
 
         local forDebugUse = item:GetForDebugUse()
         local identifiedType = item:GetCaerdonItemType()
