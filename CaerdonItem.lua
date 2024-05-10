@@ -36,10 +36,12 @@ CaerdonItemBind = {
 }
 
 local function CreateItem()
-    return CreateFromMixins(
+    local item = CreateFromMixins(
         ItemMixin,
         CaerdonItemMixin
     )
+		item.customDataLoaded = false
+		return item
 end
 
 --[[static]] function CaerdonItem:CreateFromItemLink(itemLink, extraData)
@@ -118,6 +120,26 @@ function CaerdonItemMixin:Clear()
     ItemMixin.Clear(self)
     self.caerdonItemType = nil
     self.caerdonItemData = nil
+		self.customDataLoaded = false
+end
+
+function CaerdonItemMixin:IsItemDataCached() -- Checks for both item and any custom data
+	return self:IsItemCached() and self.customDataLoaded;
+end
+
+function CaerdonItemMixin:IsItemCached()
+	local isItemCached = true
+
+	if self:GetStaticBackingItem() then
+		isItemCached = C_Item.IsItemDataCachedByID(self:GetStaticBackingItem());
+	end
+
+	if not isItemCached and not self:IsItemEmpty() then
+		isItemCached = C_Item.IsItemDataCached(self:GetItemLocation());
+	end
+
+	-- print("Item ID: " .. self:GetItemID() .. " IsItemCached: " .. tostring(isItemCached))
+	return isItemCached;
 end
 
 -- Add a callback to be executed when item data is loaded, if the item data is already loaded then execute it immediately
@@ -126,37 +148,36 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
         error("Usage: ContinueOnLoad(callbackFunction)", 2);
     end
 
-    if not self:IsItemEmpty() then
-        ItemEventListener:AddCallback(self:GetItemID(), function ()
-            -- TODO: Update things and delay callback if needed for tooltip data
-            -- Make sure any dependent data is loaded
-            local itemData = self:GetItemData()
+		function ProcessTheItem()
+			-- TODO: Update things and delay callback if needed for tooltip data
+			-- Make sure any dependent data is loaded
+			local itemData = self:GetItemData()
 
-            -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
-            if itemData then
-                itemData:ContinueOnItemDataLoad(callbackFunction)
-            else
-                callbackFunction()
-            end
-        end)
-    elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
-        local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
-        local questID = tonumber(strsplit(":", linkOptions), 10)
-        QuestEventListener:AddCallback(questID, function ()
-            -- TODO: Update things and delay callback if needed for tooltip data
-            -- Make sure any dependent data is loaded
-            local itemData = self:GetItemData()
+			-- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
+			if itemData then
+					itemData:ContinueOnItemDataLoad(GenerateClosure(function () 
+						self.customDataLoaded = true
+						callbackFunction() 
+					end))
+			else
+					self.customDataLoaded = true
+					callbackFunction()
+			end
+		end
 
-            -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
-            if itemData then
-                itemData:ContinueOnItemDataLoad(callbackFunction)
-            else
-                callbackFunction()
-            end
-        end)
-    else
-        callbackFunction()
-    end
+		if not self:IsItemCached() then
+			if not self:IsItemEmpty() then
+					ItemEventListener:AddCallback(self:GetItemID(), GenerateClosure(ProcessTheItem))
+			elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
+					local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
+					local questID = tonumber(strsplit(":", linkOptions), 10)
+					QuestEventListener:AddCallback(questID, GenerateClosure(ProcessTheItem))
+			else
+				ProcessTheItem()
+			end
+		else
+			ProcessTheItem()
+		end
 end
 
 -- Same as ContinueOnItemLoad, except it returns a function that when called will cancel the continue
@@ -171,9 +192,13 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
             -- TODO: Update things and delay callback if needed for tooltip data
             local itemData = self:GetItemData()
             if itemData then
-                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(callbackFunction)
+                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(function () 
+									self.customDataLoaded = true
+									callbackFunction()
+								end)
             else
-                callbackFunction()
+							self.customDataLoaded = true
+							callbackFunction()
             end
         end);
 
@@ -193,9 +218,13 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
             -- TODO: Update things and delay callback if needed for tooltip data
             local itemData = self:GetItemData()
             if itemData then
-                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(callbackFunction)
+                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(function ()
+									self.customDataLoaded = true
+									callbackFunction()
+								end)
             else
-                callbackFunction()
+							self.customDataLoaded = true
+							callbackFunction()
             end
         end);
 
@@ -207,8 +236,9 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
             itemCancel()
         end;
     else
-        callbackFunction()
-        return function () end
+				self.customDataLoaded = true
+				callbackFunction()
+				return function () end
     end
 end
 

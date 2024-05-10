@@ -273,6 +273,9 @@ end
     -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
     -- print(recipeName or "" .. ": " .. tostring(recipeID))
 
+    local spellName, spellID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
+    -- print(spellName)
+
     if caerdonItem.extraData and caerdonItem.extraData.recipeInfo then
         itemType.recipe = caerdonItem.extraData.recipeInfo
     end

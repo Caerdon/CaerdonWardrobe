@@ -43,6 +43,7 @@ local slotTable = {
 end
 
 function CaerdonEquipmentMixin:LoadSources(callbackFunction)
+    local hasItems = false
     local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(self.item:GetItemLink())
     if not sourceID then
         -- TODO: Not sure why this is the case?  EncounterJournal links aren't returning source info
@@ -60,15 +61,35 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
             local itemID = C_TransmogCollection.GetSourceItemID(appearanceSourceID);
             -- Using Item here to avoid recursively diving
             local item = Item:CreateFromItemID(itemID)
-            if not item:IsItemEmpty() then
+            if not item:IsItemEmpty() and not item:IsItemDataCached() then
+                -- print("Loading source for " .. item:GetItemID())
+                hasItems = true
                 continuableContainer:AddContinuable(item);
             end
         end
 
-        cancelFunc = continuableContainer:ContinueOnLoad(callbackFunction);
+        local hasProcessed = false
+        if hasItems then
+            continuableContainer:ContinueOnLoad(function ()
+                hasProcessed = true
+                callbackFunction()
+            end);
+
+            -- TODO: This is silly but there are items that don't return info right now, so this gets hung up.
+            -- Unfortunately, this also is then making assumptions about how quickly data can get returned
+            C_Timer.After(0.2, function ()
+                if not hasProcessed then
+                    -- print("ContinuableContainer timed out")
+                    continuableContainer:Cancel()
+                    callbackFunction()
+                end
+            end)
+        else
+            callbackFunction()
+        end
     end
 
-    return cancelFunc
+    return function () continuableContainer:Cancel() end
 end
 
 -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)

@@ -827,13 +827,22 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 					if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
 						self:ProcessItem(button, item, feature, locationInfo, options)
 					else
-						item:ContinueOnItemLoad(function ()
+						-- TODO: Note ContinueOnItemLoad appears to fail if called too often especially on things that are already in cache - check for other places it's being used
+						if item:IsItemDataCached() then
 							if button.caerdonKey == locationKey then
 								self:ProcessItem(button, item, feature, locationInfo, options)
 							else
 								self:ClearButton(button)
 							end
-						end)
+						else
+							item:ContinueOnItemLoad(function ()
+								if button.caerdonKey == locationKey then
+									self:ProcessItem(button, item, feature, locationInfo, options)
+								else
+									self:ClearButton(button)
+								end
+							end)
+						end
 					end
 				else
 					self:ClearButton(button)

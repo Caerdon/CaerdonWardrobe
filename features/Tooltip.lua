@@ -635,7 +635,7 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         GameTooltip_CalculatePadding(tooltip)
     end
 
-    if not item:IsItemEmpty() then
+    if not item:IsItemEmpty() and not item:IsItemDataCached() then
         cancelFuncs[tooltip] = item:ContinueWithCancelOnItemLoad(continueLoad)
     else
         continueLoad()
