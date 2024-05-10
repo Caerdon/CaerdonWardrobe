@@ -89,14 +89,16 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 		yBackgroundOffset = options.statusBackgroundOffsetY
 	end
 
-	local background = icon.mogStatusBackground
-	if background then
-		background:ClearAllPoints()
-		background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset + xBackgroundOffset, yOffset + yBackgroundOffset)
-	end
+	if not options.fixedStatusPosition then
+		local background = icon.mogStatusBackground
+		if background then
+			background:ClearAllPoints()
+			background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset + xBackgroundOffset, yOffset + yBackgroundOffset)
+		end
 
-	icon:ClearAllPoints()
-	icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+		icon:ClearAllPoints()
+		icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+	end
 end
 
 function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
@@ -146,36 +148,6 @@ end
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status, bindingStatus)
 	local button = originalButton.caerdonButton
 
-	if not button then
-		button = CreateFrame("Frame", nil, originalButton)
-		button.searchOverlay = originalButton.searchOverlay
-		originalButton.caerdonButton = button
-	end
-
-	-- Make sure it's sitting in front of the frame it's going to overlay
-	local levelCheckFrame = originalButton
-	if options and options.relativeFrame then
-		if options.relativeFrame:GetObjectType() == "Texture" then
-			levelCheckFrame = options.relativeFrame:GetParent()
-		else
-			levelCheckFrame = options.relativeFrame
-		end
-	end
-
-	if levelCheckFrame then
-		button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
-		button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
-	end
-
-	button:ClearAllPoints()
-	button:SetSize(0,0)
-
-	if options and options.relativeFrame then
-		button:SetAllPoints(options.relativeFrame)
-	else
-		button:SetAllPoints(originalButton)
-	end
-
 	-- Had some addons messing with frame level resulting in this getting covered by the parent button.
 	-- Haven't seen any negative issues with bumping it up, yet, but keep an eye on it if
 	-- the status icon overlaps something it shouldn't.
@@ -199,24 +171,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 			mogAnim:Stop()
 		end
 	end
-
-	if not mogStatus then
-		mogStatusBackground = button:CreateTexture(nil, "ARTWORK", nil, 1)
-		mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 2)
-		mogStatus.mogStatusBackground = mogStatusBackground
-		button.mogStatus = mogStatus
-	end
-
-	-- local mogFlash = button.mogFlash
-	-- if not mogFlash then
-	-- 	mogFlash = button:CreateTexture(nil, "OVERLAY")
-	-- 	mogFlash:SetAlpha(0)
-	-- 	mogFlash:SetBlendMode("ADD")
-	-- 	mogFlash:SetAtlas("bags-glow-flash", true)
-	-- 	mogFlash:SetPoint("CENTER")
-
-	-- 	button.mogFlash = mogFlash
-	-- end
 
 	local showAnim = false
 	if status == "waiting" then
@@ -486,7 +440,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		mogStatus:SetTexCoord(-1/32, 33/32, -1/32, 33/32)
 		mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
 	elseif status == "collected" then
-		if IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+		if IsGearSetStatus(bindingStatus, item) and (CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon or options.forceGearSetsAsIcon) then
 			mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 			mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 		end
@@ -500,7 +454,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 		alpha = 0.5
 		mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 		mogStatus:SetTexture("Interface\\Common\\StreamCircle")
-	-- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+	-- elseif IsGearSetStatus(bindingStatus, item) and (CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon or options.forceGearSetsAsIcon) then
 	-- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
 	-- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
 	end
@@ -579,7 +533,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 
 	local bindingText = ""
 	if IsGearSetStatus(bindingStatus, item) then -- is gear set
-		if CaerdonWardrobeConfig.Binding.ShowGearSets then
+		if (CaerdonWardrobeConfig.Binding.ShowGearSets and not options.forceGearSetsAsIcon) then
 			bindingText = "|cFFFFFFFF" .. bindingStatus .. "|r"
 		end
 	else
@@ -616,53 +570,55 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 
 	bindsOnText:SetText(bindingText)
 
-	-- Measure text and resize accordingly
-	bindsOnText:ClearAllPoints()
-	bindsOnText:SetSize(0,0)
-	bindsOnText:SetPoint("LEFT")
-	bindsOnText:SetPoint("RIGHT")
+	if not options.fixedBindingPosition then
+		-- Measure text and resize accordingly
+		bindsOnText:ClearAllPoints()
+		bindsOnText:SetSize(0,0)
+		bindsOnText:SetPoint("LEFT")
+		bindsOnText:SetPoint("RIGHT")
 
-	local newWidth = bindsOnText:GetStringWidth()
-	if newWidth > button:GetWidth() then
-		newWidth = button:GetWidth()
-	end
-	local newHeight = bindsOnText:GetHeight()
-
-	bindsOnText:ClearAllPoints()
-	bindsOnText:SetSize(newWidth, newHeight)
-
-	local bindingScale = options.bindingScale or 1
-	local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
-	local xOffset = 1
-	if options.bindingOffsetX ~= nil then
-		xOffset = options.bindingOffsetX
-	end
-
-	local yOffset = 2
-	if options.bindingOffsetY ~= nil then
-		yOffset = options.bindingOffsetY
-	end
-
-	local hasCount = (button.count and button.count > 1) or options.hasCount
-	
-	if string.find(bindingPosition, "BOTTOM") then
-		if hasCount then
-			yOffset = options.itemCountOffset or 15
+		local newWidth = bindsOnText:GetStringWidth()
+		if newWidth > button:GetWidth() then
+			newWidth = button:GetWidth()
 		end
-	end
+		local newHeight = bindsOnText:GetHeight()
+	
+		bindsOnText:ClearAllPoints()
+		bindsOnText:SetSize(newWidth, newHeight)
+	
+		local bindingScale = options.bindingScale or 1
+		local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
+		local xOffset = 1
+		if options.bindingOffsetX ~= nil then
+			xOffset = options.bindingOffsetX
+		end
 
-	if string.find(bindingPosition, "TOP") then
-		yOffset = yOffset * -1
-	end
+		local yOffset = 2
+		if options.bindingOffsetY ~= nil then
+			yOffset = options.bindingOffsetY
+		end
 
-	if string.find(bindingPosition, "RIGHT") then
-		xOffset = xOffset * -1
-	end
+		local hasCount = (button.count and button.count > 1) or options.hasCount
+		
+		if string.find(bindingPosition, "BOTTOM") then
+			if hasCount then
+				yOffset = options.itemCountOffset or 15
+			end
+		end
 
-	if options and options.relativeFrame then
-		bindsOnText:SetAllPoints(options.relativeFrame, xOffset, yOffset)
-	else
-		bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
+		if string.find(bindingPosition, "TOP") then
+			yOffset = yOffset * -1
+		end
+
+		if string.find(bindingPosition, "RIGHT") then
+			xOffset = xOffset * -1
+		end
+
+		if options and options.relativeFrame then
+			bindsOnText:SetAllPoints(options.relativeFrame, xOffset, yOffset)
+		else
+			bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
+		end
 	end
 
 	if(options.bindingScale) then
@@ -742,7 +698,66 @@ function CaerdonWardrobeMixin:ClearButton(button)
 	end
 end
 
+function CaerdonWardrobeMixin:CreateButtonIfNeeded(originalButton, item, feature, locationInfo, options)
+	local button = originalButton.caerdonButton
+
+	if not button then
+		button = CreateFrame("Frame", nil, originalButton)
+		button.searchOverlay = originalButton.searchOverlay
+		originalButton.caerdonButton = button
+	end
+
+	-- Make sure it's sitting in front of the frame it's going to overlay
+	local levelCheckFrame = originalButton
+	if options and options.relativeFrame then
+		if options.relativeFrame:GetObjectType() == "Texture" then
+			levelCheckFrame = options.relativeFrame:GetParent()
+		else
+			levelCheckFrame = options.relativeFrame
+		end
+	end
+
+	if levelCheckFrame then
+		button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
+		button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
+	end
+
+	if not options.fixedStatusPosition and not options.fixedBindingPosition then
+		button:ClearAllPoints()
+		button:SetSize(0,0)
+
+		if options and options.relativeFrame then
+			button:SetAllPoints(options.relativeFrame)
+		else
+			button:SetAllPoints(originalButton)
+		end
+	end
+
+	local mogStatus = button.mogStatus
+	if not mogStatus then
+		local mogStatusBackground = button:CreateTexture(nil, "ARTWORK", nil, 1)
+		mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 2)
+		mogStatus.mogStatusBackground = mogStatusBackground
+		button.mogStatus = mogStatus
+	end
+
+	local bindsOnText = button.bindsOnText
+	if not bindsOnText then
+		bindsOnText = button:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") -- TODO: Note: placing directly on button to enable search fade - need to check on other addons
+		button.bindsOnText = bindsOnText
+	end
+
+	local newWidth = bindsOnText:GetStringWidth()
+	if newWidth > button:GetWidth() then
+		newWidth = button:GetWidth()
+	end
+	local newHeight = bindsOnText:GetHeight()
+	bindsOnText:SetSize(newWidth, newHeight)
+end
+
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
+	self:CreateButtonIfNeeded(button, item, feature, locationInfo, options)
+
 	if item == nil then
 		self:ClearButton(button)
 		return

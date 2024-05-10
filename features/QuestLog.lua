@@ -104,7 +104,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 
 	if questID == 0 then return end -- quest abandoned
 
-	QuestEventListener:AddCallback(questID, function()
+	CaerdonQuestEventListener:AddCallback(questID, function()
 		local questLink = GetQuestLink(questID)
 		if not questLink then
 			local questName = C_QuestLog.GetTitleForQuestID(questID)
@@ -120,6 +120,8 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 				self:ProcessItem(item, questID)
 			end)
 		end
+	end, function ()
+		print('Failed to load quest data for ' .. questID)
 	end)
 end
 

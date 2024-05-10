@@ -1,5 +1,10 @@
 CaerdonWardrobeItemDataMixin = {}
 
+function CaerdonWardrobeItemDataMixin:Init()
+	-- init and return array of frame events you'd like to receive
+	-- error(format("Caerdon Wardrobe: Must provide Init implementation for %s", self:GetName()))
+end
+
 function CaerdonWardrobeItemDataMixin:ContinueOnItemDataLoad(callbackFunction)
     if type(callbackFunction) ~= "function" or self.item:IsItemEmpty() then
         error("Usage: NonEmptyItem:ContinueOnLoad(callbackFunction)", 2);

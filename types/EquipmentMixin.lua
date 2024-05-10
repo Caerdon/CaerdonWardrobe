@@ -50,8 +50,24 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(self.item:GetItemID())
     end
 
+    local waitingForItems = {}
     local continuableContainer = ContinuableContainer:Create();
     local cancelFunc = function() end;
+
+    function ProcessTheItem(itemID)
+        waitingForItems[itemID] = nil
+        if not next(waitingForItems) then
+            callbackFunction()
+        end
+    end
+
+    function FailTheItem(itemID)
+        waitingForItems[itemID] = nil
+        print("Failed to load item " .. itemID)
+        if not next(waitingForItems) then
+            callbackFunction()
+        end
+    end
 
     if not appearanceID then
         callbackFunction()
@@ -59,37 +75,19 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
         for appearanceSourceIndex, appearanceSourceID in pairs(appearanceSourceIDs) do
             local itemID = C_TransmogCollection.GetSourceItemID(appearanceSourceID);
-            -- Using Item here to avoid recursively diving
-            local item = Item:CreateFromItemID(itemID)
-            if not item:IsItemEmpty() and not item:IsItemDataCached() then
-                -- print("Loading source for " .. item:GetItemID())
-                hasItems = true
-                continuableContainer:AddContinuable(item);
+            -- Using CaerdonItemEventListener instead of CaerdonItem here to avoid recursively diving
+            if not waitingForItems[itemID] then
+                waitingForItems[itemID] = true
+                CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID), GenerateClosure(FailTheItem, itemID))
             end
         end
 
-        local hasProcessed = false
-        if hasItems then
-            continuableContainer:ContinueOnLoad(function ()
-                hasProcessed = true
-                callbackFunction()
-            end);
-
-            -- TODO: This is silly but there are items that don't return info right now, so this gets hung up.
-            -- Unfortunately, this also is then making assumptions about how quickly data can get returned
-            C_Timer.After(0.2, function ()
-                if not hasProcessed then
-                    -- print("ContinuableContainer timed out")
-                    continuableContainer:Cancel()
-                    callbackFunction()
-                end
-            end)
-        else
+        if #waitingForItems == 0 then
             callbackFunction()
         end
     end
 
-    return function () continuableContainer:Cancel() end
+    return function () end -- No cancel function for now
 end
 
 -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)

@@ -1,5 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
+	<Script file="CaerdonAsyncCallbackSystem.lua" />
 	<Script file="FeatureMixin.lua" />
 	<Script file="ItemDataMixin.lua" />
 	<Script file="CaerdonWardrobe.lua" />
@@ -36,8 +37,10 @@
 	<Script file="external\AdiBags\Core.AdiBags.lua" />
 	<Script file="external\AngrierWorldQuests\Core.AngrierWorldQuests.lua" />
 	<Script file="external\ArkInventory\Core.ArkInventory.lua" />
+	<Script file="external\Baganator\Core.Baganator.lua" />
 	<Script file="external\Bagnon\Core.Bagnon.lua" />
 	<Script file="external\BaudBag\Core.BaudBag.lua" />
+	<Script file="external\BetterBags\Core.BetterBags.lua" />
 	<Script file="external\CargBags\Core.CargBags.lua" />
 	<Script file="external\Combuctor\Core.Combuctor.lua" />
 	<Script file="external\ElvUI\Core.ElvUI.lua" />

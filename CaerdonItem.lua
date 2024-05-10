@@ -135,7 +135,11 @@ function CaerdonItemMixin:IsItemCached()
 	end
 
 	if not isItemCached and not self:IsItemEmpty() then
-		isItemCached = C_Item.IsItemDataCached(self:GetItemLocation());
+		if self:HasItemLocation() then
+			isItemCached = C_Item.IsItemDataCached(self:GetItemLocation());
+		else
+			isItemCached = false
+		end
 	end
 
 	-- print("Item ID: " .. self:GetItemID() .. " IsItemCached: " .. tostring(isItemCached))
@@ -165,13 +169,20 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
 			end
 		end
 
+		function FailTheItem()
+			self.customDataLoaded = false
+			-- TODO: Should I provide an errorCallback in this case?
+			print("ITEM LOAD FAILED: " .. self:GetItemID())
+			callbackFunction()
+		end
+
 		if not self:IsItemCached() then
 			if not self:IsItemEmpty() then
-					ItemEventListener:AddCallback(self:GetItemID(), GenerateClosure(ProcessTheItem))
+					CaerdonItemEventListener:AddCallback(self:GetItemID(), GenerateClosure(ProcessTheItem), FailTheItem)
 			elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
 					local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
 					local questID = tonumber(strsplit(":", linkOptions), 10)
-					QuestEventListener:AddCallback(questID, GenerateClosure(ProcessTheItem))
+					CaerdonQuestEventListener:AddCallback(questID, GenerateClosure(ProcessTheItem), FailTheItem)
 			else
 				ProcessTheItem()
 			end
@@ -188,7 +199,7 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
 
     if not self:IsItemEmpty() then
         local itemDataCancel
-        local itemCancel = ItemEventListener:AddCancelableCallback(self:GetItemID(), function ()
+        local itemCancel = CaerdonItemEventListener:AddCancelableCallback(self:GetItemID(), function ()
             -- TODO: Update things and delay callback if needed for tooltip data
             local itemData = self:GetItemData()
             if itemData then
@@ -200,7 +211,12 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
 							self.customDataLoaded = true
 							callbackFunction()
             end
-        end);
+        end, function ()
+					self.customDataLoaded = false
+					-- TODO: Should I provide an errorCallback in this case?
+					print("ITEM LOAD FAILED: " .. self:GetItemID())
+					callbackFunction()
+				end);
 
         return function()
             if type(itemDataCancel) == "function" then
@@ -214,7 +230,7 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
         local questID = tonumber(strsplit(":", linkOptions), 10);
 
         local itemDataCancel
-        local itemCancel = QuestEventListener:AddCancelableCallback(questID, function ()
+        local itemCancel = CaerdonQuestEventListener:AddCancelableCallback(questID, function ()
             -- TODO: Update things and delay callback if needed for tooltip data
             local itemData = self:GetItemData()
             if itemData then
@@ -226,7 +242,12 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
 							self.customDataLoaded = true
 							callbackFunction()
             end
-        end);
+        end, function ()
+					self.customDataLoaded = false
+					-- TODO: Should I provide an errorCallback in this case?
+					print("QUEST ITEM LOAD FAILED: " .. self:GetItemID())
+					callbackFunction()
+				end);
 
         return function()
             if type(itemDataCancel) == "function" then

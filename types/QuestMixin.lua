@@ -14,8 +14,6 @@ local version, build, date, tocversion = GetBuildInfo()
 end
 
 function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
-    local cancelFunc = function() end;
-
     local item = self.item
     -- TODO: Temp... pulls out quality info to allow extract link to work - may need to consolidate and use elsewhere or figure out if there's a new way to parse.
     local tempLink = self.item:GetItemLink():gsub(" |A:.*|a]", "]")
@@ -24,6 +22,23 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
     
     local questID = strsplit(":", linkOptions);
     
+    local waitingForItems = {}
+
+    function ProcessTheItem(itemID)
+        waitingForItems[itemID] = nil
+        if not next(waitingForItems) then
+            callbackFunction()
+        end
+    end
+
+    function FailTheItem(itemID)
+        waitingForItems[itemID] = nil
+        print("Failed to load item " .. itemID)
+        if not next(waitingForItems) then
+            callbackFunction()
+        end
+    end
+
     local numQuestRewards
     local numQuestChoices
 
@@ -50,9 +65,10 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
                 name, texture, numItems, quality, isUsable, itemID = GetQuestItemInfo("reward", i)
             end
 
-            local item = Item:CreateFromItemID(itemID)
-            if not item:IsItemEmpty() then
-                continuableContainer:AddContinuable(item);
+            -- Using CaerdonItemEventListener instead of CaerdonItem here to avoid recursively diving
+            if not waitingForItems[itemID] then
+                waitingForItems[itemID] = true
+                CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID), GenerateClosure(FailTheItem, itemID))
             end
         end
 
@@ -64,16 +80,18 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
                 name, texture, numItems, quality, isUsable, itemID = GetQuestItemInfo("choice", i)
             end
 
-            local item = Item:CreateFromItemID(itemID)
-            if not item:IsItemEmpty() then
-                continuableContainer:AddContinuable(item);
+            if not waitingForItems[itemID] then
+                waitingForItems[itemID] = true
+                CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID), GenerateClosure(FailTheItem, itemID))
             end
         end
 
-        cancelFunc = continuableContainer:ContinueOnLoad(callbackFunction);
+        if #waitingForItems == 0 then
+            callbackFunction()
+        end
     end
 
-    return cancelFunc
+    return function () end -- No cancel function for now
 end
 
 
