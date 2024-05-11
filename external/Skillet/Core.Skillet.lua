@@ -120,4 +120,4 @@ if select(4, C_AddOns.GetAddOnInfo(addonName)) then
 	end
 end
 
-WagoAnalytics:Switch(addonName, isActive)
+-- WagoAnalytics:Switch(addonName, isActive)

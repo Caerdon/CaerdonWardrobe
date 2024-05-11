@@ -1,1 +1,1 @@
-WagoAnalytics = LibStub("WagoAnalytics"):Register("pkNMoqKz")
+-- WagoAnalytics = LibStub("WagoAnalytics"):Register("pkNMoqKz")

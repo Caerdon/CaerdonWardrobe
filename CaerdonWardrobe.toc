@@ -7,12 +7,11 @@
 ## Author: Caerdon
 ## Version: v3.6.2
 ## SavedVariables: CaerdonWardrobeConfig
-## OptionalDeps: WagoAnalytics, WoWUnit, AdiBags, AngrierWorldQuests, ArkInventory, Baganator, Bagnon, BaudBag, BetterBags, cargBags_Nivaya, Combuctor, ElvUI, Inventorian, KkthnxUI, LiteBag, Pawn, Skillet, Sorted, VenturePlan, WorldQuestsList, WorldQuestTracker, ZygorGuidesViewer
+## OptionalDeps: WoWUnit, AdiBags, AngrierWorldQuests, ArkInventory, Baganator, Bagnon, BaudBag, BetterBags, cargBags_Nivaya, Combuctor, ElvUI, Inventorian, KkthnxUI, LiteBag, Pawn, Skillet, Sorted, VenturePlan, WorldQuestsList, WorldQuestTracker, ZygorGuidesViewer
 
 ## IconTexture: Interface\Store\category-icon-featured
 
 libs\libs.xml
-libs\WagoAnalytics\Shim.lua
 LibConfig.lua
 
 Localization.lua
