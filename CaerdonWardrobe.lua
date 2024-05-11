@@ -722,7 +722,7 @@ function CaerdonWardrobeMixin:CreateButtonIfNeeded(originalButton, item, feature
 		button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
 	end
 
-	if not options.fixedStatusPosition and not options.fixedBindingPosition then
+	if options and not options.fixedStatusPosition and not options.fixedBindingPosition then
 		button:ClearAllPoints()
 		button:SetSize(0,0)
 
