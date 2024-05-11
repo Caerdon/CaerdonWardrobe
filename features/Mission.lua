@@ -83,27 +83,29 @@ function MissionMixin:OnGarrisonLandingScrollBoxRangeChanged(sortPending)
         local missionIndex = scrollBox:FindIndex(elementData)
 
         local index = 1;
-        for id, reward in pairs(elementData.rewards) do
-            local button = missionButton.Rewards[index];
-            if button.itemLink and button.itemID and button.itemID > 0 then
-                local options = {
-                    relativeFrame = button.Icon,
-                    statusOffsetX = 3,
-                    statusOffsetY = 3
-                }
-    
-                local item = CaerdonItem:CreateFromItemLink(button.itemLink)
-                CaerdonWardrobe:UpdateButton(button, item, self, { 
-                    locationKey = format("garrisonlandingbutton-%d-%d", button.itemID, id)
-                }, options)
-            else
-                CaerdonWardrobe:ClearButton(button)
+        if elementData.rewards then
+            for id, reward in pairs(elementData.rewards) do
+                local button = missionButton.Rewards[index];
+                if button.itemLink and button.itemID and button.itemID > 0 then
+                    local options = {
+                        relativeFrame = button.Icon,
+                        statusOffsetX = 3,
+                        statusOffsetY = 3
+                    }
+        
+                    local item = CaerdonItem:CreateFromItemLink(button.itemLink)
+                    CaerdonWardrobe:UpdateButton(button, item, self, { 
+                        locationKey = format("garrisonlandingbutton-%d-%d", button.itemID, id)
+                    }, options)
+                else
+                    CaerdonWardrobe:ClearButton(button)
+                end
+        
+                index = index + 1
             end
-    
-            index = index + 1
         end
     
-        for index = (#elementData.rewards + 1), #missionButton.Rewards do
+        for index = ((#elementData.rewards or 0) + 1), #missionButton.Rewards do
             CaerdonWardrobe:ClearButton(missionButton.Rewards[index])
         end
     end)

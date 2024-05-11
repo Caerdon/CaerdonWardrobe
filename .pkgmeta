@@ -9,7 +9,7 @@ externals:
     url: https://github.com/tekkub/libdatabroker-1-1
     branch: master
   libs/WagoAnalytics:
-    url: https://github.com/wagoio/WagoAnalytics.git
+    url: https://github.com/wagoio/WagoAnalyticsShim.git
     branch: main
 
 enable-nolib-creation: no
