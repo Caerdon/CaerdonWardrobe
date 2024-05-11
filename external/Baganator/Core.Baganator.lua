@@ -11,7 +11,6 @@ end
 local options = {
   fixedStatusPosition = true,
   statusProminentSize = 16,
-  -- forceGearSetsAsIcon = false
 }
 
 function BaganatorMixin:Init()
@@ -35,6 +34,8 @@ function BaganatorMixin:Init()
         CaerdonWardrobe:UpdateButton(itemButton, item, self, { locationKey = details.itemLink }, options)
       end
     
+      -- Ideally, we'd only show if we have a status to show, but UpdateButton is running asynchronously, so we can't account for it here.
+      -- Unfortunately, this means that mog status will override options in Baganator's icon corner setup even if it doesn't have anything to show.
       return shouldShow
   end, function(itemButton)
     -- Create Caerdon Button with nil item to create caerdonButton ahead of time for all slots
@@ -61,17 +62,14 @@ function BaganatorMixin:Init()
       end
       CaerdonWardrobe:UpdateButton(itemButton, item, self, { locationKey = details.itemLink }, options)
     end
-  
-    -- if shouldShow and (bindsOnText:GetText() == "" or bindsOnText:GetText() == nil) then
-    --   shouldShow = false
-    -- end
 
-    -- return shouldShow
+    -- Ideally, we'd only show if we have a binding to show, but UpdateButton is running asynchronously, so we can't account for it here.
+    -- Unfortunately, this means that binding will override options in Baganator's icon corner setup even if it doesn't have anything to show.
     return true
   end, function(itemButton)
     CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
     return itemButton.caerdonButton.bindsOnText
-  end, {corner = "bottom_right", priority = 2})
+  end, {corner = "bottom_left", priority = 2})
 end
 
 function BaganatorMixin:GetTooltipData(item, locationInfo)

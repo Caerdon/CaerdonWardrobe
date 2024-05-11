@@ -273,7 +273,7 @@ end
     -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
     -- print(recipeName or "" .. ": " .. tostring(recipeID))
 
-    local spellName, spellID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
+    -- local spellName, spellID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
     -- print(spellName)
 
     if caerdonItem.extraData and caerdonItem.extraData.recipeInfo then
@@ -281,7 +281,8 @@ end
     end
 
     if not itemType.recipe then
-        local recipeName = string.gsub(caerdonItem:GetItemName(), "Recipe: ", "")
+        local checkName = caerdonItem:GetItemName()
+        local recipeName = string.gsub(checkName or "", "Recipe: ", "")
         recipeName = string.gsub(recipeName, "Schematic: ", "")
         recipeName = string.gsub(recipeName, "Design: ", "")
         recipeName = string.gsub(recipeName, "Plans: ", "")
