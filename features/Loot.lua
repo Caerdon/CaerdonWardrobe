@@ -5,7 +5,8 @@ function LootMixin:GetName()
 end
 
 function LootMixin:Init()
-	LootFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self)
+	-- LootFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self)
+	ScrollUtil.AddInitializedFrameCallback(LootFrame.ScrollBox, function (...) self:OnLootInitializedFrame(...) end, LootFrame, false)
 end
 
 function LootMixin:GetTooltipData(item, locationInfo)
@@ -30,6 +31,20 @@ function LootMixin:OnScrollBoxRangeChanged(sortPending)
 			CaerdonWardrobe:ClearButton(button)
 		end
 	end)
+end
+
+function LootMixin:OnLootInitializedFrame(listFrame, frame, elementData)
+	local button = frame.Item;
+	local link = GetLootSlotLink(elementData.slotIndex);
+	if link then
+		local item = CaerdonItem:CreateFromItemLink(link)
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = format("%d", elementData.slotIndex),
+			elementData = elementData
+		}, nil)
+	else
+		CaerdonWardrobe:ClearButton(button)
+	end
 end
 
 CaerdonWardrobe:RegisterFeature(LootMixin)
