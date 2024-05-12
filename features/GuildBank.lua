@@ -48,15 +48,19 @@ function GuildBankMixin:OnGuildBankFrameUpdate()
 		local button, index, column;
 		local texture, itemCount, locked, isFiltered, quality;
 
+		if ( GuildBankFrame.noViewableTabs ) then
+			return;
+		end
+
 		for i=1, MAX_GUILDBANK_SLOTS_PER_TAB do
 			index = mod(i, NUM_SLOTS_PER_GUILDBANK_GROUP);
 			if ( index == 0 ) then
 				index = NUM_SLOTS_PER_GUILDBANK_GROUP;
 			end
 
-			if self.isGuildBankFrameUpdateRequested then
-				return
-			end
+			-- if self.isGuildBankFrameUpdateRequested then
+			-- 	return
+			-- end
 
 			column = ceil((i-0.5)/NUM_SLOTS_PER_GUILDBANK_GROUP);
 

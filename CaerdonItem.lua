@@ -519,8 +519,19 @@ function CaerdonItemMixin:GetTooltipData(data)
 		requiredTradeSkillTooLow = false
 	}
 
+	-- TODO: Hack to handle Pet Cage - need to move down into BattlePetMixin and get CaerdonItem to handle it upfront if needed.
+	local isBattlePet = self:GetCaerdonItemType() == CaerdonItemType.BattlePet
+	if isBattlePet then
+		if data.battlePetSpeciesID then
+	    -- local item = CaerdonItem:CreateFromSpeciesInfo(data.battlePetSpeciesID, data.battlePetLevel, data.battlePetBreedQuality, data.battlePetMaxHealth, data.battlePetPower, data.battlePetSpeed, data.battlePetName, battlePetID)
+			local numCollected = C_PetJournal.GetNumCollectedInfo(data.battlePetSpeciesID)
+			if numCollected == 0 then
+					tooltipData.canLearn = true
+			end
+		end
+	end
+
 	local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
-	local isBattlePetShown = BattlePetTooltip:IsShown()
 	local lines = data.lines or {}
 	for lineIndex, line in ipairs(data.lines) do
 		local lineText = line.leftText
@@ -857,8 +868,11 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
 
 	local data = nil
-	-- If something goes wrong with refactor, can switch back to this:
-	-- data = C_TooltipInfo and feature and feature:GetTooltipData(item, locationInfo) or nil
+	if self:GetItemName() == L["Pet Cage"] then
+		-- Was hoping to just use the item link but battlepets in particular cause issues showing up as Pet Cage.
+		-- Could check CaerdonItemType for BattlePet, but just going to do this for now.
+		data = C_TooltipInfo and feature and feature:GetTooltipData(self, locationInfo) or nil
+	end
 
 	local tooltipData = self:GetTooltipData(data)
 
@@ -914,7 +928,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		local petInfo = 
 			(caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
 			(caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
-		if petInfo.needsItem then
+		if petInfo.needsItem or tooltipData.canLearn then
 			if bindingResult.unusableItem then
 				mogStatus = "other"
 			else
