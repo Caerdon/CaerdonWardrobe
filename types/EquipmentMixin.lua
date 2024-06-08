@@ -440,6 +440,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     end
 
     local isUpgrade = nil
+    
+    -- TODO: Add check if upgrading item will result in an unlearned appearance.
+    -- if item:GetItemID() == 199446 then
+    local itemLocation = item:GetItemLocation()
+    if itemLocation and C_ItemUpgrade.CanUpgradeItem(itemLocation) then
+        C_ItemUpgrade.SetItemUpgradeFromLocation(item:GetItemLocation())
+        local upgradeInfo = C_ItemUpgrade.GetItemUpgradeItemInfo()
+        if upgradeInfo and upgradeInfo.currUpgrade < upgradeInfo.maxUpgrade then
+            print("Item can be upgraded: " .. item:GetItemLink() .. " to " .. upgradeInfo.upgradedItemLink)
+        end
+    end
 
     if PawnShouldItemLinkHaveUpgradeArrow then
         isUpgrade = PawnShouldItemLinkHaveUpgradeArrow(item:GetItemLink(), false)

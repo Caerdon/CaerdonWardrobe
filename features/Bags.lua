@@ -1,5 +1,4 @@
 local BagsMixin = {}
-local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function BagsMixin:GetName()
 	return "Bags"
@@ -24,11 +23,7 @@ function BagsMixin:Init()
 
 	EventRegistry:RegisterCallback("ContainerFrame.OpenBag", self.BagOpened, self)
 
-	if isDragonflight then
-		return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
-	else
-		return { "UNIT_SPELLCAST_SUCCEEDED" }
-	end
+	return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
 end
 
 function BagsMixin:BagOpened(frame, too)
@@ -95,41 +90,17 @@ function BagsMixin:OnUpdateSearchResults(frame)
 end
 
 function BagsMixin:OnUpdateItems(frame)
-	if frame:IsCombinedBagContainer() then
-		for i, button in frame:EnumerateValidItems() do
-			-- local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
-			-- button:SetMatchesSearch(not isFiltered);
-			local slot, bag = button:GetSlotAndBagID()
-			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-			CaerdonWardrobe:UpdateButton(button, item, self, {
-				bag = bag, 
-				slot = slot
-			}, { 
-			})
-		end
-	else
-		local bag = frame:GetID()
-		local size
-		if C_Container and C_Container.GetContainerNumSlots then
-			size = C_Container.GetContainerNumSlots(bag)
-		else
-			size = GetContainerNumSlots(bag)
-		end
-
-		for buttonIndex = 1, size do
-			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
-			local slot = button:GetID()
-
-			local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-
-			CaerdonAPI:CompareCIMI(self, item, bag, slot)
-
-			CaerdonWardrobe:UpdateButton(button, item, self, {
-				bag = bag, 
-				slot = slot
-			}, { 
-			})
-		end
+	for i, button in frame:EnumerateValidItems() do
+		-- local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
+		-- button:SetMatchesSearch(not isFiltered);
+		local slot, bag = button:GetSlotAndBagID()
+		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		-- CaerdonAPI:CompareCIMI(self, item, bag, slot)
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			bag = bag, 
+			slot = slot
+		}, { 
+		})
 	end
 end
 

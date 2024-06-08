@@ -1,11 +1,17 @@
 local BankMixin = {}
+local isWarWithin = select(4, GetBuildInfo()) >= 110000
 
 function BankMixin:GetName()
 	return "Bank"
 end
 
 function BankMixin:Init()
+	if isWarWithin then
+		hooksecurefunc("BankFrame_ShowPanel", function(...) self:OnBankFrameShowPanel(...) end)
+	end
+
 	hooksecurefunc("BankFrameItemButton_Update", function(...) self:OnBankItemUpdate(...) end)
+
 	-- TODO: Review for better hooks
 	hooksecurefunc(ContainerFrame7, "UpdateItems", function(...) self:OnUpdateItems(...) end)
 	hooksecurefunc(ContainerFrame7, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
@@ -74,34 +80,60 @@ function BankMixin:OnUpdateSearchResults(frame)
 end
 
 function BankMixin:OnUpdateItems(frame)
-	local bag = frame:GetID()
-
-	local size
-	if C_Container and C_Container.GetContainerNumSlots then
-		size = C_Container.GetContainerNumSlots(bag)
-	else
-		size = GetContainerNumSlots(bag)
-	end
-
-	for buttonIndex = 1, size do
-		local button = _G[frame:GetName() .. "Item" .. buttonIndex]
-		local slot = button:GetID()
-
+	for i, button in frame:EnumerateValidItems() do
+		local slot, bag = button:GetSlotAndBagID()
 		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { })
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			bag = bag, 
+			slot = slot
+		}, { 
+		})
 	end
 end
 
 function BankMixin:OnBankItemUpdate(button)
 	local bag = button:GetParent():GetID();
-    local slot = button:GetID();
+	local slot = button:GetID();
 
-    if bag ~= BANK_CONTAINER or not slot or button.isBag then
-        return
+	if bag ~= BANK_CONTAINER or not slot or button.isBag then
+		return
 	end
 
 	local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
 	CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, { })
+end
+
+function BankMixin:OnBankFrameShowPanel(sidePanelName, selection)
+	if sidePanelName == "AccountBankPanel" then
+		local frame = _G[sidePanelName]
+		for itemButton in frame:EnumerateValidItems() do
+			if not itemButton.caerdonHooked then -- Hooking each button individually - had trouble hooking into AccountBankPanel for some reason
+				hooksecurefunc(itemButton, "Refresh", function(...) self:OnBankPanelItemUpdate(itemButton) end)
+				itemButton.caerdonHooked = true
+			end
+	
+			self:OnBankPanelItemUpdate(itemButton)
+		end
+	end
+end
+
+function BankMixin:OnBankPanelItemUpdate(itemButton)
+	local bag = itemButton:GetBankTabID();
+	local slot = itemButton:GetContainerSlotID();
+
+		-- local itemInfo = C_Container.GetContainerItemInfo(itemButton:GetBankTabID(), itemButton:GetContainerSlotID());
+		-- local isFiltered = itemInfo and itemInfo.isFiltered;
+		-- itemButton:SetMatchesSearch(not isFiltered);
+		-- local slot, bag = itemButton:GetSlotAndBagID()
+
+		if bag and slot then
+		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+		CaerdonWardrobe:UpdateButton(itemButton, item, self, {
+			bag = bag, 
+			slot = slot
+		}, { 
+		})
+	end
 end
 
 CaerdonWardrobe:RegisterFeature(BankMixin)

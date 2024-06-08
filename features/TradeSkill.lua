@@ -1,7 +1,6 @@
 local TradeSkillMixin = {}
 
 local version, build, date, tocversion = GetBuildInfo()
-local isShadowlands = tonumber(build) > 35700
 
 function TradeSkillMixin:GetName()
 	return "TradeSkill"

@@ -5,7 +5,7 @@ CaerdonItem = {}
 CaerdonItemMixin = {}
 
 local version, build, date, tocversion = GetBuildInfo()
-local isShadowlands = tonumber(build) > 35700
+local isWarWithin = select(4, GetBuildInfo()) >= 110000
 
 -- Should not be translated - used to provide me with screenshots for debugging.
 CaerdonItemType = {
@@ -420,7 +420,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
         local subTypeID = self:GetItemSubTypeID()
 
         local toylink = typeID and C_ToyBox.GetToyLink(self:GetItemID())
-        local isConduit = isShadowlands and C_Soulbinds.IsItemConduitByItemInfo(itemLink)
+        local isConduit = C_Soulbinds.IsItemConduitByItemInfo(itemLink)
 
         if toylink then
             caerdonType = CaerdonItemType.Toy
@@ -1179,9 +1179,16 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		end
 	end
 
+	-- TODO: C_Item.GetItemLearnTransmogSet
+
 	local spellName, spellID = C_Item.GetItemSpell(self:GetItemLink())
 	if spellID then
-		local spellDescription = GetSpellDescription(spellID)
+		local spellDescription
+		if isWarWithin then
+			spellDescription = C_Spell.GetSpellDescription(spellID) or ""
+		else
+			spellDescription = GetSpellDescription(spellID) or ""
+		end
 		local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
 		local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
 		if isCollectDescription and IsUsableSpell(spellID) then

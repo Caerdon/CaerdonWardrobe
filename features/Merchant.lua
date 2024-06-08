@@ -1,5 +1,4 @@
 local MerchantMixin = {}
-local isDragonflight = select(4, GetBuildInfo()) > 100000
 
 function MerchantMixin:GetName()
     return "Merchant"
@@ -9,11 +8,7 @@ function MerchantMixin:Init()
     hooksecurefunc("MerchantFrame_UpdateMerchantInfo", function(...) self:OnMerchantUpdate(...) end)
     hooksecurefunc("MerchantFrame_UpdateBuybackInfo", function(...) self:OnBuybackUpdate(...) end)
 
-    if isDragonflight then
-        return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE" }
-    else
-        return { "MERCHANT_UPDATE" }
-    end
+    return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE" }
 end
 
 function MerchantMixin:MERCHANT_UPDATE()

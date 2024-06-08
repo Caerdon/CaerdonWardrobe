@@ -270,9 +270,13 @@ end
 
     -- You would think one of these... but no.
     -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemID())
-    -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
+    -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemLocation())
     -- print(recipeName or "" .. ": " .. tostring(recipeID))
 
+    -- local spellID = C_Item.GetFirstTriggeredSpellForItem(caerdonItem:GetItemID(), caerdonItem:GetItemQuality())
+    -- if spellID then
+    --     print("Spell ID: " .. spellID)
+    -- end
     -- local spellName, spellID = C_Item.GetItemSpell(caerdonItem:GetItemLink())
     -- print(spellName)
 
@@ -287,18 +291,44 @@ end
         recipeName = string.gsub(recipeName, "Design: ", "")
         recipeName = string.gsub(recipeName, "Plans: ", "")
 
+        -- local recipeSpellID = C_Spell.GetSpellIDForSpellIdentifier(recipeName)
+        -- C_Spell.GetSpellTradeSkillLink(recipeName)
+        -- if recipeSpellID then
+        --     print("Spell ID: " .. recipeSpellID)
+        --     local recipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeSpellID)
+        --     if recipeInfo then
+        --         DevTools_Dump(recipeInfo)
+        --     end
+        -- end
+
         itemType.recipe = nil
 
         -- TODO: This is not ideal, but I haven't identified a great way to get the recipe spell ID from the item ID.
         -- local loaded, reason = C_AddOns.LoadAddOn("Blizzard_Professions")
-        -- print("Loaded: " .. tostring(loaded) .. ", " .. tostring(reason))
-        -- C_TradeSkillUI.CloseTradeSkill()
+        -- DevTools_Dump("Loaded: " .. tostring(loaded) .. ", " .. tostring(reason))
 
+        -- print("Loaded: " .. tostring(loaded) .. ", " .. tostring(reason))
+
+        -- local lines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
+        -- local lineIndex
+        -- for lineIndex = 1, #lines do
+        --     local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(lines[lineIndex])
+        --     print(professionInfo.professionName)
+        -- end
+
+        -- local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(185)
+
+        -- DevTools_Dump(lines)
+        -- C_TradeSkillUI.CloseTradeSkill()
+        -- DevTools_Dump(C_TradeSkillUI)
+
+        -- local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skillLineID)
         -- C_TradeSkillUI.SetProfessionChildSkillLineID(professionInfo.professionID)
 
         -- local currBaseProfessionInfo = C_TradeSkillUI.GetBaseProfessionInfo();
         -- if currBaseProfessionInfo == nil or currBaseProfessionInfo.professionID ~= skillLineID then
-        --     C_TradeSkillUI.OpenTradeSkill(185);
+            -- C_TradeSkillUI.OpenTradeSkill(185);
+            -- CastSpellByName("Jewelcrafting")
         -- end
 
         -- TODO: Doesn't return secondary profession info
@@ -316,10 +346,13 @@ end
         -- end
 
         local recipeIDs = C_TradeSkillUI.GetAllRecipeIDs();
+        -- DevTools_Dump(recipeIDs)
         local recipeIndex
         for recipeIndex = 1, #recipeIDs do
             local checkRecipe = C_TradeSkillUI.GetRecipeInfo(recipeIDs[recipeIndex]);
+            -- print("Checking recipe: " .. checkRecipe.name .. " (" .. checkRecipe.recipeID .. ")")
             if checkRecipe.name == recipeName then
+                -- print("Found recipe: " .. checkRecipe.name .. " (" .. checkRecipe.recipeID .. ")")
                 itemType.recipe = checkRecipe;
                 break
             end
