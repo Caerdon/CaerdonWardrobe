@@ -1191,14 +1191,14 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		end
 		local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
 		local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
-		if isCollectDescription and IsUsableSpell(spellID) then
+		if isCollectDescription and C_Spell.IsSpellUsable(spellID) then
 			mogStatus = "own"
 		elseif self:HasItemLocationBankOrBags() then
 			if (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
 				-- TODO: Better to figure out a way to identify spells that create currency if possible
 				mogStatus = "own"
 			elseif isCombineDescription then -- and mogStatus == "" then
-				if IsUsableSpell(spellID) then
+				if C_Spell.IsSpellUsable(spellID) then
 					local maxStackCount = C_Item.GetItemMaxStackSize(itemLocation)
 					local currentStackCount = C_Item.GetStackCount(itemLocation)
 			
