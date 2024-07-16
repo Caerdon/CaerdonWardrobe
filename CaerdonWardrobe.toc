@@ -1,4 +1,4 @@
-## Interface: 100207, 110000
+## Interface: 100207, 110000, 110002
 ## X-Curse-Project-ID: 101123
 ## X-WoWI-ID: 26357
 ## X-Wago-ID: pkNMoqKz
