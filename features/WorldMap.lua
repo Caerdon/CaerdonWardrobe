@@ -46,7 +46,12 @@ end
 function WorldMapMixin:UpdatePin(pin)
 		-- QuestEventListener:AddCallback(pin.questID, function()
 		local options = {
-			statusProminentSize = 30
+			statusProminentSize = 15,
+			-- TODO: Review binding positioning
+			bindingScale = .8,
+			statusOffsetY = 10,
+			statusOffsetX = 10,
+			relativeFrame = pin.NormalTexture
 		}
 
 		local questLink = GetQuestLink(pin.questID)
