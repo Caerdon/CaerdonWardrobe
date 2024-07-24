@@ -116,6 +116,7 @@ function CaerdonQuestMixin:GetQuestInfo()
     local item = self.item
     local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
     local questID = strsplit(":", linkOptions);
+-- TODO: Review for use:    local questID = QuestInfoFrame.questLog and C_QuestLog.GetSelectedQuest() or GetQuestID();
 
     local questName = C_QuestLog.GetTitleForQuestID(questID)
 
@@ -144,11 +145,13 @@ function CaerdonQuestMixin:GetQuestInfo()
     isWorldQuest = C_QuestLog.IsWorldQuest(questID)
     isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
 
+    local currencyRewards = C_QuestInfoSystem.GetQuestRewardCurrencies(questID) or {};
+    numQuestCurrencies = #currencyRewards
+
     local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
     if isQuestLog then
         numQuestRewards = GetNumQuestLogRewards(questID)
         numQuestChoices = GetNumQuestLogChoices(questID, true)
-        numQuestCurrencies = GetNumQuestLogRewardCurrencies(questID)
         totalXp, baseXp = GetQuestLogRewardXP(questID)
         honorAmount = GetQuestLogRewardHonor(questID)
         rewardMoney = GetQuestLogRewardMoney(questID)
@@ -157,7 +160,6 @@ function CaerdonQuestMixin:GetQuestInfo()
     else
         numQuestRewards = GetNumQuestRewards()
         numQuestChoices = GetNumQuestChoices()
-        numQuestCurrencies = GetNumRewardCurrencies()
         totalXp, baseXp = GetRewardXP()
         honorAmount = GetRewardHonor()
         rewardMoney = GetRewardMoney()
