@@ -145,8 +145,8 @@ function CaerdonQuestMixin:GetQuestInfo()
     isWorldQuest = C_QuestLog.IsWorldQuest(questID)
     isBonusObjective = (C_QuestLog.IsQuestTask(questID) and not isWorldQuest)
 
-    local currencyRewards = C_QuestInfoSystem.GetQuestRewardCurrencies(questID) or {};
-    numQuestCurrencies = #currencyRewards
+    local rewardCurrencies = C_QuestInfoSystem.GetQuestRewardCurrencies(questID) or {};
+    numQuestCurrencies = #rewardCurrencies
 
     local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
     if isQuestLog then
@@ -235,16 +235,12 @@ function CaerdonQuestMixin:GetQuestInfo()
         end
     end
 
-    for i = 1, numQuestCurrencies do
-        local name, texture, quality, amount, currencyID;
-        if isQuestLog then
-            name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(i, questID)
-        else
-            name, texture, amount, quality = GetQuestCurrencyInfo("reward", i);
-            currencyID = GetQuestCurrencyID("reward", i);
-        end
-    
-        currencyRewards[i] = {
+    numQuestCurrencies = #rewardCurrencies
+    for index, currencyReward in ipairs(rewardCurrencies) do
+        local name = currencyReward.name
+        local currencyID = currencyReward.currencyID
+
+        currencyRewards[index] = {
             name = name,
             numItems = numItems,
             currencyID = currencyID
