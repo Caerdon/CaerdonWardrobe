@@ -116,7 +116,7 @@ function CaerdonQuestMixin:GetQuestInfo()
     local item = self.item
     local linkType, linkOptions, name = LinkUtil.ExtractLink(self.item:GetItemLink());
     local questID = strsplit(":", linkOptions);
--- TODO: Review for use:    local questID = QuestInfoFrame.questLog and C_QuestLog.GetSelectedQuest() or GetQuestID();
+    -- TODO: Works but requires active quest log open:    local questID = QuestInfoFrame.questLog and C_QuestLog.GetSelectedQuest() or GetQuestID();
 
     local questName = C_QuestLog.GetTitleForQuestID(questID)
 
@@ -150,25 +150,31 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     local isQuestLog = QuestInfoFrame.questLog or isWorldQuest
     if isQuestLog then
-        numQuestRewards = GetNumQuestLogRewards(questID)
-        numQuestChoices = GetNumQuestLogChoices(questID, true)
-        totalXp, baseXp = GetQuestLogRewardXP(questID)
-        honorAmount = GetQuestLogRewardHonor(questID)
-        rewardMoney = GetQuestLogRewardMoney(questID)
-        majorFactionRepRewards = C_QuestLog.GetQuestLogMajorFactionReputationRewards(questID);
-        skillName, skillIcon, skillPoints = GetQuestLogRewardSkillPoints(questID);
+        if C_QuestLog.ShouldShowQuestRewards(questID) then
+            numQuestRewards = GetNumQuestLogRewards(questID)
+            numQuestChoices = GetNumQuestLogChoices(questID, true)
+            totalXp, baseXp = GetQuestLogRewardXP(questID)
+            honorAmount = GetQuestLogRewardHonor(questID)
+            rewardMoney = GetQuestLogRewardMoney(questID)
+            majorFactionRepRewards = C_QuestLog.GetQuestLogMajorFactionReputationRewards(questID);
+            skillName, skillIcon, skillPoints = GetQuestLogRewardSkillPoints(questID);
+        end
     else
-        numQuestRewards = GetNumQuestRewards()
-        numQuestChoices = GetNumQuestChoices()
-        totalXp, baseXp = GetRewardXP()
-        honorAmount = GetRewardHonor()
-        rewardMoney = GetRewardMoney()
-        majorFactionRepRewards = C_QuestOffer.GetQuestOfferMajorFactionReputationRewards();
-        skillName, skillIcon, skillPoints = GetRewardSkillPoints();
+		if ( QuestFrameRewardPanel:IsShown() or C_QuestLog.ShouldShowQuestRewards(questID) ) then
+            numQuestRewards = GetNumQuestRewards()
+            numQuestChoices = GetNumQuestChoices()
+            totalXp, baseXp = GetRewardXP()
+            honorAmount = GetRewardHonor()
+            rewardMoney = GetRewardMoney()
+            majorFactionRepRewards = C_QuestOffer.GetQuestOfferMajorFactionReputationRewards();
+            skillName, skillIcon, skillPoints = GetRewardSkillPoints();
+        end
     end
 
+    -- TODO: Look at reworking this section to return CaerdonItems as rewards
     for i = 1, numQuestRewards do
         local itemLink, name, texture, numItems, quality, isUsable, itemID
+
         if isQuestLog then
             name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID)
             itemLink = GetQuestLogItemLink("reward", i, questID)
@@ -188,13 +194,37 @@ function CaerdonQuestMixin:GetQuestInfo()
 	end
 
     for i = 1, numQuestChoices do
-        local itemLink, name, texture, numItems, quality, isUsable, itemID
-        if isQuestLog then
-            name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
-            itemLink = GetQuestLogItemLink("choice", i, questID)
-        else
-            name, texture, numItems, quality, isUsable = GetQuestItemInfo("choice", i)
-            itemLink = GetQuestItemLink("choice", i)
+        local itemLink, name, texture, numItems, quality, isUsable, itemID, isValid
+
+        local lootType = 0; -- LOOT_LIST_ITEM
+		if ( QuestInfoFrame.questLog ) then
+			lootType = GetQuestLogChoiceInfoLootType(i);
+		else
+			lootType = GetQuestItemInfoLootType("choice", i);
+		end
+
+		if (lootType == 0) then -- LOOT_LIST_ITEM
+            if isQuestLog then
+                name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
+                itemLink = GetQuestLogItemLink("choice", i, questID)
+            else
+                name, texture, numItems, quality, isUsable = GetQuestItemInfo("choice", i)
+                itemLink = GetQuestItemLink("choice", i)
+            end
+        elseif (lootType == 1) then -- LOOT_LIST_CURRENCY
+			local currencyInfo = QuestInfoFrame.questLog and C_QuestLog.GetQuestRewardCurrencyInfo(questItem.questID, i, isChoice) or C_QuestOffer.GetQuestRewardCurrencyInfo("choice", i);
+
+            isValid = currencyInfo and currencyInfo.currencyID ~= nil;
+
+            name = currencyInfo.name
+            quantity = currencyInfo.totalRewardAmount
+            quality = currencyInfo.quality
+            itemID = currencyInfo.currencyID
+            itemLink = C_CurrencyInfo.GetCurrencyLink(itemID, quantity)
+
+            local factionID = C_CurrencyInfo.GetFactionGrantedByCurrency(itemID)
+            local hasMaxRenown = C_MajorFactions.HasMaximumRenown(factionID)
+            isUsable = not hasMaxRenown
         end
 
         choices[i] = {
@@ -203,7 +233,8 @@ function CaerdonQuestMixin:GetQuestInfo()
             quality = quality,
             isUsable = isUsable,
             itemID = itemID,
-            itemLink = itemLink
+            itemLink = itemLink,
+            isValid = isValid
         }
     end
 
@@ -237,13 +268,17 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     numQuestCurrencies = #rewardCurrencies
     for index, currencyReward in ipairs(rewardCurrencies) do
+        isValid = currencyReward and currencyReward.currencyID ~= nil;
         local name = currencyReward.name
         local currencyID = currencyReward.currencyID
+        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID, quantity)
 
         currencyRewards[index] = {
+            isValid = isValid,
             name = name,
             numItems = numItems,
-            currencyID = currencyID
+            currencyID = currencyID,
+            itemLink = itemLink
         }
     end
 

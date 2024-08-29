@@ -61,6 +61,7 @@
 	<Script file="types\CompanionPetMixin.lua" />
 	<Script file="types\ConduitMixin.lua" />
 	<Script file="types\ConsumableMixin.lua" />
+	<Script file="types\CurrencyMixin.lua" />
 	<Script file="types\EquipmentMixin.lua" />
 	<Script file="types\MountMixin.lua" />
 	<Script file="types\ProfessionMixin.lua" />

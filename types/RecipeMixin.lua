@@ -179,6 +179,7 @@ local TradeSkillLines = {
 }
 
 function CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+    -- print(requiredSkill .. requiredRank)
     local hasSkillLine = false
     local meetsMinRank = false
     local rank, maxRank
@@ -269,7 +270,7 @@ end
     itemType.item = caerdonItem
 
     -- You would think one of these... but no.
-    -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemID())
+    local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemID())
     -- local recipeName, recipeID = C_Item.GetItemSpell(caerdonItem:GetItemLocation())
     -- print(recipeName or "" .. ": " .. tostring(recipeID))
 

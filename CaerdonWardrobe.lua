@@ -168,7 +168,6 @@ end
 
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status, bindingStatus)
 	local button = originalButton.caerdonButton
-
 	-- Make sure it's sitting in front of the frame it's going to overlay
 	local levelCheckFrame = originalButton
 	if options and options.relativeFrame then

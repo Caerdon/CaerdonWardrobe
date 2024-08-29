@@ -50,7 +50,9 @@ function CaerdonAPIMixin:GetItemDetails(item)
     elseif caerdonType == CaerdonItemType.Conduit then
         itemResults = itemData:GetConduitInfo()
     elseif caerdonType == CaerdonItemType.Consumable then
-        -- TODO
+        itemResults = itemData:GetConsumableInfo()
+    elseif caerdonType == CaerdonItemType.Currency then
+        itemResults = itemData:GetCurrencyInfo()
     elseif caerdonType == CaerdonItemType.Equipment then
         itemResults = itemData:GetTransmogInfo()
     elseif caerdonType == CaerdonItemType.Mount then

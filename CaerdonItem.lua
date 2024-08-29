@@ -328,15 +328,26 @@ function CaerdonItemMixin:GetMinLevel() -- requires item data to be loaded
 end
 
 function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
-    if not self:IsItemEmpty() then
+		local caerdonType = self:GetCaerdonItemType()
+		local binding = CaerdonItemBind.Unknown
+
+		if not self:IsItemEmpty() then
         local bindType = (select(14, C_Item.GetItemInfo(self:GetItemLink())))
-        local binding = CaerdonItemBind.Unknown
         if bindType == 0 then
             binding = CaerdonItemBind.None
         elseif bindType == 1 then -- BoP
             binding = CaerdonItemBind.BindOnPickup
         elseif bindType == 2 then -- BoE
-            binding = CaerdonItemBind.BindOnEquip
+					local isWarboundUntilEquip = C_Item.IsItemBindToAccountUntilEquip(self:GetItemLink())
+					if isWarboundUntilEquip then -- WuE
+						if caerdonType == CaerdonItemType.Currency then
+							binding = CaerdonItemBind.None
+						else
+							binding = CaerdonItemBind.WarboundUntilEquip
+						end
+					else
+						binding = CaerdonItemBind.BindOnEquip
+					end
         elseif bindType == 3 then -- BoU
             binding = CaerdonItemBind.BindOnUse
         elseif bindType == 4 then -- Quest
@@ -347,9 +358,11 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
         elseif bindType ~= nil then
             print(self:GetItemLink() .. ": Please report - Unknown binding type " .. tostring(bindType))
         end
+		else
+			  binding = CaerdonItemBind.None
+		end
 
-        return binding
-    end
+		return binding
 end
 
 function CaerdonItemMixin:HasItemLocationBankOrBags()
@@ -516,7 +529,8 @@ function CaerdonItemMixin:GetTooltipData(data)
 		supercedingSpellNotKnown = false,
 		foundRedRequirements = false,
 		requiredTradeSkillMissingOrUnleveled = false,
-		requiredTradeSkillTooLow = false
+		requiredTradeSkillTooLow = false,
+		embeddedLink = data.hyperlink
 	}
 
 	-- TODO: Hack to handle Pet Cage - need to move down into BattlePetMixin and get CaerdonItem to handle it upfront if needed.
@@ -552,6 +566,22 @@ function CaerdonItemMixin:GetTooltipData(data)
 					-- know how to tell if they have recipes you need.
 					if strmatch(lineText, L["Use: Re%-learn .*"]) then
 						tooltipData.isRelearn = true
+					end
+
+					if data.hyperlink and C_Item.GetItemInfoInstant(data.hyperlink) ~= self:GetItemID() then -- Skip self-referential items for now
+						local spellName, spellID = C_Item.GetItemSpell(data.hyperlink)
+						if spellID then
+							-- local isUsable = C_Spell.IsSpellUsable(spellID)
+							-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
+							local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
+							if recipeInfo.learned then
+								tooltipData.canLearn = false
+								-- print(self:GetItemLink() .. " already learned")
+							else
+								tooltipData.canLearn = true
+								-- print("Can learn " .. self:GetItemLink() .. " creates " .. data.hyperlink)
+							end
+						end
 					end
 				end
 
@@ -634,7 +664,6 @@ function CaerdonItemMixin:GetTooltipData(data)
 			if isRecipe then
 				-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
 				-- which toons could learn a recipe.
-
 				local replaceSkill = "%w"
 				
 				-- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
@@ -646,6 +675,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 				else
 					skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
 				end
+
 				if strmatch(lineText, skillCheck) then
 					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 
@@ -655,7 +685,35 @@ function CaerdonItemMixin:GetTooltipData(data)
 					tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
 
 					if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
-						tooltipData.canLearn = false
+						-- tooltipData.canLearn = false -- TODO: Confirm if I need to do this - GetRecipeInfo appears to be returning nil for unknown recipes?
+						local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
+
+						local _, _, _, _, _, _, itemSubType = C_Item.GetItemInfo(self:GetItemLink())
+						local professionName = itemSubType
+
+						local prof
+						-- Get information about each profession the player has
+						local profList = {prof1, prof2, archaeology, fishing, cooking, firstAid}
+						for _, prof in ipairs(profList) do
+								if prof then
+										local name, _, rank, _, _, _, skillLine = GetProfessionInfo(prof)
+										if name == professionName then
+											tooltipData.requiredTradeSkillMissingOrUnleveled = false
+										end
+								end
+						end
+										
+						-- local spellName, spellID = C_Item.GetItemSpell(data.hyperlink)
+						-- if spellID then
+						-- 	-- local isUsable = C_Spell.IsSpellUsable(spellID)
+						-- 	-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
+						-- 	local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
+						-- 	if recipeInfo then
+						-- 		tooltipData.requiredTradeSkillMissingOrUnleveled = false -- TODO: Verify - seemed to not retrieve if missing skill
+						-- 	end
+						-- 	-- DevTools_Dump(recipeInfo)
+						-- end
+
 					else
 						tooltipData.canLearn = true
 					end
@@ -664,6 +722,8 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.RestrictedPvPMedal then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedReputation then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedSpellKnown then
+			tooltipData.canLearn = false
+			tooltipData.isKnownSpell = true
 		elseif line.type == Enum.TooltipDataLineType.RestrictedLevel then
 		elseif line.type == Enum.TooltipDataLineType.EquipSlot then
 		elseif line.type == Enum.TooltipDataLineType.ItemName then
@@ -675,6 +735,9 @@ function CaerdonItemMixin:GetTooltipData(data)
 		end
 	end
 
+	-- if self:GetItemID() == 224418 then
+	-- 	DevTools_Dump(tooltipData)
+	-- end
 	return tooltipData
 end
 
@@ -753,6 +816,8 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 		isBindOnPickup = true
 	elseif binding == CaerdonItemBind.BindOnEquip then
 		bindingStatus = L["BoE"]
+	elseif binding == CaerdonItemBind.WarboundUntilEquip then
+		bindingStatus = L["WuE"]
 	elseif binding == CaerdonItemBind.BindOnUse then
 		isBindOnUse = true
 		bindingStatus = L["BoE"]
@@ -836,7 +901,9 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 		local recipeInfo = itemData:GetRecipeInfo()
 		if recipeInfo and recipeInfo.learned then -- TODO: This still ends up flagging a few of the weird self-referential ones that aren't learned... look into later.
 			needsItem = false
-		elseif tooltipData.isKnownSpell then
+		elseif tooltipData.canLearn then
+			needsItem = true
+		else
 			needsItem = false
 		end
 	end
@@ -951,17 +1018,34 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 			end
 		end
 	elseif caerdonType == CaerdonItemType.Consumable then
-		if tooltipData.canCombine then
+		local consumableInfo = itemData:GetConsumableInfo()
+		if consumableInfo.needsItem then
+			if consumableInfo.validForCharacter then
+				mogStatus = "own"
+			else
+				mogStatus = "other"
+			end
+		elseif tooltipData.canCombine then
 			mogStatus = "canCombine"
 			if tooltipData.readyToCombine then
 				mogStatus = "readyToCombine"
 			end
-		elseif tooltipData.canLearn then
-			if bindingResult.skillTooLow then
-				mogStatus = "lowSkill"
-			else
-				mogStatus = "own"
-			end
+			-- TODO: Keep an eye on this - should be able to incorporate info GetConsumableInfo as needed
+		-- elseif tooltipData.canLearn then
+		-- 	if bindingResult.skillTooLow then
+		-- 		mogStatus = "lowSkill"
+		-- 	else
+		-- 		mogStatus = "own"
+		-- 	end
+		else
+			mogStatus = "collected"
+		end
+	elseif caerdonType == CaerdonItemType.Currency then
+		local currencyInfo = itemData:GetCurrencyInfo()
+		if currencyInfo.needsItem then
+			mogStatus = "own"
+		elseif currencyInfo.otherNeedsItem then
+			mogStatus = "other"
 		end
 	elseif caerdonType == CaerdonItemType.Equipment then
 		local transmogInfo = itemData:GetTransmogInfo()
@@ -1069,7 +1153,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 			end
 		end
 	elseif caerdonType == CaerdonItemType.Recipe then
-		if bindingResult.needsItem then
+		if tooltipData.canCombine then
+			mogStatus = "canCombine"
+			if tooltipData.readyToCombine then
+				mogStatus = "readyToCombine"
+			end
+		elseif bindingResult.needsItem then
 			if bindingResult.unusableItem then
 				if bindingResult.skillTooLow then
 					mogStatus = "lowSkill"
@@ -1106,6 +1195,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 		-- 			mogStatus = "own"
 		-- 		end
 		-- 	end
+		else
+			mogStatus = "collected"
 		end
 	elseif caerdonType == CaerdonItemType.Toy then
 		local toyInfo = itemData:GetToyInfo()
@@ -1184,26 +1275,24 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 	local spellName, spellID = C_Item.GetItemSpell(self:GetItemLink())
 	if spellID then
 		local spellDescription
-		if isWarWithin then
-			spellDescription = C_Spell.GetSpellDescription(spellID) or ""
-		else
-			spellDescription = GetSpellDescription(spellID) or ""
-		end
-		local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
+		spellDescription = C_Spell.GetSpellDescription(spellID) or ""
+		-- local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
 		local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
+		local isArrangeDescription = string.find(spellDescription, L["^Arrange %d+"]) ~= nil
 		local CheckUsable = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
-		if isCollectDescription and CheckUsable(spellID) then
-			mogStatus = "own"
-		elseif self:HasItemLocationBankOrBags() then
+		-- if isCollectDescription and CheckUsable(spellID) then
+		-- 	mogStatus = "own"
+		-- elseif
+		if self:HasItemLocationBankOrBags() then
 			if (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
 				-- TODO: Better to figure out a way to identify spells that create currency if possible
 				mogStatus = "own"
-			elseif isCombineDescription then -- and mogStatus == "" then
+			elseif isCombineDescription or isArrangeDescription then -- and mogStatus == "" then
 				if CheckUsable(spellID) then
 					local maxStackCount = C_Item.GetItemMaxStackSize(itemLocation)
 					local currentStackCount = C_Item.GetStackCount(itemLocation)
 			
-					local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or 0))
+					local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0))
 					if combineCount > 1 then
 						mogStatus = "canCombine"
 						if combineCount <= currentStackCount then
@@ -1229,11 +1318,13 @@ function CaerdonItemMixin:GetItemData()
         if caerdonType == CaerdonItemType.BattlePet then
             self.caerdonItemData = CaerdonBattlePet:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.CompanionPet then
-            self.caerdonItemData = CaerdonCompanionPet:CreateFromCaerdonItem(self)
+						self.caerdonItemData = CaerdonCompanionPet:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Conduit then
-            self.caerdonItemData = CaerdonConduit:CreateFromCaerdonItem(self)
+						self.caerdonItemData = CaerdonConduit:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Consumable then
-            self.caerdonItemData = CaerdonConsumable:CreateFromCaerdonItem(self)
+						self.caerdonItemData = CaerdonConsumable:CreateFromCaerdonItem(self)
+				elseif caerdonType == CaerdonItemType.Currency then
+						self.caerdonItemData = CaerdonCurrency:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Equipment then
             self.caerdonItemData = CaerdonEquipment:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Mount then
