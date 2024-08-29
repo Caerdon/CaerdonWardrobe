@@ -212,7 +212,7 @@ function CaerdonQuestMixin:GetQuestInfo()
                 itemLink = GetQuestItemLink("choice", i)
             end
         elseif (lootType == 1) then -- LOOT_LIST_CURRENCY
-			local currencyInfo = QuestInfoFrame.questLog and C_QuestLog.GetQuestRewardCurrencyInfo(questItem.questID, i, isChoice) or C_QuestOffer.GetQuestRewardCurrencyInfo("choice", i);
+			local currencyInfo = QuestInfoFrame.questLog and C_QuestLog.GetQuestRewardCurrencyInfo(questID, i, true) or C_QuestOffer.GetQuestRewardCurrencyInfo("choice", i);
 
             isValid = currencyInfo and currencyInfo.currencyID ~= nil;
 

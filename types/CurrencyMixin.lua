@@ -13,7 +13,7 @@ end
 
 function CaerdonCurrencyMixin:GetCurrencyInfo()
   local currencyInfo = C_CurrencyInfo.GetCurrencyInfoFromLink(self.item:GetItemLink())
-  DevTools_Dump(currencyInfo)
+  -- DevTools_Dump(currencyInfo)
   local hasMaxRenown = false
   local isAccountWideRenown = false
 
