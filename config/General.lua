@@ -12,6 +12,7 @@ function CaerdonWardrobeConfigGeneral:Register()
 
 	self.options = {
         enableDebug = { key = "enableDebug", text = "Enable Debug", tooltip = "Enables debugging info in tooltips", configSection="Debug", configSubsection=nil, configValue="Enabled" },
+        showProfessionLoad = { key = "showProfessionLoad", text = "Show Profession Load", tooltip = "Enables showing the profession load dialog on login", configSection="LoadBehavior", configSubsection=nil, configValue="ShowProfessionLoad", rightOf="enableDebug" },
         enableIconAnimation = { key = "enableIconAnimation", text = "Show Icon Animation", tooltip = "Turns icon animation on / off (largely in unlearned and openable items)", configSection="Icon", configValue="EnableAnimation"},
         iconPosition = { key = "iconPosition", text = "Select Icon Position", tooltip = "Configures placement of the primary collectible icon", configSection="Icon", configValue="Position"},
         sameLookDifferentItem = { key = "sameLookDifferentItem", text = "Include different items w/ the same look (you completionist, you)", tooltip = "Ensures that you learn every single item that provides the same exact appearance for no other reason than you know you don't have that one.",  configSection="Icon", configSubsection="ShowLearnable", configValue="SameLookDifferentItem"},
@@ -32,6 +33,7 @@ function CaerdonWardrobeConfigGeneral:Register()
     self:ConfigureSection(self:GetTitle(), "GeneralSection")
 
     self:ConfigureCheckboxNew(self.options["enableDebug"])
+    self:ConfigureCheckboxNew(self.options["showProfessionLoad"])
     self:ConfigureCheckboxNew(self.options["enableIconAnimation"])
     self:ConfigureDropdownNew(self.options["iconPosition"], { 
         { title = "Top Left", value = "TOPLEFT", tooltip = "Show the primary icon in the top left" },

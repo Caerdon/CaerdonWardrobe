@@ -168,23 +168,7 @@ end
 -- Wowhead Transmog Guide - https://www.wowhead.com/transmogrification-overview-frequently-asked-questions
 function CaerdonEquipmentMixin:GetTransmogInfo()
     local item = self.item
-    -- TODO: Pretty sure this doesn't matter anymore as it should always be a CaerdonItem
-    -- local itemParamType = type(item)
-    -- if itemParamType == "string" then
-    --     item = gsub(item, "\124\124", "\124")
-    --     item = CaerdonItem:CreateFromItemLink(item)
-    --     print("Creating from link: " .. item)
-    -- elseif itemParamType == "number" then
-    --     item = CaerdonItem:CreateFromItemID(item)
-    --     print("Creating from ID: " .. item)
-    -- elseif itemParamType ~= "table" then
-    --     error("Must specify itemLink, itemID, or CaerdonItem for GetTransmogInfo")
-    -- end
-
     local itemLink = item:GetItemLink()
-    -- if not itemLink then
-    --     return
-    -- end
 
     if item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
         return
@@ -197,14 +181,15 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local otherNeedsItem = false
     local matchesLootSpec = true
     local isTransmog = false
+    local otherSourceFound = false
+    local otherSourceFoundForPlayer = false
+    local canCollect = false
 
     -- Keep available for debug info
     local appearanceInfo, sourceInfo
-    local isInfoReady, canCollect, accountCanCollect
-    local shouldSearchSources
+    local isInfoReady, accountCanCollect
     local appearanceSources
     local currentSourceFound
-    local otherSourceFound, otherSourceFoundForPlayer
     local sourceSpecs
     local lowestLevelFound
     local matchedSources = {}
@@ -261,11 +246,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
         isTransmog = true
 
-        -- If canCollect, then the current toon can learn it (but may already know it)
-        isInfoReady, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
-        -- This one checks the appearance resulting in plate showing mail items as valid, for instance.
-        -- isInfoReady, canCollect = CollectionWardrobeUtil.PlayerCanCollectSource(sourceID)
-
         local hasItemData
         hasItemData, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
 
@@ -273,44 +253,27 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         --     print('Info not ready - source ID ' .. tostring(sourceID) .. ' for ' .. itemLink)
         -- end
 
-         -- TODO: Forcing to always for now be true because a class could have an item it knows
-         -- that no other class can use, so we actually need the item rather than just completionist
-        shouldSearchSources = true
-
         sourceSpecs = C_Item.GetItemSpecInfo(itemLink)
 
         -- Only returns for sources that can be transmogged by current toon right now
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
 
+        local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         -- If the source is already collected, we don't need to check anything else for the source / appearance
-        sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         if sourceInfo and not sourceInfo.isCollected then
-            -- if appearanceInfo then -- Toon can learn
-            -- --     needsItem = not appearanceInfo.sourceIsCollected
-            -- --     isCompletionistItem = needsItem and appearanceInfo.appearanceIsCollected
-
-            -- --     print(itemLink .. ", " .. tostring(needsItem) .. ", " .. tostring(isCompletionistItem))
-            --     -- TODO: I think this logic might help with appearances but not sources?
-            --     -- What are appearance non-level requirements?
-            --     if appearanceInfo.appearanceHasAnyNonLevelRequirements and not appearanceInfo.appearanceMeetsNonLevelRequirements then
-            --         -- TODO: Do I want to separate out level vs other requirements?
-            --         hasMetRequirements = false
-            --     end
-            -- -- else
-            -- --     shouldSearchSources = true
-            -- end
-
-            if appearanceID and shouldSearchSources then
+            canCollect = sourceInfo.playerCanCollect
+            currentSourceFound = sourceInfo.isCollected
+    
+            local isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer
+            if appearanceID then
                 local sourceIndex, source
+                -- GetAllAppearanceSources includes hidden and otherwise unusable sources, so it's the most thorough
                 local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
                 for sourceIndex, source in pairs(appearanceSourceIDs) do
                     local isInfoReadySearch, canCollectSearch = C_TransmogCollection.PlayerCanCollectSource(source)
-                    -- local isInfoReadySearch, canCollectSearch = CollectionWardrobeUtil.PlayerCanCollectSource(sourceID)
-                    -- if not isInfoReadySearch then
-                    --     print('Search Info not ready - source ID ' .. tostring(source) .. ' for ' .. itemLink)
-                    -- end
-
                     local info = C_TransmogCollection.GetSourceInfo(source)
+                        
+                    -- TODO: This is how Blizz confirms data is loaded - need to look at CaerdonItem load handling and account for it
                     -- if info and info.quality then
                     --     -- Item is ready
                     -- else
@@ -323,71 +286,36 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         end
 
                         table.insert(appearanceSources, info)
+
+                        -- Check if we've already collected it and if it works for the current toon
+                        if info.sourceID ~= sourceID then -- already checked the current item's info
+                            if info.isCollected then
+                                if info.isValidSourceForPlayer then
+                                    otherSourceFoundForPlayer = true
+                                else
+                                    otherSourceFound = true
+                                end
+                            end
+                        end
+                    end
+
+                    local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item.GetItemInfoInstant(info.itemID)
+                    -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
+                    info.itemSubTypeID = sourceSubTypeID -- stuff it in here (mostly for debug)
+                    info.specs = C_Item.GetItemSpecInfo(info.itemID) -- also this
+
+                    local sourceMinLevel = (select(5, C_Item.GetItemInfo(info.itemID)))
+                    if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
+                        lowestLevelFound = sourceMinLevel
+                    end
+
+                    if info.isCollected and (item:GetItemSubTypeID() == info.itemSubTypeID or info.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then 
+                        -- Log any matched sources even if they're treated as not found due to other logic below (for debug)
+                        table.insert(matchedSources, info)
                     end
                 end
 
-                -- appearanceSources = C_TransmogCollection.GetAppearanceSources(appearanceID)
-                currentSourceFound = false
-                otherSourceFound = false
-                otherSourceFoundForPlayer = false
-
-                if appearanceSources then
-                    local sourceIndex, source
-                    for sourceIndex, source in pairs(appearanceSources) do
-                        local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item.GetItemInfoInstant(source.itemID)
-                        -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
-                        source.itemSubTypeID = sourceSubTypeID -- stuff it in here (mostly for debug)
-                        source.specs = C_Item.GetItemSpecInfo(source.itemID) -- also this
-
-                        local sourceMinLevel = (select(5, C_Item.GetItemInfo(source.itemID)))
-                        if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
-                            lowestLevelFound = sourceMinLevel
-                        end
-
-                        if source.sourceID == sourceID and source.isCollected then
-                            currentSourceFound = true -- but keep iterating to gather level info
-                        elseif source.isCollected and (item:GetItemSubTypeID() == source.itemSubTypeID or source.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then 
-                            -- Log any matched sources even if they're treated as not found due to logic below (for debug)
-                            table.insert(matchedSources, source)
-                            otherSourceFound = true -- remove this and do something like below if I can ever find a way to get full spec / class reqs for an item
-
-                            local sourceAppearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
-                            if sourceAppearanceInfo then
-                                otherSourceFoundForPlayer = sourceAppearanceInfo.appearanceIsCollected
-                            end
-
-                            -- If this item covers classes that aren't already covered by another source, we want to learn it... 
-                            -- EXCEPT TODO: This doesn't work because C_Item.GetItemSpecInfo appears to at least sometimes return just your own class specs for an item...
-                            -- Weapons may be accurate but also spec doesn't seem to matter for them to show up.
-                            -- ALSO TODO: Check C_Item.DoesItemContainSpec to see if it would help
-                            -- local sourceSpecIndex, sourceSpec
-                            -- if sourceSpecs and #sourceSpecs > 0 and source.specs and #source.specs > 0 then
-                            --     local itemClasses = {}
-                            --     print("Checking classes for " .. itemLink)
-
-                            --     for sourceSpecIndex, sourceSpec in pairs(source.specs) do
-                            --         local id, name, description, icon, role, classFile, className = GetSpecializationInfoByID(sourceSpec)
-                            --         print(itemLink .. source.name .. " found " .. className)
-                            --         table.insert(itemClasses, className)
-                            --     end
-
-                            --     for sourceSpecIndex, sourceSpec in pairs(sourceSpecs) do
-                            --         -- print(itemLink .. ": " .. sourceSpec)
-                            --         local id, name, description, icon, role, classFile, className = GetSpecializationInfoByID(sourceSpec)
-                            --         if not tContains(itemClasses, className) then
-                            --             print(itemLink .. ": New Spec " .. sourceSpec .. " for " .. className .. " " .. source.itemID)
-                            --             otherSourceFound = false
-                            --             break
-                            --         else
-                            --             otherSourceFound = true
-                            --         end
-                            --     end
-                            -- else
-                            --     otherSourceFound = true
-                            -- end
-                        end
-                    end
-
+                if currentSourceFound then
                     -- Ignore the other source if this item is lower level than what we know
                     -- TODO: Find an item to add to tests
                     -- local includeLevelDifferences = CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem and CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentLevel
@@ -396,14 +324,16 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     if lowestLevelFound ~= nil and itemMinLevel ~= nil and itemMinLevel < lowestLevelFound and includeLevelDifferences then
                         -- This logic accounts for the changes to transmog that allow lower-level players to wear transmog up to a certain level.
                         -- This changes "completionist" slightly in that you will no longer collect every single level difference of an appearance as it's no longer needed.
-                        if (lowestLevelFound > 9 and itemMinLevel <= 9) or (lowestLevelFound > 48 and itemMinLevel <= 48) or (lowestLevelFound > 60 and itemMinLevel <= 60) then
+                        -- Supposedly just need to check if lower than level 10 now. TODO: Verify
+                        -- if (lowestLevelFound > 9 and itemMinLevel <= 9) or (lowestLevelFound > 48 and itemMinLevel <= 48) or (lowestLevelFound > 60 and itemMinLevel <= 60) then
+                        if lowestLevelFound > 9 and itemMinLevel <= 9 then
                             currentSourceFound = false
                         end
                     end
                 end
 
                 if not currentSourceFound then
-                    if canCollect then
+                    if canCollect and isValidSourceForPlayer then
                         needsItem = true
                         isCompletionistItem = otherSourceFoundForPlayer
                     elseif accountCanCollect then
@@ -413,7 +343,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 end
             end
 
-            if canCollect then
+            if canCollect and isValidSourceForPlayer then
                 local playerSpecID = -1
                 local playerSpec = GetSpecialization();
                 if (playerSpec) then
@@ -472,7 +402,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         forDebugUseOnly = CaerdonWardrobeConfig.Debug.Enabled and {
             matchedSources = matchedSources,
             isInfoReady = isInfoReady,
-            shouldSearchSources = shouldSearchSources,
             appearanceInfo = appearanceInfo,
             sourceInfo = sourceInfo,
             appearanceSources = appearanceSources,

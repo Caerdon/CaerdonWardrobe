@@ -66,10 +66,14 @@ end
 
 function NS:GetDefaultConfig()
 	return {
-		Version = 22,
+		Version = 24,
 		
 		Debug = {
 			Enabled = false
+		},
+
+		LoadBehavior = {
+			ShowProfessionLoad = true
 		},
 
 		Icon = {

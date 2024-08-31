@@ -70,7 +70,6 @@ function Tests:DataChangeCanary()
 
     local debugUse = info.forDebugUseOnly
     IsTrue(type(debugUse) == "table")
-    IsTrue(debugUse.shouldSearchSources)
     IsFalse(debugUse.currentSourceFound)
     IsFalse(debugUse.otherSourceFound)
     IsTrue(debugUse.isInfoReady)

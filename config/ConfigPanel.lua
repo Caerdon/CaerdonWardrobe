@@ -62,9 +62,19 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureCheckboxNew(info)
         dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
     end
 
+    local rightOf = nil
+    if info.rightOf then
+        rightOf = _G["CaerdonWardrobe" .. info.rightOf].label
+    end
+
     if dependsOn then
         checkbox:SetPoint("LEFT", dependsOn, "LEFT", 16, 0)
         self.nextPoint = self.nextPoint + DEPENDS_ADJUSTMENT
+        checkbox:SetPoint("TOP", 0, self.nextPoint)
+        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    elseif rightOf then
+        checkbox:SetPoint("LEFT", rightOf, "RIGHT", rightOf:GetStringWidth(), 0)
+        self.nextPoint = self.nextPoint + LINE_HEIGHT
         checkbox:SetPoint("TOP", 0, self.nextPoint)
         self.nextPoint = self.nextPoint - LINE_HEIGHT
     else

@@ -18,6 +18,7 @@ CaerdonItemType = {
     Consumable = "Consumable",
     Currency = "Currency",
     Equipment = "Equipment",
+		Miscellaneous = "Miscellaneous",
     Mount = "Mount",
     Profession = "Profession",
     Recipe = "Recipe",
@@ -469,6 +470,8 @@ function CaerdonItemMixin:GetCaerdonItemType()
                     end
                 elseif subTypeID == Enum.ItemMiscellaneousSubclass.Mount or subTypeID == Enum.ItemMiscellaneousSubclass.MountEquipment then
                     caerdonType = CaerdonItemType.Mount
+								elseif subTypeID == Enum.ItemMiscellaneousSubclass.Other then
+									caerdonType = CaerdonItemType.Miscellaneous
                 else
                     caerdonType = CaerdonItemType.Unhandled
                 end
@@ -545,8 +548,12 @@ function CaerdonItemMixin:GetTooltipData(data)
 		end
 	end
 
+	local itemSpellName, itemSpellID = C_Item.GetItemSpell(self:GetItemLink())
+	local isStudyItem = itemSpellName == L["Studying"] -- A bunch of these so working off name for now: itemSpellID == 450824 or itemSpellID == 462909 --Spell: "Studying"
 	local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
+	local isMiscellaneousStudy = self:GetCaerdonItemType() == CaerdonItemType.Miscellaneous and isStudyItem
 	local lines = data.lines or {}
+
 	for lineIndex, line in ipairs(data.lines) do
 		local lineText = line.leftText
 		if line.type == Enum.TooltipDataLineType.None or
@@ -560,7 +567,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 
 				-- NOTE: I had removed the check for isRecipe for some reason... but then things like Reaves would get flagged as canLearn.
 				-- Keep an eye out and figure out what to do if needed
-				if isRecipe then
+				if isRecipe or isMiscellaneousStudy then
 					-- TODO: Don't like matching this hard-coded string but not sure how else
 					-- to prevent the expensive books from showing as learnable when I don't
 					-- know how to tell if they have recipes you need.
@@ -568,19 +575,28 @@ function CaerdonItemMixin:GetTooltipData(data)
 						tooltipData.isRelearn = true
 					end
 
+					-- TODO: Not tagging a few items like this - GetItemSpell returns nil
+					-- if self:GetItemID() == 224423 then
+					-- 	DevTools_Dump(data)
+					-- end
+				
 					if data.hyperlink and C_Item.GetItemInfoInstant(data.hyperlink) ~= self:GetItemID() then -- Skip self-referential items for now
 						local spellName, spellID = C_Item.GetItemSpell(data.hyperlink)
 						if spellID then
-							-- local isUsable = C_Spell.IsSpellUsable(spellID)
-							-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
-							local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
-							if recipeInfo.learned then
-								tooltipData.canLearn = false
-								-- print(self:GetItemLink() .. " already learned")
-							else
-								tooltipData.canLearn = true
-								-- print("Can learn " .. self:GetItemLink() .. " creates " .. data.hyperlink)
-							end
+								-- local isUsable = C_Spell.IsSpellUsable(spellID)
+								-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
+								local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
+								if recipeInfo.learned then
+									tooltipData.canLearn = false
+									-- print(self:GetItemLink() .. " already learned")
+								else
+									tooltipData.canLearn = true
+									-- print("Can learn " .. self:GetItemLink() .. " creates " .. data.hyperlink)
+								end
+						-- TODO: Likely don't need this now that profession data load is handled upfront.
+						-- else
+						-- 	-- TODO: Assume it's learnable for the moment since some items don't give the data
+						-- 	tooltipData.canLearn = true
 						end
 					end
 				end
@@ -606,30 +622,31 @@ function CaerdonItemMixin:GetTooltipData(data)
 				end
 
 				if strmatch(lineText, L["Use: .* ([%d,]+) reputation"]) then
-					if CaerdonWardrobeConfig.Binding.ShowBoARepItems then
+						if CaerdonWardrobeConfig.Binding.ShowBoARepItems then
+							tooltipData.canLearn = true
+						end
+					elseif strmatch(lineText, L["Use: Marks your map with the location"]) then
 						tooltipData.canLearn = true
+					elseif strmatch(lineText, L["Use: Unlocks this customization"]) then
+						tooltipData.canLearn = true
+					-- TODO: Review - removed because I think this is handled by recipe management
+					-- elseif strmatch(lineText, L["Use: Study to increase your"]) then
+					-- 	tooltipData.canLearn = true
+					elseif lineText == RETRIEVING_ITEM_INFO then
+						tooltipData.isRetrieving = true
+						break
+					elseif lineText == ITEM_SOULBOUND then
+						tooltipData.isSoulbound = true
+					elseif lineText == ITEM_SPELL_KNOWN then
+						tooltipData.isKnownSpell = true
+					elseif lineText == LOCKED then
+						tooltipData.isLocked = true
+					elseif lineText == ITEM_OPENABLE then
+						tooltipData.isOpenable = true
+					elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+						tooltipData.supercedingSpellNotKnown = true
 					end
-				elseif strmatch(lineText, L["Use: Marks your map with the location"]) then
-					tooltipData.canLearn = true
-				elseif strmatch(lineText, L["Use: Unlocks this customization"]) then
-					tooltipData.canLearn = true
-				elseif strmatch(lineText, L["Use: Study to increase your"]) then
-					tooltipData.canLearn = true
-				elseif lineText == RETRIEVING_ITEM_INFO then
-					tooltipData.isRetrieving = true
-					break
-				elseif lineText == ITEM_SOULBOUND then
-					tooltipData.isSoulbound = true
-				elseif lineText == ITEM_SPELL_KNOWN then
-					tooltipData.isKnownSpell = true
-				elseif lineText == LOCKED then
-					tooltipData.isLocked = true
-				elseif lineText == ITEM_OPENABLE then
-					tooltipData.isOpenable = true
-				elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
-					tooltipData.supercedingSpellNotKnown = true
 				end
-			end
 
 				local hex = line.leftColor:GenerateHexColor()
 				-- TODO: Generated hex color includes alpha value so need to check for full red.
@@ -661,7 +678,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 		elseif line.type == Enum.TooltipDataLineType.RestrictedRaceClass then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedFaction then
 		elseif line.type == Enum.TooltipDataLineType.RestrictedSkill then
-			if isRecipe then
+			if isRecipe or isMiscellaneousStudy then
 				-- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
 				-- which toons could learn a recipe.
 				local replaceSkill = "%w"
@@ -680,43 +697,45 @@ function CaerdonItemMixin:GetTooltipData(data)
 					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
 
 					local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+					-- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
 
 					tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
 					tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+					tooltipData.canLearn = hasSkillLine
 
-					if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
-						-- tooltipData.canLearn = false -- TODO: Confirm if I need to do this - GetRecipeInfo appears to be returning nil for unknown recipes?
-						local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
+					-- if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
+					-- 	-- tooltipData.canLearn = false -- TODO: Confirm if I need to do this - GetRecipeInfo appears to be returning nil for unknown recipes?
+					-- 	local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
 
-						local _, _, _, _, _, _, itemSubType = C_Item.GetItemInfo(self:GetItemLink())
-						local professionName = itemSubType
+					-- 	local _, _, _, _, _, _, itemSubType = C_Item.GetItemInfo(self:GetItemLink())
+					-- 	local professionName = itemSubType
 
-						local prof
-						-- Get information about each profession the player has
-						local profList = {prof1, prof2, archaeology, fishing, cooking, firstAid}
-						for _, prof in ipairs(profList) do
-								if prof then
-										local name, _, rank, _, _, _, skillLine = GetProfessionInfo(prof)
-										if name == professionName then
-											tooltipData.requiredTradeSkillMissingOrUnleveled = false
-										end
-								end
-						end
+					-- 	local prof
+					-- 	-- Get information about each profession the player has
+					-- 	local profList = {prof1, prof2, archaeology, fishing, cooking, firstAid}
+					-- 	for _, prof in ipairs(profList) do
+					-- 			if prof then
+					-- 					local name, _, rank, _, _, _, skillLine = GetProfessionInfo(prof)
+					-- 					if name == professionName then
+					-- 						tooltipData.requiredTradeSkillMissingOrUnleveled = false
+					-- 					end
+					-- 			end
+					-- 	end
 										
-						-- local spellName, spellID = C_Item.GetItemSpell(data.hyperlink)
-						-- if spellID then
-						-- 	-- local isUsable = C_Spell.IsSpellUsable(spellID)
-						-- 	-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
-						-- 	local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
-						-- 	if recipeInfo then
-						-- 		tooltipData.requiredTradeSkillMissingOrUnleveled = false -- TODO: Verify - seemed to not retrieve if missing skill
-						-- 	end
-						-- 	-- DevTools_Dump(recipeInfo)
-						-- end
+					-- 	-- local spellName, spellID = C_Item.GetItemSpell(data.hyperlink)
+					-- 	-- if spellID then
+					-- 	-- 	-- local isUsable = C_Spell.IsSpellUsable(spellID)
+					-- 	-- 	-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
+					-- 	-- 	local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
+					-- 	-- 	if recipeInfo then
+					-- 	-- 		tooltipData.requiredTradeSkillMissingOrUnleveled = false -- TODO: Verify - seemed to not retrieve if missing skill
+					-- 	-- 	end
+					-- 	-- 	-- DevTools_Dump(recipeInfo)
+					-- 	-- end
 
-					else
-						tooltipData.canLearn = true
-					end
+					-- else
+					-- 	tooltipData.canLearn = true
+					-- end
 				end		
 			end
 		elseif line.type == Enum.TooltipDataLineType.RestrictedPvPMedal then
@@ -738,6 +757,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 	-- if self:GetItemID() == 224418 then
 	-- 	DevTools_Dump(tooltipData)
 	-- end
+	-- DevTools_Dump(tooltipData)
 	return tooltipData
 end
 
