@@ -1061,14 +1061,16 @@ end
 function CaerdonWardrobeMixin:VARIABLES_LOADED()
 	-- Unless I find a way to force the recipe data to load outside of
 	-- opening the tradeskill window, I have to show a dialog.
-	if not self:IsTradeSkillDataLoaded() then
-		if CaerdonWardrobeConfig.LoadBehavior.ShowProfessionLoad then
-			local tradeSkillDialog = self:CreateTradeSkillDialog()
-			if not InCombatLockdown() then
-				tradeSkillDialog:Show()
+	C_Timer.After(0, function ()
+		if not self:IsTradeSkillDataLoaded() then
+			if CaerdonWardrobeConfig.LoadBehavior.ShowProfessionLoad then
+				local tradeSkillDialog = self:CreateTradeSkillDialog()
+				if not InCombatLockdown() then
+					tradeSkillDialog:Show()
+				end
 			end
 		end
-	end
+	end)
 end
 
 function CaerdonWardrobeMixin:ADDON_LOADED(name)

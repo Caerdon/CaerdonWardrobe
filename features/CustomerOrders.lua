@@ -93,7 +93,7 @@ function CustomerOrdersMixin:OnSchematicFormInit(frame)
 
         local itemLink = outputItemInfo.hyperlink
         if itemLink then
-            print(itemLink)
+            -- print(itemLink)
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             CaerdonWardrobe:UpdateButton(button, item, self, { 
                 locationKey = format("selectedrecipe%d",  item:GetItemID()),
