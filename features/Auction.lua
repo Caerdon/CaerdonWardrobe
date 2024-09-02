@@ -12,20 +12,34 @@ function AuctionMixin:Init(frame)
 
 	return {
 		"AUCTION_HOUSE_SHOW",
-		"ITEM_KEY_ITEM_INFO_RECEIVED"
-		-- "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
+		"ITEM_KEY_ITEM_INFO_RECEIVED",
+		-- "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
+		-- "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
 		-- "OWNED_AUCTIONS_UPDATED"
 	}
 end
 
 -- function AuctionMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
+-- 	print("Results Updated")
+-- 	-- DevTools_Dump(C_AuctionHouse.GetBrowseResults())
+-- end
+
+-- function AuctionMixin:AUCTION_HOUSE_BROWSE_RESULTS_ADDED()
+-- 	print("Results Added")
 -- end
 
 function AuctionMixin:AUCTION_HOUSE_SHOW()
 	if (self.shouldHookAuction) then
 		self.shouldHookAuction = false
 		ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.AuctionsFrame.AllAuctionsList.ScrollBox, function (...) self:OnAllAuctionsInitializedFrame(...) end, AuctionHouseFrame.AuctionsFrame.AllAuctionsList, false)
-        ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox, function (...) self:OnInitializedFrame(...) end, AuctionHouseFrame.BrowseResultsFrame.ItemList, false)
+		ScrollUtil.AddInitializedFrameCallback(AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox, function (...) self:OnInitializedFrame(...) end, AuctionHouseFrame.BrowseResultsFrame.ItemList, false)
+		if C_AddOns.IsAddOnLoaded("TradeSkillMaster") then
+			 -- TSM breaks the normal AH scrollbox frame initialization, so we have to hook into scroll events to ensure we can still show icons
+			 -- NOTE: This only ensures icons show up in the Blizzard AH interface.  TSM is unreasonably locked down, so I can't augment it at
+			 -- all.
+			AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox:RegisterCallback(BaseScrollBoxEvents.OnLayout, function (...) self.OnScrollBoxLayout(..., AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox) end, self);
+			AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox:RegisterCallback(BaseScrollBoxEvents.OnScroll, function (...) self.OnScrollBoxScroll(..., AuctionHouseFrame.BrowseResultsFrame.ItemList.ScrollBox) end, self);
+		end
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)
 		hooksecurefunc(AuctionHouseFrame.AuctionsFrame.ItemDisplay, "SetItemInternal", function(...) self:OnSetAuctionItemDisplay(...) end)
@@ -44,6 +58,29 @@ function AuctionMixin:ITEM_KEY_ITEM_INFO_RECEIVED(itemID)
 
 		self.waitingForItemKeyInfo[itemID] = nil
 	end
+end
+
+function AuctionMixin:OnScrollBoxLayout(scrollBox)
+	scrollBox:ForEachFrame(function(frame, elementData)
+		self:OnInitializedFrame(AuctionHouseFrame.BrowseResultsFrame, frame, elementData)
+	end)
+end
+
+local scrollTimer
+function AuctionMixin:OnScrollBoxScroll(scrollBox)
+	if scrollTimer then
+		scrollTimer:Cancel()
+	end
+
+	scrollBox:ForEachFrame(function(frame, elementData)
+		CaerdonWardrobe:ClearButton(frame)
+	end)
+
+	scrollTimer = C_Timer.NewTimer(0.1, function ()
+		scrollBox:ForEachFrame(function(frame, elementData)
+			self:OnInitializedFrame(AuctionHouseFrame.BrowseResultsFrame, frame, elementData)
+		end)
+	end)
 end
 
 function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, elementData)
