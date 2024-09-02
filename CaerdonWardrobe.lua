@@ -47,108 +47,94 @@ local function OpenCloseTradeSkill(professionID)
 	C_TradeSkillUI.CloseTradeSkill()
 end
 
--- Function to create a button that opens and closes the tradeskill
-function CaerdonWardrobeMixin:CreateTradeSkillButton()
-	local button = CreateFrame("Button", "TradeSkillOpenCloseButton", UIParent, "UIPanelButtonTemplate")
-	button:SetSize(150, 30)
-	button:SetText("Load Profession Data")
-	button:SetPoint("CENTER")
-	
-	-- Set button click script
-	button:SetScript("OnClick", function()
-			-- Retrieve player's professions
-			local prof1, prof2 = GetProfessions()
-			
-			-- Get information about the first profession
-			local professionID = nil
-			if prof1 then
-					local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof1)
-					professionID = skillLineID
-			elseif prof2 then
-					local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof2)
-					professionID = skillLineID
-			end
-
-			-- Open and close the tradeskill window for the first profession found
-			OpenCloseTradeSkill(professionID)
-
-			-- Hide the button after clicking
-			button:Hide()
-	end)
-	
-	return button
-end
-
 function CaerdonWardrobeMixin:CreateTradeSkillDialog()
-	-- Create a frame for the dialog
-	local dialog = CreateFrame("Frame", "TradeSkillDialog", UIParent, "BasicFrameTemplateWithInset")
-	dialog:SetSize(350, 180)  -- Set the size of the dialog
-	dialog:SetPoint("CENTER")  -- Position the dialog in the center of the screen
+	if not self:IsTradeSkillDataLoaded() then
+		if CaerdonWardrobeConfig.LoadBehavior.ShowProfessionLoad then
+			-- Create a frame for the dialog
+			local dialog = CreateFrame("Frame", "TradeSkillDialog", UIParent, "BasicFrameTemplateWithInset")
+			dialog:SetSize(350, 180)  -- Set the size of the dialog
+			dialog:SetPoint("CENTER")  -- Position the dialog in the center of the screen
 
-	-- Create a title for the dialog
-	dialog.title = dialog:CreateFontString(nil, "OVERLAY")
-	dialog.title:SetFontObject("GameFontHighlight")
-	dialog.title:SetPoint("TOP", dialog, "TOP", 0, -6)
-	dialog.title:SetText(L["Caerdon: Load Profession Info"])
+			-- Create a title for the dialog
+			dialog.title = dialog:CreateFontString(nil, "OVERLAY")
+			dialog.title:SetFontObject("GameFontHighlight")
+			dialog.title:SetPoint("TOP", dialog, "TOP", 0, -6)
+			dialog.title:SetText(L["Caerdon: Load Profession Info"])
 
-	-- Make the dialog movable
-	dialog:SetMovable(true)
-	dialog:EnableMouse(true)
-	dialog:RegisterForDrag("LeftButton")
-	dialog:SetScript("OnDragStart", dialog.StartMoving)
-	dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
-	
-	-- Create an explanatory text with wrapping
-	dialog.text = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	dialog.text:SetPoint("TOPLEFT", dialog, "TOPLEFT", 13, -20)
-	dialog.text:SetPoint("RIGHT", dialog, "RIGHT", -10, 0)
-	dialog.text:SetText(L["Blizzard doesn't seem to provide a way to fully load recipe info without tradeskills being opened by a click.\n\nTo ensure Caerdon Wardrobe has all the recipe info, this needs to be loaded on every initial login.\n\nYou can disable this in Options, but you'll need to manually open tradeskills to get the data to show correctly."])
-	dialog.text:SetJustifyH("LEFT")  -- Align text to the left
-	dialog.text:SetWidth(280)  -- Set width for wrapping
+			-- Make the dialog movable
+			dialog:SetMovable(true)
+			dialog:EnableMouse(true)
+			dialog:RegisterForDrag("LeftButton")
+			dialog:SetScript("OnDragStart", dialog.StartMoving)
+			dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
+			
+			-- Create an explanatory text with wrapping
+			dialog.text = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			dialog.text:SetPoint("TOPLEFT", dialog, "TOPLEFT", 13, -20)
+			dialog.text:SetPoint("RIGHT", dialog, "RIGHT", -10, 0)
+			dialog.text:SetText(L["Blizzard doesn't seem to provide a way to fully load recipe info without tradeskills being opened by a click.\n\nTo ensure Caerdon Wardrobe has all the recipe info, this needs to be loaded on every initial login.\n\nYou can disable this in Options, but you'll need to manually open tradeskills to get the data to show correctly."])
+			dialog.text:SetJustifyH("LEFT")  -- Align text to the left
+			dialog.text:SetWidth(280)  -- Set width for wrapping
 
-	-- Create the button
-	dialog.button = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-	dialog.button:SetSize(120, 30)
-	dialog.button:SetText(L["Load Data"])
-	dialog.button:SetPoint("BOTTOM", dialog, "BOTTOM", 0, 10)
+			-- Create the button
+			dialog.button = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+			dialog.button:SetSize(120, 30)
+			dialog.button:SetText(L["Load Data"])
+			dialog.button:SetPoint("BOTTOM", dialog, "BOTTOM", 0, 10)
 
-	-- Set button click script
-	dialog.button:SetScript("OnClick", function()
-		-- Retrieve player's professions
-		local prof1, prof2 = GetProfessions()
-		
-		-- Get information about the first profession
-		local professionID = nil
-		if prof1 then
-				local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof1)
-				professionID = skillLineID
-		elseif prof2 then
-				local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof2)
-				professionID = skillLineID
-		end
+			-- Set button click script
+			dialog.button:SetScript("OnClick", function()
+				-- Retrieve player's professions
+				local prof1, prof2 = GetProfessions()
+				
+				-- Get information about the first profession
+				local professionID = nil
+				if prof1 then
+						local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof1)
+						professionID = skillLineID
+				elseif prof2 then
+						local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof2)
+						professionID = skillLineID
+				end
 
-		-- Open and close the tradeskill window for the first profession found
-		OpenCloseTradeSkill(professionID)
+				-- Open and close the tradeskill window for the first profession found
+				OpenCloseTradeSkill(professionID)
 
-		-- Hide the dialog after clicking
-		dialog:Hide()
-	end)
-	
-	local caerdon = self -- store off for dialog event
-	-- Hide dialog during combat
-	dialog:RegisterEvent("PLAYER_REGEN_DISABLED")
-	dialog:RegisterEvent("PLAYER_REGEN_ENABLED")
-	dialog:SetScript("OnEvent", function(self, event)
-			if event == "PLAYER_REGEN_DISABLED" then
-					self:Hide()  -- Hide the dialog when entering combat
-			elseif event == "PLAYER_REGEN_ENABLED" then
-					if not caerdon:IsTradeSkillDataLoaded() then
-							self:Show()  -- Show the dialog again when leaving combat if data isn't loaded
+				-- Hide the dialog after clicking
+				dialog:UnregisterEvent("PLAYER_REGEN_DISABLED")
+				dialog:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				dialog:Hide()
+			end)
+			
+			local caerdon = self -- store off for dialog event
+			-- Hide dialog during combat
+			dialog:RegisterEvent("PLAYER_REGEN_DISABLED")
+			dialog:RegisterEvent("PLAYER_REGEN_ENABLED")
+			dialog:SetScript("OnEvent", function(self, event)
+				if event == "PLAYER_REGEN_DISABLED" then
+						self:Hide()  -- Hide the dialog when entering combat
+				elseif event == "PLAYER_REGEN_ENABLED" then
+					if CaerdonWardrobeConfig.LoadBehavior.ShowProfessionLoad then
+						if not caerdon:IsTradeSkillDataLoaded() then
+									self:Show()  -- Show the dialog again when leaving combat if data isn't loaded
+						end
 					end
-			end
-	end)
+				end
+			end)
 
-	return dialog
+			dialog.CloseButton:SetScript("OnClick", function()
+				dialog:UnregisterEvent("PLAYER_REGEN_DISABLED")
+				dialog:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				dialog:Hide()
+			end)
+
+			if not InCombatLockdown() then
+				dialog:Show()
+			else
+				dialog:Hide()
+			end
+		end
+	end
 end
 
 -- Function to check if tradeskill data is already loaded
@@ -1061,15 +1047,8 @@ end
 function CaerdonWardrobeMixin:VARIABLES_LOADED()
 	-- Unless I find a way to force the recipe data to load outside of
 	-- opening the tradeskill window, I have to show a dialog.
-	C_Timer.After(0, function ()
-		if not self:IsTradeSkillDataLoaded() then
-			if CaerdonWardrobeConfig.LoadBehavior.ShowProfessionLoad then
-				local tradeSkillDialog = self:CreateTradeSkillDialog()
-				if not InCombatLockdown() then
-					tradeSkillDialog:Show()
-				end
-			end
-		end
+	C_Timer.After(1, function ()
+		self:CreateTradeSkillDialog()
 	end)
 end
 
