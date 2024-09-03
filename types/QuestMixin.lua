@@ -127,13 +127,14 @@ function CaerdonQuestMixin:GetQuestInfo()
     local spellRewards = {}
     local currencyRewards = {}
 
-    local numQuestRewards
-    local numQuestChoices
-    local numQuestSpellRewards
-    local numQuestCurrencies
-    local totalXp, baseXp
-    local honorAmount
-    local rewardMoney
+    local numQuestRewards = 0
+    local numQuestChoices = 0
+    local numQuestSpellRewards = 0
+    local numQuestCurrencies = 0
+    local totalXp = 0
+    local baseXp = 0
+    local honorAmount = 0
+    local rewardMoney = 0
     local majorFactionRepRewards
     local skillName, skillIcon, skillPoints
 
