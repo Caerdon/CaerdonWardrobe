@@ -100,6 +100,9 @@ function WorldQuestTrackerMixin:OnUpdateWorldWidget(widget, questID, numObjectiv
     if (type (questID) == "boolean" and questID) then
 		questID = widget.questID
     end
+	if (type (questID) == "table") then
+		questID = questID.questID
+	end
 
     local haveQuestData = HaveQuestData (questID)
 	local haveQuestRewardData = HaveQuestRewardData (questID)
