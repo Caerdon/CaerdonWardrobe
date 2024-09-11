@@ -27,6 +27,7 @@ function CaerdonWardrobeMixin:OnLoad()
 
 	self:RegisterEvent "ADDON_LOADED"
 	self:RegisterEvent "PLAYER_LOGOUT"
+	self:RegisterEvent "PLAYER_ENTERING_WORLD"
 	self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
 	self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
 	self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
@@ -36,23 +37,67 @@ function CaerdonWardrobeMixin:OnLoad()
 	hooksecurefunc(BankFrame, "UpdateSearchResults", function(...) self:OnContainerFrameUpdateSearchResults(...) end)
 end
 
-local function OpenCloseTradeSkill(professionID)
-	if not professionID then
-			print("No valid profession ID found.")
-			return
+local function OpenCloseTradeSkill()
+	-- TODO: Can open via book frame or from trade skill API. Having what appears to be cache clear happening for cooking recipes
+	--       so keeping some opening options around in case I find a way to force it to keep them around
+
+	-- ToggleFrame(ProfessionsBookFrame)
+	-- _G["SecondaryProfession1SpellButtonRight"]:Click()
+	-- ToggleFrame(ProfessionsBookFrame)
+
+	-- _G["PrimaryProfession1SpellButtonBottom"]:Click()
+	-- _G["PrimaryProfession2SpellButtonBottom"]:Click()
+	-- _G["SecondaryProfession1SpellButtonRight"]:Click()
+	-- _G["SecondaryProfession2SpellButtonRight"]:Click()
+	-- _G["SecondaryProfession2SpellButtonRight"]:Click()
+	-- _G["SecondaryProfession3SpellButtonRight"]:Click()
+
+	-- Retrieve player's professions
+	local prof1, prof2, archaeology, fishing, cooking = GetProfessions()
+	
+	-- Get information about the first profession
+	local professionID = nil
+	if prof1 then
+			local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof1)
+			professionID = skillLineID
+	elseif prof2 then
+			local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof2)
+			professionID = skillLineID
+	end
+	
+	-- local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(professionID)
+	-- EventRegistry:TriggerEvent("Professions.SelectSkillLine", professionInfo)
+
+	if cooking then
+			local name, _, skillLevel, maxSkillLevel, _, _, skillLineID = GetProfessionInfo(cooking)
+			C_TradeSkillUI.OpenTradeSkill(skillLineID)
+	else
+		C_TradeSkillUI.OpenTradeSkill(professionID)
 	end
 
-	-- Attempt to open the profession tradeskill window
-	C_TradeSkillUI.OpenTradeSkill(professionID)
-	C_TradeSkillUI.CloseTradeSkill()
+	-- Cooking doesn't seem to fully process the recipe data if you don't pump the frame first.
+	-- TODO: This has the side-effect of slightly showing the window... would be nice to not do that.
+	C_Timer.After(0, function()
+		C_TradeSkillUI.CloseTradeSkill()
+	end)
 end
 
 function CaerdonWardrobeMixin:CreateTradeSkillDialog()
+	local playerName = UnitName("player")
+	local realmName = GetRealmName()
+
 	if not self:IsTradeSkillDataLoaded() then
+		if CaerdonRecipeData and CaerdonRecipeData.globalRecipeNameToID and CaerdonProfessionData and CaerdonProfessionData[realmName] and CaerdonProfessionData[realmName][playerName] then
+			if next(CaerdonRecipeData.globalRecipeNameToID) ~= nil and next(CaerdonProfessionData[realmName][playerName]) ~= nil then
+				-- Cached recipe data is already available
+				return
+			end
+		end
+
 		if CaerdonWardrobeConfig.LoadBehavior.ShowProfessionLoad then
 			-- Create a frame for the dialog
 			local dialog = CreateFrame("Frame", "TradeSkillDialog", UIParent, "BasicFrameTemplateWithInset")
-			dialog:SetSize(350, 180)  -- Set the size of the dialog
+			dialog:SetSize(350, 130)  -- Set the size of the dialog
 			dialog:SetPoint("CENTER")  -- Position the dialog in the center of the screen
 
 			-- Create a title for the dialog
@@ -72,33 +117,20 @@ function CaerdonWardrobeMixin:CreateTradeSkillDialog()
 			dialog.text = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 			dialog.text:SetPoint("TOPLEFT", dialog, "TOPLEFT", 13, -20)
 			dialog.text:SetPoint("RIGHT", dialog, "RIGHT", -10, 0)
-			dialog.text:SetText(L["Blizzard doesn't seem to provide a way to fully load recipe info without tradeskills being opened by a click.\n\nTo ensure Caerdon Wardrobe has all the recipe info, this needs to be loaded on every initial login.\n\nYou can disable this in Options, but you'll need to manually open tradeskills to get the data to show correctly."])
+			dialog.text:SetText(L["\nProfession data not yet evaluated - make sure to open up each of your professions to allow Caerdon to retrieve and store it.  You should only need to do this once per toon."])
 			dialog.text:SetJustifyH("LEFT")  -- Align text to the left
 			dialog.text:SetWidth(280)  -- Set width for wrapping
 
 			-- Create the button
 			dialog.button = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
 			dialog.button:SetSize(120, 30)
-			dialog.button:SetText(L["Load Data"])
+			dialog.button:SetText(L["Got it!"])
 			dialog.button:SetPoint("BOTTOM", dialog, "BOTTOM", 0, 10)
 
 			-- Set button click script
 			dialog.button:SetScript("OnClick", function()
-				-- Retrieve player's professions
-				local prof1, prof2 = GetProfessions()
-				
-				-- Get information about the first profession
-				local professionID = nil
-				if prof1 then
-						local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof1)
-						professionID = skillLineID
-				elseif prof2 then
-						local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof2)
-						professionID = skillLineID
-				end
-
 				-- Open and close the tradeskill window for the first profession found
-				OpenCloseTradeSkill(professionID)
+				OpenCloseTradeSkill()
 
 				-- Hide the dialog after clicking
 				dialog:UnregisterEvent("PLAYER_REGEN_DISABLED")
@@ -139,26 +171,9 @@ end
 
 -- Function to check if tradeskill data is already loaded
 function CaerdonWardrobeMixin:IsTradeSkillDataLoaded()
-	-- local prof1, prof2 = GetProfessions()
-	
-	-- if prof1 then
-	-- 		local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof1)
-	-- 		local tradeSkillInfo = C_TradeSkillUI.GetTradeSkillLine()
-	-- 		if tradeSkillInfo and tradeSkillInfo.skillLineID == skillLineID then
-	-- 				return true
-	-- 		end
-	-- end
-	
-	-- if prof2 then
-	-- 		local name, _, _, _, _, _, skillLineID = GetProfessionInfo(prof2)
-	-- 		local tradeSkillInfo = C_TradeSkillUI.GetTradeSkillLine()
-	-- 		if tradeSkillInfo and tradeSkillInfo.skillLineID == skillLineID then
-	-- 				return true
-	-- 		end
-	-- end
-
 	local lines = C_TradeSkillUI.GetAllProfessionTradeSkillLines()
 	local lineIndex
+
 	for lineIndex = 1, #lines do
 			local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(lines[lineIndex])
 			if professionInfo.skillLevel and professionInfo.skillLevel > 0 then
@@ -1041,15 +1056,21 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 	end
 end
 
+function CaerdonWardrobeMixin:PLAYER_ENTERING_WORLD()
+end
+
 function CaerdonWardrobeMixin:PLAYER_LOGOUT()
 end
 
 function CaerdonWardrobeMixin:VARIABLES_LOADED()
 	-- Unless I find a way to force the recipe data to load outside of
 	-- opening the tradeskill window, I have to show a dialog.
-	C_Timer.After(1, function ()
-		self:CreateTradeSkillDialog()
-	end)
+	-- UIParentLoadAddOn("Blizzard_ProfessionsBook");
+	-- UIParentLoadAddOn("Blizzard_Professions");
+
+	-- C_Timer.After(1, function ()
+	-- 		self:CreateTradeSkillDialog()
+	-- end)
 end
 
 function CaerdonWardrobeMixin:ADDON_LOADED(name)

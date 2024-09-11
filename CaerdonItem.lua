@@ -459,7 +459,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == Enum.ItemClass.Battlepet then
                 caerdonType = CaerdonItemType.BattlePet
             elseif typeID == Enum.ItemClass.Consumable then
-                caerdonType = CaerdonItemType.Consumable
+							caerdonType = CaerdonItemType.Consumable
             elseif typeID == Enum.ItemClass.Miscellaneous then
                 if subTypeID == Enum.ItemMiscellaneousSubclass.CompanionPet then
                     local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self:GetItemID());
@@ -598,6 +598,12 @@ function CaerdonItemMixin:GetTooltipData(data)
 						-- 	-- TODO: Assume it's learnable for the moment since some items don't give the data
 						-- 	tooltipData.canLearn = true
 						end
+					else
+						-- No related item so do checks on known learnables
+						if strmatch(lineText, L["Use: Study to increase your .*"]) then -- reward from Artisans
+							-- TODO: Could validate profession in lineText but I think you only receive these items if you have the profession
+							tooltipData.canLearn = true
+						end
 					end
 				end
 
@@ -695,8 +701,7 @@ function CaerdonItemMixin:GetTooltipData(data)
 
 				if strmatch(lineText, skillCheck) then
 					local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
-
-					local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(requiredSkill, requiredRank)
+					local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self, requiredSkill, requiredRank)
 					-- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
 
 					tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
@@ -919,6 +924,7 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 		needsItem = petInfo.needsItem
 	elseif caerdonType == CaerdonItemType.Recipe then
 		local recipeInfo = itemData:GetRecipeInfo()
+		-- DevTools_Dump(recipeInfo)
 		if recipeInfo and recipeInfo.learned then -- TODO: This still ends up flagging a few of the weird self-referential ones that aren't learned... look into later.
 			needsItem = false
 		elseif tooltipData.canLearn then
@@ -1073,6 +1079,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 			if transmogInfo.isTransmog then
 				if transmogInfo.needsItem then
 					if not transmogInfo.isCompletionistItem then
+						-- print(self:GetItemLink() .. ": hasMetRequirements = " .. tostring(transmogInfo.hasMetRequirements) .. ", foundRedRequirements = " .. tostring(tooltipData.foundRedRequirements))
 						if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
 							mogStatus = "own"
 						else

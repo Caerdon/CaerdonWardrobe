@@ -12,9 +12,6 @@ end
 function WorldQuestTrackerMixin:Init()
     hooksecurefunc(WorldQuestTracker, "UpdateWorldWidget", function(...) self:OnUpdateWorldWidget(...) end)
     hooksecurefunc(WorldQuestTracker, "SetupWorldQuestButton", function(...) self:OnSetupWorldQuestButton(...) end)
-
-    -- WorldQuestTracker.SetupWorldQuestButton(widget, worldQuestType, rarity, isElite, tradeskillLineIndex, inProgress, selected, isCriteria, isSpellTarget, mapID)
-    -- WorldQuestTracker.UpdateWorldWidget (widget, questID, numObjectives, mapID, isCriteria, isNew, isUsingTracker, timeLeft, artifactPowerIcon)
 end
 
 function WorldQuestTrackerMixin:GetTooltipData(item, locationInfo)
@@ -64,11 +61,15 @@ function WorldQuestTrackerMixin:IsValidItem(type)
 	  type ~= WQT_REWARDTYPE.xp
 end
 
-function WorldQuestTrackerMixin:OnSetupWorldQuestButton(widget, worldQuestType, rarity, isElite, tradeskillLineIndex, inProgress, selected, isCriteria, isSpellTarget, mapID)
+function WorldQuestTrackerMixin:OnSetupWorldQuestButton(widget, questData)
     local questID = widget.questID
-
+		if (not questID) then
+			CaerdonWardrobe:ClearButton(widget)
+			return
+		end
+	
     local haveQuestData = HaveQuestData (questID)
-	local haveQuestRewardData = HaveQuestRewardData (questID)
+		local haveQuestRewardData = HaveQuestRewardData (questID)
 
     if not haveQuestData or not haveQuestRewardData then
         CaerdonWardrobe:ClearButton(widget)
@@ -95,16 +96,10 @@ function WorldQuestTrackerMixin:OnSetupWorldQuestButton(widget, worldQuestType, 
     end
 end
 
-function WorldQuestTrackerMixin:OnUpdateWorldWidget(widget, questID, numObjectives, mapID, isCriteria, isNew, isUsingTracker, timeLeft, artifactPowerIcon)
-    -- local itemLink = GetQuestLogItemLink("reward", k, questId)
-    if (type (questID) == "boolean" and questID) then
-		questID = widget.questID
-    end
-	if (type (questID) == "table") then
-		questID = questID.questID
-	end
+function WorldQuestTrackerMixin:OnUpdateWorldWidget(widget, questData, bIsUsingTracker)
+	local questID = questData.questID
 
-    local haveQuestData = HaveQuestData (questID)
+	local haveQuestData = HaveQuestData (questID)
 	local haveQuestRewardData = HaveQuestRewardData (questID)
 
     if not haveQuestData or not haveQuestRewardData then

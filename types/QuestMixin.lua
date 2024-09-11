@@ -177,10 +177,10 @@ function CaerdonQuestMixin:GetQuestInfo()
         local itemLink, name, texture, numItems, quality, isUsable, itemID
 
         if isQuestLog then
-            name, texture, numItems, quality, isUsable, itemID = GetQuestLogRewardInfo(i, questID)
+            name, texture, numItems, quality, isUsable, itemID, itemLevel, questRewardContextFlags = GetQuestLogRewardInfo(i, questID)
             itemLink = GetQuestLogItemLink("reward", i, questID)
         else
-            name, texture, numItems, quality, isUsable = GetQuestItemInfo("reward", i)
+            name, texture, numItems, quality, isUsable, itemID, questRewardContextFlags = GetQuestItemInfo("reward", i)
             itemLink = GetQuestItemLink("reward", i)
         end
 
@@ -206,10 +206,10 @@ function CaerdonQuestMixin:GetQuestInfo()
 
 		if (lootType == 0) then -- LOOT_LIST_ITEM
             if isQuestLog then
-                name, texture, numItems, quality, isUsable, itemID = GetQuestLogChoiceInfo(i, questID)
+                name, texture, numItems, quality, isUsable, itemID, itemLevel, questRewardContextFlags = GetQuestLogChoiceInfo(i, questID)
                 itemLink = GetQuestLogItemLink("choice", i, questID)
             else
-                name, texture, numItems, quality, isUsable = GetQuestItemInfo("choice", i)
+                name, texture, numItems, quality, isUsable, itemID, questRewardContextFlags = GetQuestItemInfo("choice", i)
                 itemLink = GetQuestItemLink("choice", i)
             end
         elseif (lootType == 1) then -- LOOT_LIST_CURRENCY
@@ -224,8 +224,12 @@ function CaerdonQuestMixin:GetQuestInfo()
             itemLink = C_CurrencyInfo.GetCurrencyLink(itemID, quantity)
 
             local factionID = C_CurrencyInfo.GetFactionGrantedByCurrency(itemID)
-            local hasMaxRenown = C_MajorFactions.HasMaximumRenown(factionID)
-            isUsable = not hasMaxRenown
+            if not factionID then
+                isUsable = false
+            else
+                local hasMaxRenown = C_MajorFactions.HasMaximumRenown(factionID)
+                isUsable = not hasMaxRenown
+            end
         end
 
         choices[i] = {

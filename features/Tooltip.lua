@@ -420,33 +420,38 @@ function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLo
 end
 
 function TooltipMixin:OnTooltipSetItem(tooltip)
-    local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
-    if itemLink and itemName then
---         local id = string.match(itemLink, "item:(%d*)")
---         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
---             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
---             for i = 1, 8 do
---                 if GetMouseFocus().reagentIndex == i then
---                     itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
---                     break
---                 end
---             end
---         end
+    if not tooltip.caerdonProcessing then
+        tooltip.caerdonProcessing = true
+        local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
+        if itemLink and itemName then
+    --         local id = string.match(itemLink, "item:(%d*)")
+    --         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
+    --             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
+    --             for i = 1, 8 do
+    --                 if GetMouseFocus().reagentIndex == i then
+    --                     itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
+    --                     break
+    --                 end
+    --             end
+    --         end
 
-        if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
-            tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+            if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+                tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+            end
+
+            -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
+            -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
+            local tooltipData = tooltip:GetPrimaryTooltipData()
+            if tooltipData.id ~= tooltipItem:GetItemID() then
+                local parentItem = CaerdonItem:CreateFromItemID(tooltipData.id)
+                Tooltip:ProcessTooltip(tooltip, parentItem, false)
+                -- Tooltip:ProcessTooltip(tooltip, tooltipItem, true)
+            else
+                Tooltip:ProcessTooltip(tooltip, tooltipItem, false)
+            end
         end
 
-        -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
-        -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
-        local tooltipData = tooltip:GetPrimaryTooltipData()
-        if tooltipData.id ~= tooltipItem:GetItemID() then
-            local parentItem = CaerdonItem:CreateFromItemID(tooltipData.id)
-            Tooltip:ProcessTooltip(tooltip, parentItem, false)
-            Tooltip:ProcessTooltip(tooltip, tooltipItem, true)
-        else
-            Tooltip:ProcessTooltip(tooltip, tooltipItem, false)
-        end
+        tooltip.caerdonProcessing = false
     end
 end
 

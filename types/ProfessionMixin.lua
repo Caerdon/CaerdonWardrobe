@@ -16,7 +16,7 @@ function CaerdonProfessionMixin:GetProfessionInfo()
         needsItem = false
     }
 
-    local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self.item:GetItemSubType(), 0)
+    local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self.item, self.item:GetItemSubType(), 0)
     if hasSkillLine and C_TradeSkillUI.GetSkillLineForGear then
         local skillLine = C_TradeSkillUI.GetSkillLineForGear(self.item:GetItemLink()) --itemInfo
         if skillLine then
