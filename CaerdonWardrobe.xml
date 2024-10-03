@@ -37,6 +37,7 @@
 	<Script file="external\AdiBags\Core.AdiBags.lua" />
 	<Script file="external\AngrierWorldQuests\Core.AngrierWorldQuests.lua" />
 	<Script file="external\ArkInventory\Core.ArkInventory.lua" />
+	<Script file="external\Auctionator\Core.Auctionator.lua" />
 	<Script file="external\Baganator\Core.Baganator.lua" />
 	<Script file="external\Bagnon\Core.Bagnon.lua" />
 	<Script file="external\BaudBag\Core.BaudBag.lua" />

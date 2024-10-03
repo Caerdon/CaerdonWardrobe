@@ -203,7 +203,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         sourceID = item.extraData.appearanceSourceID
     else
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
-        if not sourceID and C_Item.IsDressableItemByID(item:GetItemID()) then -- not finding via transmog collection so need to do the DressUp hack
+        if (not sourceID or not appearanceID) and C_Item.IsDressableItemByID(item:GetItemID()) then -- not finding via transmog collection so need to do the DressUp hack
             local inventoryType = item:GetInventoryTypeName()
             local slotID = slotTable[inventoryType]
 
@@ -215,12 +215,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             end
 
             if slotID and slotID > 0 then
+                isTransmog = true
                 -- Don't think I need to do this unless weapons cause some sort of problem?
                 -- CaerdonWardrobe.dressUp:Undress()
                 CaerdonWardrobe.dressUp:TryOn(itemLink, slotID)
-                -- print("CHECKING FOR SLOT: " .. tostring(slotID))
                 local transmogInfo = CaerdonWardrobe.dressUp:GetItemTransmogInfo(slotID)
-
                 if transmogInfo then
                     sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
                     if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
@@ -259,6 +258,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
 
         local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+        -- TODO: If no appearance ID by now, might be able to use VisualID returned from here?  Not sure if needed...
         -- If the source is already collected, we don't need to check anything else for the source / appearance
         if sourceInfo and not sourceInfo.isCollected then
             canCollect = sourceInfo.playerCanCollect
@@ -367,6 +367,12 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 end
             end    
         end
+    else
+        -- No source ID for some reason - last resort effort but assume another toon needs it.
+        local itemLocation = item:GetItemLocation()
+        needItem = false
+        otherNeedsItem = not C_TransmogCollection.PlayerHasTransmogByItemInfo(C_Item.GetItemInfo(item:GetItemLink()))
+        canCollect = true
     end
 
     local isUpgrade = nil

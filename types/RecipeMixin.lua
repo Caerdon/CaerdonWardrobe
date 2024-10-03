@@ -159,6 +159,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         EnsureVariables()
         GatherAllProfessionData()
     elseif event == "PLAYER_ENTERING_WORLD" then
+        EnsureVariables()
         ResetMissingProfessionLevel()
         GatherAllProfessionData()
     elseif event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then

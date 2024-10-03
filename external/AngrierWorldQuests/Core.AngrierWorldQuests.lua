@@ -11,15 +11,8 @@ end
 local isHooked = false
 
 function AngrierWorldQuestsMixin:Init()
-	local addon = _G[addonName]
-	local questFrame = addon.Modules["QuestFrame"]
-
-	hooksecurefunc(questFrame, "Startup", function(...) 
-		if not isHooked then
-			isHooked = true
-			hooksecurefunc("QuestLogQuests_Update", function(...) self:OnQuestLogQuests_Update(...) end)
-		end
-	end)
+	local questFrame = AngrierWorldQuests:GetModule("QuestFrameModule")
+	hooksecurefunc(questFrame, "QuestLog_Update", function(...) self:OnQuestLog_Update(...) end)
 end
 
 function AngrierWorldQuestsMixin:GetTooltipData(item, locationInfo)
@@ -57,7 +50,7 @@ function AngrierWorldQuestsMixin:GetDisplayInfo(button, item, feature, locationI
 	}
 end
 
-function AngrierWorldQuestsMixin:OnQuestLogQuests_Update()
+function AngrierWorldQuestsMixin:OnQuestLog_Update()
 	if self.questTimer then
 		self.questTimer:Cancel()
 	end
