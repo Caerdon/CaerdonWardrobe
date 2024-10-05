@@ -24,9 +24,25 @@ function CaerdonConsumableMixin:GetConsumableInfo()
     local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
     if transmogSetID then
         local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
-        if not transmogSetInfo.collected then
-            needsItem = true
-            validForCharacter = transmogSetInfo.validForCharacter
+        if transmogSetInfo then
+            if not transmogSetInfo.collected then
+                needsItem = true
+                validForCharacter = transmogSetInfo.validForCharacter
+            end
+        else
+            validForCharacter = false
+            
+            local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
+            for sourceIDIndex = 1, #sourceIDs do
+                local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceIDs[sourceIDIndex])
+                if not sourceInfo.isCollected then
+                    needsItem = true
+                    -- Have to iterate through all sources provided in case some are not valid for the toon
+                    if not validForCharacter then
+                        validForCharacter = sourceInfo.isValidSourceForPlayer
+                    end
+                end
+            end
         end
     end
 
