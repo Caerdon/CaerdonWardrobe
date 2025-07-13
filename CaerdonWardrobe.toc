@@ -1,11 +1,22 @@
-## Interface: 110100, 110105
+## Interface: 110107, 110200
 ## X-Curse-Project-ID: 101123
 ## X-WoWI-ID: 26357
 ## X-Wago-ID: pkNMoqKz
 ## Title: Caerdon Wardrobe
+## Category-enUS: Collections
+## Category-deDE: Kriegsmeutesammlungen
+## Category-esES: Colecciones de banda guerrera
+## Category-esMX: Colecciones de tropa
+## Category-frFR: Collections du bataillon
+## Category-itIT: Collezioni della Brigata
+## Category-koKR: 전투부대 수집품
+## Category-ptBR: Coleções do Bando de Guerra
+## Category-ruRU: Коллекции отряда
+## Category-zhCN: 战团藏品
+## Category-zhTW: 戰隊收藏
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v3.9.4
+## Version: v3.9.5
 ## SavedVariables: CaerdonWardrobeConfig, CaerdonProfessionData, CaerdonRecipeData
 ## OptionalDeps: WoWUnit, AdiBags, AngrierWorldQuests, ArkInventory, Auctionator, Baganator, Bagnon, BaudBag, BetterBags, cargBags_Nivaya, Combuctor, ElvUI, Inventorian, KkthnxUI, LiteBag, Pawn, Skillet, Sorted, TradeSkillMaster, VenturePlan, WorldQuestsList, WorldQuestTracker, ZygorGuidesViewer
 
