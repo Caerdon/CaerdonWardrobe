@@ -15,7 +15,7 @@
 
 	<Script file="CaerdonItem.lua" />
 	<Script file="CaerdonAPI.lua" />
-	
+
 	<Script file="features\Auction.lua" />
 	<Script file="features\Bags.lua" />
 	<Script file="features\Bank.lua" />
@@ -29,7 +29,6 @@
 	<Script file="features\Merchant.lua" />
 	<Script file="features\Mission.lua" />
 	<Script file="features\QuestLog.lua" />
-	<Script file="features\ReagentBank.lua" />
 	<Script file="features\TradeSkill.lua" />
 	<Script file="features\WorldMap.lua" />
 	<Script file="features\Tooltip.lua" />
@@ -68,7 +67,7 @@
 	<Script file="types\ProfessionMixin.lua" />
 	<Script file="types\QuestMixin.lua" />
 	<Script file="types\RecipeMixin.lua" />
-	<Script file="types\ToyMixin.lua" />	
+	<Script file="types\ToyMixin.lua" />
 
 	<Script file="tests\CaerdonItemTests.lua" />
 	<Script file="tests\ClothTests.lua" />

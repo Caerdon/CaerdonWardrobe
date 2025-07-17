@@ -12,17 +12,17 @@ function MerchantMixin:Init()
 end
 
 function MerchantMixin:MERCHANT_UPDATE()
-	self:Refresh()
+    self:Refresh()
 end
 
 function MerchantMixin:TOOLTIP_DATA_UPDATE()
-	if self.refreshTimer then
-		self.refreshTimer:Cancel()
-	end
+    if self.refreshTimer then
+        self.refreshTimer:Cancel()
+    end
 
-	self.refreshTimer = C_Timer.NewTimer(0.1, function ()
-		self:Refresh()
-	end, 1)
+    self.refreshTimer = C_Timer.NewTimer(0.1, function()
+        self:Refresh()
+    end, 1)
 end
 
 function MerchantMixin:GetTooltipData(item, locationInfo)
@@ -50,7 +50,8 @@ function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function MerchantMixin:Refresh()
-    if MerchantFrame:IsShown() then 
+    CaerdonWardrobeFeatureMixin:Refresh(self)
+    if MerchantFrame:IsShown() then
         if MerchantFrame.selectedTab == 1 then
             self:OnMerchantUpdate()
         else
@@ -60,9 +61,9 @@ function MerchantMixin:Refresh()
 end
 
 function MerchantMixin:GetDisplayInfo()
-	return {
-		bindingStatus = {
-			shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.Merchant
+    return {
+        bindingStatus = {
+            shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.Merchant
         },
         ownIcon = {
             shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant
@@ -76,24 +77,24 @@ function MerchantMixin:GetDisplayInfo()
         sellableIcon = {
             shouldShow = false
         }
-	}
+    }
 end
 
 function MerchantMixin:OnMerchantUpdate()
-    local options = { 
+    local options = {
     }
 
-	for i=1, MERCHANT_ITEMS_PER_PAGE, 1 do
-		local index = (((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i)
+    for i = 1, MERCHANT_ITEMS_PER_PAGE, 1 do
+        local index = (((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i)
 
-		local button = _G["MerchantItem"..i.."ItemButton"];
+        local button = _G["MerchantItem" .. i .. "ItemButton"];
 
-		local slot = index
+        local slot = index
 
         local itemLink = GetMerchantItemLink(index)
         if itemLink then
             local item = CaerdonItem:CreateFromItemLink(itemLink)
-            CaerdonWardrobe:UpdateButton(button, item, self, { 
+            CaerdonWardrobe:UpdateButton(button, item, self, {
                 locationKey = format("merchantitem-%d", slot),
                 slot = slot
             }, options)
@@ -101,14 +102,15 @@ function MerchantMixin:OnMerchantUpdate()
             CaerdonWardrobe:ClearButton(button)
         end
     end
-    
+
     local numBuybackItems = GetNumBuybackItems()
-    local buybackName, buybackTexture, buybackPrice, buybackQuantity, buybackNumAvailable, buybackIsUsable = GetBuybackItemInfo(numBuybackItems)
+    local buybackName, buybackTexture, buybackPrice, buybackQuantity, buybackNumAvailable, buybackIsUsable =
+    GetBuybackItemInfo(numBuybackItems)
     if buybackName then
         local itemLink = GetBuybackItemLink(numBuybackItems)
         local slot = "buybackbutton"
         if itemLink then
-    		local item = CaerdonItem:CreateFromItemLink(itemLink)
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
             CaerdonWardrobe:UpdateButton(MerchantBuyBackItemItemButton, item, self, {
                 locationKey = format("buybackbutton"),
                 slot = slot
@@ -122,13 +124,13 @@ function MerchantMixin:OnMerchantUpdate()
 end
 
 function MerchantMixin:OnBuybackUpdate()
-	local numBuybackItems = GetNumBuybackItems();
+    local numBuybackItems = GetNumBuybackItems();
 
-	for index=1, BUYBACK_ITEMS_PER_PAGE, 1 do -- Only 1 actual page for buyback right now
-		if index <= numBuybackItems then
-			local button = _G["MerchantItem"..index.."ItemButton"];
+    for index = 1, BUYBACK_ITEMS_PER_PAGE, 1 do -- Only 1 actual page for buyback right now
+        if index <= numBuybackItems then
+            local button = _G["MerchantItem" .. index .. "ItemButton"];
 
-			local slot = index
+            local slot = index
 
             local itemLink = GetBuybackItemLink(index)
             if itemLink then
@@ -136,12 +138,12 @@ function MerchantMixin:OnBuybackUpdate()
                 CaerdonWardrobe:UpdateButton(button, item, self, {
                     locationKey = format("buybackitem-%d", slot),
                     slot = slot
-                }, { })
+                }, {})
             else
                 CaerdonWardrobe:ClearButton(button)
             end
-		end
-	end
+        end
+    end
 end
 
 CaerdonWardrobe:RegisterFeature(MerchantMixin)

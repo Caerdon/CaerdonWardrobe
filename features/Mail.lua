@@ -1,7 +1,7 @@
 local MailMixin = {}
 
 function MailMixin:GetName()
-	return "Mail"
+    return "Mail"
 end
 
 function MailMixin:Init()
@@ -11,111 +11,112 @@ function MailMixin:Init()
 end
 
 function MailMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.type == "open" then
-		return C_TooltipInfo.GetInboxItem(InboxFrame.openMailID, locationInfo.index)
-	elseif locationInfo.type == "send" then
-		return C_TooltipInfo.GetSendMailItem(locationInfo.index)
-	elseif locationInfo.type == "inbox" then
-		return C_TooltipInfo.GetInboxItem(locationInfo.index)
-	else
-		error(format("Unknown mail type: %s", locationInfo.type))
-	end
+    if locationInfo.type == "open" then
+        return C_TooltipInfo.GetInboxItem(InboxFrame.openMailID, locationInfo.index)
+    elseif locationInfo.type == "send" then
+        return C_TooltipInfo.GetSendMailItem(locationInfo.index)
+    elseif locationInfo.type == "inbox" then
+        return C_TooltipInfo.GetInboxItem(locationInfo.index)
+    else
+        error(format("Unknown mail type: %s", locationInfo.type))
+    end
 end
 
 function MailMixin:Refresh()
 end
 
 function MailMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
+    return {
+        bindingStatus = {
+            shouldShow = true
+        },
+        ownIcon = {
+            shouldShow = true
+        },
+        otherIcon = {
+            shouldShow = true
+        },
+        questIcon = {
+            shouldShow = true
+        },
+        oldExpansionIcon = {
+            shouldShow = false
+        },
         sellableIcon = {
             shouldShow = false
         }
-	}
+    }
 end
 
 function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
-	for i=1, ATTACHMENTS_MAX_RECEIVE do
-		local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
-		if HasInboxItem(InboxFrame.openMailID, i) then
-			-- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
-			local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
-			if itemLink then
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
-					locationKey = format("open-%d", i),
-					type="open",
-					index = i
-				}, nil)
-			else
-				CaerdonWardrobe:ClearButton(attachmentButton)
-			end
-		else
+    for i = 1, ATTACHMENTS_MAX_RECEIVE do
+        local attachmentButton = OpenMailFrame.OpenMailAttachments[i];
+        if HasInboxItem(InboxFrame.openMailID, i) then
+            -- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
+            local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
+            if itemLink then
+                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
+                    locationKey = format("open-%d", i),
+                    type = "open",
+                    index = i
+                }, nil)
+            else
+                CaerdonWardrobe:ClearButton(attachmentButton)
+            end
+        else
             CaerdonWardrobe:ClearButton(attachmentButton)
-		end
-	end
+        end
+    end
 end
 
 function MailMixin:OnSendMailFrameUpdate()
-	for i=1, ATTACHMENTS_MAX_SEND do
-		local attachmentButton = SendMailFrame.SendMailAttachments[i];
+    for i = 1, ATTACHMENTS_MAX_SEND do
+        local attachmentButton = SendMailFrame.SendMailAttachments[i];
 
-		if HasSendMailItem(i) then
-			local itemLink = GetSendMailItemLink(i)
-			if itemLink then
-				local item = CaerdonItem:CreateFromItemLink(itemLink)
-				CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
-					locationKey = format("send-%d", i),
-					type="send",
-					index = i
-				}, nil)
-			else
-				CaerdonWardrobe:ClearButton(attachmentButton)
-			end
-		else
+        if HasSendMailItem(i) then
+            local itemLink = GetSendMailItemLink(i)
+            if itemLink then
+                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
+                    locationKey = format("send-%d", i),
+                    type = "send",
+                    index = i
+                }, nil)
+            else
+                CaerdonWardrobe:ClearButton(attachmentButton)
+            end
+        else
             CaerdonWardrobe:ClearButton(attachmentButton)
-		end
-	end
+        end
+    end
 end
 
 function MailMixin:OnInboxFrameUpdate()
-	local numItems, totalItems = GetInboxNumItems();
+    local numItems, totalItems = GetInboxNumItems();
 
-	for i=1, INBOXITEMS_TO_DISPLAY do
-		local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
+    for i = 1, INBOXITEMS_TO_DISPLAY do
+        local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
 
-		button = _G["MailItem"..i.."Button"];
-		if ( index <= numItems ) then
-			-- Setup mail item
-			local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink = GetInboxHeaderInfo(index);
-			if firstItemLink then
-				local item = CaerdonItem:CreateFromItemLink(firstItemLink)
-				CaerdonWardrobe:UpdateButton(button, item, self, {
-					locationKey = format("inbox-%d", index),
-					type="inbox",
-					index = index
-				}, nil)
-			else
-				CaerdonWardrobe:ClearButton(button)
-			end
-		else
+        button = _G["MailItem" .. i .. "Button"];
+        if (index <= numItems) then
+            -- Setup mail item
+            local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink =
+                GetInboxHeaderInfo(index);
+            if firstItemLink then
+                local item = CaerdonItem:CreateFromItemLink(firstItemLink)
+                CaerdonWardrobe:UpdateButton(button, item, self, {
+                    locationKey = format("inbox-%d", index),
+                    type = "inbox",
+                    index = index
+                }, nil)
+            else
+                CaerdonWardrobe:ClearButton(button)
+            end
+        else
             CaerdonWardrobe:ClearButton(button)
-		end
-	end
+        end
+    end
 end
 
 CaerdonWardrobe:RegisterFeature(MailMixin)
