@@ -896,6 +896,10 @@ function CaerdonWardrobeMixin:RegisterFeature(mixin)
     end
 end
 
+function CaerdonWardrobeMixin:GetRegisteredFeatures()
+    return availableFeatures
+end
+
 function CaerdonWardrobeMixin:ClearButton(button)
     if button.caerdonButton then
         self:SetItemButtonStatus(button)

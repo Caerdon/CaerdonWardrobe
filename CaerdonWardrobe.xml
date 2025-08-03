@@ -32,6 +32,7 @@
 	<Script file="features\TradeSkill.lua" />
 	<Script file="features\WorldMap.lua" />
 	<Script file="features\Tooltip.lua" />
+	<Script file="features\DebugFrame.lua" />
 
 	<Script file="external\AdiBags\Core.AdiBags.lua" />
 	<Script file="external\AngrierWorldQuests\Core.AngrierWorldQuests.lua" />

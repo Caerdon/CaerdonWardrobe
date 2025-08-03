@@ -20,116 +20,128 @@ I don't like slow addons and try my best to keep this addon from impacting your 
 ]] ]
 
 function CaerdonWardrobeConfigMixin:OnLoad()
-	self:RegisterEvent("VARIABLES_LOADED");
+    self:RegisterEvent("VARIABLES_LOADED");
 
-	self.name = "Caerdon Wardrobe"
-	self.okay = self.OnSave
+    self.name = "Caerdon Wardrobe"
+    self.okay = self.OnSave
 
-	self.OnCommit = self.okay;
-	self.OnDefault = self.default;
-	self.OnRefresh = self.refresh;
+    self.OnCommit = self.okay;
+    self.OnDefault = self.default;
+    self.OnRefresh = self.refresh;
 
-	local category, layout = Settings.RegisterCanvasLayoutCategory(self, self.name, self.name);
-	category.ID = self.name;
-	Settings.RegisterAddOnCategory(category);
+    local category, layout = Settings.RegisterCanvasLayoutCategory(self, self.name, self.name);
+    category.ID = self.name;
+    Settings.RegisterAddOnCategory(category);
 
-	-- Any anchors assigned to the frame will be disposed. Intended anchors need to be provided through
-	-- the layout object. If no anchor points are provided, the frame will be anchored to TOPLEFT (0,0)
-	-- and BOTTOMRIGHT (0,0).
-	-- layout:AddAnchorPoint("TOPLEFT", 10, -10);
-	-- layout:AddAnchorPoint("BOTTOMRIGHT", -10, 10);
-	
+    -- Any anchors assigned to the frame will be disposed. Intended anchors need to be provided through
+    -- the layout object. If no anchor points are provided, the frame will be anchored to TOPLEFT (0,0)
+    -- and BOTTOMRIGHT (0,0).
+    -- layout:AddAnchorPoint("TOPLEFT", 10, -10);
+    -- layout:AddAnchorPoint("BOTTOMRIGHT", -10, 10);
 end
 
 function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
-	-- BlizzardOptionsPanel_OnEvent(self, event, ...);
+    -- BlizzardOptionsPanel_OnEvent(self, event, ...);
 
-	if ( event == "VARIABLES_LOADED" ) then
-		self.variablesLoaded = true;
-		self:UnregisterEvent(event);
+    if (event == "VARIABLES_LOADED") then
+        self.variablesLoaded = true;
+        self:UnregisterEvent(event);
 
-		if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
-			print("Caerdon: Old settings detected - updating to defaults.  Please check your settings!")
-			CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
-		end
-	
-		CaerdonWardrobe:RefreshItems()
-	end
+        if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+            print("Caerdon: Old settings detected - updating to defaults.  Please check your settings!")
+            CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
+        end
+
+        CaerdonWardrobe:RefreshItems()
+    end
 end
 
 function CaerdonWardrobeConfigMixin:OnSave()
-	-- Make sure that errors aren't swallowed for InterfaceOption callbacks
-	xpcall(function()
-		CaerdonWardrobe:RefreshItems()
-	end, geterrorhandler())
+    -- Make sure that errors aren't swallowed for InterfaceOption callbacks
+    xpcall(function()
+        CaerdonWardrobe:RefreshItems()
+    end, geterrorhandler())
+end
+
+function CaerdonWardrobeConfigMixin:OpenDebugFrame()
+    -- Find and open our Debug Frame feature
+    local frame = _G["CaerdonWardrobe"]
+    local features = frame:GetRegisteredFeatures()
+    for _, feature in pairs(features) do
+        if feature:GetName() == "DebugFrame" then
+            feature:ToggleDebugFrame()
+            return
+        end
+    end
 end
 
 function NS:GetDefaultConfig()
-	return {
-		Version = 24,
-		
-		Debug = {
-			Enabled = false
-		},
+    return {
+        Version = 24,
 
-		LoadBehavior = {
-			ShowProfessionLoad = true
-		},
+        Debug = {
+            Enabled = false,
+            ShowDebugFrame = false
+        },
 
-		Icon = {
-			EnableAnimation = true,
-			Position = "TOPLEFT",
+        LoadBehavior = {
+            ShowProfessionLoad = true
+        },
 
-			ShowLearnable = {
-				BankAndBags = true,
-				GuildBank = true,
-				Merchant = true,
-				Auction = true,
-				SameLookDifferentItem = false,
-				SameLookDifferentLevel = true
-			},
+        Icon = {
+            EnableAnimation = true,
+            Position = "TOPLEFT",
 
-			ShowUpgrades = {
-				BankAndBags = true
-			},
+            ShowLearnable = {
+                BankAndBags = true,
+                GuildBank = true,
+                Merchant = true,
+                Auction = true,
+                SameLookDifferentItem = false,
+                SameLookDifferentLevel = true
+            },
 
-			ShowLearnableByOther = {
-				BankAndBags = true,
-				GuildBank = true,
-				Merchant = true,
-				Auction = true,
-				EncounterJournal = true
-			},
+            ShowUpgrades = {
+                BankAndBags = true
+            },
 
-			ShowSellable = {
-				BankAndBags = true,
-				GuildBank = false
-			},
+            ShowLearnableByOther = {
+                BankAndBags = true,
+                GuildBank = true,
+                Merchant = true,
+                Auction = true,
+                EncounterJournal = true
+            },
 
-			ShowOldExpansion = {
-				Unknown = false,
-				Reagents = true,
-				Usable = false,
-				Other = false,
-				Auction = true
-			},
+            ShowSellable = {
+                BankAndBags = true,
+                GuildBank = false
+            },
 
-			ShowQuestItems = true
-		},
+            ShowOldExpansion = {
+                Unknown = false,
+                Reagents = true,
+                Usable = false,
+                Other = false,
+                Auction = true
+            },
 
-		Binding = {
-			ShowStatus = {
-				BankAndBags = true,
-				GuildBank = true,
-				Merchant = true
-			},
+            ShowQuestItems = true
+        },
 
-			ShowBoA = true,
-			ShowBoARepItems = false,
-			ShowBoE = true,
-			ShowGearSets = true,
-			ShowGearSetsAsIcon = false,
-			Position = "BOTTOM"
-		}
-	}
+        Binding = {
+            ShowStatus = {
+                BankAndBags = true,
+                GuildBank = true,
+                Merchant = true
+            },
+
+            ShowBoA = true,
+            ShowBoARepItems = false,
+            ShowBoE = true,
+            ShowGearSets = true,
+            ShowGearSetsAsIcon = false,
+            Position = "BOTTOM"
+        }
+    }
 end

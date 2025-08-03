@@ -30,8 +30,7 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     -- scrollFrame:SetScrollChild(scrollChild)
     -- scrollChild:SetPoint("LEFT", 0)
     -- scrollChild:SetPoint("RIGHT", 0)
-    -- scrollChild:SetHeight(1) 
-   
+    -- scrollChild:SetHeight(1)
 end
 
 function CaerdonWardrobeConfigPanelMixin:ConfigureSection(title, key)
@@ -40,10 +39,10 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureSection(title, key)
     local sectionFrame = CreateFrame("Frame", "CaerdonWardrobe" .. key, frame)
     sectionFrame.key = key
     local titleString = sectionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	titleString:SetText(title)
-	sectionFrame:SetPoint("LEFT", 16)
+    titleString:SetText(title)
+    sectionFrame:SetPoint("LEFT", 16)
     sectionFrame:SetPoint("TOP", 0, self.nextPoint)
-	titleString:SetPoint("LEFT", 16)
+    titleString:SetPoint("LEFT", 16)
     titleString:SetPoint("TOP", 0, 0)
     self.nextPoint = self.nextPoint - LINE_HEIGHT
 end
@@ -51,10 +50,15 @@ end
 function CaerdonWardrobeConfigPanelMixin:ConfigureCheckboxNew(info)
     local frame = self.scrollChild
 
-    local section = info.configSection and info.configSubsection and CaerdonWardrobeConfig[info.configSection][info.configSubsection] or info.configSection and CaerdonWardrobeConfig[info.configSection]
-    local defaultSection = info.configSection and info.configSubsection and NS:GetDefaultConfig()[info.configSection][info.configSubsection] or info.configSection and NS:GetDefaultConfig()[info.configSection]
+    local section = info.configSection and info.configSubsection and
+    CaerdonWardrobeConfig[info.configSection][info.configSubsection] or
+    info.configSection and CaerdonWardrobeConfig[info.configSection]
+    local defaultSection = info.configSection and info.configSubsection and
+    NS:GetDefaultConfig()[info.configSection][info.configSubsection] or
+    info.configSection and NS:GetDefaultConfig()[info.configSection]
 
-    local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, frame, "InterfaceOptionsCheckButtonTemplate")
+    local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, frame,
+        "InterfaceOptionsCheckButtonTemplate")
     checkbox.key = info.key
 
     local dependsOn = nil
@@ -107,16 +111,20 @@ end
 function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValues)
     local frame = self.scrollChild
 
-    local section = info.configSection and info.configSubsection and CaerdonWardrobeConfig[info.configSection][info.configSubsection] or info.configSection and CaerdonWardrobeConfig[info.configSection]
-    local defaultSection = info.configSection and info.configSubsection and NS:GetDefaultConfig()[info.configSection][info.configSubsection] or info.configSection and NS:GetDefaultConfig()[info.configSection]
+    local section = info.configSection and info.configSubsection and
+    CaerdonWardrobeConfig[info.configSection][info.configSubsection] or
+    info.configSection and CaerdonWardrobeConfig[info.configSection]
+    local defaultSection = info.configSection and info.configSubsection and
+    NS:GetDefaultConfig()[info.configSection][info.configSubsection] or
+    info.configSection and NS:GetDefaultConfig()[info.configSection]
 
-	local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, frame, "UIDropDownMenuTemplate")
+    local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, frame, "UIDropDownMenuTemplate")
     dropdown.key = info.key
 
     local label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	label:SetPoint("TOPLEFT", 5, 12)
-	label:SetJustifyH("LEFT")
-	label:SetText(info.text)
+    label:SetPoint("TOPLEFT", 5, 12)
+    label:SetJustifyH("LEFT")
+    label:SetText(info.text)
 
     local dependsOn = nil
     if info.dependsOn then
@@ -136,7 +144,7 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValu
     end
 
     local selectedTitle = nil
-    local text =  _G[dropdown:GetName() .. "Text"]
+    local text = _G[dropdown:GetName() .. "Text"]
     text:SetText(info.text)
 
     for _, dropdownValue in ipairs(dropdownValues) do
@@ -147,18 +155,18 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValu
 
     dropdown.initialize = function(dropdown)
         local dropdownInfo = {}
-		for _, dropdownValue in ipairs(dropdownValues) do
-			dropdownInfo.text = dropdownValue.title
-			dropdownInfo.value = dropdownValue.value
+        for _, dropdownValue in ipairs(dropdownValues) do
+            dropdownInfo.text = dropdownValue.title
+            dropdownInfo.value = dropdownValue.value
             dropdownInfo.checked = function() return dropdownValue.value == section[info.configValue] end
 
             dropdownInfo.func = function(dropdown)
                 section[info.configValue] = dropdown.value
-				text:SetText(dropdown:GetText())
-			end
-			UIDropDownMenu_AddButton(dropdownInfo)
-		end
-	end
+                text:SetText(dropdown:GetText())
+            end
+            UIDropDownMenu_AddButton(dropdownInfo)
+        end
+    end
 end
 
 function CaerdonWardrobeConfigPanelMixin:ConfigureCheckbox(checkbox, label, configSection, configSubsection, configValue)
@@ -176,16 +184,18 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureCheckbox(checkbox, label, conf
 
     local dependsOn, dependsOnControl
     if checkbox.dependentOn then
-        dependsOn = checkbox.dependentOn:gsub( "$parent", checkbox:GetParent():GetName())
+        dependsOn = checkbox.dependentOn:gsub("$parent", checkbox:GetParent():GetName())
         dependsOnControl = _G[dependsOn]
     end
 
-    checkbox.GetValue = function (self)
-        local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or configSection and CaerdonWardrobeConfig[configSection]
+    checkbox.GetValue = function(self)
+        local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or
+        configSection and CaerdonWardrobeConfig[configSection]
         return self.value or section[configValue] and "1" or "0";
     end
-    checkbox.setFunc = function (value)
-        local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or configSection and CaerdonWardrobeConfig[configSection]
+    checkbox.setFunc = function(value)
+        local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or
+        configSection and CaerdonWardrobeConfig[configSection]
         section[configValue] = value == "1"
     end
 
@@ -195,23 +205,62 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureCheckbox(checkbox, label, conf
     end
 end
 
-function CaerdonWardrobeConfigPanelMixin:ConfigureDropdown(dropdown, label, configSection, configSubsection, configValue, items)
-    dropdown:SetScript("OnEvent", function (self, event, ...)
-        if ( event == "FIRST_FRAME_RENDERED" ) then
+function CaerdonWardrobeConfigPanelMixin:ConfigureButtonNew(info, buttonText, tooltip)
+    local frame = self.scrollChild
+
+    local button = CreateFrame("Button", "CaerdonWardrobe" .. info.key, frame, "UIPanelButtonTemplate")
+    button.key = info.key
+
+    local dependsOn = nil
+    if info.dependsOn then
+        dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
+        if dependsOn then
+            local xOffset = dependsOn.rightOf and 150 or DEPENDS_ADJUSTMENT
+            button:SetPoint("TOPLEFT", dependsOn, "TOPLEFT", xOffset, 0)
+        end
+    else
+        local leftOffset = info.rightOf and 150 or 16
+        button:SetPoint("TOPLEFT", leftOffset, self.nextPoint)
+        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    end
+
+    button:SetSize(120, 24)
+    button:SetText(buttonText)
+    button:SetScript("OnClick", info.func)
+
+    if tooltip then
+        button.tooltipText = tooltip
+        button:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT")
+            GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true)
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+    end
+
+    return button
+end
+
+function CaerdonWardrobeConfigPanelMixin:ConfigureDropdown(dropdown, label, configSection, configSubsection, configValue,
+                                                           items)
+    dropdown:SetScript("OnEvent", function(self, event, ...)
+        if (event == "FIRST_FRAME_RENDERED") then
             self:GetParent():InitializeDropdown(dropdown, label, configSection, configSubsection, configValue, items)
             self:UnregisterEvent(event)
         end
     end)
 
-    dropdown:SetScript("OnEnter", function (self)
-        if ( not self.isDisabled ) then
+    dropdown:SetScript("OnEnter", function(self)
+        if (not self.isDisabled) then
             GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
             GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
         end
     end)
 
-    dropdown:SetScript("OnLeave", function (self)
-        if ( GameTooltip:GetOwner() == self ) then
+    dropdown:SetScript("OnLeave", function(self)
+        if (GameTooltip:GetOwner() == self) then
             GameTooltip:Hide();
         end
     end)
@@ -219,30 +268,32 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureDropdown(dropdown, label, conf
     dropdown:RegisterEvent("FIRST_FRAME_RENDERED");
 end
 
-function CaerdonWardrobeConfigPanelMixin:InitializeDropdown(dropdown, label, configSection, configSubsection, configValue, items)
+function CaerdonWardrobeConfigPanelMixin:InitializeDropdown(dropdown, label, configSection, configSubsection, configValue,
+                                                            items)
     dropdown.type = CONTROLTYPE_DROPDOWN;
     dropdown.label = label
     dropdown.items = items
 
     dropdown.defaultValue = self.options[label].default
-    local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or configSection and CaerdonWardrobeConfig[configSection]
+    local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or
+    configSection and CaerdonWardrobeConfig[configSection]
     dropdown.value = section[configValue] or dropdown.defaultValue;
 
     dropdown.SetValue =
-        function (self, value)
+        function(self, value)
             self.value = value
             section[configValue] = value
-    end
+        end
 
     dropdown.GetValue =
-        function (self)
+        function(self)
             return self.newValue or self.value;
         end
 
     dropdown.RefreshValue =
-        function (self)
+        function(self)
             UIDropDownMenu_SetSelectedValue(self, self.value);
-            UIDropDownMenu_Initialize(self, function ()
+            UIDropDownMenu_Initialize(self, function()
                 for itemIndex = 1, #self.items do
                     local item = self.items[itemIndex]
                     self:GetParent():AddDropDownItem(self, item.title, item.value, item.tooltip)
@@ -257,25 +308,25 @@ function CaerdonWardrobeConfigPanelMixin:InitializeDropdown(dropdown, label, con
 end
 
 function CaerdonWardrobeConfigPanelMixin:AddDropDownItem(dropdown, name, value, tooltip)
-	local selectedValue = UIDropDownMenu_GetSelectedValue(dropdown);
+    local selectedValue = UIDropDownMenu_GetSelectedValue(dropdown);
 
     local info = UIDropDownMenu_CreateInfo()
-	info.text = name
-	info.value = value
+    info.text = name
+    info.value = value
     info.func = self.OnClickDropDownItem
     info.arg1 = dropdown;
-	info.tooltipText = tooltip;
-    if ( info.value == selectedValue ) then
-		info.checked = 1;
-	else
-		info.checked = nil;
-	end
+    info.tooltipText = tooltip;
+    if (info.value == selectedValue) then
+        info.checked = 1;
+    else
+        info.checked = nil;
+    end
 
-	UIDropDownMenu_AddButton(info)
+    UIDropDownMenu_AddButton(info)
 
     if info.checked then
         dropdown.tooltipText = info.tooltipText
-    	UIDropDownMenu_SetSelectedValue(dropdown, info.value)
+        UIDropDownMenu_SetSelectedValue(dropdown, info.value)
     end
 end
 
