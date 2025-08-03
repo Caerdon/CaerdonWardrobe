@@ -84,10 +84,6 @@ function NS:GetDefaultConfig()
             ShowDebugFrame = false
         },
 
-        LoadBehavior = {
-            ShowProfessionLoad = true
-        },
-
         Icon = {
             EnableAnimation = true,
             Position = "TOPLEFT",

@@ -6,7 +6,10 @@ end
 
 function QuestLogMixin:Init()
     hooksecurefunc("QuestInfo_Display", function(...) self:OnQuestInfoDisplay(...) end)
-    hooksecurefunc("QuestInfo_ShowRewards", function(...) self:OnQuestInfoShowRewards(...) end)
+    -- hooksecurefunc("QuestInfo_ShowRewards", function(...) self:OnQuestInfoShowRewards(...) end)
+    hooksecurefunc(QuestInfoRewardsFrame, "Show", function()
+        self:OnQuestInfoShowRewards()
+    end)
 
     return { "QUEST_ITEM_UPDATE", "QUEST_LOG_UPDATE", "TOOLTIP_DATA_UPDATE" }
 end
@@ -75,6 +78,7 @@ function QuestLogMixin:QUEST_LOG_UPDATE()
 end
 
 function QuestLogMixin:OnQuestInfoDisplay(template, parentFrame)
+
     -- function getFuncName(funct)
     -- 	for i,v in pairs(getfenv()) do
     -- 		if v == funct then
@@ -84,18 +88,21 @@ function QuestLogMixin:OnQuestInfoDisplay(template, parentFrame)
     -- end
 
     -- print("DO THE DISPLAY")
-    local elementsTable = template.elements;
-    local i = 1
-    for i = 1, #elementsTable, 3 do
-        -- print(getFuncName(elementsTable[i]))
-        if elementsTable[i] == QuestInfo_ShowAccountCompletedNotice then -- can't do because it's blank for some reason: QuestInfo_ShowRewards then
-            self:OnQuestInfoShowRewards()
-            return
+    local elementsTable = template and template.elements;
+    if elementsTable then
+        local i = 1
+        for i = 1, #elementsTable, 3 do
+            -- Check for various reward-related functions
+            if elementsTable[i] == QuestInfo_ShowRewards or
+                elementsTable[i] == QuestInfo_ShowAccountCompletedNotice then
+                self:OnQuestInfoShowRewards()
+                return
+            end
         end
     end
 
     -- DevTools_Dump(template)
-    if template.questLog then
+    if template and template.questLog then
         self:OnQuestInfoShowRewards()
     end
 end
@@ -140,7 +147,7 @@ function QuestLogMixin:ProcessItem(item, questID)
     local rewardsFrame = QuestInfoFrame.rewardsFrame;
     local itemData = item:GetItemData()
     if not itemData then
-        CaerdonWardrobe:ClearButton(pin)
+        -- No button to clear if itemData is nil
         return
     end
 
@@ -152,24 +159,26 @@ function QuestLogMixin:ProcessItem(item, questID)
         local reward = questInfo.choices[i]
         local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
-        local options = {
-            relativeFrame = questItem.Icon
-        }
+        if questItem then
+            local options = {
+                relativeFrame = questItem.Icon
+            }
 
-        local rewardItem
-        if reward.itemLink then
-            rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
-        end
+            local rewardItem
+            if reward.itemLink then
+                rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
+            end
 
-        if questItem and rewardItem then
-            CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
-                locationKey = format("%s-index%d", "choice", questLogIndex),
-                questID = questID,
-                index = i,
-                type = "choice"
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(questItem)
+            if rewardItem then
+                CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
+                    locationKey = format("%s-quest%d-index%d", "choice", questID, questLogIndex),
+                    questID = questID,
+                    index = i,
+                    type = "choice"
+                }, options)
+            else
+                CaerdonWardrobe:ClearButton(questItem)
+            end
         end
     end
 
@@ -178,24 +187,26 @@ function QuestLogMixin:ProcessItem(item, questID)
         local reward = questInfo.rewards[i]
         local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
-        local options = {
-            relativeFrame = questItem.Icon
-        }
+        if questItem then
+            local options = {
+                relativeFrame = questItem.Icon
+            }
 
-        local rewardItem
-        if reward.itemLink then
-            rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
-        end
+            local rewardItem
+            if reward.itemLink then
+                rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
+            end
 
-        if questItem and rewardItem then
-            CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
-                locationKey = format("%s-index%d", "reward", i, questID),
-                questID = questID,
-                index = i,
-                type = "reward"
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(questItem)
+            if rewardItem then
+                CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
+                    locationKey = format("%s-quest%d-index%d", "reward", questID, i),
+                    questID = questID,
+                    index = i,
+                    type = "reward"
+                }, options)
+            else
+                CaerdonWardrobe:ClearButton(questItem)
+            end
         end
     end
 
@@ -204,24 +215,26 @@ function QuestLogMixin:ProcessItem(item, questID)
         local reward = questInfo.currencyRewards[i]
         local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
-        local options = {
-            relativeFrame = questItem.Icon
-        }
+        if questItem then
+            local options = {
+                relativeFrame = questItem.Icon
+            }
 
-        local rewardItem
-        if reward.itemLink then
-            rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
-        end
+            local rewardItem
+            if reward.itemLink then
+                rewardItem = CaerdonItem:CreateFromItemLink(reward.itemLink)
+            end
 
-        if questItem and rewardItem then
-            CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
-                locationKey = format("%s-index%d", "currency", i, questID),
-                questID = questID,
-                index = i,
-                type = "currency"
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(questItem)
+            if rewardItem then
+                CaerdonWardrobe:UpdateButton(questItem, rewardItem, self, {
+                    locationKey = format("%s-quest%d-index%d", "currency", questID, i),
+                    questID = questID,
+                    index = i,
+                    type = "currency"
+                }, options)
+            else
+                CaerdonWardrobe:ClearButton(questItem)
+            end
         end
     end
 end
