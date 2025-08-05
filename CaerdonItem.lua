@@ -34,6 +34,7 @@ CaerdonItemBind = {
     BindOnUse = "Bind on Use",
     QuestItem = "Quest Item",
     Unknown = "Unknown",
+    WarboundUntilEquip = "Warbound until Equip"
 }
 
 local function CreateItem()
@@ -105,7 +106,8 @@ function CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, po
     -- TODO: This is a terrible hack until Blizzard gives me more to work with (mostly for tooltips where I don't have an itemLink).
     if type(speciesID) ~= "number" then
         error(
-        "Usage: CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName, petID)", 2);
+            "Usage: CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName, petID)",
+            2);
     end
 
     local name, _, _, _, _, _, _, _, _, _, _, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
@@ -344,9 +346,9 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
         local bindType = (select(14, C_Item.GetItemInfo(self:GetItemLink())))
         if bindType == 0 then
             binding = CaerdonItemBind.None
-        elseif bindType == 1 then -- BoP
+        elseif bindType == 1 then        -- BoP
             binding = CaerdonItemBind.BindOnPickup
-        elseif bindType == 2 then -- BoE
+        elseif bindType == 2 then        -- BoE
             local isWarboundUntilEquip = C_Item.IsItemBindToAccountUntilEquip(self:GetItemLink())
             if isWarboundUntilEquip then -- WuE
                 if caerdonType == CaerdonItemType.Currency then
@@ -471,7 +473,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == Enum.ItemClass.Miscellaneous then
                 if subTypeID == Enum.ItemMiscellaneousSubclass.CompanionPet then
                     local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID =
-                    C_PetJournal.GetPetInfoByItemID(self:GetItemID());
+                        C_PetJournal.GetPetInfoByItemID(self:GetItemID());
                     if creatureID and displayID then
                         caerdonType = CaerdonItemType.CompanionPet
                     else
@@ -492,7 +494,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
                 caerdonType = CaerdonItemType.Profession
             else
                 print("Caerdon: Unknown item type " ..
-                tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
+                    tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
             end
         elseif linkType == "achievement" then
             caerdonType = CaerdonItemType.Unhandled
@@ -504,7 +506,7 @@ function CaerdonItemMixin:GetCaerdonItemType()
             caerdonType = CaerdonItemType.Unhandled
         else
             print("Caerdon: Unknown type " ..
-            tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
+                tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
         end
 
         self.caerdonItemType = caerdonType
@@ -561,8 +563,8 @@ function CaerdonItemMixin:GetTooltipData(data)
 
     local itemSpellName, itemSpellID = C_Item.GetItemSpell(self:GetItemLink())
     local isStudyItem = itemSpellName ==
-    L
-    ["Studying"]                                    -- A bunch of these so working off name for now: itemSpellID == 450824 or itemSpellID == 462909 --Spell: "Studying"
+        L
+        ["Studying"] -- A bunch of these so working off name for now: itemSpellID == 450824 or itemSpellID == 462909 --Spell: "Studying"
     local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
     local isMiscellaneousStudy = self:GetCaerdonItemType() == CaerdonItemType.Miscellaneous and isStudyItem
     local lines = data.lines or {}
@@ -807,7 +809,7 @@ end
 function CaerdonItemMixin:IsSellable()
     local itemID = self:GetItemID()
     local isSellable = itemID ~= nil
-    if itemID == 23192 then   -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
+    if itemID == 23192 then      -- Tabard of the Scarlet Crusade needs to be worn for a vendor at Darkmoon Faire
         isSellable = false
     elseif itemID == 116916 then -- Gorepetal's Gentle Grasp allows faster herbalism in Draenor
         isSellable = false
@@ -884,7 +886,7 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         end
 
         if caerdonType ~= CaerdonItemType.Recipe then -- ignore red on recipes for now... should be handling correctly through the recipe checks
-            if tooltipData.foundRedRequirements then -- TODO: See about getting rid of this eventually and having specific checks (if possible)
+            if tooltipData.foundRedRequirements then  -- TODO: See about getting rid of this eventually and having specific checks (if possible)
                 unusableItem = true
                 if caerdonType ~= CaerdonItemType.Recipe then
                     skillTooLow = true
