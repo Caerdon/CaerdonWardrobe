@@ -1112,7 +1112,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                         end
                     end
                 elseif transmogInfo.otherNeedsItem then
-                    if not bindingResult.isBindOnPickup then
+                    if transmogInfo.canEquip then
                         if not transmogInfo.isCompletionistItem then
                             mogStatus = "other"
                         else

@@ -38,7 +38,6 @@ function CaerdonWardrobeMixin:OnLoad()
     hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
 end
 
-
 -- TODO: Pretty sure I don't need to do this... get setID from GetItemInfo?
 local function IsGearSetStatus(status, item)
     return status and status ~= "" and status ~= L["BoA"] and status ~= L["BoE"]
