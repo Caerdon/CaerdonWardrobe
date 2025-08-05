@@ -828,10 +828,7 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
     if self.processQueue == nil then
         self.processQueue = {}
 
-        local hasMore = true
-
         while true do
-            local isBatch = false
             local itemCount = 0
             for locationKey, processInfo in pairs(self.waitingToProcess) do
                 -- Don't process item if the key is different than expected
@@ -841,23 +838,12 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
                 end
 
                 self.waitingToProcess[locationKey] = nil
-
-                -- if itemCount > 12 then -- Process a small batch at a time
-                --     isBatch = true
-                --     break
-                -- end
             end
-
-            hasMore = isBatch
 
             local itemsProcessedThisFrame = 0
             local maxItemsPerFrame = 3 -- Process only a few items per frame
 
             for locationKey, processInfo in pairs(self.processQueue) do
-                -- TODO: May have to look into cancelable continue to avoid timing issues
-                -- Need to figure out how to key this correctly (could have multiple of item in bags, for instance)
-                -- but in cases of rapid data update (AH scroll), we don't want to update an old button
-                -- Look into ContinuableContainer
                 local button = processInfo.button
                 local item = processInfo.item
                 local feature = processInfo.feature
