@@ -221,6 +221,18 @@ function DebugFrameMixin:Init()
     end)
 
     self.itemButton:SetScript("OnReceiveDrag", function(button)
+        -- Prefer using the actual ItemLocation from the cursor if available so we retain bag/slot context
+        local cursorItem = C_Cursor and C_Cursor.GetCursorItem and C_Cursor.GetCursorItem()
+        if cursorItem and cursorItem.HasAnyLocation and cursorItem:HasAnyLocation() and cursorItem.IsBagAndSlot and cursorItem:IsBagAndSlot() then
+            local bag, slot = cursorItem:GetBagAndSlot()
+            ClearCursor()
+            if bag ~= nil and slot ~= nil then
+                self:SetCurrentItemFromBagAndSlot(bag, slot)
+                return
+            end
+        end
+
+        -- Fallback to classic GetCursorInfo hyperlink
         local infoType, info1, info2 = GetCursorInfo()
         if infoType == "item" then
             ClearCursor()
@@ -232,7 +244,19 @@ function DebugFrameMixin:Init()
         if buttonType == "RightButton" then
             self:ClearDebugDisplay()
             self.currentItem = nil
+            self.currentItemLocation = nil
         else
+            -- Prefer ItemLocation if available
+            local cursorItem = C_Cursor and C_Cursor.GetCursorItem and C_Cursor.GetCursorItem()
+            if cursorItem and cursorItem.HasAnyLocation and cursorItem:HasAnyLocation() and cursorItem.IsBagAndSlot and cursorItem:IsBagAndSlot() then
+                local bag, slot = cursorItem:GetBagAndSlot()
+                ClearCursor()
+                if bag ~= nil and slot ~= nil then
+                    self:SetCurrentItemFromBagAndSlot(bag, slot)
+                    return
+                end
+            end
+
             local infoType, info1, info2 = GetCursorInfo()
             if infoType == "item" then
                 ClearCursor()
@@ -248,7 +272,15 @@ function DebugFrameMixin:Init()
         end
         GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
         if self.currentItem then
-            GameTooltip:SetHyperlink(self.currentItem)
+            if self.currentItemLocation and self.currentItemLocation.bag ~= nil and self.currentItemLocation.slot ~= nil then
+                if C_Container and C_Container.GetContainerItemInfo then
+                    GameTooltip:SetBagItem(self.currentItemLocation.bag, self.currentItemLocation.slot)
+                else
+                    GameTooltip:SetBagItem(self.currentItemLocation.bag, self.currentItemLocation.slot)
+                end
+            else
+                GameTooltip:SetHyperlink(self.currentItem)
+            end
             GameTooltip:Show()
         end
     end)
@@ -321,8 +353,42 @@ function DebugFrameMixin:Init()
             if self.frame:IsShown() and self.tooltipCheckbox:GetChecked() and tooltip == GameTooltip then
                 local _, link = tooltip:GetItem()
                 if link then
-                    self.currentItem = nil
-                    self:SetCurrentItem(link)
+                    local owner = tooltip:GetOwner()
+                    local bag, slot
+
+                    -- Try to detect bag/slot from various bag UIs
+                    if owner then
+                        -- Blizzard default: ContainerFrameItemButton, parent frame often has bagID or GetID returns bag
+                        if owner.GetBagID and type(owner.GetBagID) == "function" then
+                            local ok, b = pcall(function() return owner:GetBagID() end)
+                            if ok then bag = b end
+                        end
+                        if not bag and owner.GetBag and type(owner.GetBag) == "function" then
+                            local ok, b = pcall(function() return owner:GetBag() end)
+                            if ok then bag = b end
+                        end
+                        if not bag and owner.GetParent and owner:GetParent() and owner:GetParent().bagID then
+                            bag = owner:GetParent().bagID
+                        end
+                        if not bag and owner.GetParent and owner:GetParent() and type(owner:GetParent().GetID) == "function" then
+                            local ok, b = pcall(function() return owner:GetParent():GetID() end)
+                            if ok then bag = b end
+                        end
+
+                        -- Slot is commonly the button ID
+                        if owner.GetID and type(owner.GetID) == "function" then
+                            local ok, s = pcall(function() return owner:GetID() end)
+                            if ok then slot = s end
+                        end
+                        if not slot and owner.slot then slot = owner.slot end
+                    end
+
+                    if bag ~= nil and slot ~= nil then
+                        self:SetCurrentItemFromBagAndSlot(bag, slot)
+                    else
+                        self.currentItem = nil
+                        self:SetCurrentItem(link)
+                    end
                 end
             end
         end)
@@ -342,51 +408,71 @@ function DebugFrameMixin:ToggleDebugFrame()
     end
 end
 
+function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
+    if not item then return end
+
+    -- Cancel any pending operations
+    if cancelFuncs[self] then
+        cancelFuncs[self]()
+        cancelFuncs[self] = nil
+    end
+
+    self:ClearDebugDisplay()
+
+    -- Always show basic item information immediately
+    self:ShowBasicItemInfo(item)
+
+    -- Update the button through Caerdon's system to show overlays
+    local options = {
+        statusProminentSize = 24,  -- Standard size for debug display
+        bindingScale = 1.0
+    }
+
+    local locKey = "debugframe-" .. (keySuffix or (item:GetItemID() or "unknown"))
+
+    CaerdonWardrobe:UpdateButton(self.itemButton, item, self, {
+        locationKey = locKey,
+        isDebugFrame = true
+    }, options)
+
+    if not item:IsItemEmpty() then
+        cancelFuncs[self] = item:ContinueWithCancelOnItemLoad(function()
+            self:ClearDebugEntries()
+            self:DisplayItemInfo(item)
+            
+            -- Re-update button after item loads to ensure correct status
+            CaerdonWardrobe:UpdateButton(self.itemButton, item, self, {
+                locationKey = locKey,
+                isDebugFrame = true
+            }, options)
+        end)
+    else
+        self:ClearDebugEntries()
+        self:DisplayItemInfo(item)
+    end
+end
+
 function DebugFrameMixin:SetCurrentItem(itemLink)
     if itemLink then
         self.currentItem = itemLink
+        self.currentItemLocation = nil
 
         -- Create a fresh item object each time
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         if item then
-            self:ClearDebugDisplay()
-
-            -- Cancel any pending operations
-            if cancelFuncs[self] then
-                cancelFuncs[self]()
-                cancelFuncs[self] = nil
-            end
-
-            -- Always show basic item information immediately
-            self:ShowBasicItemInfo(item)
-            
-            -- Update the button through Caerdon's system to show overlays
-            local options = {
-                statusProminentSize = 24,  -- Standard size for debug display
-                bindingScale = 1.0
-            }
-            
-            CaerdonWardrobe:UpdateButton(self.itemButton, item, self, {
-                locationKey = "debugframe-" .. (item:GetItemID() or "unknown"),
-                isDebugFrame = true
-            }, options)
-
-            if not item:IsItemEmpty() then
-                cancelFuncs[self] = item:ContinueWithCancelOnItemLoad(function()
-                    self:ClearDebugEntries()
-                    self:DisplayItemInfo(item)
-                    
-                    -- Re-update button after item loads to ensure correct status
-                    CaerdonWardrobe:UpdateButton(self.itemButton, item, self, {
-                        locationKey = "debugframe-" .. (item:GetItemID() or "unknown"),
-                        isDebugFrame = true
-                    }, options)
-                end)
-            else
-                self:ClearDebugEntries()
-                self:DisplayItemInfo(item)
-            end
+            self:ProcessCurrentItem(item)
         end
+    end
+end
+
+function DebugFrameMixin:SetCurrentItemFromBagAndSlot(bag, slot)
+    if bag == nil or slot == nil then return end
+    local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+    if item then
+        -- Prefer showing the hyperlink if available; otherwise show a placeholder until load completes
+        self.currentItem = item:GetItemLink() or ("Bag " .. tostring(bag) .. ", Slot " .. tostring(slot))
+        self.currentItemLocation = { bag = bag, slot = slot }
+        self:ProcessCurrentItem(item, ("bag%d-slot%d"):format(bag, slot))
     end
 end
 
@@ -893,6 +979,14 @@ function DebugFrameMixin:AddEquipmentInfo(item)
 end
 
 function DebugFrameMixin:RefreshCurrentItem()
+    -- Prefer bag/slot refresh when available to preserve location-based tooltip and status
+    if self.currentItemLocation and self.currentItemLocation.bag ~= nil and self.currentItemLocation.slot ~= nil then
+        local bag, slot = self.currentItemLocation.bag, self.currentItemLocation.slot
+        self:ClearDebugDisplay()
+        self:SetCurrentItemFromBagAndSlot(bag, slot)
+        return
+    end
+
     if self.currentItem then
         -- Re-create the item to ensure we get fresh data
         local itemLink = self.currentItem

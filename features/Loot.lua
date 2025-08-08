@@ -17,9 +17,13 @@ function LootMixin:Refresh()
     local scrollBox = LootFrame.ScrollBox
     scrollBox:ForEachFrame(function(buttonItem, elementData)
         -- elementData: slotIndex, group (coin = 1 else 0), quality
+        local button = buttonItem.Item;
+        if not button then
+            return
+        end
+        
         local link = GetLootSlotLink(elementData.slotIndex);
         if link then
-            local button = buttonItem.Item;
             local item = CaerdonItem:CreateFromItemLink(link)
             CaerdonWardrobe:UpdateButton(button, item, self, {
                 locationKey = format("%d", elementData.slotIndex),
@@ -33,6 +37,10 @@ end
 
 function LootMixin:OnLootInitializedFrame(listFrame, frame, elementData)
     local button = frame.Item;
+    if not button then
+        return
+    end
+    
     local link = GetLootSlotLink(elementData.slotIndex);
     if link then
         local item = CaerdonItem:CreateFromItemLink(link)

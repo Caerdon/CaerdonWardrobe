@@ -13,10 +13,18 @@ end
 
 function CaerdonToyMixin:GetToyInfo()
     local itemID = self.item:GetItemID()
-    local itemID, toyName, icon, isFavorite, hasFanfare = C_ToyBox.GetToyInfo(itemID);
+    local toyItemID, toyName, icon, isFavorite, hasFanfare = C_ToyBox.GetToyInfo(itemID)
+
+    -- Prefer the toyItemID returned by the API when available; otherwise fall back to the original itemID
+    local checkItemID = toyItemID or itemID
+    local hasToy = false
+    if checkItemID ~= nil then
+        hasToy = PlayerHasToy(checkItemID)
+    end
+
     return {
         name = toyName,
         isFavorite = isFavorite,
-        needsItem = not PlayerHasToy(itemID)
+        needsItem = not hasToy
     }
 end

@@ -151,6 +151,10 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
 end
 
 function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, locationInfo, options)
+    if not originalButton then
+        return
+    end
+    
     local button = originalButton.caerdonButton
     if not button then
         button = CreateFrame("Frame", nil, originalButton)
@@ -891,9 +895,9 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
                     -- Store items that need processing back into the queue
                     if items then
                         for locationKey, processInfo in pairs(items) do
-                            -- if not self.processQueue then
-                            --     self.processQueue = {}
-                            -- end
+                            if not self.processQueue then
+                                self.processQueue = {}
+                            end
                             self.processQueue[locationKey] = processInfo
                         end
                         self.featureProcessItems[feature] = nil
