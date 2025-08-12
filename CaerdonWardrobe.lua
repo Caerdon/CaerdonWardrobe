@@ -154,7 +154,7 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
     if not originalButton then
         return
     end
-    
+
     local button = originalButton.caerdonButton
     if not button then
         button = CreateFrame("Frame", nil, originalButton)
@@ -845,7 +845,7 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
             end
 
             local itemsProcessedThisFrame = 0
-            local maxItemsPerFrame = 3 -- Process only a few items per frame
+            local maxItemsPerFrame = 12 -- Process only a few items per frame
 
             for locationKey, processInfo in pairs(self.processQueue) do
                 local button = processInfo.button

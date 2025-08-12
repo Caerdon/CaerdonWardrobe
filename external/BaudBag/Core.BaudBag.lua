@@ -13,19 +13,19 @@ function BaudBagMixin:Init()
 end
 
 function BaudBagMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.isOffline then
-		if not item:IsItemEmpty() then
+    if locationInfo.isOffline then
+        if not item:IsItemEmpty() then
             return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-		end
-	elseif locationInfo.bag == BANK_CONTAINER then
+        end
+    elseif locationInfo.bag == BANK_CONTAINER then
         return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
+    else
         return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
+    end
 end
 
 function BaudBagMixin:Refresh()
-    BaudUpdateJoinedBags()
+    -- Can do something like BaudBag.Sets[bagSet.Id]:RebuildContainers() if needed
 end
 
 function BaudBagMixin:ProcessItem(bag, slot, button)
@@ -35,9 +35,9 @@ function BaudBagMixin:ProcessItem(bag, slot, button)
             local slotCache = bagCache[slot]
             if slotCache and slotCache.Link then
                 local item = CaerdonItem:CreateFromItemLink(slotCache.Link)
-                CaerdonWardrobe:UpdateButton(button, item, self, { 
+                CaerdonWardrobe:UpdateButton(button, item, self, {
                     locationKey = format("bag%d-slot%d", bag, slot),
-                    isOffline=true
+                    isOffline = true
                 }, options)
             else
                 CaerdonWardrobe:ClearButton(button)
@@ -62,7 +62,7 @@ local isActive = false
 if select(4, C_AddOns.GetAddOnInfo(addonName)) then
     if C_AddOns.IsAddOnLoaded(addonName) then
         Version = C_AddOns.GetAddOnMetadata(addonName, "Version")
-		CaerdonWardrobe:RegisterFeature(BaudBagMixin)
+        CaerdonWardrobe:RegisterFeature(BaudBagMixin)
         isActive = true
     end
 end
