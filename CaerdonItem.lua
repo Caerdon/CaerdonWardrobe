@@ -933,12 +933,16 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 
     if caerdonType == CaerdonItemType.Conduit then
         local conduitInfo = itemData:GetConduitInfo()
-        needsItem = conduitInfo.needsItem
+        if conduitInfo then
+            needsItem = conduitInfo.needsItem
+        end
     elseif caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
         local petInfo =
             (caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
             (caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
-        needsItem = petInfo.needsItem
+        if petInfo then
+            needsItem = petInfo.needsItem
+        end
     elseif caerdonType == CaerdonItemType.Recipe then
         local recipeInfo = itemData:GetRecipeInfo()
         -- DevTools_Dump(recipeInfo)
@@ -1038,7 +1042,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         local petInfo =
             (caerdonType == CaerdonItemType.CompanionPet and itemData:GetCompanionPetInfo()) or
             (caerdonType == CaerdonItemType.BattlePet and itemData:GetBattlePetInfo())
-        if petInfo.needsItem or tooltipData.canLearn then
+        if (petInfo and petInfo.needsItem) or tooltipData.canLearn then
             if bindingResult.unusableItem then
                 mogStatus = "other"
             else
@@ -1048,7 +1052,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     elseif caerdonType == CaerdonItemType.Conduit then
         if bindingResult.needsItem then
             local conduitInfo = itemData:GetConduitInfo()
-            if conduitInfo.isUpgrade then
+            if conduitInfo and conduitInfo.isUpgrade then
                 mogStatus = "upgradeNonEquipment"
             else
                 mogStatus = "own"
