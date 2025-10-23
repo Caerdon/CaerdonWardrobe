@@ -1067,11 +1067,18 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     elseif caerdonType == CaerdonItemType.Consumable then
         local consumableInfo = itemData:GetConsumableInfo()
         if consumableInfo.needsItem then
-            if consumableInfo.validForCharacter then
+            -- Use canEquip instead of validForCharacter to handle ensembles with cross-class sources
+            if consumableInfo.canEquip then
                 mogStatus = "own"
             else
                 mogStatus = "other"
             end
+        elseif consumableInfo.ownPlusItem then
+            -- Completionist - has collectible items for own class but not the primary purpose
+            -- Example: Mail ensemble with cloak for a cloth wearer
+            mogStatus = "ownPlus"
+        elseif consumableInfo.otherNeedsItem then
+            mogStatus = "other"
         elseif tooltipData.canCombine then
             mogStatus = "canCombine"
             if tooltipData.readyToCombine then
@@ -1125,7 +1132,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                             end
                         end
                     else
-                        mogStatus = "collected"
+                        -- Can't equip but other characters need it (e.g., cross-class ensemble)
+                        mogStatus = "other"
                     end
                 elseif transmogInfo.isUpgrade then
                     if transmogInfo.hasMetRequirements then

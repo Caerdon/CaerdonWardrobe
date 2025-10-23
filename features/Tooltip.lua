@@ -59,7 +59,7 @@ function TooltipMixin:ADDON_LOADED(name)
     -- Disabling for now until I can get useful info from a Trainer API
     -- if name == "Blizzard_TrainerUI" then
     --     hooksecurefunc("ClassTrainerFrame_SetServiceButton", function(...) Tooltip:OnClassTrainerFrameSetServiceButton(...) end)
-	-- end
+    -- end
 end
 
 function TooltipMixin:OnLoad()
@@ -76,10 +76,10 @@ function TooltipMixin:OnLoad()
     -- end)
 
     -- if C_TooltipInfo then
-        -- hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
+    -- hooksecurefunc(GameTooltip, "ProcessInfo", function (...) Tooltip:OnProcessInfo(...) end)
     --     hooksecurefunc(ItemRefTooltip, "ItemRefSetHyperlink", function (...) Tooltip:OnItemRefSetHyperlink(...) end)
-        -- hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
-        -- hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
+    -- hooksecurefunc("BattlePetToolTip_Show", function (...) Tooltip:OnBattlePetTooltipShow(BattlePetTooltip, ...) end)
+    -- hooksecurefunc("FloatingBattlePet_Show", function(...) Tooltip:OnBattlePetTooltipShow(FloatingBattlePetTooltip, ...) end)
     --     hooksecurefunc("EmbeddedItemTooltip_SetItemByQuestReward", function(...) Tooltip:OnEmbeddedItemTooltipSetItemByQuestReward(...) end)
     -- end
 
@@ -88,12 +88,12 @@ function TooltipMixin:OnLoad()
     -- GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
 
     -- hooksecurefunc("TaskPOI_OnEnter", function(...) Tooltip:OnTaskPOIOnEnter(...) end)
-    
-	-- Show missing info in tooltips
-	-- NOTE: This causes a bug with tooltip scanning, so we disable
-	--   briefly and turn it back on with each scan.
-	-- C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
-	-- SetCVar("missingTransmogSourceInItemTooltips", 1)
+
+    -- Show missing info in tooltips
+    -- NOTE: This causes a bug with tooltip scanning, so we disable
+    --   briefly and turn it back on with each scan.
+    -- C_TransmogCollection.SetShowMissingSourceInItemTooltips(true)
+    -- SetCVar("missingTransmogSourceInItemTooltips", 1)
 
     -- May need this for inner items but has same item reference in current tests resulting in double
     -- ItemRefTooltip:HookScript("OnShow", function (tooltip, ...) Tooltip:OnTooltipSetItem(tooltip, ...) end)
@@ -123,7 +123,8 @@ end
 
 local tooltipItem
 
-function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality, health, power, speed, customName, battlePetID)
+function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality, health, power, speed, customName,
+                                             battlePetID)
     if not CaerdonWardrobeConfig.Debug.Enabled then
         -- Not doing anything other than debug for tooltips right now
         return
@@ -138,13 +139,15 @@ function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality,
 
     local englishFaction = UnitFactionGroup("player")
     local specIndex = GetSpecialization()
-    local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat = GetSpecializationInfo(specIndex)
+    local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat = GetSpecializationInfo(
+        specIndex)
 
     tooltip:AddLine(format("|nSpec: %s", SpecMap[specID] or specID), 0, 0.8, 0.8, true)
     tooltip:AddLine(format("Level: %s", UnitLevel("player")), 0, 0.8, 0.8, true)
     tooltip:AddLine(format("Faction: %s", englishFaction), 0, 0.8, 0.8, true)
 
-    local item = CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName, battlePetID)
+    local item = CaerdonItem:CreateFromSpeciesInfo(speciesID, level, quality, health, power, speed, customName,
+        battlePetID)
     if item then
         local itemData = item:GetItemData()
         tooltip:AddLine(format("|nIdentified Type: %s", item:GetCaerdonItemType()), 0, 0.8, 0.8, true)
@@ -152,7 +155,7 @@ function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality,
         local forDebugUse = item:GetForDebugUse()
         tooltip:AddLine(format("|nLink Type: %s", forDebugUse and forDebugUse.linkType or "Missing"), 0, 0.8, 0.8, true)
         tooltip:AddLine(format("Options: %s", forDebugUse and forDebugUse.linkOptions or "Missing"), 0, 0.8, 0.8, true)
-        
+
         tooltip:AddLine(format("|nSpecies ID: %s", speciesID), 0, 0.8, 0.8, true)
         if item:GetCaerdonItemType() == CaerdonItemType.BattlePet then
             local petInfo = itemData and itemData:GetBattlePetInfo()
@@ -163,12 +166,14 @@ function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality,
     end
 
     local owned = C_PetJournal.GetOwnedBattlePetString(speciesID);
-    if(owned == nil) then
+    if (owned == nil) then
         FloatingBattlePetTooltip.Delimiter:ClearAllPoints();
-        FloatingBattlePetTooltip.Delimiter:SetPoint("TOPLEFT",FloatingBattlePetTooltip.SpeedTexture,"BOTTOMLEFT",-6,-5);
+        FloatingBattlePetTooltip.Delimiter:SetPoint("TOPLEFT", FloatingBattlePetTooltip.SpeedTexture, "BOTTOMLEFT", -6,
+            -5);
     else
         FloatingBattlePetTooltip.Delimiter:ClearAllPoints();
-        FloatingBattlePetTooltip.Delimiter:SetPoint("TOPLEFT",FloatingBattlePetTooltip.SpeedTexture,"BOTTOMLEFT",-6,-19);
+        FloatingBattlePetTooltip.Delimiter:SetPoint("TOPLEFT", FloatingBattlePetTooltip.SpeedTexture, "BOTTOMLEFT", -6,
+            -19);
     end
 end
 
@@ -323,7 +328,8 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         Tooltip:ProcessTooltip(tooltip, item)
     elseif tooltipInfo.getterName == "GetRecipeResultItem" then
-        local recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID = unpack(tooltipInfo.getterArgs)
+        local recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID = unpack(tooltipInfo
+            .getterArgs)
         -- TODO: Not sure why this method is missing... but I'm not always get a full item back from GetRecipeOutputItemData so need to figure something out here. (See enchant Writ of Versatility)
         -- local resultItem = GetRecipeResultItem(recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID)
         local resultItem = C_TradeSkillUI.GetRecipeOutputItemData(recipeID, craftingReagents, recraftItemGUID)
@@ -357,7 +363,7 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
     elseif tooltipInfo.getterName == "GetQuestLogCurrency" then
         local itemType, currencyIndex, questID = unpack(tooltipInfo.getterArgs)
         if not questID then
-            if ( QuestInfoFrame.questLog ) then
+            if (QuestInfoFrame.questLog) then
                 questID = C_QuestLog.GetSelectedQuest()
             else
                 questID = GetQuestID()
@@ -365,7 +371,8 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         end
 
         if questID then
-            local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID, itemType == "choice")
+            local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID,
+                itemType == "choice")
             local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
             if itemLink then
                 local item = CaerdonItem:CreateFromItemLink(itemLink)
@@ -404,13 +411,15 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             elseif tooltipData.type == Enum.TooltipDataType.MinimapMouseover then
             elseif tooltipData.type == Enum.TooltipDataType.QuestPartyProgress then
             else
-                print("Caerdon: MISSING HANDLER FOR " .. tooltipInfo.getterName .. ", type: " .. tostring(tooltipData.type))
+                print("Caerdon: MISSING HANDLER FOR " ..
+                    tooltipInfo.getterName .. ", type: " .. tostring(tooltipData.type))
             end
         end
     end
 end
 
-function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLogIndex, questID, rewardType, showCollectionText)
+function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLogIndex, questID, rewardType,
+                                                                showCollectionText)
     rewardType = rewardType or "reward";
     local itemLink = GetQuestLogItemLink(rewardType, questLogIndex, questID)
     if itemLink then
@@ -424,19 +433,62 @@ function TooltipMixin:OnTooltipSetItem(tooltip)
         tooltip.caerdonProcessing = true
         local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
         if itemLink and itemName then
-    --         local id = string.match(itemLink, "item:(%d*)")
-    --         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
-    --             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
-    --             for i = 1, 8 do
-    --                 if GetMouseFocus().reagentIndex == i then
-    --                     itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
-    --                     break
-    --                 end
-    --             end
-    --         end
+            --         local id = string.match(itemLink, "item:(%d*)")
+            --         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
+            --             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
+            --             for i = 1, 8 do
+            --                 if GetMouseFocus().reagentIndex == i then
+            --                     itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
+            --                     break
+            --                 end
+            --             end
+            --         end
 
             if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
                 tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+            end
+
+            -- For ensembles with uncollected variants, hide the "Already known" text
+            -- Check if this is an ensemble (consumable with transmog set)
+            if tooltipItem:GetCaerdonItemType() == CaerdonItemType.Consumable then
+                local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
+                if transmogSetID then
+                    -- Check directly if ensemble has uncollected sources
+                    -- Don't rely on GetConsumableInfo as item data may not be fully loaded yet
+                    local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
+                    local hasUncollected = false
+
+                    if transmogSetInfo then
+                        -- Check if set is not fully collected
+                        if not transmogSetInfo.collected then
+                            hasUncollected = true
+                        else
+                            -- Even if set shows as "collected", check sources for uncollected variants
+                            local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
+                            if sourceIDs then
+                                for _, sourceID in ipairs(sourceIDs) do
+                                    local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                                    if sourceInfo and not sourceInfo.isCollected then
+                                        hasUncollected = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    if hasUncollected then
+                        -- Hide "Already known" line for ensembles with uncollected items
+                        for i = 1, tooltip:NumLines() do
+                            local line = _G[tooltip:GetName() .. "TextLeft" .. i]
+                            if line and line:GetText() == ITEM_SPELL_KNOWN then
+                                line:SetText("")
+                                line:Hide()
+                                break
+                            end
+                        end
+                    end
+                end
             end
 
             -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
@@ -459,25 +511,25 @@ end
 -- function TooltipMixin:OnClassTrainerFrameSetServiceButton(skillButton, skillIndex, playerMoney, selected, isTradeSkill)
 --     if not skillButton.caerdonTooltipHooked then
 --         skillButton.caerdonTooltipHooked = true
---         skillButton:HookScript("OnEnter", function (button, ...) 
+--         skillButton:HookScript("OnEnter", function (button, ...)
 --             print(button:GetID())
 --         end)
 --     end
 -- end
 
 function TooltipMixin:AddTooltipData(tooltip, item, title, value, valueColor)
-	local noWrap = false;
+    local noWrap = false;
     local wrap = true;
 
     local identifiedType = item:GetCaerdonItemType()
 
     valueColor = valueColor or HIGHLIGHT_FONT_COLOR
-    
+
     if not title then
         GameTooltip_AddErrorLine(tooltip, format("Dev Error", "Missing Title"));
         return
     end
-   
+
     if title and value == nil then
         GameTooltip_AddErrorLine(tooltip, format("Missing %s", title));
     elseif tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip or identifiedType == CaerdonItemType.Currency then -- assuming this for now
@@ -502,7 +554,7 @@ function TooltipMixin:AddTooltipData(tooltip, item, title, value, valueColor)
 end
 
 function TooltipMixin:AddTooltipDoubleData(tooltip, item, title, value, title2, value2, valueColor)
-	local noWrap = false;
+    local noWrap = false;
     local wrap = true;
 
     local identifiedType = item:GetCaerdonItemType()
@@ -513,7 +565,7 @@ function TooltipMixin:AddTooltipDoubleData(tooltip, item, title, value, title2, 
         GameTooltip_AddErrorLine(tooltip, format("Dev Error", "Missing Title"));
         return
     end
-    
+
     if value == nil then
         GameTooltip_AddErrorLine(tooltip, format("Missing %s", title));
     end
@@ -527,19 +579,22 @@ function TooltipMixin:AddTooltipDoubleData(tooltip, item, title, value, title2, 
             GameTooltip_AddColoredLine(tooltip, format("%s: %s", title, value), HIGHLIGHT_FONT_COLOR, wrap)
             GameTooltip_AddColoredLine(tooltip, format("%s: %s", title2, value2), HIGHLIGHT_FONT_COLOR, wrap)
         else
-            GameTooltip_AddColoredDoubleLine(tooltip, format("%s / %s:", title, title2), format("%s / %s", value, value2), HIGHLIGHT_FONT_COLOR, valueColor, wrap);
+            GameTooltip_AddColoredDoubleLine(tooltip, format("%s / %s:", title, title2), format("%s / %s", value, value2),
+                HIGHLIGHT_FONT_COLOR, valueColor, wrap);
         end
     elseif value ~= nil then
         if tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip then -- assuming this for now
             GameTooltip_AddColoredLine(tooltip, format("%s: %s", title, value), HIGHLIGHT_FONT_COLOR, wrap)
         else
-            GameTooltip_AddColoredDoubleLine(tooltip, format("%s:", title), tostring(value), HIGHLIGHT_FONT_COLOR, valueColor, wrap);
+            GameTooltip_AddColoredDoubleLine(tooltip, format("%s:", title), tostring(value), HIGHLIGHT_FONT_COLOR,
+                valueColor, wrap);
         end
     elseif value2 ~= nil then
         if tooltip == BattlePetTooltip or tooltip == FloatingBattlePetTooltip then -- assuming this for now
             GameTooltip_AddColoredLine(tooltip, format("%s: %s", title, value2), HIGHLIGHT_FONT_COLOR, wrap)
         else
-            GameTooltip_AddColoredDoubleLine(tooltip, format("%s:", title), tostring(value2), HIGHLIGHT_FONT_COLOR, valueColor, wrap);
+            GameTooltip_AddColoredDoubleLine(tooltip, format("%s:", title), tostring(value2), HIGHLIGHT_FONT_COLOR,
+                valueColor, wrap);
         end
     end
 end
@@ -554,13 +609,14 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
     end
 
     if cancelFuncs[tooltip] then
-         cancelFuncs[tooltip]()
-         cancelFuncs[tooltip] = nil
-     end
+        cancelFuncs[tooltip]()
+        cancelFuncs[tooltip] = nil
+    end
 
     function continueLoad()
         GameTooltip_AddBlankLineToTooltip(tooltip);
-        GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe " .. (isEmbedded and "Associated Item" or ""), LIGHTBLUE_FONT_COLOR);
+        GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe " .. (isEmbedded and "Associated Item" or ""),
+            LIGHTBLUE_FONT_COLOR);
 
         local forDebugUse = item:GetForDebugUse()
         local identifiedType = item:GetCaerdonItemType()
@@ -569,10 +625,11 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         if identifiedType == CaerdonItemType.Unknown then
             identifiedColor = RED_FONT_COLOR
         end
-            
+
         if not isEmbedded and identifiedType ~= CaerdonItemType.Currency then
             local specIndex = GetSpecialization()
-            local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat = GetSpecializationInfo(specIndex)
+            local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat =
+                GetSpecializationInfo(specIndex)
             self:AddTooltipData(tooltip, item, "Spec", SpecMap[specID] or specID)
             self:AddTooltipData(tooltip, item, "Level", UnitLevel("player"))
 
@@ -590,11 +647,13 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
                 optionsEnd = "..."
             end
 
-            self:AddTooltipDoubleData(tooltip, item, "Link Type", forDebugUse.linkType or "Missing", "Options", (strsub(forDebugUse.linkOptions or "", 1, 30) .. optionsEnd) or "Missing")
+            self:AddTooltipDoubleData(tooltip, item, "Link Type", forDebugUse.linkType or "Missing", "Options",
+                (strsub(forDebugUse.linkOptions or "", 1, 30) .. optionsEnd) or "Missing")
         end
 
         if item:GetItemQuality() then
-            self:AddTooltipData(tooltip, item, "Quality", _G[format("ITEM_QUALITY%d_DESC", item:GetItemQuality())], item:GetItemQualityColor().color)
+            self:AddTooltipData(tooltip, item, "Quality", _G[format("ITEM_QUALITY%d_DESC", item:GetItemQuality())],
+                item:GetItemQualityColor().color)
         end
 
         local itemLocation = item:GetItemLocation()
@@ -608,7 +667,7 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
                 self:AddTooltipDoubleData(tooltip, item, "Bag", bag, "Slot", slot)
 
                 local canTransmog, error = C_Item.CanItemTransmogAppearance(itemLocation)
-                self:AddTooltipData(tooltip, item, "Can Item Transmog Appearance", tostring(canTransmog))    
+                self:AddTooltipData(tooltip, item, "Can Item Transmog Appearance", tostring(canTransmog))
             end
         end
 
@@ -617,7 +676,8 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
 
             self:AddTooltipData(tooltip, item, "Item ID", item:GetItemID())
             self:AddTooltipDoubleData(tooltip, item, "Item Type", item:GetItemType(), "SubType", item:GetItemSubType())
-            self:AddTooltipDoubleData(tooltip, item, "Item Type ID", item:GetItemTypeID(), "SubType ID", item:GetItemSubTypeID())
+            self:AddTooltipDoubleData(tooltip, item, "Item Type ID", item:GetItemTypeID(), "SubType ID",
+                item:GetItemSubTypeID())
             self:AddTooltipData(tooltip, item, "Binding", item:GetBinding())
 
             GameTooltip_AddBlankLineToTooltip(tooltip);
@@ -625,7 +685,7 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
             self:AddTooltipData(tooltip, item, "Expansion ID", item:GetExpansionID())
             self:AddTooltipData(tooltip, item, "Is Crafting Reagent", tostring(item:GetIsCraftingReagent()))
         end
-        
+
 
         -- All data from here on out should come from the API
         -- TODO: Add additional option to show item link since it's so large?
@@ -646,7 +706,6 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         continueLoad()
     end
 end
-
 
 function TooltipMixin:AddPetInfoToTooltip(tooltip, item)
     local itemType = item:GetCaerdonItemType()
@@ -694,8 +753,8 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
         self:AddTooltipData(tooltip, item, "Equipment Sets", setNames)
     end
 
-	if transmogInfo.isTransmog then
-		self:AddTooltipData(tooltip, item, "Appearance ID", transmogInfo.appearanceID)
+    if transmogInfo.isTransmog then
+        self:AddTooltipData(tooltip, item, "Appearance ID", transmogInfo.appearanceID)
         self:AddTooltipData(tooltip, item, "Source ID", transmogInfo.sourceID)
 
         GameTooltip_AddBlankLineToTooltip(tooltip);
@@ -712,7 +771,7 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
 
         local matchedSources = transmogInfo.forDebugUseOnly.matchedSources
         if matchedSources and #matchedSources > 0 then
-            for k,v in pairs(matchedSources) do
+            for k, v in pairs(matchedSources) do
                 self:AddTooltipData(tooltip, item, "Matched Source", v.name)
             end
         else
@@ -728,12 +787,13 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
             self:AddTooltipData(tooltip, item, "Is Conditionally Known", appearanceInfo.sourceIsCollectedConditional)
             self:AddTooltipData(tooltip, item, "Is Permanently Known", appearanceInfo.sourceIsCollectedPermanent)
             self:AddTooltipData(tooltip, item, "Has Non-level Reqs", appearanceInfo.appearanceHasAnyNonLevelRequirements)
-            self:AddTooltipData(tooltip, item, "Meets Non-level Reqs", appearanceInfo.appearanceMeetsNonLevelRequirements)
+            self:AddTooltipData(tooltip, item, "Meets Non-level Reqs", appearanceInfo
+                .appearanceMeetsNonLevelRequirements)
             self:AddTooltipData(tooltip, item, "Appearance Is Usable", appearanceInfo.appearanceIsUsable)
             self:AddTooltipData(tooltip, item, "Meets Condition", appearanceInfo.meetsTransmogPlayerCondition)
         else
         end
-	end
+    end
 end
 
 Tooltip = CreateFromMixins(TooltipMixin)
