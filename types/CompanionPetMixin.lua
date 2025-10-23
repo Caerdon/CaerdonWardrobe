@@ -1,10 +1,11 @@
 CaerdonCompanionPet = {}
 CaerdonCompanionPetMixin = {}
 
---[[static]] function CaerdonCompanionPet:CreateFromCaerdonItem(caerdonItem)
-	if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
-		error("Usage: CaerdonCompanion:CreateFromCaerdonItem(caerdonItem)", 2)
-	end
+--[[static]]
+function CaerdonCompanionPet:CreateFromCaerdonItem(caerdonItem)
+    if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
+        error("Usage: CaerdonCompanion:CreateFromCaerdonItem(caerdonItem)", 2)
+    end
 
     local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonCompanionPetMixin)
     itemType.item = caerdonItem
@@ -12,10 +13,11 @@ CaerdonCompanionPetMixin = {}
 end
 
 function CaerdonCompanionPetMixin:GetCompanionPetInfo()
-    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID = C_PetJournal.GetPetInfoByItemID(self.item:GetItemID())
+    local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID =
+    C_PetJournal.GetPetInfoByItemID(self.item:GetItemID())
     if creatureID and displayID then
         local needsItem = false
-        local numCollected = C_PetJournal.GetNumCollectedInfo(speciesID)
+        local numCollected, limit = C_PetJournal.GetNumCollectedInfo(speciesID)
         if numCollected == 0 then
             needsItem = true
         end
@@ -33,7 +35,8 @@ function CaerdonCompanionPetMixin:GetCompanionPetInfo()
             isObtainable = isObtainable,
             speciesID = speciesID,
             displayID = displayID,
-            numCollected = numCollected
+            numCollected = numCollected,
+            limit = limit
         }
     end
 end

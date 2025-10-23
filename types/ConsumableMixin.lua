@@ -421,6 +421,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
         validForCharacter = validForCharacter,
         -- For ensembles, canEquip should reflect if player can equip uncollected sources
         -- Not just if the set itself is marked as valid for character
-        canEquip = validForCharacter or canEquipEnsemble
+        canEquip = validForCharacter or canEquipEnsemble,
+        isEnsemble = transmogSetID ~= nil
     }
 end

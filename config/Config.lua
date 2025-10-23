@@ -52,6 +52,14 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
             CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
         end
 
+        -- Ensure new config sections exist for users with existing configs
+        if not CaerdonWardrobeConfig.Merchant then
+            CaerdonWardrobeConfig.Merchant = CopyTable(NS:GetDefaultConfig().Merchant)
+        end
+        if not CaerdonWardrobeConfig.Merchant.Filter then
+            CaerdonWardrobeConfig.Merchant.Filter = CopyTable(NS:GetDefaultConfig().Merchant.Filter)
+        end
+
         CaerdonWardrobe:RefreshItems()
     end
 end
@@ -138,6 +146,13 @@ function NS:GetDefaultConfig()
             ShowGearSets = true,
             ShowGearSetsAsIcon = false,
             Position = "BOTTOM"
+        },
+
+        Merchant = {
+            Filter = {
+                HideCollected = false,
+                SuppressLegionRemixHelperWarning = false
+            }
         }
     }
 end
