@@ -4,6 +4,9 @@ CaerdonConsumableMixin = {}
 local ADDON_NAME, NS = ...
 local L = NS.L
 
+local bit_band = bit.band
+local bit_lshift = bit.lshift
+
 --[[static]]
 function CaerdonConsumable:CreateFromCaerdonItem(caerdonItem)
     if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
@@ -21,7 +24,7 @@ end
 local function CanPlayerWearArmorSubType(itemSubTypeID)
     -- itemSubTypeID values for armor:
     -- 0 = Miscellaneous (shirts, tabards, etc.) - everyone can wear
-    -- 1 = Cloth - everyone can wear
+    -- 1 = Cloth - cloth classes only
     -- 2 = Leather - leather/mail/plate wearers only
     -- 3 = Mail - mail/plate wearers only
     -- 4 = Plate - plate wearers only
@@ -29,16 +32,21 @@ local function CanPlayerWearArmorSubType(itemSubTypeID)
     -- 6 = Shields - classes with shield proficiency
     -- nil/other = Cloaks and other items - everyone can wear
 
+    local _, playerClass = UnitClass("player")
+
     if not itemSubTypeID then
         return true -- If we can't determine type, allow it (cosmetic items, cloaks, etc.)
     end
 
-    -- Everyone can wear: Miscellaneous (0), Cloth (1), Cosmetic (5)
-    if itemSubTypeID == 0 or itemSubTypeID == 1 or itemSubTypeID == 5 then
+    -- Everyone can wear: Miscellaneous (0), Cosmetic (5)
+    if itemSubTypeID == 0 or itemSubTypeID == 5 then
         return true
     end
 
-    local _, playerClass = UnitClass("player")
+    if itemSubTypeID == 1 then
+        -- Cloth ensembles should only count as wearable for cloth classes
+        return playerClass == "PRIEST" or playerClass == "MAGE" or playerClass == "WARLOCK"
+    end
 
     -- Leather wearers: Druid, Monk, Rogue, Demon Hunter, and all mail/plate wearers
     if itemSubTypeID == 2 then
@@ -90,7 +98,19 @@ function CaerdonConsumableMixin:GetConsumableInfo()
         debugInfo.setInfo = transmogSetInfo
 
         if transmogSetInfo then
-            validForCharacter = transmogSetInfo.validForCharacter
+            local classMask = transmogSetInfo.classMask
+            local _, _, playerClassID = UnitClass("player")
+            local isPlayerClassInSet = true
+
+            if classMask and classMask ~= 0 and playerClassID then
+                local playerClassMask = bit_lshift(1, playerClassID - 1)
+                isPlayerClassInSet = bit_band(classMask, playerClassMask) ~= 0
+            end
+
+            validForCharacter = transmogSetInfo.validForCharacter and isPlayerClassInSet
+            debugInfo.classMask = classMask
+            debugInfo.playerClassID = playerClassID
+            debugInfo.isPlayerClassInSet = isPlayerClassInSet
 
             -- Check individual appearances in the set to determine if there are any uncollected
             -- Don't rely on transmogSetInfo.collected alone, as it only returns true when ALL appearances are collected
@@ -216,6 +236,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 -- Cloaks have classID=4 (armor) but equipLoc="INVTYPE_CLOAK"
                                 -- They're universal items, not part of the armor set's class restriction
                                 local isCloak = (itemEquipLoc == "INVTYPE_CLOAK")
+                                if isCloak then
+                                    canWearArmorType = true
+                                end
 
                                 -- Determine if this source is part of the armor set or a universal bonus item
                                 -- If it's armor but NOT a cloak, it's part of the set's armor type restriction
@@ -272,7 +295,6 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         debugInfo.hasUncollectedSetArmor = hasUncollectedSetArmor
                         debugInfo.hasWearableSetArmor = hasWearableSetArmor
                         debugInfo.hasWearableNonSetItems = hasWearableNonSetItems
-                        debugInfo.classMask = transmogSetInfo.classMask
 
                         -- ENSEMBLE CLASSIFICATION LOGIC (Set-based approach):
                         -- Ensembles contain two types of items:
