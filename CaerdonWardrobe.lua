@@ -129,13 +129,14 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
         local mogStatus = button.mogStatus
         if mogStatus then
             local mogStatusBackground = mogStatus.mogStatusBackground
+            local assignedAlpha = mogStatus.assignedAlpha or 1.0
 
             if isFiltered then
                 mogStatusBackground:SetAlpha(0.3)
                 mogStatus:SetAlpha(0.3)
             else
-                mogStatusBackground:SetAlpha(mogStatus.assignedAlpha)
-                mogStatus:SetAlpha(mogStatus.assignedAlpha)
+                mogStatusBackground:SetAlpha(assignedAlpha)
+                mogStatus:SetAlpha(assignedAlpha)
             end
         end
 

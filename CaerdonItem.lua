@@ -1073,6 +1073,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             else
                 mogStatus = "other"
             end
+        elseif consumableInfo.lowSkillItem then
+            mogStatus = "lowSkill"
+        elseif consumableInfo.lowSkillPlusItem then
+            mogStatus = "lowSkillPlus"
+        elseif consumableInfo.otherNoLootItem then
+            mogStatus = "otherNoLoot"
         elseif consumableInfo.ownPlusItem then
             -- Completionist - has collectible items for own class but not the primary purpose
             -- Example: Mail ensemble with cloak for a cloth wearer

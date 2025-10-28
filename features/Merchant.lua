@@ -194,7 +194,8 @@ function MerchantMixin:IsItemCollected(item)
         -- Don't gray out regular consumables, quest items, or food/potions
 
         -- Don't gray out items with learnable status
-        if mogStatus == "own" or mogStatus == "ownPlus" or mogStatus == "other" or mogStatus == "otherPlus" then
+        if mogStatus == "own" or mogStatus == "ownPlus" or mogStatus == "other" or mogStatus == "otherPlus"
+            or mogStatus == "lowSkill" or mogStatus == "lowSkillPlus" or mogStatus == "otherNoLoot" then
             return false
         end
 

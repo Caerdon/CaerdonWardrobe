@@ -7,6 +7,40 @@ local L = NS.L
 local bit_band = bit.band
 local bit_lshift = bit.lshift
 
+local ITEM_CLASS_ARMOR = Enum and Enum.ItemClass and Enum.ItemClass.Armor or 4
+
+local requestItemDataByID
+do
+    if C_Item and C_Item.RequestLoadItemDataByID then
+        requestItemDataByID = C_Item.RequestLoadItemDataByID
+    else
+        local noop = function() end
+        requestItemDataByID = function(itemID)
+            if not itemID or not Item or not Item.CreateFromItemID then
+                return
+            end
+
+            local item = Item:CreateFromItemID(itemID)
+            if item and item.ContinueOnItemLoad then
+                item:ContinueOnItemLoad(noop)
+            end
+        end
+    end
+end
+
+local function GetDebugItemLink(itemID)
+    if not itemID then
+        return nil
+    end
+
+    local _, itemLink = C_Item.GetItemInfo(itemID)
+    if itemLink then
+        return itemLink
+    end
+
+    return "item:" .. tostring(itemID)
+end
+
 --[[static]]
 function CaerdonConsumable:CreateFromCaerdonItem(caerdonItem)
     if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
@@ -25,8 +59,8 @@ local function CanPlayerWearArmorSubType(itemSubTypeID)
     -- itemSubTypeID values for armor:
     -- 0 = Miscellaneous (shirts, tabards, etc.) - everyone can wear
     -- 1 = Cloth - cloth classes only
-    -- 2 = Leather - leather/mail/plate wearers only
-    -- 3 = Mail - mail/plate wearers only
+    -- 2 = Leather - leather wearers only
+    -- 3 = Mail - mail wearers only
     -- 4 = Plate - plate wearers only
     -- 5 = Cosmetic (some special cosmetic items) - everyone can wear
     -- 6 = Shields - classes with shield proficiency
@@ -48,17 +82,14 @@ local function CanPlayerWearArmorSubType(itemSubTypeID)
         return playerClass == "PRIEST" or playerClass == "MAGE" or playerClass == "WARLOCK"
     end
 
-    -- Leather wearers: Druid, Monk, Rogue, Demon Hunter, and all mail/plate wearers
+    -- Leather wearers: Druid, Monk, Rogue, Demon Hunter
     if itemSubTypeID == 2 then
         return playerClass == "DRUID" or playerClass == "MONK" or playerClass == "ROGUE" or playerClass == "DEMONHUNTER"
-            or playerClass == "HUNTER" or playerClass == "SHAMAN" or playerClass == "EVOKER"
-            or playerClass == "WARRIOR" or playerClass == "PALADIN" or playerClass == "DEATHKNIGHT"
     end
 
-    -- Mail wearers: Hunter, Shaman, Evoker, and plate wearers
+    -- Mail wearers: Hunter, Shaman, Evoker
     if itemSubTypeID == 3 then
         return playerClass == "HUNTER" or playerClass == "SHAMAN" or playerClass == "EVOKER"
-            or playerClass == "WARRIOR" or playerClass == "PALADIN" or playerClass == "DEATHKNIGHT"
     end
 
     -- Plate wearers: Warrior, Paladin, Death Knight
@@ -74,8 +105,14 @@ function CaerdonConsumableMixin:GetConsumableInfo()
     local needsItem = false
     local otherNeedsItem = false
     local ownPlusItem = false      -- Completionist - has uncollected items for own class but not the primary purpose
+    local lowSkillItem = false     -- Needs the item but requirements aren't met for this character
+    local lowSkillPlusItem = false -- Completionist variant when requirements unmet for other characters
+    local otherNoLootItem = false  -- Nothing here is learnable by the current character
     local validForCharacter = true
     local canEquipEnsemble = false -- Track if player can equip uncollected sources from ensemble
+    local playerLevel = UnitLevel("player")
+    local _, _, playerClassID = UnitClass("player")
+    local playerClassMask = playerClassID and bit_lshift(1, playerClassID - 1) or nil
 
     -- Debug tracking
     local debugInfo = {
@@ -99,11 +136,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
 
         if transmogSetInfo then
             local classMask = transmogSetInfo.classMask
-            local _, _, playerClassID = UnitClass("player")
             local isPlayerClassInSet = true
 
-            if classMask and classMask ~= 0 and playerClassID then
-                local playerClassMask = bit_lshift(1, playerClassID - 1)
+            if classMask and classMask ~= 0 and playerClassMask then
                 isPlayerClassInSet = bit_band(classMask, playerClassMask) ~= 0
             end
 
@@ -120,6 +155,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
             if primaryAppearances then
                 local hasUncollectedAppearances = false
                 local hasUncollectedForPlayer = false
+                local collectedAppearanceIDs = {}
 
                 for _, appearanceInfo in ipairs(primaryAppearances) do
                     local appearanceDebug = {
@@ -127,6 +163,19 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         collected = appearanceInfo.collected,
                         sources = {}
                     }
+
+                    -- Track collected appearances by their visualID (not appearanceID)
+                    -- Need to get sources to find the visualID since appearanceID != visualID
+                    if appearanceInfo.collected then
+                        local sources = C_TransmogSets.GetSourcesForSlot(transmogSetID, appearanceInfo.appearanceID)
+                        if sources and #sources > 0 then
+                            -- Get the first source and extract its visualID
+                            local sourceInfo = C_TransmogCollection.GetSourceInfo(sources[1])
+                            if sourceInfo and sourceInfo.visualID then
+                                collectedAppearanceIDs[sourceInfo.visualID] = true
+                            end
+                        end
+                    end
 
                     if not appearanceInfo.collected then
                         hasUncollectedAppearances = true
@@ -175,19 +224,143 @@ function CaerdonConsumableMixin:GetConsumableInfo()
 
                     if sourceIDs then
                         local hasUncollectedSources = false
+                        local hasUncollectedForPlayerInSet = false
+                        local hasCollectibleNonArmorSources = false
+                        local hasRequirementLockedSources = false
+                        local hasPlayerCanCollectButRequirementsFail = false
+                        local hasLevelLockedSources = false
+                        local hasClassRestrictedSources = false
+                        local allSourcesClassRestricted = true
+                        local pendingItemDataLoad = false
+
                         for _, sourceID in ipairs(sourceIDs) do
                             local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
                             if sourceInfo then
+                                -- For ensembles, we care about the actual SOURCE being collected, not just the appearance
+                                -- Even if you know the appearance from another difficulty/modifier, the ensemble will still
+                                -- teach you this specific source, which counts toward set completion
                                 if not sourceInfo.isCollected then
                                     hasUncollectedSources = true
+
+                                    local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+                                    local collectibleByPlayer
+                                    if hasItemData then
+                                        collectibleByPlayer = canCollect
+                                    else
+                                        collectibleByPlayer = sourceInfo.playerCanCollect
+                                    end
+
+                                    local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
+                                        .GetItemInfoInstant(sourceInfo.itemID)
+                                    local _, _, _, _, itemMinLevel = C_Item.GetItemInfo(sourceInfo.itemID)
+                                    if not itemMinLevel then
+                                        requestItemDataByID(sourceInfo.itemID)
+                                        pendingItemDataLoad = true
+                                    end
+                                    local isArmor = (classID == ITEM_CLASS_ARMOR)
+                                    local isCloak = (itemEquipLoc == "INVTYPE_CLOAK")
+                                    local canWearArmorType = CanPlayerWearArmorSubType(itemSubTypeID)
+                                    if isCloak then
+                                        canWearArmorType = true
+                                    end
+                                    local playerEligibleByClass = canWearArmorType and sourceInfo.playerCanCollect
+                                    local levelLocked = itemMinLevel and playerLevel < itemMinLevel
+
+                                    -- Check if this specific source has TRUE class restrictions (Paladin-only, etc.)
+                                    -- This is different from armor type restrictions (cloth/leather/mail/plate)
+                                    local classRestrictedForPlayer = false
+
+                                    -- Method 1: Use useErrorType to distinguish true restrictions from armor type restrictions
+                                    -- TransmogUseErrorType enum values:
+                                    --   7 = Class (Paladin-only, etc.) - TRUE restriction
+                                    --   8 = Race - TRUE restriction
+                                    --   9 = Faction - TRUE restriction
+                                    --  10 = ItemProficiency (plate on priest, etc.) - armor type only
+                                    if not sourceInfo.isValidSourceForPlayer then
+                                        local errorType = sourceInfo.useErrorType
+                                        if errorType == 7 or errorType == 8 or errorType == 9 then
+                                            -- Class, Race, or Faction restriction
+                                            classRestrictedForPlayer = true
+                                        end
+                                    end
+
+                                    -- Method 2: Check if source is invalid but armor type/weapon is wearable
+                                    -- This catches Paladin-only items on Warriors/DKs who can wear plate
+                                    -- Also verify canCollect=false to ensure it's truly a class restriction,
+                                    -- not just a temporary validity issue (like level requirement)
+                                    if not classRestrictedForPlayer and (not sourceInfo.isValidSourceForPlayer) and canWearArmorType and not canCollect then
+                                        classRestrictedForPlayer = true
+                                    end
+
+                                    -- Method 3: For items where armor type isn't wearable, use canCollect
+                                    -- If canCollect=false, the item has true class/race/faction restrictions
+                                    -- If canCollect=true, it's just an armor type restriction (collectible account-wide)
+                                    if not classRestrictedForPlayer and not sourceInfo.isValidSourceForPlayer and not canWearArmorType then
+                                        if not canCollect then
+                                            classRestrictedForPlayer = true
+                                        end
+                                    end
+
+                                    if classRestrictedForPlayer then
+                                        hasClassRestrictedSources = true
+                                    else
+                                        allSourcesClassRestricted = false
+                                    end
+
+                                    if not canWearArmorType then
+                                        collectibleByPlayer = false
+                                    end
+
+                                    if hasItemData and not canCollect and playerEligibleByClass then
+                                        hasRequirementLockedSources = true
+                                    end
+
+                                    if levelLocked then
+                                        hasRequirementLockedSources = true
+                                        hasLevelLockedSources = true
+                                        collectibleByPlayer = false
+                                        -- Only set hasPlayerCanCollectButRequirementsFail if NOT class-restricted
+                                        -- Class-restricted items should trigger otherNoLoot, not lowSkill
+                                        if playerEligibleByClass and not classRestrictedForPlayer then
+                                            hasPlayerCanCollectButRequirementsFail = true
+                                        end
+                                    end
+
+                                    if isArmor and collectibleByPlayer and canWearArmorType and not classRestrictedForPlayer then
+                                        hasUncollectedForPlayerInSet = true
+                                    elseif collectibleByPlayer and not classRestrictedForPlayer then
+                                        hasCollectibleNonArmorSources = true
+                                    elseif playerEligibleByClass and not collectibleByPlayer and not classRestrictedForPlayer then
+                                        -- Sometimes playerCanCollect is true but PlayerCanCollectSource returns false (level requirement, etc.)
+                                        -- Only count this if NOT class-restricted (class-restricted should trigger otherNoLoot)
+                                        hasRequirementLockedSources = true
+                                        hasPlayerCanCollectButRequirementsFail = true
+                                    end
 
                                     -- Store uncollected sources for debug (first 15)
                                     if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
                                         table.insert(debugInfo.appearances[1].sources, {
                                             sourceID = sourceID,
+                                            itemID = sourceInfo.itemID,
+                                            itemLink = GetDebugItemLink(sourceInfo.itemID),
+                                            itemType = itemType,
+                                            itemEquipLoc = itemEquipLoc,
+                                            classID = classID,
+                                            itemSubTypeID = itemSubTypeID,
+                                            isArmor = isArmor,
+                                            isCloak = isCloak,
+                                            canWearArmorType = canWearArmorType,
+                                            itemMinLevel = itemMinLevel,
+                                            levelLocked = levelLocked,
                                             isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
                                             isCollected = sourceInfo.isCollected,
-                                            playerCanCollect = sourceInfo.playerCanCollect
+                                            playerCanCollect = sourceInfo.playerCanCollect,
+                                            playerEligibleByClass = playerEligibleByClass,
+                                            collectibleByPlayer = collectibleByPlayer,
+                                            hasItemDataAPI = hasItemData,
+                                            canCollectAPI = canCollect,
+                                            requirementLocked = hasItemData and not canCollect,
+                                            classRestrictedForPlayer = classRestrictedForPlayer
                                         })
                                     end
                                 end
@@ -195,9 +368,36 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         end
 
                         debugInfo.hasUncollectedSourcesInSet = hasUncollectedSources
+                        debugInfo.hasUncollectedForPlayerInSet = hasUncollectedForPlayerInSet
+                        debugInfo.hasCollectibleNonArmorSources = hasCollectibleNonArmorSources
+                        debugInfo.hasRequirementLockedSources = hasRequirementLockedSources
+                        debugInfo.hasPlayerCanCollectButRequirementsFail = hasPlayerCanCollectButRequirementsFail
+                        debugInfo.hasLevelLockedSources = hasLevelLockedSources
+                        debugInfo.hasClassRestrictedSources = hasClassRestrictedSources
+                        debugInfo.allSourcesClassRestricted = allSourcesClassRestricted
+                        debugInfo.pendingItemDataLoad = pendingItemDataLoad
 
-                        if hasUncollectedSources then
+                        if hasUncollectedForPlayerInSet then
                             needsItem = true
+                            canEquipEnsemble = true
+                        elseif hasCollectibleNonArmorSources then
+                            ownPlusItem = true
+                        elseif hasRequirementLockedSources then
+                            if allSourcesClassRestricted and hasClassRestrictedSources then
+                                -- All remaining sources are class-restricted - player can never learn these
+                                otherNoLootItem = true
+                            elseif hasLevelLockedSources and hasPlayerCanCollectButRequirementsFail then
+                                -- Level-locked but otherwise learnable
+                                lowSkillItem = true
+                            else
+                                needsItem = false
+                            end
+                        elseif hasUncollectedSources then
+                            if allSourcesClassRestricted and hasClassRestrictedSources then
+                                otherNoLootItem = true
+                            else
+                                needsItem = false
+                            end
                         end
                     elseif hasUncollectedAppearances then
                         -- Fallback: if no sources but has uncollected appearances, mark as needed
@@ -218,6 +418,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         local hasUncollectedSetArmor = false
                         local hasWearableSetArmor = false
                         local hasWearableNonSetItems = false
+                        local hasClassRestrictedSources = false
+                        local allSourcesClassRestricted = true
+                        local allSourcesInvalidForPlayer = true
 
                         for _, sourceID in ipairs(sourceIDs) do
                             local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
@@ -244,8 +447,46 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 -- If it's armor but NOT a cloak, it's part of the set's armor type restriction
                                 local isSetPiece = isArmor and not isCloak
 
+                                -- For ensembles, we care about the actual SOURCE being collected, not just the appearance
+                                -- Even if you know the appearance from another difficulty/modifier, the ensemble will still
+                                -- teach you this specific source, which counts toward set completion
                                 if not sourceInfo.isCollected then
                                     hasUncollectedSources = true
+
+                                    -- Track if ANY uncollected source is valid for the player
+                                    if sourceInfo.isValidSourceForPlayer then
+                                        allSourcesInvalidForPlayer = false
+                                    end
+
+                                    -- Check if this specific source has TRUE class restrictions (Paladin-only, etc.)
+                                    -- This is different from armor type restrictions (cloth/leather/mail/plate)
+                                    local classRestrictedForPlayer = false
+
+                                    -- Method 1: Check if source is invalid but armor type is wearable
+                                    -- This catches Paladin-only items on Warriors/DKs who can wear plate
+                                    if (not sourceInfo.isValidSourceForPlayer) and canWearArmorType then
+                                        classRestrictedForPlayer = true
+                                    end
+
+                                    -- Method 2: Use useErrorType to distinguish true restrictions from armor type restrictions
+                                    -- TransmogUseErrorType enum values:
+                                    --   7 = Class (Paladin-only, etc.) - TRUE restriction
+                                    --   8 = Race - TRUE restriction
+                                    --   9 = Faction - TRUE restriction
+                                    --  10 = ItemProficiency (plate on priest, etc.) - armor type only
+                                    if not classRestrictedForPlayer and not sourceInfo.isValidSourceForPlayer then
+                                        local errorType = sourceInfo.useErrorType
+                                        if errorType == 7 or errorType == 8 or errorType == 9 then
+                                            -- Class, Race, or Faction restriction
+                                            classRestrictedForPlayer = true
+                                        end
+                                    end
+
+                                    if classRestrictedForPlayer then
+                                        hasClassRestrictedSources = true
+                                    else
+                                        allSourcesClassRestricted = false
+                                    end
 
                                     -- Track uncollected set armor separately
                                     if isSetPiece and isArmor then
@@ -323,7 +564,12 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                             ownPlusItem = true
                         elseif hasUncollectedSources then
                             -- Has uncollected sources but player can't wear any of them
-                            otherNeedsItem = true
+                            if allSourcesClassRestricted and hasClassRestrictedSources then
+                                -- All remaining sources are class-restricted - no one can learn these except specific classes
+                                otherNoLootItem = true
+                            else
+                                otherNeedsItem = true
+                            end
                         end
                     elseif hasUncollectedAppearances then
                         -- Fallback to appearance check if no sources found
@@ -350,58 +596,30 @@ function CaerdonConsumableMixin:GetConsumableInfo()
         end
     end
 
-    -- Print debug info for specific items (add item IDs to debug specific items)
-    -- Example: if debugInfo.itemID == 241481 or debugInfo.itemID == 241420 then
-    if false then -- Set to true and add item IDs above to enable debug output
-        print("=== CaerdonWardrobe Ensemble Debug ===")
-        print("Item ID: " .. debugInfo.itemID)
-        print("Transmog Set ID: " .. tostring(debugInfo.transmogSetID))
-        print("Has SetInfo: " .. tostring(debugInfo.setInfo ~= nil))
-        if debugInfo.setInfo then
-            print("  SetInfo.collected: " .. tostring(debugInfo.setInfo.collected))
-            print("  SetInfo.validForCharacter: " .. tostring(debugInfo.setInfo.validForCharacter))
-        end
-        print("Has PrimaryAppearances: " .. tostring(debugInfo.primaryAppearances ~= nil))
-        if debugInfo.primaryAppearances then
-            print("  Appearance Count: " .. #debugInfo.primaryAppearances)
-            for i, app in ipairs(debugInfo.appearances) do
-                print("  Appearance " .. i .. ":")
-                print("    ID: " .. app.appearanceID)
-                print("    Collected: " .. tostring(app.collected))
-                print("    Source Count: " .. (app.sourceCount or 0))
-                if #app.sources > 0 then
-                    for j, src in ipairs(app.sources) do
-                        print("      Source " .. j .. ": ID=" .. src.sourceID ..
-                            ", itemID=" .. tostring(src.itemID) ..
-                            ", equipLoc=" .. tostring(src.itemEquipLoc) ..
-                            ", classID=" .. tostring(src.classID) ..
-                            ", subTypeID=" .. tostring(src.itemSubTypeID) ..
-                            ", isArmor=" .. tostring(src.isArmor) ..
-                            ", isCloak=" .. tostring(src.isCloak) ..
-                            ", isSetPiece=" .. tostring(src.isSetPiece) ..
-                            ", canWearArmorType=" .. tostring(src.canWearArmorType) ..
-                            ", isCollected=" .. tostring(src.isCollected))
-                    end
-                end
-            end
-        end
-        print("Set Source Count: " .. tostring(debugInfo.setSourceCount or "N/A"))
-        print("Has Uncollected Sources In Set: " .. tostring(debugInfo.hasUncollectedSourcesInSet or "N/A"))
-        print("Has Uncollected For Player In Set: " .. tostring(debugInfo.hasUncollectedForPlayerInSet or "N/A"))
-        print("Has Uncollected Set Armor: " .. tostring(debugInfo.hasUncollectedSetArmor or "N/A"))
-        print("Has Wearable Set Armor: " .. tostring(debugInfo.hasWearableSetArmor or "N/A"))
-        print("Has Wearable Non-Set Items: " .. tostring(debugInfo.hasWearableNonSetItems or "N/A"))
-        print("Class Mask (Primary Set): " .. tostring(debugInfo.classMask or "N/A"))
-        print("Approach Used: " .. tostring(debugInfo.approachUsed or "N/A"))
-        print("Fallback Used: " .. tostring(debugInfo.fallbackUsed))
-        print("Result - needsItem: " .. tostring(needsItem) .. ", otherNeedsItem: " .. tostring(otherNeedsItem))
-        print("validForCharacter: " .. tostring(validForCharacter))
-        print("canEquipEnsemble: " .. tostring(canEquipEnsemble))
-        print("canEquip (final): " .. tostring(validForCharacter or canEquipEnsemble))
-        print("Config - ShowLearnableByOther.Merchant: " ..
-            tostring(CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant))
-        print("=====================================")
+    if lowSkillItem or lowSkillPlusItem then
+        needsItem = false
     end
+
+    -- Debug info available in debugInfo variable for troubleshooting
+    -- Debug template for troubleshooting specific items:
+    -- if debugInfo.itemID == ITEM_ID_HERE then
+    --     print("=== CaerdonWardrobe Item Debug ===")
+    --     print("Item ID: " .. debugInfo.itemID)
+    --     print("Transmog Set ID: " .. tostring(debugInfo.transmogSetID))
+    --     print("SetInfo.validForCharacter: " ..
+    --         tostring(debugInfo.setInfo and debugInfo.setInfo.validForCharacter or "N/A"))
+    --     print("SetInfo.collected: " .. tostring(debugInfo.setInfo and debugInfo.setInfo.collected or "N/A"))
+    --     print("Result - needsItem: " .. tostring(needsItem))
+    --     print("Result - otherNeedsItem: " .. tostring(otherNeedsItem))
+    --     print("Result - otherNoLootItem: " .. tostring(otherNoLootItem))
+    --     print("Result - canEquipEnsemble: " .. tostring(canEquipEnsemble))
+    --     print("Result - validForCharacter: " .. tostring(validForCharacter))
+    --     if debugInfo.hasClassRestrictedSources ~= nil then
+    --         print("hasClassRestrictedSources: " .. tostring(debugInfo.hasClassRestrictedSources))
+    --         print("allSourcesClassRestricted: " .. tostring(debugInfo.allSourcesClassRestricted))
+    --     end
+    --     print("=====================================")
+    -- end
 
     local itemName = C_Item.GetItemInfo(self.item:GetItemLink())
     local factionName, changed = string.gsub(itemName, L["Contract: "], "")
@@ -440,6 +658,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
         needsItem = needsItem,
         otherNeedsItem = otherNeedsItem,
         ownPlusItem = ownPlusItem,
+        lowSkillItem = lowSkillItem,
+        lowSkillPlusItem = lowSkillPlusItem,
+        otherNoLootItem = otherNoLootItem,
         validForCharacter = validForCharacter,
         -- For ensembles, canEquip should reflect if player can equip uncollected sources
         -- Not just if the set itself is marked as valid for character
