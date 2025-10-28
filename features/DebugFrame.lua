@@ -20,7 +20,7 @@ function DebugFrameMixin:Init()
     self.frame:SetMovable(true)
     self.frame:SetResizable(true)
     self.frame:EnableMouse(true)
-    self.frame:SetResizeBounds(450, 300)  -- Set minimum width and height
+    self.frame:SetResizeBounds(450, 300) -- Set minimum width and height
     self.frame:Hide()
 
     -- Set the title in the header
@@ -95,7 +95,7 @@ function DebugFrameMixin:Init()
 
     -- Setup item frame for displaying item info
     self.itemFrame = CreateFrame("Frame", "CaerdonDebugItemFrame", self.content)
-    self.itemFrame:SetSize(self.content:GetWidth(), 90)  -- Increased height to accommodate new layout
+    self.itemFrame:SetSize(self.content:GetWidth(), 90) -- Increased height to accommodate new layout
     self.itemFrame:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, 0)
 
     -- Create item button that can accept drops
@@ -104,7 +104,7 @@ function DebugFrameMixin:Init()
     self.itemButton:SetPoint("TOPLEFT", self.itemFrame, "TOPLEFT", 10, -10)
     self.itemButton:RegisterForDrag("LeftButton")
     self.itemButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    
+
     -- Clear the normal texture
     self.itemButton:SetNormalTexture("")
     -- After setting it to empty, hide it
@@ -113,12 +113,12 @@ function DebugFrameMixin:Init()
         normalTexture:Hide()
         normalTexture:SetAlpha(0)
     end
-    
+
     -- Hide the icon border
     if self.itemButton.IconBorder then
         self.itemButton.IconBorder:Hide()
     end
-    
+
     -- Create a better empty slot background using standard UI textures
     local slotBG = self.itemButton:CreateTexture(nil, "BACKGROUND")
     slotBG:SetAllPoints()
@@ -126,10 +126,10 @@ function DebugFrameMixin:Init()
     slotBG:SetTexCoord(0.1, 0.9, 0.1, 0.9) -- Trim edges slightly
     slotBG:SetAlpha(0.5)
     self.itemButton.slotBackground = slotBG
-    
+
     -- Simple highlight on hover
     self.itemButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-    
+
     -- Add subtle text to the right of the empty slot
     self.slotHelpText = self.itemFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     self.slotHelpText:SetPoint("TOPLEFT", self.itemButton, "TOPRIGHT", 8, 0)
@@ -153,12 +153,12 @@ function DebugFrameMixin:Init()
     self.itemIDInput:SetAutoFocus(false)
     self.itemIDInput:SetMaxLetters(255)
     self.itemIDInput:SetNumeric(false)
-    
+
     -- Create background for the edit box
     local bg = self.itemIDInput:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(self.itemIDInput)
     bg:SetColorTexture(0, 0, 0, 0.5)
-    
+
     -- Create border for the edit box
     local border = CreateFrame("Frame", nil, self.itemIDInput, "BackdropTemplate")
     border:SetPoint("TOPLEFT", -3, 3)
@@ -169,7 +169,7 @@ function DebugFrameMixin:Init()
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     border:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
-    
+
     -- Create Show button
     self.showButton = CreateFrame("Button", nil, self.itemFrame, "UIPanelButtonTemplate")
     self.showButton:SetSize(50, 22)
@@ -179,7 +179,7 @@ function DebugFrameMixin:Init()
         local inputText = self.itemIDInput:GetText()
         if inputText and inputText ~= "" then
             local itemLink
-            
+
             -- Check if it's already an item link
             if string.match(inputText, "|c%x+|Hitem:.-|h%[.-%]|h|r") then
                 itemLink = inputText
@@ -194,7 +194,7 @@ function DebugFrameMixin:Init()
                     end
                 end
             end
-            
+
             if itemLink then
                 self:SetCurrentItem(itemLink)
                 self.itemIDInput:SetText("")
@@ -202,12 +202,12 @@ function DebugFrameMixin:Init()
             end
         end
     end)
-    
+
     -- Handle Enter key in the input box
     self.itemIDInput:SetScript("OnEnterPressed", function()
         self.showButton:Click()
     end)
-    
+
     -- Clear focus on Escape
     self.itemIDInput:SetScript("OnEscapePressed", function(editBox)
         editBox:ClearFocus()
@@ -234,7 +234,14 @@ function DebugFrameMixin:Init()
 
         -- Fallback to classic GetCursorInfo hyperlink
         local infoType, info1, info2 = GetCursorInfo()
-        if infoType == "item" then
+        if infoType == "merchant" then
+            -- Dragging from merchant frame - info1 is the merchant slot index
+            local itemLink = GetMerchantItemLink(info1)
+            ClearCursor()
+            if itemLink then
+                self:SetCurrentItem(itemLink)
+            end
+        elseif infoType == "item" then
             ClearCursor()
             self:SetCurrentItem(info2) -- info2 is the item link
         end
@@ -258,7 +265,14 @@ function DebugFrameMixin:Init()
             end
 
             local infoType, info1, info2 = GetCursorInfo()
-            if infoType == "item" then
+            if infoType == "merchant" then
+                -- Clicking with merchant item on cursor - info1 is the merchant slot index
+                local itemLink = GetMerchantItemLink(info1)
+                ClearCursor()
+                if itemLink then
+                    self:SetCurrentItem(itemLink)
+                end
+            elseif infoType == "item" then
                 ClearCursor()
                 self:SetCurrentItem(info2)
             end
@@ -294,7 +308,7 @@ function DebugFrameMixin:Init()
     self.itemName:SetPoint("TOPLEFT", self.itemButton, "TOPRIGHT", 10, 0)
     self.itemName:SetPoint("RIGHT", self.itemFrame, "RIGHT", -10, 0)
     self.itemName:SetJustifyH("LEFT")
-    
+
     -- Make the item name clickable for item links
     self.itemNameButton = CreateFrame("Button", nil, self.itemFrame)
     self.itemNameButton:SetAllPoints(self.itemName)
@@ -323,7 +337,7 @@ function DebugFrameMixin:Init()
     self.itemID:SetPoint("RIGHT", self.itemFrame, "RIGHT", -10, 0)
     self.itemID:SetJustifyH("LEFT")
     self.itemID:SetTextColor(0.6, 0.6, 0.6)
-    
+
     -- Add player info (spec, level, faction)
     self.playerInfo = self.itemFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     self.playerInfo:SetPoint("TOPLEFT", self.itemID, "BOTTOMLEFT", 0, -5)
@@ -424,7 +438,7 @@ function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
 
     -- Update the button through Caerdon's system to show overlays
     local options = {
-        statusProminentSize = 24,  -- Standard size for debug display
+        statusProminentSize = 24, -- Standard size for debug display
         bindingScale = 1.0
     }
 
@@ -439,7 +453,7 @@ function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
         cancelFuncs[self] = item:ContinueWithCancelOnItemLoad(function()
             self:ClearDebugEntries()
             self:DisplayItemInfo(item)
-            
+
             -- Re-update button after item loads to ensure correct status
             CaerdonWardrobe:UpdateButton(self.itemButton, item, self, {
                 locationKey = locKey,
@@ -483,24 +497,24 @@ function DebugFrameMixin:ClearDebugDisplay()
     self.itemName:SetText("")
     self.itemID:SetText("")
     self.playerInfo:SetText("")
-    
+
     if self.slotHelpText then
         self.slotHelpText:Show()
     end
-    
+
     if self.orText then
         self.orText:Show()
     end
-    
+
     if self.itemIDInput then
         self.itemIDInput:Show()
         self.itemIDInput:SetText("")
     end
-    
+
     if self.showButton then
         self.showButton:Show()
     end
-    
+
     if self.playerInfo then
         self.playerInfo:Show()
     end
@@ -530,21 +544,21 @@ end
 function DebugFrameMixin:RefreshLayout()
     -- Reposition all visible entries based on current frame width
     local numColumns, columnWidth = self:GetColumnLayout()
-    
+
     for index, entry in ipairs(self.debugEntries) do
         if entry:IsShown() then
             -- Update entry width
             entry:SetWidth(columnWidth)
             entry.value:SetWidth(columnWidth - 170)
-            
+
             -- Clear existing points
             entry:ClearAllPoints()
-            
+
             -- Reposition based on column layout
             if numColumns == 2 then
                 local row = math.ceil(index / 2)
                 local column = ((index - 1) % 2) + 1
-                
+
                 if index == 1 then
                     entry:SetPoint("TOPLEFT", self.infoFrame, "TOPLEFT", 0, 0)
                 elseif column == 1 then
@@ -565,7 +579,7 @@ function DebugFrameMixin:RefreshLayout()
             end
         end
     end
-    
+
     -- Update frame heights
     local visibleCount = 0
     for _, entry in ipairs(self.debugEntries) do
@@ -573,7 +587,7 @@ function DebugFrameMixin:RefreshLayout()
             visibleCount = visibleCount + 1
         end
     end
-    
+
     local numRows = numColumns == 2 and math.ceil(visibleCount / 2) or visibleCount
     self.infoFrame:SetHeight((numRows * 25) + 10)
     self.content:SetHeight(self.itemFrame:GetHeight() + self.infoFrame:GetHeight() + 10)
@@ -583,11 +597,11 @@ function DebugFrameMixin:GetColumnLayout()
     -- Determine if we should use two columns based on frame width
     local frameWidth = self.frame:GetWidth()
     local minWidthForTwoColumns = 600 -- Lowered threshold since we have minimum width of 450
-    
+
     if frameWidth >= minWidthForTwoColumns then
         return 2, (frameWidth - 40) / 2 -- Two columns with some padding
     else
-        return 1, frameWidth - 40 -- Single column
+        return 1, frameWidth - 40       -- Single column
     end
 end
 
@@ -616,17 +630,17 @@ function DebugFrameMixin:AddDebugEntry(label, value, color)
 
     -- Get column layout
     local numColumns, columnWidth = self:GetColumnLayout()
-    
+
     -- Set entry width based on column layout
     entry:SetWidth(columnWidth)
     entry.value:SetWidth(columnWidth - 170) -- Label width + padding
-    
+
     -- Position entry based on column layout
     if numColumns == 2 then
         -- Two column layout
         local row = math.ceil(index / 2)
         local column = ((index - 1) % 2) + 1
-        
+
         if index == 1 then
             -- First entry, top left
             entry:SetPoint("TOPLEFT", self.infoFrame, "TOPLEFT", 0, 0)
@@ -674,24 +688,24 @@ function DebugFrameMixin:ShowBasicItemInfo(item)
     local level = UnitLevel("player")
     local specIndex = GetSpecialization()
     local specInfo = ""
-    
+
     if specIndex then
         local specID, specName = GetSpecializationInfo(specIndex)
         if specName then
             specInfo = specName .. " "
         end
     end
-    
+
     local className = UnitClass("player")
     local faction = UnitFactionGroup("player")
     local factionIcon = ""
-    
+
     if faction == "Alliance" then
         factionIcon = "|TInterface\\FriendsFrame\\PlusManz-Alliance:16|t"
     elseif faction == "Horde" then
         factionIcon = "|TInterface\\FriendsFrame\\PlusManz-Horde:16|t"
     end
-    
+
     self.playerInfo:SetText(format("Level %d %s%s %s", level, specInfo, className or "", factionIcon))
 
     -- Set item icon and name
@@ -702,28 +716,28 @@ function DebugFrameMixin:ShowBasicItemInfo(item)
         if self.slotHelpText then
             self.slotHelpText:Hide()
         end
-        
+
         if self.orText then
             self.orText:Hide()
         end
-        
+
         if self.itemIDInput then
             self.itemIDInput:Hide()
         end
-        
+
         if self.showButton then
             self.showButton:Hide()
         end
-        
+
         if self.playerInfo then
             self.playerInfo:Hide()
         end
     end
-    
+
     if self.playerInfo then
         self.playerInfo:Show()
     end
-    
+
     -- Set the item name as a hyperlink
     if self.currentItem then
         self.itemName:SetText(self.currentItem)
@@ -756,7 +770,7 @@ function DebugFrameMixin:DisplayItemInfo(item)
     end
 
     self:AddDebugEntry("Identified Type", identifiedType, identifiedColor)
-    
+
     -- Get Caerdon status info
     local locationInfo = {
         locationKey = "debugframe-" .. (item:GetItemID() or "unknown"),
@@ -821,7 +835,7 @@ function DebugFrameMixin:DisplayItemInfo(item)
     if identifiedType == CaerdonItemType.BattlePet or identifiedType == CaerdonItemType.CompanionPet then
         self:AddPetInfo(item)
     elseif identifiedType == CaerdonItemType.Equipment then
-            self:AddTransmogInfo(item)
+        self:AddTransmogInfo(item)
         self:AddEquipmentInfo(item)
     end
 end
@@ -853,16 +867,16 @@ function DebugFrameMixin:AddTransmogInfo(item)
         self:AddDebugEntry("Transmog Info", "Item is nil")
         return
     end
-    
+
     -- Get transmog info using the WoW API directly
     local itemLink = item:GetItemLink()
     if not itemLink then
         self:AddDebugEntry("Transmog Info", "No item link available")
         return
     end
-    
+
     local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
-    
+
     if not appearanceID then
         -- Try with item ID as fallback
         local itemID = item:GetItemID()
@@ -870,15 +884,15 @@ function DebugFrameMixin:AddTransmogInfo(item)
             appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemID)
         end
     end
-    
+
     if appearanceID then
         self:AddDebugEntry("Appearance ID", tostring(appearanceID))
         self:AddDebugEntry("Source ID", tostring(sourceID))
-        
+
         -- Check if collected
         local isCollected = C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)
         self:AddDebugEntry("Is Collected", tostring(isCollected))
-        
+
         -- Get source info
         local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         if sourceInfo then
@@ -898,13 +912,13 @@ function DebugFrameMixin:AddEquipmentInfo(item)
     if equipLocation then
         self:AddDebugEntry("Item Equip Location", equipLocation)
     end
-    
+
     -- Also show the inventory type name if available
     local inventoryTypeName = item:GetInventoryTypeName()
     if inventoryTypeName then
         self:AddDebugEntry("Inventory Type Name", inventoryTypeName)
     end
-    
+
     -- Get item location info for equipped items
     local itemLocation = item:GetItemLocation()
     if itemLocation and itemLocation:HasAnyLocation() then
@@ -912,10 +926,10 @@ function DebugFrameMixin:AddEquipmentInfo(item)
             self:AddDebugEntry("Equipment Slot", tostring(itemLocation:GetEquipmentSlot()))
         end
     end
-    
+
     -- Get transmog info from the equipment type
     local itemData = CaerdonEquipment:CreateFromCaerdonItem(item)
-    
+
     -- Get equipment set info
     if itemData and itemData.GetEquipmentSets then
         local equipmentSets = itemData:GetEquipmentSets()
@@ -945,13 +959,13 @@ function DebugFrameMixin:AddEquipmentInfo(item)
             if transmogInfo.canEquip ~= nil then
                 self:AddDebugEntry("Can Equip", tostring(transmogInfo.canEquip))
             end
-            
+
             -- Add item min level
             local minLevel = item:GetMinLevel()
             if minLevel then
                 self:AddDebugEntry("Item Min Level", tostring(minLevel))
             end
-            
+
             -- Check for matched sources
             local matchedSources = transmogInfo.forDebugUseOnly and transmogInfo.forDebugUseOnly.matchedSources
             if matchedSources and #matchedSources > 0 then
@@ -961,7 +975,7 @@ function DebugFrameMixin:AddEquipmentInfo(item)
             else
                 self:AddDebugEntry("Matched Source", "false")
             end
-            
+
             -- Check appearance info from debug data
             local appearanceInfo = transmogInfo.forDebugUseOnly and transmogInfo.forDebugUseOnly.appearanceInfo
             if appearanceInfo then
