@@ -53,6 +53,9 @@ function DebugFrameMixin:Init()
     end)
     self.frame.resizeButton:SetScript("OnMouseUp", function()
         self.frame:StopMovingOrSizing()
+        -- Update content width to match scroll frame (minus scrollbar width and padding)
+        local contentWidth = self.scrollFrame:GetWidth() - 35
+        self.content:SetWidth(contentWidth)
         -- Refresh layout after resize
         self:RefreshLayout()
     end)
@@ -70,7 +73,11 @@ function DebugFrameMixin:Init()
 
     -- Create content frame for scroll frame
     self.content = CreateFrame("Frame", "CaerdonDebugContent", self.scrollFrame)
-    self.content:SetSize(self.scrollFrame:GetWidth(), 1) -- Height will be adjusted as content is added
+    -- Width needs to account for scrollbar from UIPanelScrollFrameTemplate
+    -- The scrollbar is typically 18-20px wide, but we also need to account for frame insets
+    -- Using a more conservative 35px to ensure no clipping
+    local contentWidth = self.scrollFrame:GetWidth() - 35
+    self.content:SetSize(contentWidth, 1) -- Height will be adjusted as content is added
     self.scrollFrame:SetScrollChild(self.content)
 
     -- Clear and Refresh buttons
@@ -254,6 +261,12 @@ function DebugFrameMixin:Init()
             self.currentItem = nil
             self.currentItemLocation = nil
         else
+            -- Handle modified clicks first (ctrl/shift/alt)
+            if self.currentItem and IsModifiedClick() then
+                HandleModifiedItemClick(self.currentItem)
+                return
+            end
+
             -- Prefer ItemLocation if available
             local cursorItem = C_Cursor and C_Cursor.GetCursorItem and C_Cursor.GetCursorItem()
             if cursorItem and cursorItem.HasAnyLocation and cursorItem:HasAnyLocation() and cursorItem.IsBagAndSlot and cursorItem:IsBagAndSlot() then
@@ -525,6 +538,21 @@ function DebugFrameMixin:ClearDebugDisplay()
 
     -- Clear debug entries
     self:ClearDebugEntries()
+
+    -- Clear ensemble container
+    if self.ensembleContainer then
+        self.ensembleContainer:Hide()
+        if self.ensembleItemFrames then
+            for _, frame in ipairs(self.ensembleItemFrames) do
+                -- Clear Caerdon overlay
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                frame:ClearAllPoints()
+            end
+        end
+    end
 end
 
 function DebugFrameMixin:ClearDebugEntries()
@@ -591,7 +619,13 @@ function DebugFrameMixin:RefreshLayout()
 
     local numRows = numColumns == 2 and math.ceil(visibleCount / 2) or visibleCount
     self.infoFrame:SetHeight((numRows * 25) + 10)
-    self.content:SetHeight(self.infoFrame:GetHeight())
+
+    -- Update total content height including ensemble container if present
+    local totalHeight = self.infoFrame:GetHeight()
+    if self.ensembleContainer and self.ensembleContainer:IsShown() then
+        totalHeight = totalHeight + 10 + self.ensembleContainer:GetHeight()
+    end
+    self.content:SetHeight(totalHeight)
 end
 
 function DebugFrameMixin:GetColumnLayout()
@@ -1031,7 +1065,665 @@ function DebugFrameMixin:AddConsumableInfo(item)
         self:AddDebugEntry("Valid For Character", tostring(consumableInfo.validForCharacter))
         self:AddDebugEntry("Can Equip", tostring(consumableInfo.canEquip))
         self:AddDebugEntry("Is Ensemble", tostring(consumableInfo.isEnsemble))
+
+        -- Add detailed ensemble information if this is an ensemble
+        if consumableInfo.isEnsemble then
+            self:AddEnsembleInfo(item)
+        end
     end
+end
+
+function DebugFrameMixin:AddEnsembleInfo(item)
+    local itemLink = item:GetItemLink()
+    if not itemLink then return end
+
+    local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
+    if not transmogSetID then return end
+
+    -- Add ensemble header section
+    local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
+    if transmogSetInfo then
+        self:AddDebugEntry("Set Name", transmogSetInfo.name or "Unknown")
+        self:AddDebugEntry("Set ID", tostring(transmogSetID))
+        self:AddDebugEntry("Set Collected", tostring(transmogSetInfo.collected))
+        self:AddDebugEntry("Set Valid For Character", tostring(transmogSetInfo.validForCharacter))
+
+        if transmogSetInfo.classMask then
+            self:AddDebugEntry("Set Class Mask", tostring(transmogSetInfo.classMask))
+        end
+    end
+
+    -- Get all sources in the ensemble
+    local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
+    if not sourceIDs or #sourceIDs == 0 then return end
+
+    self:AddDebugEntry("Total Sources", tostring(#sourceIDs))
+
+    -- Track unique items (multiple sources can have same itemID)
+    local processedItems = {}
+    local itemDetails = {}
+
+    -- Collect all item information
+    for _, sourceID in ipairs(sourceIDs) do
+        local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+        if sourceInfo and sourceInfo.itemID then
+            if not processedItems[sourceInfo.itemID] then
+                processedItems[sourceInfo.itemID] = true
+
+                local itemInfo = {
+                    itemID = sourceInfo.itemID,
+                    sources = {}
+                }
+
+                -- Get item details
+                local itemName, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType,
+                itemStackCount, itemEquipLoc, icon, sellPrice, classID, subclassID =
+                    C_Item.GetItemInfo(sourceInfo.itemID)
+
+                itemInfo.itemName = itemName or ("Item " .. sourceInfo.itemID)
+                itemInfo.itemLink = itemLink
+                itemInfo.itemQuality = itemQuality
+                itemInfo.icon = icon
+                itemInfo.itemMinLevel = itemMinLevel
+                itemInfo.itemType = itemType
+                itemInfo.itemSubType = itemSubType
+                itemInfo.classID = classID
+                itemInfo.subclassID = subclassID
+                itemInfo.itemEquipLoc = itemEquipLoc
+
+                table.insert(itemDetails, itemInfo)
+            end
+        end
+    end
+
+    -- Now collect source information for each item
+    for _, itemInfo in ipairs(itemDetails) do
+        for _, sourceID in ipairs(sourceIDs) do
+            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+            if sourceInfo and sourceInfo.itemID == itemInfo.itemID then
+                local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+
+                local sourceDetail = {
+                    sourceID = sourceID,
+                    visualID = sourceInfo.visualID,
+                    isCollected = sourceInfo.isCollected,
+                    isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
+                    playerCanCollect = sourceInfo.playerCanCollect,
+                    useErrorType = sourceInfo.useErrorType,
+                    hasItemDataAPI = hasItemData,
+                    canCollectAPI = canCollect,
+                    itemModID = sourceInfo.itemModID
+                }
+
+                table.insert(itemInfo.sources, sourceDetail)
+            end
+        end
+    end
+
+    -- Create an ensemble items container if it doesn't exist
+    if not self.ensembleContainer then
+        self.ensembleContainer = CreateFrame("Frame", "CaerdonDebugEnsembleContainer", self.content)
+        self.ensembleItemFrames = {}
+
+        -- Create header for ensemble section
+        self.ensembleHeader = self.ensembleContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        self.ensembleHeader:SetPoint("TOPLEFT", self.ensembleContainer, "TOPLEFT", 0, 0)
+        self.ensembleHeader:SetText("Ensemble Items")
+        self.ensembleHeader:SetTextColor(1, 0.82, 0) -- Gold color
+    end
+
+    -- Update container position and width to match content area
+    self.ensembleContainer:ClearAllPoints()
+    self.ensembleContainer:SetPoint("TOPLEFT", self.infoFrame, "BOTTOMLEFT", 0, -10)
+    self.ensembleContainer:SetPoint("TOPRIGHT", self.infoFrame, "BOTTOMRIGHT", 0, -10)
+
+    -- Clear existing ensemble item frames
+    for _, frame in ipairs(self.ensembleItemFrames) do
+        -- Clear Caerdon overlay before hiding
+        if frame.itemButton then
+            CaerdonWardrobe:ClearButton(frame.itemButton)
+        end
+        frame:Hide()
+        frame:ClearAllPoints()
+    end
+    wipe(self.ensembleItemFrames)
+
+    -- Create item frames for each item
+    local headerHeight = 25 -- Height for the "Ensemble Items" header
+    local yOffset = headerHeight
+    for index, itemInfo in ipairs(itemDetails) do
+        local itemFrame = self:CreateEnsembleItemFrame(index, itemInfo)
+
+        if index == 1 then
+            -- Position first frame below the header
+            itemFrame:SetPoint("TOPLEFT", self.ensembleContainer, "TOPLEFT", 0, -headerHeight)
+        else
+            itemFrame:SetPoint("TOPLEFT", self.ensembleItemFrames[index - 1], "BOTTOMLEFT", 0, -5)
+        end
+
+        table.insert(self.ensembleItemFrames, itemFrame)
+        yOffset = yOffset + itemFrame:GetHeight() + 5
+    end
+
+    -- Update container height (include header height)
+    self.ensembleContainer:SetHeight(math.max(yOffset, headerHeight))
+    self.ensembleContainer:Show()
+
+    -- Update content height to include ensemble container
+    local totalHeight = self.infoFrame:GetHeight() + 10 + self.ensembleContainer:GetHeight()
+    self.content:SetHeight(totalHeight)
+end
+
+function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
+    local frameName = "CaerdonDebugEnsembleItem" .. index
+    local frame = _G[frameName] or CreateFrame("Frame", frameName, self.ensembleContainer, "BackdropTemplate")
+
+    frame:SetHeight(100) -- Will adjust based on content
+    -- Use anchors to ensure width updates on resize
+    -- Add padding on right to account for backdrop border (edgeSize=12) and prevent clipping
+    frame:ClearAllPoints()
+    frame:SetPoint("LEFT", self.ensembleContainer, "LEFT", 0, 0)
+    frame:SetPoint("RIGHT", self.ensembleContainer, "RIGHT", -15, 0)
+
+    -- Set up backdrop for visual separation
+    frame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 }
+    })
+    frame:SetBackdropColor(0.05, 0.05, 0.05, 0.8)
+    frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+    -- Store default colors for hover effect
+    frame.defaultBgColor = { 0.05, 0.05, 0.05, 0.8 }
+    frame.defaultBorderColor = { 0.3, 0.3, 0.3, 1 }
+    frame.hoverBgColor = { 0.1, 0.1, 0.15, 0.9 }
+    frame.hoverBorderColor = { 0.5, 0.5, 0.6, 1 }
+
+    -- Create item button
+    if not frame.itemButton then
+        frame.itemButton = CreateFrame("ItemButton", frameName .. "Button", frame)
+        frame.itemButton:SetSize(40, 40)
+        frame.itemButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
+        frame.itemButton:RegisterForDrag("LeftButton")
+
+        -- Set up item button scripts
+        frame.itemButton:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if self.itemLink then
+                GameTooltip:SetHyperlink(self.itemLink)
+            elseif self.itemID then
+                GameTooltip:SetItemByID(self.itemID)
+            end
+            GameTooltip:Show()
+        end)
+
+        frame.itemButton:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+        end)
+
+        frame.itemButton:SetScript("OnClick", function(self, button)
+            if self.itemLink then
+                -- Handle all modified clicks (ctrl for dressing room, shift for chat link, etc.)
+                if IsModifiedClick() then
+                    HandleModifiedItemClick(self.itemLink)
+                end
+            end
+        end)
+
+        frame.itemButton:SetScript("OnDragStart", function(self)
+            if self.itemLink then
+                -- Put the item on the cursor using the same method as the main debug frame
+                PickupItem(self.itemLink)
+            end
+        end)
+
+        frame.itemButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
+
+    -- Update item button
+    frame.itemButton.itemID = itemInfo.itemID
+    frame.itemButton.itemLink = itemInfo.itemLink
+
+    if itemInfo.icon then
+        frame.itemButton.icon:SetTexture(itemInfo.icon)
+        frame.itemButton.icon:Show()
+    end
+
+    -- Set quality border if available
+    if itemInfo.itemQuality and frame.itemButton.IconBorder then
+        local r, g, b = GetItemQualityColor(itemInfo.itemQuality)
+        frame.itemButton.IconBorder:SetVertexColor(r, g, b)
+        frame.itemButton.IconBorder:Show()
+    end
+
+    -- Add Caerdon overlay to show collection status
+    if itemInfo.itemLink then
+        local item = CaerdonItem:CreateFromItemLink(itemInfo.itemLink)
+        if item then
+            local options = {
+                statusProminentSize = 20,
+                bindingScale = 1.0
+            }
+
+            local locKey = "ensemble-item-" .. itemInfo.itemID .. "-" .. index
+
+            -- Update button with Caerdon system - use isEnsembleItem flag instead of isDebugFrame
+            CaerdonWardrobe:UpdateButton(frame.itemButton, item, self, {
+                locationKey = locKey,
+                isEnsembleItem = true
+            }, options)
+        end
+    end
+
+    -- Create or update item name label
+    if not frame.itemNameText then
+        frame.itemNameText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        frame.itemNameText:SetPoint("TOPLEFT", frame.itemButton, "TOPRIGHT", 8, 0)
+        frame.itemNameText:SetJustifyH("LEFT")
+        frame.itemNameText:SetWordWrap(false)
+        frame.itemNameText:SetWidth(0) -- Will auto-size to text
+    end
+
+    if itemInfo.itemLink then
+        frame.itemNameText:SetText(itemInfo.itemLink)
+    else
+        frame.itemNameText:SetText(itemInfo.itemName or ("Item " .. itemInfo.itemID))
+    end
+
+    -- Make the item name clickable for item links (like chat links)
+    -- Button should only cover the text, not the entire line
+    if not frame.itemNameButton then
+        frame.itemNameButton = CreateFrame("Button", nil, frame)
+        frame.itemNameButton:SetScript("OnClick", function(self)
+            local link = self.itemLink
+            if link then
+                if IsModifiedClick("CHATLINK") then
+                    ChatEdit_InsertLink(link)
+                else
+                    -- Show floating item tooltip like clicking items in chat
+                    if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
+                        ItemRefTooltip:Hide()
+                    else
+                        ShowUIPanel(ItemRefTooltip)
+                        if not ItemRefTooltip:IsShown() then
+                            ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
+                        end
+                        ItemRefTooltip:SetHyperlink(link)
+                        ItemRefTooltip.itemLink = link
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Size button to match text width only
+    frame.itemNameButton:ClearAllPoints()
+    frame.itemNameButton:SetPoint("TOPLEFT", frame.itemNameText, "TOPLEFT", 0, 0)
+    frame.itemNameButton:SetPoint("BOTTOMRIGHT", frame.itemNameText, "BOTTOMRIGHT", 0, 0)
+    frame.itemNameButton.itemLink = itemInfo.itemLink
+
+    -- Create or update item ID label
+    if not frame.itemIDText then
+        frame.itemIDText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        frame.itemIDText:SetPoint("TOPLEFT", frame.itemNameText, "BOTTOMLEFT", 0, -2)
+        frame.itemIDText:SetJustifyH("LEFT")
+        frame.itemIDText:SetTextColor(0.7, 0.7, 0.7)
+    end
+    frame.itemIDText:SetText("Item ID: " .. itemInfo.itemID)
+
+    -- Create or update item type info
+    if not frame.itemTypeText then
+        frame.itemTypeText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        frame.itemTypeText:SetPoint("TOPLEFT", frame.itemIDText, "BOTTOMLEFT", 0, -2)
+        frame.itemTypeText:SetJustifyH("LEFT")
+        frame.itemTypeText:SetTextColor(0.7, 0.7, 0.7)
+    end
+
+    local typeInfo = ""
+    if itemInfo.itemType then
+        typeInfo = itemInfo.itemType
+        if itemInfo.itemSubType then
+            typeInfo = typeInfo .. " - " .. itemInfo.itemSubType
+        end
+    end
+    if itemInfo.itemEquipLoc then
+        typeInfo = typeInfo .. " (" .. itemInfo.itemEquipLoc .. ")"
+    end
+    frame.itemTypeText:SetText(typeInfo)
+
+    -- Create expand/collapse button
+    if not frame.expandButton then
+        frame.expandButton = CreateFrame("Button", nil, frame)
+        frame.expandButton:SetSize(20, 20)
+        frame.expandButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+        frame.expandButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+        frame.expandButton:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+        frame.expandButton:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
+
+        frame.expandButton:SetScript("OnClick", function(self)
+            local parent = self:GetParent()
+            if parent.detailsFrame:IsShown() then
+                parent.detailsFrame:Hide()
+                self:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+                self:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+                parent:SetHeight(60)
+            else
+                parent.detailsFrame:Show()
+                self:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+                self:SetPushedTexture("Interface\\Buttons\\UI-MinusButton-Down")
+                local detailsHeight = parent.detailsFrame:GetHeight()
+                parent:SetHeight(60 + detailsHeight + 5)
+            end
+
+            -- Refresh layout after expanding/collapsing
+            local debugFrame = self:GetParent():GetParent():GetParent():GetParent()
+            if debugFrame.RefreshEnsembleLayout then
+                debugFrame:RefreshEnsembleLayout()
+            end
+        end)
+    end
+
+    -- Create details frame for source information
+    if not frame.detailsFrame then
+        frame.detailsFrame = CreateFrame("Frame", nil, frame)
+        frame.detailsFrame:SetPoint("TOPLEFT", frame.itemButton, "BOTTOMLEFT", 0, -5)
+        frame.detailsFrame:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
+        frame.detailsFrame:Hide() -- Collapsed by default
+    end
+
+    -- Clear existing detail texts and buttons
+    if frame.detailTexts then
+        for _, element in ipairs(frame.detailTexts) do
+            -- Element could be a font string or a button
+            if element.SetText then
+                -- It's a font string
+                element:SetText("")
+                element:Hide()
+                element:ClearAllPoints()
+            elseif element.SetScript then
+                -- It's a button
+                element:SetScript("OnClick", nil)
+                element:Hide()
+                element:ClearAllPoints()
+            end
+        end
+        wipe(frame.detailTexts)
+    else
+        frame.detailTexts = {}
+    end
+
+    -- Add source information
+    local detailY = 0
+    local lineHeight = 16
+
+    -- Header for sources
+    local sourceHeader = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sourceHeader:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 8, -detailY)
+    sourceHeader:SetText(format("Sources (%d):", #itemInfo.sources))
+    sourceHeader:SetTextColor(1, 0.82, 0)
+    table.insert(frame.detailTexts, sourceHeader)
+    detailY = detailY + lineHeight
+
+    for sourceIndex, source in ipairs(itemInfo.sources) do
+        -- Source ID and collection status
+        local statusText = source.isCollected and "|cff00ff00Collected|r" or "|cffff0000Uncollected|r"
+        local sourceText = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sourceText:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 16, -detailY)
+        sourceText:SetText(format("Source %d (ID: %d) - %s", sourceIndex, source.sourceID, statusText))
+        sourceText:SetTextColor(0.9, 0.9, 0.9)
+        sourceText:SetJustifyH("LEFT")
+        table.insert(frame.detailTexts, sourceText)
+        detailY = detailY + lineHeight
+
+        -- Visual/Appearance ID
+        local visualText = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        visualText:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 24, -detailY)
+        visualText:SetText(format("Visual ID: %d | Item Mod: %d", source.visualID or 0, source.itemModID or 0))
+        visualText:SetTextColor(0.7, 0.7, 0.7)
+        visualText:SetJustifyH("LEFT")
+        table.insert(frame.detailTexts, visualText)
+        detailY = detailY + lineHeight
+
+        -- Player eligibility
+        local eligText = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        eligText:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 24, -detailY)
+        local eligInfo = format("Valid: %s | CanCollect: %s | API CanCollect: %s",
+            tostring(source.isValidSourceForPlayer),
+            tostring(source.playerCanCollect),
+            source.hasItemDataAPI and tostring(source.canCollectAPI) or "pending")
+        eligText:SetText(eligInfo)
+        eligText:SetTextColor(0.7, 0.7, 0.7)
+        eligText:SetJustifyH("LEFT")
+        table.insert(frame.detailTexts, eligText)
+        detailY = detailY + lineHeight
+
+        -- Use error type (restriction type)
+        if source.useErrorType then
+            local errorTypeText = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            errorTypeText:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 24, -detailY)
+            local errorTypeName = "Unknown"
+            local errorColor = { 0.7, 0.7, 0.7 }
+
+            if source.useErrorType == 7 then
+                errorTypeName = "Class Restriction"
+                errorColor = { 1, 0.3, 0.3 }
+            elseif source.useErrorType == 8 then
+                errorTypeName = "Race Restriction"
+                errorColor = { 1, 0.3, 0.3 }
+            elseif source.useErrorType == 9 then
+                errorTypeName = "Faction Restriction"
+                errorColor = { 1, 0.3, 0.3 }
+            elseif source.useErrorType == 10 then
+                errorTypeName = "Armor Type Restriction"
+                errorColor = { 1, 0.82, 0 }
+            end
+
+            errorTypeText:SetText(format("useErrorType: %d (%s)", source.useErrorType, errorTypeName))
+            errorTypeText:SetTextColor(errorColor[1], errorColor[2], errorColor[3])
+            errorTypeText:SetJustifyH("LEFT")
+            table.insert(frame.detailTexts, errorTypeText)
+            detailY = detailY + lineHeight
+        end
+
+        -- Add spacing between sources
+        if sourceIndex < #itemInfo.sources then
+            detailY = detailY + 4
+        end
+    end
+
+    -- Add section for items sharing the same appearance
+    if itemInfo.sources and #itemInfo.sources > 0 then
+        detailY = detailY + 8 -- Extra spacing before new section
+
+        -- Get all sources for the first appearance (they should all share the same appearance)
+        local firstSource = itemInfo.sources[1]
+        if firstSource and firstSource.visualID then
+            local allSources = C_TransmogCollection.GetAllAppearanceSources(firstSource.visualID)
+
+            if allSources and #allSources > 0 then
+                -- Build a list of unique item IDs that share this appearance (excluding current item)
+                local sharedItems = {}
+                local seenItems = {}
+
+                for _, sourceID in ipairs(allSources) do
+                    local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                    if sourceInfo and sourceInfo.itemID and sourceInfo.itemID ~= itemInfo.itemID then
+                        if not seenItems[sourceInfo.itemID] then
+                            seenItems[sourceInfo.itemID] = true
+                            local itemName, itemLink = C_Item.GetItemInfo(sourceInfo.itemID)
+                            if itemLink then
+                                table.insert(sharedItems, {
+                                    itemID = sourceInfo.itemID,
+                                    itemLink = itemLink,
+                                    itemName = itemName or ("Item " .. sourceInfo.itemID)
+                                })
+                            end
+                        end
+                    end
+                end
+
+                -- Only show section if there are other items with same appearance
+                if #sharedItems > 0 then
+                    local sharedHeader = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                    sharedHeader:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 8, -detailY)
+                    sharedHeader:SetText(format("Items Sharing Same Appearance (%d):", #sharedItems))
+                    sharedHeader:SetTextColor(0.5, 0.8, 1) -- Light blue color
+                    table.insert(frame.detailTexts, sharedHeader)
+                    detailY = detailY + lineHeight
+
+                    -- List up to 10 items
+                    local maxToShow = math.min(#sharedItems, 10)
+                    for i = 1, maxToShow do
+                        local sharedItem = sharedItems[i]
+                        local itemText = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                        itemText:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 16, -detailY)
+                        itemText:SetText(sharedItem.itemLink)
+                        itemText:SetJustifyH("LEFT")
+                        itemText:SetWidth(0) -- Auto-size to text
+                        table.insert(frame.detailTexts, itemText)
+
+                        -- Create clickable button over the item link text
+                        local itemButton = CreateFrame("Button", nil, frame.detailsFrame)
+                        itemButton:SetPoint("TOPLEFT", itemText, "TOPLEFT", 0, 0)
+                        itemButton:SetPoint("BOTTOMRIGHT", itemText, "BOTTOMRIGHT", 0, 0)
+                        itemButton.itemLink = sharedItem.itemLink
+                        itemButton:SetScript("OnClick", function(self)
+                            local link = self.itemLink
+                            if link then
+                                if IsModifiedClick("CHATLINK") then
+                                    ChatEdit_InsertLink(link)
+                                else
+                                    -- Show floating item tooltip like clicking items in chat
+                                    if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
+                                        ItemRefTooltip:Hide()
+                                    else
+                                        ShowUIPanel(ItemRefTooltip)
+                                        if not ItemRefTooltip:IsShown() then
+                                            ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
+                                        end
+                                        ItemRefTooltip:SetHyperlink(link)
+                                        ItemRefTooltip.itemLink = link
+                                    end
+                                end
+                            end
+                        end)
+                        table.insert(frame.detailTexts, itemButton)
+
+                        detailY = detailY + lineHeight
+                    end
+
+                    -- Show count if there are more
+                    if #sharedItems > maxToShow then
+                        local moreText = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                        moreText:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", 16, -detailY)
+                        moreText:SetText(format("... and %d more", #sharedItems - maxToShow))
+                        moreText:SetTextColor(0.7, 0.7, 0.7)
+                        moreText:SetJustifyH("LEFT")
+                        table.insert(frame.detailTexts, moreText)
+                        detailY = detailY + lineHeight
+                    end
+                end
+            end
+        end
+    end
+
+    frame.detailsFrame:SetHeight(detailY + 8)
+
+    -- Always start collapsed when creating/updating the frame
+    frame.detailsFrame:Hide()
+    frame:SetHeight(60) -- Collapsed height
+
+    -- Update expand button to show collapsed state
+    if frame.expandButton then
+        frame.expandButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+        frame.expandButton:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+    end
+
+    -- Make the frame interactive with hover and click
+    frame:EnableMouse(true)
+
+    -- Add hover effect
+    frame:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(unpack(self.hoverBgColor))
+        self:SetBackdropBorderColor(unpack(self.hoverBorderColor))
+    end)
+
+    frame:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(self.defaultBgColor))
+        self:SetBackdropBorderColor(unpack(self.defaultBorderColor))
+    end)
+
+    -- Make entire frame clickable to expand/collapse (excluding item button and item name button)
+    frame:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then
+            -- Check if we clicked on the item button or item name button by checking mouse focus
+            -- GetMouseFoci returns a table in modern WoW
+            local foci = GetMouseFoci and GetMouseFoci() or {}
+            local clickedButton = false
+            for _, focus in ipairs(foci) do
+                if focus == self.itemButton or focus == self.itemNameButton then
+                    clickedButton = true
+                    break
+                end
+            end
+
+            if clickedButton then
+                return -- Let those buttons handle the click
+            end
+
+            -- Toggle expand/collapse
+            if self.detailsFrame:IsShown() then
+                self.detailsFrame:Hide()
+                self.expandButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+                self.expandButton:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+                self:SetHeight(60)
+            else
+                self.detailsFrame:Show()
+                self.expandButton:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+                self.expandButton:SetPushedTexture("Interface\\Buttons\\UI-MinusButton-Down")
+                local detailsHeight = self.detailsFrame:GetHeight()
+                self:SetHeight(60 + detailsHeight + 5)
+            end
+
+            -- Refresh layout after expanding/collapsing
+            local debugFrame = self:GetParent():GetParent():GetParent()
+            if debugFrame.RefreshEnsembleLayout then
+                debugFrame:RefreshEnsembleLayout()
+            end
+        end
+    end)
+
+    frame:Show()
+
+    return frame
+end
+
+function DebugFrameMixin:RefreshEnsembleLayout()
+    if not self.ensembleContainer or not self.ensembleContainer:IsShown() then
+        return
+    end
+
+    -- Recalculate positions and heights
+    local headerHeight = 25
+    local yOffset = headerHeight
+    for index, itemFrame in ipairs(self.ensembleItemFrames) do
+        if index == 1 then
+            itemFrame:SetPoint("TOPLEFT", self.ensembleContainer, "TOPLEFT", 0, -headerHeight)
+        else
+            itemFrame:SetPoint("TOPLEFT", self.ensembleItemFrames[index - 1], "BOTTOMLEFT", 0, -5)
+        end
+        yOffset = yOffset + itemFrame:GetHeight() + 5
+    end
+
+    self.ensembleContainer:SetHeight(math.max(yOffset, headerHeight))
+
+    -- Update total content height
+    local totalHeight = self.infoFrame:GetHeight() + 10 + self.ensembleContainer:GetHeight()
+    self.content:SetHeight(totalHeight)
 end
 
 function DebugFrameMixin:AddCurrencyInfo(item)
@@ -1134,8 +1826,22 @@ function DebugFrameMixin:GetTooltipData(item, locationInfo)
     return {}
 end
 
-function DebugFrameMixin:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    -- Return display info that enables all icons for debug purposes
+function DebugFrameMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    -- For ensemble items, show all relevant icons (learnable, completionist, restrictions, etc.)
+    -- but hide binding and sellable icons
+    if locationInfo and locationInfo.isEnsembleItem then
+        return {
+            bindingStatus = { shouldShow = false },
+            ownIcon = { shouldShow = true },
+            otherIcon = { shouldShow = true },
+            questIcon = { shouldShow = true },
+            oldExpansionIcon = { shouldShow = true },
+            upgradeIcon = { shouldShow = true },
+            sellableIcon = { shouldShow = false }
+        }
+    end
+
+    -- For main debug frame item, show everything for debugging
     return {
         bindingStatus = { shouldShow = true },
         upgradeIcon = { shouldShow = true },
@@ -1147,9 +1853,14 @@ function DebugFrameMixin:GetDisplayInfoInternal(button, item, feature, locationI
     }
 end
 
+function DebugFrameMixin:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    -- Fallback for internal display info - delegate to GetDisplayInfo
+    return self:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+end
+
 function DebugFrameMixin:IsSameItem(button, item, locationInfo)
-    -- For debug frame, always treat as same item
-    return locationInfo and locationInfo.isDebugFrame
+    -- For debug frame items (both main and ensemble), always treat as same item
+    return locationInfo and (locationInfo.isDebugFrame or locationInfo.isEnsembleItem)
 end
 
 function DebugFrameMixin:Refresh(feature)
