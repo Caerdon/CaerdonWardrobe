@@ -57,9 +57,15 @@ function DebugFrameMixin:Init()
         self:RefreshLayout()
     end)
 
+    -- Setup item frame for displaying item info (fixed header, doesn't scroll)
+    self.itemFrame = CreateFrame("Frame", "CaerdonDebugItemFrame", self.frame)
+    self.itemFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 10, -30)
+    self.itemFrame:SetPoint("RIGHT", self.frame, "RIGHT", -10, 0)
+    self.itemFrame:SetHeight(90) -- Increased height to accommodate new layout
+
     -- Create scroll frame for content
     self.scrollFrame = CreateFrame("ScrollFrame", "CaerdonDebugScrollFrame", self.frame, "UIPanelScrollFrameTemplate")
-    self.scrollFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 10, -30)
+    self.scrollFrame:SetPoint("TOPLEFT", self.itemFrame, "BOTTOMLEFT", 0, -10)
     self.scrollFrame:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -30, 40)
 
     -- Create content frame for scroll frame
@@ -92,11 +98,6 @@ function DebugFrameMixin:Init()
     self.tooltipCheckbox.text:SetPoint("LEFT", self.tooltipCheckbox, "RIGHT", 5, 0)
     self.tooltipCheckbox.text:SetText("Update from Tooltip")
     self.tooltipCheckbox:SetChecked(false) -- Off by default
-
-    -- Setup item frame for displaying item info
-    self.itemFrame = CreateFrame("Frame", "CaerdonDebugItemFrame", self.content)
-    self.itemFrame:SetSize(self.content:GetWidth(), 90) -- Increased height to accommodate new layout
-    self.itemFrame:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, 0)
 
     -- Create item button that can accept drops
     self.itemButton = CreateFrame("ItemButton", "CaerdonDebugItemButton", self.itemFrame)
@@ -345,10 +346,10 @@ function DebugFrameMixin:Init()
     self.playerInfo:SetJustifyH("LEFT")
     self.playerInfo:SetTextColor(0.6, 0.6, 0.6)
 
-    -- Debug info section
+    -- Debug info section (scrollable content)
     self.infoFrame = CreateFrame("Frame", "CaerdonDebugInfoFrame", self.content)
     self.infoFrame:SetSize(self.content:GetWidth(), 1) -- Will expand as content is added
-    self.infoFrame:SetPoint("TOPLEFT", self.itemFrame, "BOTTOMLEFT", 0, -10)
+    self.infoFrame:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, 0)
 
     self.debugEntries = {}
     self.currentItem = nil
@@ -538,7 +539,7 @@ function DebugFrameMixin:ClearDebugEntries()
 
     -- Reset content height
     self.infoFrame:SetHeight(1)
-    self.content:SetHeight(self.itemFrame:GetHeight() + self.infoFrame:GetHeight() + 10)
+    self.content:SetHeight(self.infoFrame:GetHeight())
 end
 
 function DebugFrameMixin:RefreshLayout()
@@ -590,7 +591,7 @@ function DebugFrameMixin:RefreshLayout()
 
     local numRows = numColumns == 2 and math.ceil(visibleCount / 2) or visibleCount
     self.infoFrame:SetHeight((numRows * 25) + 10)
-    self.content:SetHeight(self.itemFrame:GetHeight() + self.infoFrame:GetHeight() + 10)
+    self.content:SetHeight(self.infoFrame:GetHeight())
 end
 
 function DebugFrameMixin:GetColumnLayout()
@@ -677,7 +678,7 @@ function DebugFrameMixin:AddDebugEntry(label, value, color)
     -- Update frame heights based on column layout
     local numRows = numColumns == 2 and math.ceil(index / 2) or index
     self.infoFrame:SetHeight((numRows * 25) + 10)
-    self.content:SetHeight(self.itemFrame:GetHeight() + self.infoFrame:GetHeight() + 10)
+    self.content:SetHeight(self.infoFrame:GetHeight())
 
     return entry
 end
@@ -837,6 +838,18 @@ function DebugFrameMixin:DisplayItemInfo(item)
     elseif identifiedType == CaerdonItemType.Equipment then
         self:AddTransmogInfo(item)
         self:AddEquipmentInfo(item)
+    elseif identifiedType == CaerdonItemType.Conduit then
+        self:AddConduitInfo(item)
+    elseif identifiedType == CaerdonItemType.Consumable then
+        self:AddConsumableInfo(item)
+    elseif identifiedType == CaerdonItemType.Currency then
+        self:AddCurrencyInfo(item)
+    elseif identifiedType == CaerdonItemType.Mount then
+        self:AddMountInfo(item)
+    elseif identifiedType == CaerdonItemType.Recipe then
+        self:AddRecipeInfo(item)
+    elseif identifiedType == CaerdonItemType.Toy then
+        self:AddToyInfo(item)
     end
 end
 
@@ -988,6 +1001,108 @@ function DebugFrameMixin:AddEquipmentInfo(item)
                 self:AddDebugEntry("Appearance Is Usable", tostring(appearanceInfo.appearanceIsUsable))
                 self:AddDebugEntry("Meets Condition", tostring(appearanceInfo.meetsTransmogPlayerCondition))
             end
+        end
+    end
+end
+
+function DebugFrameMixin:AddConduitInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData then return end
+
+    local conduitInfo = itemData:GetConduitInfo()
+    if conduitInfo then
+        self:AddDebugEntry("Needs Item", tostring(conduitInfo.needsItem))
+        self:AddDebugEntry("Is Upgrade", tostring(conduitInfo.isUpgrade))
+    end
+end
+
+function DebugFrameMixin:AddConsumableInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData then return end
+
+    local consumableInfo = itemData:GetConsumableInfo()
+    if consumableInfo then
+        self:AddDebugEntry("Needs Item", tostring(consumableInfo.needsItem))
+        self:AddDebugEntry("Other Needs Item", tostring(consumableInfo.otherNeedsItem))
+        self:AddDebugEntry("Own Plus Item", tostring(consumableInfo.ownPlusItem))
+        self:AddDebugEntry("Low Skill Item", tostring(consumableInfo.lowSkillItem))
+        self:AddDebugEntry("Low Skill Plus Item", tostring(consumableInfo.lowSkillPlusItem))
+        self:AddDebugEntry("Other No Loot Item", tostring(consumableInfo.otherNoLootItem))
+        self:AddDebugEntry("Valid For Character", tostring(consumableInfo.validForCharacter))
+        self:AddDebugEntry("Can Equip", tostring(consumableInfo.canEquip))
+        self:AddDebugEntry("Is Ensemble", tostring(consumableInfo.isEnsemble))
+    end
+end
+
+function DebugFrameMixin:AddCurrencyInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData then return end
+
+    local currencyInfo = itemData:GetCurrencyInfo()
+    if currencyInfo then
+        self:AddDebugEntry("Needs Item", tostring(currencyInfo.needsItem))
+        self:AddDebugEntry("Other Needs Item", tostring(currencyInfo.otherNeedsItem))
+
+        if currencyInfo.currencyID then
+            self:AddDebugEntry("Currency ID", tostring(currencyInfo.currencyID))
+        end
+    end
+end
+
+function DebugFrameMixin:AddMountInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData then return end
+
+    local mountInfo = itemData:GetMountInfo()
+    if mountInfo then
+        if mountInfo.name then
+            self:AddDebugEntry("Mount Name", mountInfo.name)
+        end
+        if mountInfo.isEquipment ~= nil then
+            self:AddDebugEntry("Is Equipment", tostring(mountInfo.isEquipment))
+        end
+        self:AddDebugEntry("Needs Item", tostring(mountInfo.needsItem))
+        if mountInfo.isUsable ~= nil then
+            self:AddDebugEntry("Is Usable", tostring(mountInfo.isUsable))
+        end
+        if mountInfo.isFactionSpecific ~= nil then
+            self:AddDebugEntry("Is Faction Specific", tostring(mountInfo.isFactionSpecific))
+            if mountInfo.factionID then
+                self:AddDebugEntry("Faction ID", tostring(mountInfo.factionID))
+            end
+        end
+    end
+end
+
+function DebugFrameMixin:AddRecipeInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData then return end
+
+    local recipeInfo = itemData:GetRecipeInfo()
+    if recipeInfo then
+        self:AddDebugEntry("Learned", tostring(recipeInfo.learned))
+
+        if recipeInfo.spellID then
+            self:AddDebugEntry("Recipe Spell ID", tostring(recipeInfo.spellID))
+        end
+        if recipeInfo.name then
+            self:AddDebugEntry("Recipe Name", recipeInfo.name)
+        end
+    end
+end
+
+function DebugFrameMixin:AddToyInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData then return end
+
+    local toyInfo = itemData:GetToyInfo()
+    if toyInfo then
+        if toyInfo.name then
+            self:AddDebugEntry("Toy Name", toyInfo.name)
+        end
+        self:AddDebugEntry("Needs Item", tostring(toyInfo.needsItem))
+        if toyInfo.isFavorite ~= nil then
+            self:AddDebugEntry("Is Favorite", tostring(toyInfo.isFavorite))
         end
     end
 end
