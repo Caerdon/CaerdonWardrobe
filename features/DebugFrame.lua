@@ -6,6 +6,20 @@ local DebugFrameMixin = {}
 local MAX_DEBUG_ENTRIES = 50
 local cancelFuncs = {}
 
+local TRANSMOG_USE_ERROR_LABELS = {
+    [Enum.TransmogUseErrorType.None] = "None",
+    [Enum.TransmogUseErrorType.PlayerCondition] = "Player Condition",
+    [Enum.TransmogUseErrorType.Skill] = "Skill",
+    [Enum.TransmogUseErrorType.Ability] = "Ability",
+    [Enum.TransmogUseErrorType.Reputation] = "Reputation",
+    [Enum.TransmogUseErrorType.Holiday] = "Holiday",
+    [Enum.TransmogUseErrorType.HotRecheckFailed] = "Hot Recheck Failed",
+    [Enum.TransmogUseErrorType.Class] = "Class Restriction",
+    [Enum.TransmogUseErrorType.Race] = "Race Restriction",
+    [Enum.TransmogUseErrorType.Faction] = "Faction Restriction",
+    [Enum.TransmogUseErrorType.ItemProficiency] = "Item Proficiency"
+}
+
 local function SetWardrobeCollectionSearchText(searchText)
     if not WardrobeCollectionFrame then
         return
@@ -124,6 +138,15 @@ function DebugFrameMixin:Init()
     self.tooltipCheckbox.text:SetPoint("LEFT", self.tooltipCheckbox, "RIGHT", 5, 0)
     self.tooltipCheckbox.text:SetText("Update from Tooltip")
     self.tooltipCheckbox:SetChecked(false) -- Off by default
+
+    -- Copy to clipboard button
+    self.copyButton = CreateFrame("Button", nil, self.frame, "UIPanelButtonTemplate")
+    self.copyButton:SetSize(120, 22)
+    self.copyButton:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -10, 10)
+    self.copyButton:SetText("Copy Details")
+    self.copyButton:SetScript("OnClick", function()
+        self:CopyCurrentItemDetails()
+    end)
 
     -- Create item button that can accept drops
     self.itemButton = CreateFrame("ItemButton", "CaerdonDebugItemButton", self.itemFrame)
@@ -279,6 +302,8 @@ function DebugFrameMixin:Init()
             self:ClearDebugDisplay()
             self.currentItem = nil
             self.currentItemLocation = nil
+            self.currentCaerdonItem = nil
+            self.currentEnsembleData = nil
         else
             -- Handle modified clicks first (ctrl/shift/alt)
             if self.currentItem and IsModifiedClick() then
@@ -394,6 +419,9 @@ function DebugFrameMixin:Init()
 
     self.debugEntries = {}
     self.currentItem = nil
+    self.currentCaerdonItem = nil
+    self.currentEnsembleData = nil
+    self.copyCancelFunc = nil
 
 
     -- Register slash command
@@ -467,6 +495,12 @@ end
 function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
     if not item then return end
 
+    self.currentEnsembleData = nil
+    if self.copyCancelFunc then
+        self.copyCancelFunc()
+        self.copyCancelFunc = nil
+    end
+
     -- Cancel any pending operations
     if cancelFuncs[self] then
         cancelFuncs[self]()
@@ -474,6 +508,7 @@ function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
     end
 
     self:ClearDebugDisplay()
+    self.currentCaerdonItem = item
 
     -- Always show basic item information immediately
     self:ShowBasicItemInfo(item)
@@ -542,6 +577,12 @@ function DebugFrameMixin:ClearDebugDisplay()
     self.currentEnsembleSetID = nil
     self.currentEnsembleSetInfo = nil
     self.currentEnsembleClassCandidates = nil
+    self.currentCaerdonItem = nil
+    self.currentEnsembleData = nil
+    if self.copyCancelFunc then
+        self.copyCancelFunc()
+        self.copyCancelFunc = nil
+    end
 
     if self.slotHelpText then
         self.slotHelpText:Show()
@@ -918,6 +959,564 @@ function DebugFrameMixin:DisplayItemInfo(item)
     end
 end
 
+function DebugFrameMixin:CopyCurrentItemDetails()
+    if self.copyCancelFunc then
+        self.copyCancelFunc()
+        self.copyCancelFunc = nil
+    end
+
+    if not self.currentCaerdonItem then
+        print("Caerdon Wardrobe Debug: No item selected to copy.")
+        return
+    end
+
+    local item = self.currentCaerdonItem
+
+    local function performCopy()
+        local payload = self:BuildClipboardPayload(item)
+        if not payload or payload == "" then
+            print("Caerdon Wardrobe Debug: Unable to build clipboard payload for current item.")
+            return
+        end
+
+        self:ShowCopyOutput(payload)
+    end
+
+    if item:IsItemEmpty() then
+        performCopy()
+        return
+    end
+
+    self.copyCancelFunc = item:ContinueWithCancelOnItemLoad(function()
+        performCopy()
+        self.copyCancelFunc = nil
+    end)
+end
+
+function DebugFrameMixin:BuildClipboardPayload(item)
+    local lines = {}
+
+    local function formatValue(value)
+        local valueType = type(value)
+        if valueType == "boolean" then
+            return value and "true" or "false"
+        elseif valueType == "number" then
+            return tostring(value)
+        elseif valueType == "string" then
+            return value
+        elseif value == nil then
+            return "nil"
+        else
+            return tostring(value)
+        end
+    end
+
+    local function addLine(indent, text)
+        table.insert(lines, (string.rep("  ", indent or 0) .. text))
+    end
+
+    local function addKV(indent, label, value)
+        addLine(indent, label .. ": " .. formatValue(value))
+    end
+
+    local function appendTable(tbl, indent)
+        if type(tbl) ~= "table" then
+            addLine(indent, formatValue(tbl))
+            return
+        end
+
+        if next(tbl) == nil then
+            addLine(indent, "{}")
+            return
+        end
+
+        local isArray = true
+        local count = 0
+        for key in pairs(tbl) do
+            count = count + 1
+            if type(key) ~= "number" then
+                isArray = false
+                break
+            end
+        end
+
+        if isArray then
+            for index = 1, #tbl do
+                local value = tbl[index]
+                if type(value) == "table" then
+                    addLine(indent, "-")
+                    appendTable(value, indent + 1)
+                else
+                    addLine(indent, "- " .. formatValue(value))
+                end
+            end
+        else
+            local keys = {}
+            for key in pairs(tbl) do
+                table.insert(keys, key)
+            end
+            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+
+            for _, key in ipairs(keys) do
+                local value = tbl[key]
+                if type(value) == "table" then
+                    addLine(indent, tostring(key) .. ":")
+                    appendTable(value, indent + 1)
+                else
+                    addLine(indent, tostring(key) .. ": " .. formatValue(value))
+                end
+            end
+        end
+    end
+
+    local function addTable(indent, label, tbl)
+        if not tbl or (type(tbl) == "table" and next(tbl) == nil) then
+            addLine(indent, label .. ": {}")
+            return
+        end
+        addLine(indent, label .. ":")
+        appendTable(tbl, indent + 1)
+    end
+
+    addLine(0, "=== CaerdonWardrobe Debug Export ===")
+    addKV(0, "Generated", date("%Y-%m-%d %H:%M:%S"))
+
+    local addonVersion
+    if C_AddOns and C_AddOns.GetAddOnMetadata then
+        addonVersion = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version")
+    elseif GetAddOnMetadata then
+        addonVersion = GetAddOnMetadata(ADDON_NAME, "Version")
+    end
+    if addonVersion then
+        addKV(0, "Addon Version", addonVersion)
+    end
+
+    local buildVersion, buildNumber, _, tocVersion = GetBuildInfo()
+    if buildVersion and buildNumber then
+        addKV(0, "Game Build", buildVersion .. " (" .. buildNumber .. ")")
+    end
+    if tocVersion then
+        addKV(0, "Client TOC", tocVersion)
+    end
+
+    if C_AddOns then
+        local numAddOns = C_AddOns.GetNumAddOns and C_AddOns.GetNumAddOns() or 0
+        local loadedAddOns = {}
+
+        if numAddOns and numAddOns > 0 then
+            for index = 1, numAddOns do
+                local addOnName = C_AddOns.GetAddOnName and C_AddOns.GetAddOnName(index)
+                if addOnName then
+                    local loaded = C_AddOns.IsAddOnLoaded and select(1, C_AddOns.IsAddOnLoaded(addOnName))
+                    if loaded then
+                        local version = C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addOnName, "Version")
+                        table.insert(loadedAddOns, {
+                            name = addOnName,
+                            version = version
+                        })
+                    end
+                end
+            end
+
+            table.sort(loadedAddOns, function(a, b)
+                return a.name < b.name
+            end)
+        end
+
+        addLine(0, "")
+        addLine(0, "[Addon]")
+
+        local stateName, stateRealm = UnitName("player")
+        local playerNameForState = stateName or "0"
+        if stateName and stateRealm and stateRealm ~= "" then
+            playerNameForState = stateName .. "-" .. stateRealm
+        end
+        local _, addOnTitle, addOnNotes, addOnLoadable, addOnReason, addOnSecurity = C_AddOns.GetAddOnInfo(ADDON_NAME)
+        local addOnInterface = C_AddOns.GetAddOnInterfaceVersion and C_AddOns.GetAddOnInterfaceVersion(ADDON_NAME)
+        local loadedOrLoading, loaded = C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(ADDON_NAME)
+        local loadOnDemand = C_AddOns.IsAddOnLoadOnDemand and C_AddOns.IsAddOnLoadOnDemand(ADDON_NAME)
+        local defaultEnabled = C_AddOns.IsAddOnDefaultEnabled and C_AddOns.IsAddOnDefaultEnabled(ADDON_NAME)
+        local hadLoadError = C_AddOns.DoesAddOnHaveLoadError and C_AddOns.DoesAddOnHaveLoadError(ADDON_NAME)
+        local enableState = C_AddOns.GetAddOnEnableState and C_AddOns.GetAddOnEnableState(ADDON_NAME, playerNameForState)
+        local loadableState
+        local loadableReason
+        if C_AddOns.IsAddOnLoadable then
+            loadableState, loadableReason = C_AddOns.IsAddOnLoadable(ADDON_NAME, playerNameForState)
+        end
+
+        local function captureVarArgs(getter)
+            if not getter then
+                return {}
+            end
+
+            local values = { getter(ADDON_NAME) }
+            local result = {}
+            for _, value in ipairs(values) do
+                if value and value ~= "" then
+                    table.insert(result, value)
+                end
+            end
+            return result
+        end
+
+        local dependencies = captureVarArgs(C_AddOns.GetAddOnDependencies)
+        local optionalDependencies = captureVarArgs(C_AddOns.GetAddOnOptionalDependencies)
+
+        addKV(1, "Title", addOnTitle)
+        addKV(1, "Notes", addOnNotes)
+        addKV(1, "Interface Version", addOnInterface)
+        addKV(1, "Loadable", addOnLoadable)
+        addKV(1, "Load Reason", addOnReason)
+        addKV(1, "Security", addOnSecurity)
+        addKV(1, "Load On Demand", loadOnDemand)
+        addKV(1, "Default Enabled", defaultEnabled)
+        addKV(1, "Had Load Error", hadLoadError)
+        addKV(1, "Enable State", enableState)
+        addKV(1, "Is Loaded Or Loading", loadedOrLoading)
+        addKV(1, "Is Fully Loaded", loaded)
+        addKV(1, "Is AddOn Loadable", loadableState)
+        addKV(1, "Loadable Reason", loadableReason)
+
+        if #dependencies > 0 then
+            addLine(1, "Dependencies:")
+            for _, dependency in ipairs(dependencies) do
+                addLine(2, "- " .. dependency)
+            end
+        else
+            addLine(1, "Dependencies: none")
+        end
+
+        if #optionalDependencies > 0 then
+            addLine(1, "Optional Dependencies:")
+            for _, dependency in ipairs(optionalDependencies) do
+                addLine(2, "- " .. dependency)
+            end
+        end
+
+        if #loadedAddOns > 0 then
+            addLine(1, "Loaded AddOns:")
+            for _, addonEntry in ipairs(loadedAddOns) do
+                local entryText = addonEntry.name
+                if addonEntry.version and addonEntry.version ~= "" then
+                    if addonEntry.version:match("^[vV]") then
+                        entryText = entryText .. " (" .. addonEntry.version .. ")"
+                    else
+                        entryText = entryText .. " (v" .. addonEntry.version .. ")"
+                    end
+                end
+                addLine(2, "- " .. entryText)
+            end
+        end
+    end
+
+    addLine(0, "")
+    addLine(0, "[Player]")
+    addKV(1, "Level", UnitLevel("player"))
+
+    local className, classFile, classID = UnitClass("player")
+    addKV(1, "Class", string.format("%s (%s, ID %s)", className or "Unknown", classFile or "?", tostring(classID or "nil")))
+
+    local specIndex = GetSpecialization()
+    local specName
+    if specIndex then
+        _, specName = GetSpecializationInfo(specIndex)
+    end
+    addKV(1, "Specialization", specName or "None")
+
+    addKV(1, "Race", UnitRace("player"))
+    addKV(1, "Faction", UnitFactionGroup("player"))
+    local genderID = UnitSex("player")
+    local genderText = genderID == 2 and "Male" or genderID == 3 and "Female" or "Unknown"
+    addKV(1, "Gender", genderText .. " (" .. tostring(genderID or "nil") .. ")")
+
+    addLine(0, "")
+    addLine(0, "[Item]")
+    local itemLink = item:GetItemLink() or self.currentItem
+    addKV(1, "Link", itemLink or "Unavailable")
+    local itemString = itemLink and itemLink:match("|H(.-)|h")
+    addKV(1, "Item String", itemString or "Unavailable")
+    addKV(1, "Item ID", item:GetItemID())
+    addKV(1, "Item GUID", item:GetItemGUID())
+
+    local infoLink = itemLink or item:GetItemID()
+    local itemName, itemLinkFull, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+    itemEquipLoc, itemTexture, sellPrice, classIDInfo, subclassIDInfo, bindType, expansionID, setID, isCraftingReagent
+
+    if infoLink then
+        itemName, itemLinkFull, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
+        itemEquipLoc, itemTexture, sellPrice, classIDInfo, subclassIDInfo, bindType, expansionID, setID, isCraftingReagent = C_Item.GetItemInfo(infoLink)
+    end
+
+    addKV(1, "Name", itemName)
+    addKV(1, "Quality", itemQuality and _G[("ITEM_QUALITY%d_DESC"):format(itemQuality)] or itemQuality)
+    addKV(1, "Item Level", itemLevel)
+    addKV(1, "Required Level", itemMinLevel)
+    addKV(1, "Type", itemType)
+    addKV(1, "SubType", itemSubType)
+    addKV(1, "Equip Location", itemEquipLoc)
+    addKV(1, "Class ID", classIDInfo)
+    addKV(1, "Subclass ID", subclassIDInfo)
+    addKV(1, "Bind Type", bindType)
+    addKV(1, "Expansion ID", expansionID)
+    addKV(1, "Set ID", setID)
+    addKV(1, "Is Crafting Reagent", isCraftingReagent)
+    addKV(1, "Stack Count", itemStackCount)
+    addKV(1, "Texture ID", itemTexture)
+    addKV(1, "Sell Price", sellPrice)
+    addKV(1, "Inventory Type Name", item:GetInventoryTypeName() or "None")
+    addKV(1, "Min Level (API)", item:GetMinLevel())
+    addKV(1, "Binding", item:GetBinding())
+
+    local itemLocation = item:GetItemLocation()
+    if itemLocation and itemLocation:HasAnyLocation() then
+        if itemLocation:IsBagAndSlot() then
+            local bag, slot = itemLocation:GetBagAndSlot()
+            addKV(1, "Bag Slot", bag .. ":" .. slot)
+        end
+
+        if itemLocation:IsEquipmentSlot() then
+            addKV(1, "Equipment Slot", itemLocation:GetEquipmentSlot())
+        end
+    end
+
+    addLine(0, "")
+    addLine(0, "[Caerdon]")
+    local identifiedType = item:GetCaerdonItemType()
+    addKV(1, "Identified Type", identifiedType)
+
+    local locationInfo = {
+        locationKey = "debugframe-copy-" .. tostring(item:GetItemID() or "unknown"),
+        isDebugFrame = true
+    }
+    local isReady, mogStatus, bindingStatus = item:GetCaerdonStatus(self, locationInfo)
+    addKV(1, "Status Ready", isReady)
+    addKV(1, "Mog Status", mogStatus)
+    addKV(1, "Binding Status", bindingStatus)
+
+    local forDebugUse = item:GetForDebugUse()
+    if forDebugUse then
+        addTable(1, "For Debug Use", forDebugUse)
+    end
+
+    local itemData = item:GetItemData()
+    if itemData and itemData.GetTransmogInfo then
+        local transmogInfo = itemData:GetTransmogInfo()
+        if transmogInfo then
+            addLine(0, "")
+            addLine(0, "[Transmog Info]")
+            addKV(1, "needsItem", transmogInfo.needsItem)
+            addKV(1, "otherNeedsItem", transmogInfo.otherNeedsItem)
+            addKV(1, "isCompletionistItem", transmogInfo.isCompletionistItem)
+            addKV(1, "matchesLootSpec", transmogInfo.matchesLootSpec)
+            addKV(1, "hasMetRequirements", transmogInfo.hasMetRequirements)
+            addKV(1, "canEquip", transmogInfo.canEquip)
+            addKV(1, "isTransmog", transmogInfo.isTransmog)
+            addKV(1, "isUpgrade", transmogInfo.isUpgrade)
+            addKV(1, "sourceID", transmogInfo.sourceID)
+            addKV(1, "appearanceID", transmogInfo.appearanceID)
+
+            if transmogInfo.forDebugUseOnly then
+                addTable(1, "forDebugUseOnly", transmogInfo.forDebugUseOnly)
+            end
+        end
+    end
+
+    if itemData and itemData.GetConsumableInfo then
+        local consumableInfo = itemData:GetConsumableInfo()
+        if consumableInfo then
+            addLine(0, "")
+            addLine(0, "[Consumable Info]")
+            addKV(1, "needsItem", consumableInfo.needsItem)
+            addKV(1, "otherNeedsItem", consumableInfo.otherNeedsItem)
+            addKV(1, "ownPlusItem", consumableInfo.ownPlusItem)
+            addKV(1, "lowSkillItem", consumableInfo.lowSkillItem)
+            addKV(1, "lowSkillPlusItem", consumableInfo.lowSkillPlusItem)
+            addKV(1, "otherNoLootItem", consumableInfo.otherNoLootItem)
+            addKV(1, "validForCharacter", consumableInfo.validForCharacter)
+            addKV(1, "canEquip", consumableInfo.canEquip)
+            addKV(1, "isEnsemble", consumableInfo.isEnsemble)
+        end
+    end
+
+    local ensembleData = self.currentEnsembleData
+    if ensembleData and ensembleData.setID then
+        addLine(0, "")
+        addLine(0, "[Ensemble]")
+        addKV(1, "Set ID", ensembleData.setID)
+
+        if ensembleData.setInfo then
+            addKV(1, "Set Name", ensembleData.setInfo.name)
+            addKV(1, "Set Collected", ensembleData.setInfo.collected)
+            addKV(1, "Set Valid For Character", ensembleData.setInfo.validForCharacter)
+            addKV(1, "Set Class Mask", ensembleData.setInfo.classMask)
+            addKV(1, "Set Label", ensembleData.setInfo.label)
+            addKV(1, "Set Description", ensembleData.setInfo.description)
+        end
+
+        if ensembleData.classCandidates and #ensembleData.classCandidates > 0 then
+            addLine(1, "Class Candidates:")
+            for _, classCandidate in ipairs(ensembleData.classCandidates) do
+                local candidateName = GetClassInfo(classCandidate)
+                addLine(2, "- " .. tostring(classCandidate) .. " (" .. (candidateName or "Unknown") .. ")")
+            end
+        end
+
+        addKV(1, "Total Sources", ensembleData.totalSources)
+        addKV(1, "Total Unique Items", ensembleData.totalItems)
+
+        if ensembleData.sourceIDs and #ensembleData.sourceIDs > 0 then
+            addLine(1, "Source IDs:")
+            for _, sourceID in ipairs(ensembleData.sourceIDs) do
+                addLine(2, "- " .. tostring(sourceID))
+            end
+        end
+
+        if ensembleData.items and #ensembleData.items > 0 then
+            addLine(1, "Items:")
+            for _, info in ipairs(ensembleData.items) do
+                addLine(2, "- Item " .. tostring(info.itemID))
+                if info.itemLink then
+                addLine(3, "Link: " .. info.itemLink)
+                local itemString = info.itemLink:match("|H(.-)|h")
+                if itemString then
+                    addLine(4, "Item String: " .. itemString)
+                end
+                else
+                    addLine(3, "Name: " .. (info.itemName or "Unknown"))
+                end
+                addKV(3, "Item Quality", info.itemQuality and _G[("ITEM_QUALITY%d_DESC"):format(info.itemQuality)] or info.itemQuality)
+                addKV(3, "Item Min Level", info.itemMinLevel)
+                addKV(3, "Item Type", info.itemType)
+                addKV(3, "Item SubType", info.itemSubType)
+                addKV(3, "Item Equip Loc", info.itemEquipLoc)
+                addKV(3, "Class ID", info.classID)
+                addKV(3, "Subclass ID", info.subclassID)
+
+                if info.sources and #info.sources > 0 then
+                    addLine(3, "Sources:")
+                    for _, source in ipairs(info.sources) do
+                        addLine(4, "* Source " .. tostring(source.sourceID) .. " (Visual " .. tostring(source.visualID) .. ", Mod " .. tostring(source.itemModID) .. ")")
+                        addKV(5, "isCollected", source.isCollected)
+                        addKV(5, "playerCanCollect", source.playerCanCollect)
+                        addKV(5, "isValidSourceForPlayer", source.isValidSourceForPlayer)
+                        addKV(5, "hasItemDataAPI", source.hasItemDataAPI)
+                        addKV(5, "canCollectAPI", source.canCollectAPI)
+                        addKV(5, "accountHasItemDataAPI", source.accountHasItemDataAPI)
+                        addKV(5, "accountCanCollectAPI", source.accountCanCollectAPI)
+                        addKV(5, "canDisplayOnPlayer", source.canDisplayOnPlayer)
+                        addKV(5, "meetsTransmogPlayerCondition", source.meetsTransmogPlayerCondition)
+                        addKV(5, "isHideVisual", source.isHideVisual)
+                        addKV(5, "sourceType", source.sourceType)
+                        addKV(5, "categoryID", source.categoryID)
+                        addKV(5, "invType", source.invType)
+                        addKV(5, "quality", source.quality)
+                        if source.name then
+                            addKV(5, "name", source.name)
+                        end
+                        if source.useErrorType then
+                            addKV(5, "useErrorType", tostring(source.useErrorType) .. " (" .. self:GetTransmogUseErrorTypeName(source.useErrorType) .. ")")
+                        end
+                        if source.useError then
+                            addKV(5, "useError", source.useError)
+                        end
+                        if source.appearanceInfo then
+                            addTable(5, "appearanceInfo", source.appearanceInfo)
+                        end
+                    end
+                else
+                    addLine(3, "Sources: none")
+                end
+            end
+        end
+    end
+
+    addLine(0, "")
+    addLine(0, "=== End CaerdonWardrobe Debug Export ===")
+
+    return table.concat(lines, "\n")
+end
+
+function DebugFrameMixin:EnsureCopyOutputFrame()
+    if self.copyOutputFrame then
+        return self.copyOutputFrame
+    end
+
+    local frame = CreateFrame("Frame", "CaerdonDebugCopyFrame", self.frame, "BackdropTemplate")
+    frame:SetSize(560, 380)
+    frame:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    frame:SetBackdropColor(0.07, 0.07, 0.1, 0.95)
+    frame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+    frame:Hide()
+
+    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.title:SetPoint("TOP", frame, "TOP", 0, -12)
+    frame.title:SetText("Caerdon Wardrobe Debug Export")
+
+    frame.instruction = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.instruction:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
+    frame.instruction:SetPoint("RIGHT", frame, "RIGHT", -16, 0)
+    frame.instruction:SetJustifyH("LEFT")
+    frame.instruction:SetText("Text is highlighted automatically. Press Ctrl-C (Cmd-C on Mac) to copy, then Ctrl-V to paste it into chat or a note.")
+
+    frame.scrollFrame = CreateFrame("ScrollFrame", "CaerdonDebugCopyScrollFrame", frame, "UIPanelScrollFrameTemplate")
+    frame.scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -64)
+    frame.scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -28, 48)
+
+    frame.editBox = CreateFrame("EditBox", "CaerdonDebugCopyEditBox", frame.scrollFrame)
+    frame.editBox:SetMultiLine(true)
+    frame.editBox:SetFontObject("ChatFontNormal")
+    frame.editBox:SetAutoFocus(false)
+    frame.editBox:SetWidth(frame.scrollFrame:GetWidth())
+    if frame.editBox.SetMaxLetters then
+        frame.editBox:SetMaxLetters(0)
+    end
+    frame.editBox:SetSpacing(4)
+    frame.editBox:SetScript("OnEscapePressed", function(editBox)
+        editBox:ClearFocus()
+        frame:Hide()
+    end)
+    frame.editBox:SetScript("OnEditFocusLost", function(editBox)
+        editBox:HighlightText(0, 0)
+    end)
+
+    frame.scrollFrame:SetScrollChild(frame.editBox)
+    frame.scrollFrame:HookScript("OnSizeChanged", function(_, width)
+        frame.editBox:SetWidth(width or frame.editBox:GetWidth())
+    end)
+
+    frame:SetScript("OnShow", function()
+        frame.editBox:SetWidth(frame.scrollFrame:GetWidth())
+    end)
+
+    frame.closeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.closeButton:SetSize(80, 22)
+    frame.closeButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
+    frame.closeButton:SetText(CLOSE)
+    frame.closeButton:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    self.copyOutputFrame = frame
+    return frame
+end
+
+function DebugFrameMixin:ShowCopyOutput(payload)
+    local frame = self:EnsureCopyOutputFrame()
+    frame.editBox:SetText(payload or "")
+    frame:Show()
+    frame.editBox:HighlightText()
+    frame.editBox:SetFocus()
+end
+
 function DebugFrameMixin:AddPetInfo(item)
     local petInfo = item:GetPetInfo()
     if not petInfo then return end
@@ -1116,9 +1715,17 @@ function DebugFrameMixin:AddEnsembleInfo(item)
 
     -- Add ensemble header section
     local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
+    self.currentEnsembleData = {
+        setID = transmogSetID
+    }
+
     if transmogSetInfo then
         self.currentEnsembleSetInfo = transmogSetInfo
         self.currentEnsembleClassCandidates = self:GetClassCandidatesForSet(transmogSetInfo)
+        self.currentEnsembleData.setInfo = CopyTable(transmogSetInfo)
+        if self.currentEnsembleClassCandidates then
+            self.currentEnsembleData.classCandidates = CopyTable(self.currentEnsembleClassCandidates)
+        end
         self:AddDebugEntry("Set Name", transmogSetInfo.name or "Unknown")
         self:AddDebugEntry("Set ID", tostring(transmogSetID))
         self:AddDebugEntry("Set Collected", tostring(transmogSetInfo.collected))
@@ -1131,8 +1738,19 @@ function DebugFrameMixin:AddEnsembleInfo(item)
 
     -- Get all sources in the ensemble
     local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
-    if not sourceIDs or #sourceIDs == 0 then return end
+    if not sourceIDs or #sourceIDs == 0 then
+        if self.currentEnsembleData then
+            self.currentEnsembleData.totalSources = 0
+            self.currentEnsembleData.sourceIDs = {}
+            self.currentEnsembleData.items = {}
+        end
+        return
+    end
 
+    if self.currentEnsembleData then
+        self.currentEnsembleData.totalSources = #sourceIDs
+        self.currentEnsembleData.sourceIDs = CopyTable(sourceIDs)
+    end
     self:AddDebugEntry("Total Sources", tostring(#sourceIDs))
 
     -- Track unique items (multiple sources can have same itemID)
@@ -1178,6 +1796,8 @@ function DebugFrameMixin:AddEnsembleInfo(item)
             local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
             if sourceInfo and sourceInfo.itemID == itemInfo.itemID then
                 local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+                local accountHasItemData, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
+                local appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
 
                 local sourceDetail = {
                     sourceID = sourceID,
@@ -1188,12 +1808,29 @@ function DebugFrameMixin:AddEnsembleInfo(item)
                     useErrorType = sourceInfo.useErrorType,
                     hasItemDataAPI = hasItemData,
                     canCollectAPI = canCollect,
-                    itemModID = sourceInfo.itemModID
+                    itemModID = sourceInfo.itemModID,
+                    invType = sourceInfo.invType,
+                    categoryID = sourceInfo.categoryID,
+                    sourceType = sourceInfo.sourceType,
+                    useError = sourceInfo.useError,
+                    canDisplayOnPlayer = sourceInfo.canDisplayOnPlayer,
+                    meetsTransmogPlayerCondition = sourceInfo.meetsTransmogPlayerCondition,
+                    isHideVisual = sourceInfo.isHideVisual,
+                    name = sourceInfo.name,
+                    quality = sourceInfo.quality,
+                    accountHasItemDataAPI = accountHasItemData,
+                    accountCanCollectAPI = accountCanCollect,
+                    appearanceInfo = appearanceInfo and CopyTable(appearanceInfo) or nil
                 }
 
                 table.insert(itemInfo.sources, sourceDetail)
             end
         end
+    end
+
+    if self.currentEnsembleData then
+        self.currentEnsembleData.items = itemDetails
+        self.currentEnsembleData.totalItems = #itemDetails
     end
 
     -- Create an ensemble items container if it doesn't exist
@@ -1401,6 +2038,14 @@ function DebugFrameMixin:GetRequiredClassForSource(appearanceID, sourceID, categ
     end
 
     return playerClassID
+end
+
+function DebugFrameMixin:GetTransmogUseErrorTypeName(errorType)
+    if not errorType then
+        return "None"
+    end
+
+    return TRANSMOG_USE_ERROR_LABELS[errorType] or tostring(errorType)
 end
 
 function DebugFrameMixin:OpenAppearanceSourceInWardrobe(appearanceID, sourceID, sourceInfo, categoryID, transmogLocation)

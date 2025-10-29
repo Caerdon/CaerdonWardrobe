@@ -230,6 +230,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         local hasPlayerCanCollectButRequirementsFail = false
                         local hasLevelLockedSources = false
                         local hasClassRestrictedSources = false
+                        local hasArmorTypeRestrictedSources = false
                         local allSourcesClassRestricted = true
                         local pendingItemDataLoad = false
 
@@ -243,12 +244,8 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                     hasUncollectedSources = true
 
                                     local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
-                                    local collectibleByPlayer
-                                    if hasItemData then
-                                        collectibleByPlayer = canCollect
-                                    else
-                                        collectibleByPlayer = sourceInfo.playerCanCollect
-                                    end
+                                    local accountCollectible = hasItemData and canCollect or sourceInfo.playerCanCollect
+                                    local collectibleByPlayer = accountCollectible
 
                                     local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
                                         .GetItemInfoInstant(sourceInfo.itemID)
@@ -305,6 +302,10 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                         hasClassRestrictedSources = true
                                     else
                                         allSourcesClassRestricted = false
+                                    end
+
+                                    if not classRestrictedForPlayer and not canWearArmorType and accountCollectible then
+                                        hasArmorTypeRestrictedSources = true
                                     end
 
                                     if not canWearArmorType then
@@ -374,6 +375,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         debugInfo.hasPlayerCanCollectButRequirementsFail = hasPlayerCanCollectButRequirementsFail
                         debugInfo.hasLevelLockedSources = hasLevelLockedSources
                         debugInfo.hasClassRestrictedSources = hasClassRestrictedSources
+                        debugInfo.hasArmorTypeRestrictedSources = hasArmorTypeRestrictedSources
                         debugInfo.allSourcesClassRestricted = allSourcesClassRestricted
                         debugInfo.pendingItemDataLoad = pendingItemDataLoad
 
@@ -396,7 +398,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                             if allSourcesClassRestricted and hasClassRestrictedSources then
                                 otherNoLootItem = true
                             else
-                                needsItem = false
+                                otherNeedsItem = true
                             end
                         end
                     elseif hasUncollectedAppearances then
@@ -419,6 +421,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         local hasWearableSetArmor = false
                         local hasWearableNonSetItems = false
                         local hasClassRestrictedSources = false
+                        local hasArmorTypeRestrictedSources = false
                         local allSourcesClassRestricted = true
                         local allSourcesInvalidForPlayer = true
 
@@ -428,6 +431,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 -- Check if this uncollected source is valid for current player
                                 -- Call PlayerCanCollectSource directly to verify (more reliable than sourceInfo fields)
                                 local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+                                local accountCollectible = hasItemData and canCollect or sourceInfo.playerCanCollect
 
                                 -- Get item info to determine armor type
                                 local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
@@ -488,6 +492,10 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                         allSourcesClassRestricted = false
                                     end
 
+                                    if not classRestrictedForPlayer and not canWearArmorType and accountCollectible then
+                                        hasArmorTypeRestrictedSources = true
+                                    end
+
                                     -- Track uncollected set armor separately
                                     if isSetPiece and isArmor then
                                         hasUncollectedSetArmor = true
@@ -536,6 +544,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         debugInfo.hasUncollectedSetArmor = hasUncollectedSetArmor
                         debugInfo.hasWearableSetArmor = hasWearableSetArmor
                         debugInfo.hasWearableNonSetItems = hasWearableNonSetItems
+                        debugInfo.hasArmorTypeRestrictedSources = hasArmorTypeRestrictedSources
 
                         -- ENSEMBLE CLASSIFICATION LOGIC (Set-based approach):
                         -- Ensembles contain two types of items:
