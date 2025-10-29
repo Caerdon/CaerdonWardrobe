@@ -196,9 +196,10 @@ function DressingRoomMixin:UpdateSetSelectionButton(button)
 
     local options = {
         relativeFrame = button.Icon,
-        statusProminentSize = 13,
-        statusOffsetX = 6,
-        statusOffsetY = 6
+        bindingScale = 0.8,
+        statusProminentSize = 15,
+        statusOffsetX = 1,
+        statusOffsetY = 1
     }
 
     CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)

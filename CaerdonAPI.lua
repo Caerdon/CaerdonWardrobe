@@ -367,10 +367,6 @@ local function GetTooltipFrames(focus)
         focus = GetMouseFocus()
     end
 
-    if focus then
-        table.insert(frames, focus)
-    end
-
     local tooltipCandidates = {
         ItemRefTooltip,
         ItemRefShoppingTooltip1,
@@ -382,9 +378,20 @@ local function GetTooltipFrames(focus)
         ShoppingTooltip3,
     }
 
+    local tooltipLookup = {}
     for _, tooltip in ipairs(tooltipCandidates) do
         if tooltip then
-            table.insert(frames, tooltip)
+            tooltipLookup[tooltip] = true
+        end
+    end
+
+    if focus then
+        table.insert(frames, { frame = focus, isTooltip = tooltipLookup[focus] == true })
+    end
+
+    for _, tooltip in ipairs(tooltipCandidates) do
+        if tooltip then
+            table.insert(frames, { frame = tooltip, isTooltip = true })
         end
     end
 
@@ -651,7 +658,7 @@ function CaerdonAPIMixin:GetDebugFeature()
     end
 end
 
-function CaerdonAPIMixin:GetFrameItemContext(frame)
+function CaerdonAPIMixin:GetFrameItemContext(frame, isTooltipFrame)
     local visited = {}
     local bagCandidate, slotCandidate
     while frame and type(frame) == "table" and not visited[frame] do
@@ -665,24 +672,40 @@ function CaerdonAPIMixin:GetFrameItemContext(frame)
             slotCandidate = slot
         end
         if bagCandidate ~= nil and slotCandidate ~= nil then
-            return { bag = bagCandidate, slot = slotCandidate }
+            local context = { bag = bagCandidate, slot = slotCandidate }
+            if isTooltipFrame then
+                context.fromTooltip = true
+            end
+            return context
         end
 
         local itemLink = ExtractItemLinkFromFrame(frame)
         if IsItemLink(itemLink) then
-            return { itemLink = itemLink }
+            local context = { itemLink = itemLink }
+            if isTooltipFrame then
+                context.fromTooltip = true
+            end
+            return context
         end
 
         local itemID = ExtractItemIDFromFrame(frame)
         if itemID then
-            return { itemID = itemID }
+            local context = { itemID = itemID }
+            if isTooltipFrame then
+                context.fromTooltip = true
+            end
+            return context
         end
 
         local sourceID = ExtractTransmogSourceID(frame)
         if sourceID and C_TransmogCollection and C_TransmogCollection.GetSourceItemID then
             local sourceItemID = C_TransmogCollection.GetSourceItemID(sourceID)
             if sourceItemID and sourceItemID > 0 then
-                return { itemID = sourceItemID }
+                local context = { itemID = sourceItemID }
+                if isTooltipFrame then
+                    context.fromTooltip = true
+                end
+                return context
             end
         end
 
@@ -690,7 +713,11 @@ function CaerdonAPIMixin:GetFrameItemContext(frame)
     end
 
     if bagCandidate ~= nil and slotCandidate ~= nil then
-        return { bag = bagCandidate, slot = slotCandidate }
+        local context = { bag = bagCandidate, slot = slotCandidate }
+        if isTooltipFrame then
+            context.fromTooltip = true
+        end
+        return context
     end
 end
 
@@ -744,9 +771,10 @@ function CaerdonAPIMixin:GetHoveredItemContext()
         end
     end
 
-    for _, frame in ipairs(GetTooltipFrames(focus)) do
+    for _, frameInfo in ipairs(GetTooltipFrames(focus)) do
+        local frame = frameInfo.frame
         if frame and (type(frame.IsShown) ~= "function" or frame:IsShown()) then
-            local context = self:GetFrameItemContext(frame)
+            local context = self:GetFrameItemContext(frame, frameInfo.isTooltip)
             if context then
                 return context
             end
@@ -754,9 +782,30 @@ function CaerdonAPIMixin:GetHoveredItemContext()
     end
 
     if GameTooltip and type(GameTooltip.GetPrimaryTooltipData) == "function" then
-        local tooltipData = GameTooltip:GetPrimaryTooltipData()
-        if tooltipData and IsItemLink(tooltipData.hyperlink) then
-            return { itemLink = tooltipData.hyperlink }
+        local tooltip = GameTooltip
+        local tooltipIsShown = type(tooltip.IsShown) ~= "function" or tooltip:IsShown()
+        if tooltipIsShown then
+            local tooltipData = tooltip:GetPrimaryTooltipData()
+            if tooltipData then
+                local tooltipLink = tooltipData.hyperlink
+                local tooltipGuid = tooltipData.guid
+                local currentTooltipLink = select(2, SafeCallMethod(tooltip, "GetItem"))
+
+                if IsItemLink(tooltipLink) and IsItemLink(currentTooltipLink) and currentTooltipLink == tooltipLink then
+                    return {
+                        itemLink = tooltipLink,
+                        fromTooltip = true
+                    }
+                end
+
+                if tooltipGuid and tooltipGuid ~= "" then
+                    return {
+                        guid = tooltipGuid,
+                        itemLink = IsItemLink(currentTooltipLink) and currentTooltipLink or (IsItemLink(tooltipLink) and tooltipLink or nil),
+                        fromTooltip = true
+                    }
+                end
+            end
         end
     end
 
@@ -764,14 +813,42 @@ function CaerdonAPIMixin:GetHoveredItemContext()
         local context = self.lastTooltipContext
         local tooltip = context.tooltip
 
-        local tooltipIsShown = not tooltip
-        if tooltip and type(tooltip.IsShown) == "function" then
-            tooltipIsShown = tooltip:IsShown()
-        end
-
-        if tooltipIsShown then
+        if tooltip and type(tooltip.IsShown) == "function" and tooltip:IsShown() then
             local ageValid = not context.timestamp or (GetTime() - context.timestamp) <= 10
             if ageValid then
+                local tooltipData = SafeCallMethod(tooltip, "GetPrimaryTooltipData")
+                local tooltipLink = tooltipData and tooltipData.hyperlink
+                local tooltipGuid = tooltipData and tooltipData.guid
+                local tooltipHasItem = (tooltipGuid and tooltipGuid ~= "") or IsItemLink(tooltipLink)
+
+                if not tooltipHasItem then
+                    return
+                end
+
+                local currentTooltipLink = select(2, SafeCallMethod(tooltip, "GetItem"))
+                if IsItemLink(context.itemLink) then
+                    if IsItemLink(tooltipLink) then
+                        if tooltipLink ~= context.itemLink then
+                            return
+                        end
+                    elseif tooltipGuid and context.guid and tooltipGuid == context.guid then
+                        -- ok, guid matches even if hyperlink missing
+                    elseif IsItemLink(currentTooltipLink) and currentTooltipLink == context.itemLink then
+                        -- ok, GetItem still matches
+                    else
+                        return
+                    end
+                elseif IsItemLink(currentTooltipLink) then
+                    context.itemLink = currentTooltipLink
+                elseif context.guid then
+                    if not tooltipGuid or tooltipGuid ~= context.guid then
+                        return
+                    end
+                    context.guid = tooltipGuid
+                else
+                    return
+                end
+
                 local copy = CopyTooltipContext(context)
                 if copy then
                     if (copy.bag == nil or copy.slot == nil) and copy.itemLocation and type(copy.itemLocation.IsValid) == "function" then
@@ -784,6 +861,7 @@ function CaerdonAPIMixin:GetHoveredItemContext()
 
                     copy.tooltip = nil
                     copy.itemLocation = nil
+                    copy.fromTooltip = true
                     return copy
                 end
             end
@@ -791,14 +869,13 @@ function CaerdonAPIMixin:GetHoveredItemContext()
     end
 end
 
-function CaerdonAPIMixin:OpenDebugFrameWithItemID(debugFeature, itemID)
-    if not debugFeature or not debugFeature.frame or not itemID or itemID <= 0 then
-        return
+local function OpenDebugFrameWithItem(debugFeature, item)
+    if not debugFeature or not debugFeature.frame or not item then
+        return false
     end
 
     debugFeature.frame:Show()
 
-    local item = Item:CreateFromItemID(itemID)
     local function onItemReady()
         local link = item:GetItemLink()
         if IsItemLink(link) then
@@ -809,9 +886,45 @@ function CaerdonAPIMixin:OpenDebugFrameWithItemID(debugFeature, itemID)
 
     if item:IsItemDataCached() then
         onItemReady()
+        return true
     else
         item:ContinueWithCancelOnItemLoad(onItemReady)
+        return true
     end
+end
+
+function CaerdonAPIMixin:OpenDebugFrameWithItemID(debugFeature, itemID)
+    if not debugFeature or not itemID or itemID <= 0 then
+        return false
+    end
+
+    if not Item or type(Item.CreateFromItemID) ~= "function" then
+        return false
+    end
+
+    local item = Item:CreateFromItemID(itemID)
+    if item then
+        return OpenDebugFrameWithItem(debugFeature, item)
+    end
+
+    return false
+end
+
+function CaerdonAPIMixin:OpenDebugFrameWithItemGUID(debugFeature, itemGUID)
+    if not debugFeature or not itemGUID or itemGUID == "" then
+        return false
+    end
+
+    if not Item or type(Item.CreateFromItemGUID) ~= "function" then
+        return false
+    end
+
+    local item = Item:CreateFromItemGUID(itemGUID)
+    if item then
+        return OpenDebugFrameWithItem(debugFeature, item)
+    end
+
+    return false
 end
 
 function CaerdonAPIMixin:OpenDebugForHoveredItem()
@@ -822,6 +935,26 @@ function CaerdonAPIMixin:OpenDebugForHoveredItem()
     end
 
     local context = self:GetHoveredItemContext()
+    if context and context.fromTooltip then
+        local tooltipLink = select(2, SafeCallMethod(GameTooltip, "GetItem"))
+        local tooltipData = nil
+        if GameTooltip and type(GameTooltip.GetPrimaryTooltipData) == "function" then
+            tooltipData = GameTooltip:GetPrimaryTooltipData()
+        end
+        local tooltipGuid = tooltipData and tooltipData.guid
+        local linkMatches = IsItemLink(context.itemLink) and IsItemLink(tooltipLink) and tooltipLink == context.itemLink
+        local guidMatches = context.guid and tooltipGuid and tooltipGuid ~= "" and tooltipGuid == context.guid
+
+        if not linkMatches and IsItemLink(tooltipLink) and not IsItemLink(context.itemLink) then
+            context.itemLink = tooltipLink
+            linkMatches = true
+        end
+
+        if not linkMatches and not guidMatches and context.bag == nil and context.slot == nil and not context.itemID and not context.transmogSourceID then
+            context = nil
+        end
+    end
+
     if not context then
         print("Caerdon Wardrobe: No hovered item found to debug.")
         return
@@ -831,6 +964,27 @@ function CaerdonAPIMixin:OpenDebugForHoveredItem()
         debugFeature.frame:Show()
         debugFeature:SetCurrentItemFromBagAndSlot(context.bag, context.slot)
         return
+    end
+
+    if context.guid then
+        local handled = false
+
+        if C_Item and type(C_Item.GetItemLinkByGUID) == "function" then
+            local guidLink = C_Item.GetItemLinkByGUID(context.guid)
+            if IsItemLink(guidLink) then
+                debugFeature.frame:Show()
+                debugFeature:SetCurrentItem(guidLink)
+                handled = true
+            end
+        end
+
+        if not handled then
+            handled = self:OpenDebugFrameWithItemGUID(debugFeature, context.guid)
+        end
+
+        if handled then
+            return
+        end
     end
 
     if IsItemLink(context.itemLink) then
