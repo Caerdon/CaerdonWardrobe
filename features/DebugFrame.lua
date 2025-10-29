@@ -346,22 +346,31 @@ function DebugFrameMixin:Init()
     self.itemNameButton = CreateFrame("Button", nil, self.itemFrame)
     self.itemNameButton:SetAllPoints(self.itemName)
     self.itemNameButton:SetScript("OnClick", function()
-        if self.currentItem then
-            if IsModifiedClick("CHATLINK") then
-                ChatEdit_InsertLink(self.currentItem)
-            else
-                -- Show floating item tooltip like clicking items in chat
-                if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == self.currentItem then
-                    ItemRefTooltip:Hide()
-                else
-                    ShowUIPanel(ItemRefTooltip)
-                    if not ItemRefTooltip:IsShown() then
-                        ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
-                    end
-                    ItemRefTooltip:SetHyperlink(self.currentItem)
-                    ItemRefTooltip.itemLink = self.currentItem
-                end
+        if not self.currentItem then
+            return
+        end
+
+        if IsModifiedClick("CHATLINK") then
+            ChatEdit_InsertLink(self.currentItem)
+            return
+        end
+
+        if IsModifiedClick("DRESSUP") then
+            if self:TryOpenCurrentEnsembleInWardrobe() then
+                return
             end
+        end
+
+        -- Show floating item tooltip like clicking items in chat
+        if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == self.currentItem then
+            ItemRefTooltip:Hide()
+        else
+            ShowUIPanel(ItemRefTooltip)
+            if not ItemRefTooltip:IsShown() then
+                ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
+            end
+            ItemRefTooltip:SetHyperlink(self.currentItem)
+            ItemRefTooltip.itemLink = self.currentItem
         end
     end)
 
@@ -530,6 +539,9 @@ function DebugFrameMixin:ClearDebugDisplay()
     self.itemName:SetText("")
     self.itemID:SetText("")
     self.playerInfo:SetText("")
+    self.currentEnsembleSetID = nil
+    self.currentEnsembleSetInfo = nil
+    self.currentEnsembleClassCandidates = nil
 
     if self.slotHelpText then
         self.slotHelpText:Show()
@@ -1098,10 +1110,15 @@ function DebugFrameMixin:AddEnsembleInfo(item)
 
     local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
     if not transmogSetID then return end
+    self.currentEnsembleSetID = transmogSetID
+    self.currentEnsembleSetInfo = nil
+    self.currentEnsembleClassCandidates = nil
 
     -- Add ensemble header section
     local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
     if transmogSetInfo then
+        self.currentEnsembleSetInfo = transmogSetInfo
+        self.currentEnsembleClassCandidates = self:GetClassCandidatesForSet(transmogSetInfo)
         self:AddDebugEntry("Set Name", transmogSetInfo.name or "Unknown")
         self:AddDebugEntry("Set ID", tostring(transmogSetID))
         self:AddDebugEntry("Set Collected", tostring(transmogSetInfo.collected))
@@ -1233,6 +1250,248 @@ function DebugFrameMixin:AddEnsembleInfo(item)
     self.content:SetHeight(totalHeight)
 end
 
+function DebugFrameMixin:GetClassCandidatesForSet(setInfo)
+    local candidates = {}
+    local playerClassID = select(3, UnitClass("player"))
+
+    if setInfo and setInfo.classMask and setInfo.classMask ~= 0 then
+        local playerBit = bit.lshift(1, playerClassID - 1)
+        if bit.band(setInfo.classMask, playerBit) ~= 0 then
+            table.insert(candidates, playerClassID)
+        end
+
+        for classID = 1, GetNumClasses() do
+            if classID ~= playerClassID then
+                local classBit = bit.lshift(1, classID - 1)
+                if bit.band(setInfo.classMask, classBit) ~= 0 then
+                    table.insert(candidates, classID)
+                end
+            end
+        end
+    else
+        table.insert(candidates, playerClassID)
+    end
+
+    if #candidates == 0 then
+        table.insert(candidates, playerClassID)
+    end
+
+    return candidates
+end
+
+function DebugFrameMixin:SelectWardrobeSet(setID)
+    if not (WardrobeCollectionFrame and WardrobeCollectionFrame.SetsCollectionFrame) then
+        return false
+    end
+
+    local setsFrame = WardrobeCollectionFrame.SetsCollectionFrame
+    if not setsFrame.SelectSet then
+        return false
+    end
+
+    setsFrame:SelectSet(setID)
+
+    if setsFrame.ScrollToSet then
+        local alignment = ScrollBoxConstants and ScrollBoxConstants.AlignCenter or nil
+        setsFrame:ScrollToSet(setID, alignment)
+    end
+
+    return true
+end
+
+function DebugFrameMixin:TryOpenCurrentEnsembleInWardrobe()
+    local setID = self.currentEnsembleSetID
+    if not setID then
+        return false
+    end
+
+    if not CollectionsJournal then
+        if CollectionsJournal_LoadUI then
+            CollectionsJournal_LoadUI()
+        else
+            UIParentLoadAddOn("Blizzard_Collections")
+        end
+    end
+
+    if not CollectionsJournal then
+        return false
+    end
+
+    ShowUIPanel(CollectionsJournal)
+
+    if CollectionsJournal_SetTab then
+        CollectionsJournal_SetTab(CollectionsJournal, 5)
+    end
+
+    if not WardrobeCollectionFrame then
+        return false
+    end
+
+    if WardrobeCollectionFrame.SetTab then
+        WardrobeCollectionFrame:SetTab(WARDROBE_TAB_SETS)
+    end
+
+    local setInfo = self.currentEnsembleSetInfo or C_TransmogSets.GetSetInfo(setID)
+    if setInfo then
+        self.currentEnsembleSetInfo = setInfo
+    end
+
+    local classCandidates = self.currentEnsembleClassCandidates
+    if not classCandidates or #classCandidates == 0 then
+        classCandidates = self:GetClassCandidatesForSet(setInfo)
+        self.currentEnsembleClassCandidates = classCandidates
+    end
+
+    if not classCandidates or #classCandidates == 0 then
+        return false
+    end
+
+    local function AttemptClass(index)
+        if index > #classCandidates then
+            return
+        end
+
+        local classID = classCandidates[index]
+        if classID then
+            C_TransmogSets.SetTransmogSetsClassFilter(classID)
+            if WardrobeCollectionFrame.ClassDropdown and WardrobeCollectionFrame.ClassDropdown.Refresh then
+                WardrobeCollectionFrame.ClassDropdown:Refresh()
+            end
+        end
+
+        C_Timer.After(0.1, function()
+            if C_TransmogSets.IsSetVisible and not C_TransmogSets.IsSetVisible(setID) and index < #classCandidates then
+                AttemptClass(index + 1)
+                return
+            end
+
+            local attempts = 0
+            local function TrySelect()
+                attempts = attempts + 1
+                if not self:SelectWardrobeSet(setID) and attempts < 3 then
+                    C_Timer.After(0.1, TrySelect)
+                end
+            end
+            TrySelect()
+        end)
+    end
+
+    AttemptClass(1)
+
+    return true
+end
+
+function DebugFrameMixin:GetRequiredClassForSource(appearanceID, sourceID, categoryID, transmogLocation, sourceInfo)
+    local playerClassID = select(3, UnitClass("player"))
+
+    if sourceInfo and sourceInfo.isValidSourceForPlayer then
+        return playerClassID
+    end
+
+    for classID = 1, GetNumClasses() do
+        local sources = C_TransmogCollection.GetValidAppearanceSourcesForClass(appearanceID, classID, categoryID,
+            transmogLocation)
+        if sources and #sources > 0 then
+            for _, source in ipairs(sources) do
+                if source.sourceID == sourceID then
+                    return classID
+                end
+            end
+        end
+    end
+
+    return playerClassID
+end
+
+function DebugFrameMixin:OpenAppearanceSourceInWardrobe(appearanceID, sourceID, sourceInfo, categoryID, transmogLocation)
+    if not appearanceID or not sourceID or not transmogLocation then
+        return
+    end
+
+    if not CollectionsJournal then
+        if CollectionsJournal_LoadUI then
+            CollectionsJournal_LoadUI()
+        else
+            UIParentLoadAddOn("Blizzard_Collections")
+        end
+    end
+
+    if not CollectionsJournal then
+        return
+    end
+
+    ShowUIPanel(CollectionsJournal)
+
+    if CollectionsJournal_SetTab then
+        CollectionsJournal_SetTab(CollectionsJournal, 5)
+    end
+
+    local requiredClassID = self:GetRequiredClassForSource(appearanceID, sourceID, categoryID, transmogLocation,
+        sourceInfo)
+
+    C_Timer.After(0.3, function()
+        if not WardrobeCollectionFrame then
+            return
+        end
+
+        if WardrobeCollectionFrame.SetTab then
+            WardrobeCollectionFrame:SetTab(WARDROBE_TAB_ITEMS)
+        end
+
+        local itemsFrame = WardrobeCollectionFrame.ItemsCollectionFrame
+        if not itemsFrame then
+            return
+        end
+
+        if requiredClassID then
+            C_TransmogCollection.SetClassFilter(requiredClassID)
+            if WardrobeCollectionFrame.ClassDropdown and WardrobeCollectionFrame.ClassDropdown.Refresh then
+                WardrobeCollectionFrame.ClassDropdown:Refresh()
+            end
+        end
+
+        if itemsFrame.GoToSourceID then
+            itemsFrame:GoToSourceID(sourceID, transmogLocation, true, false, categoryID)
+
+            if sourceInfo and sourceInfo.itemID then
+                C_Timer.After(0.1, function()
+                    local itemName = C_Item.GetItemNameByID(sourceInfo.itemID)
+                    if itemName then
+                        SetWardrobeCollectionSearchText(itemName)
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+function DebugFrameMixin:HandleAppearanceLink(link)
+    if not link then
+        return
+    end
+
+    local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(link)
+    if not (appearanceID and sourceID) then
+        return
+    end
+
+    local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+    if not (sourceInfo and sourceInfo.invType) then
+        return
+    end
+
+    local slotID = C_Transmog.GetSlotForInventoryType(sourceInfo.invType)
+    if not slotID then
+        return
+    end
+
+    local categoryID = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+    local transmogLocation = TransmogUtil.GetTransmogLocation(slotID, Enum.TransmogType.Appearance,
+        Enum.TransmogModification.Main)
+
+    self:OpenAppearanceSourceInWardrobe(appearanceID, sourceID, sourceInfo, categoryID, transmogLocation)
+end
+
 function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
     local frameName = "CaerdonDebugEnsembleItem" .. index
     local frame = _G[frameName] or CreateFrame("Frame", frameName, self.ensembleContainer, "BackdropTemplate")
@@ -1357,114 +1616,31 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
     -- Button should only cover the text, not the entire line
     if not frame.itemNameButton then
         frame.itemNameButton = CreateFrame("Button", nil, frame)
-        frame.itemNameButton:SetScript("OnClick", function(self, button)
-            local link = self.itemLink
-            if link then
-                if IsModifiedClick("CHATLINK") then
-                    ChatEdit_InsertLink(link)
-                elseif IsControlKeyDown() then
-                    -- Ctrl-Click: Open in Transmog Collection UI
-                    if not CollectionsJournal then
-                        CollectionsJournal_LoadUI()
-                    end
+        frame.itemNameButton:SetScript("OnClick", function(button)
+            local link = button.itemLink
+            if not link then
+                return
+            end
 
-                    if CollectionsJournal then
-                        -- Get appearance info from the item
-                        local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(link)
-                        if appearanceID and sourceID then
-                            -- Get the inventory slot for this item
-                            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
-                            if sourceInfo and sourceInfo.invType then
-                                -- Get the slot ID from the inventory type
-                                local slotID = C_Transmog.GetSlotForInventoryType(sourceInfo.invType)
-                                if slotID then
-                                    -- Open Collections Journal to Appearances tab
-                                    if not CollectionsJournal:IsShown() then
-                                        ShowUIPanel(CollectionsJournal)
-                                    end
-                                    CollectionsJournal_SetTab(CollectionsJournal, 5) -- Tab 5 is Appearances
+            if IsModifiedClick("CHATLINK") then
+                ChatEdit_InsertLink(link)
+                return
+            end
 
-                                    -- Pre-calculate class filter if needed
-                                    local requiredClassID = nil
-                                    local categoryID = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
-                                    local transmogLocation = TransmogUtil.GetTransmogLocation(slotID,
-                                        Enum.TransmogType.Appearance, Enum.TransmogModification.Main)
+            if IsControlKeyDown() then
+                self:HandleAppearanceLink(link)
+                return
+            end
 
-                                    if not sourceInfo.isValidSourceForPlayer then
-                                        -- Item not valid for player - find which class can use it
-                                        for classID = 1, 13 do
-                                            local sources = C_TransmogCollection.GetValidAppearanceSourcesForClass(
-                                                appearanceID, classID, categoryID, transmogLocation)
-                                            if sources and #sources > 0 then
-                                                for _, source in ipairs(sources) do
-                                                    if source.sourceID == sourceID then
-                                                        requiredClassID = classID
-                                                        break
-                                                    end
-                                                end
-                                                if requiredClassID then
-                                                    break
-                                                end
-                                            end
-                                        end
-                                    else
-                                        -- Item IS valid for player - set to player's class
-                                        local classInfo = C_CreatureInfo.GetClassInfo(select(3, UnitClass("player")))
-                                        if classInfo then
-                                            requiredClassID = classInfo.classID
-                                        end
-                                    end
-
-                                    -- Set class filter BEFORE opening UI
-                                    if requiredClassID then
-                                        C_TransmogCollection.SetClassFilter(requiredClassID)
-                                    end
-
-                                    -- Wait for frame to be fully initialized, then navigate
-                                    C_Timer.After(0.3, function()
-                                        if WardrobeCollectionFrame and WardrobeCollectionFrame.ItemsCollectionFrame then
-                                            local itemsFrame = WardrobeCollectionFrame.ItemsCollectionFrame
-
-                                            -- Refresh the class dropdown to show the new filter
-                                            if requiredClassID and WardrobeCollectionFrame.ClassDropdown then
-                                                if WardrobeCollectionFrame.ClassDropdown.Refresh then
-                                                    WardrobeCollectionFrame.ClassDropdown:Refresh()
-                                                end
-                                            end
-
-                                            if itemsFrame.GoToSourceID then
-                                                -- Navigate to the source
-                                                itemsFrame:GoToSourceID(sourceID, transmogLocation, true, false,
-                                                    categoryID)
-
-                                                -- Set search filter after navigation with a small delay
-                                                -- This ensures the frame has fully loaded before filtering
-                                                C_Timer.After(0.1, function()
-                                                    local itemName = C_Item.GetItemNameByID(sourceInfo.itemID)
-                                                    if itemName then
-                                                        SetWardrobeCollectionSearchText(itemName)
-                                                    end
-                                                end)
-                                            end
-                                        end
-                                    end)
-                                end
-                            end
-                        end
-                    end
-                else
-                    -- Normal click: Show floating item tooltip like clicking items in chat
-                    if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
-                        ItemRefTooltip:Hide()
-                    else
-                        ShowUIPanel(ItemRefTooltip)
-                        if not ItemRefTooltip:IsShown() then
-                            ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
-                        end
-                        ItemRefTooltip:SetHyperlink(link)
-                        ItemRefTooltip.itemLink = link
-                    end
+            if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
+                ItemRefTooltip:Hide()
+            else
+                ShowUIPanel(ItemRefTooltip)
+                if not ItemRefTooltip:IsShown() then
+                    ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
                 end
+                ItemRefTooltip:SetHyperlink(link)
+                ItemRefTooltip.itemLink = link
             end
         end)
     end
@@ -1700,119 +1876,31 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
                         itemButton:SetPoint("TOPLEFT", itemText, "TOPLEFT", 0, 0)
                         itemButton:SetPoint("BOTTOMRIGHT", itemText, "BOTTOMRIGHT", 0, 0)
                         itemButton.itemLink = sharedItem.itemLink
-                        itemButton:SetScript("OnClick", function(self, button)
-                            local link = self.itemLink
-                            if link then
-                                if IsModifiedClick("CHATLINK") then
-                                    ChatEdit_InsertLink(link)
-                                elseif IsControlKeyDown() then
-                                    -- Ctrl-Click: Open in Transmog Collection UI
-                                    if not CollectionsJournal then
-                                        CollectionsJournal_LoadUI()
-                                    end
+                        itemButton:SetScript("OnClick", function(button)
+                            local link = button.itemLink
+                            if not link then
+                                return
+                            end
 
-                                    if CollectionsJournal then
-                                        -- Get appearance info from the item
-                                        local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(link)
-                                        if appearanceID and sourceID then
-                                            -- Get the inventory slot for this item
-                                            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
-                                            if sourceInfo and sourceInfo.invType then
-                                                -- Get the slot ID from the inventory type
-                                                local slotID = C_Transmog.GetSlotForInventoryType(sourceInfo.invType)
-                                                if slotID then
-                                                    -- Open Collections Journal to Appearances tab
-                                                    if not CollectionsJournal:IsShown() then
-                                                        ShowUIPanel(CollectionsJournal)
-                                                    end
-                                                    CollectionsJournal_SetTab(CollectionsJournal, 5) -- Tab 5 is Appearances
+                            if IsModifiedClick("CHATLINK") then
+                                ChatEdit_InsertLink(link)
+                                return
+                            end
 
-                                                    -- Pre-calculate class filter if needed
-                                                    local requiredClassID = nil
-                                                    local categoryID = C_TransmogCollection.GetAppearanceSourceInfo(
-                                                        sourceID)
-                                                    local transmogLocation = TransmogUtil.GetTransmogLocation(slotID,
-                                                        Enum.TransmogType.Appearance, Enum.TransmogModification.Main)
+                            if IsControlKeyDown() then
+                                self:HandleAppearanceLink(link)
+                                return
+                            end
 
-                                                    if not sourceInfo.isValidSourceForPlayer then
-                                                        -- Item not valid for player - find which class can use it
-                                                        for classID = 1, 13 do
-                                                            local sources = C_TransmogCollection
-                                                                .GetValidAppearanceSourcesForClass(
-                                                                    appearanceID, classID, categoryID, transmogLocation)
-                                                            if sources and #sources > 0 then
-                                                                for _, source in ipairs(sources) do
-                                                                    if source.sourceID == sourceID then
-                                                                        requiredClassID = classID
-                                                                        break
-                                                                    end
-                                                                end
-                                                                if requiredClassID then
-                                                                    break
-                                                                end
-                                                            end
-                                                        end
-                                                    else
-                                                        -- Item IS valid for player - set to player's class
-                                                        local classInfo = C_CreatureInfo.GetClassInfo(select(3,
-                                                            UnitClass("player")))
-                                                        if classInfo then
-                                                            requiredClassID = classInfo.classID
-                                                        end
-                                                    end
-
-                                                    -- Set class filter BEFORE opening UI
-                                                    if requiredClassID then
-                                                        C_TransmogCollection.SetClassFilter(requiredClassID)
-                                                    end
-
-                                                    -- Wait for frame to be fully initialized, then navigate
-                                                    C_Timer.After(0.3, function()
-                                                        if WardrobeCollectionFrame and WardrobeCollectionFrame.ItemsCollectionFrame then
-                                                            local itemsFrame = WardrobeCollectionFrame
-                                                                .ItemsCollectionFrame
-
-                                                            -- Refresh the class dropdown to show the new filter
-                                                            if requiredClassID and WardrobeCollectionFrame.ClassDropdown then
-                                                                if WardrobeCollectionFrame.ClassDropdown.Refresh then
-                                                                    WardrobeCollectionFrame.ClassDropdown:Refresh()
-                                                                end
-                                                            end
-
-                                                            if itemsFrame.GoToSourceID then
-                                                                -- Navigate to the source
-                                                                itemsFrame:GoToSourceID(sourceID, transmogLocation, true,
-                                                                    false, categoryID)
-
-                                                                -- Set search filter after navigation with a small delay
-                                                                -- This ensures the frame has fully loaded before filtering
-                                                                C_Timer.After(0.1, function()
-                                                                    local itemName = C_Item.GetItemNameByID(sourceInfo
-                                                                        .itemID)
-                                                                    if itemName then
-                                                                        SetWardrobeCollectionSearchText(itemName)
-                                                                    end
-                                                                end)
-                                                            end
-                                                        end
-                                                    end)
-                                                end
-                                            end
-                                        end
-                                    end
-                                else
-                                    -- Normal click: Show floating item tooltip like clicking items in chat
-                                    if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
-                                        ItemRefTooltip:Hide()
-                                    else
-                                        ShowUIPanel(ItemRefTooltip)
-                                        if not ItemRefTooltip:IsShown() then
-                                            ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
-                                        end
-                                        ItemRefTooltip:SetHyperlink(link)
-                                        ItemRefTooltip.itemLink = link
-                                    end
+                            if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
+                                ItemRefTooltip:Hide()
+                            else
+                                ShowUIPanel(ItemRefTooltip)
+                                if not ItemRefTooltip:IsShown() then
+                                    ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
                                 end
+                                ItemRefTooltip:SetHyperlink(link)
+                                ItemRefTooltip.itemLink = link
                             end
                         end)
                         table.insert(frame.detailTexts, itemButton)
