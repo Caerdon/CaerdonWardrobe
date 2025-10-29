@@ -5,4 +5,7 @@
  <Binding name="PRINTMOUSEOVERLINKDETAILS" category="Caerdon Wardrobe" default="F12">
     CaerdonAPI:DumpMouseoverLinkDetails()
  </Binding>
+ <Binding name="CAERDONDEBUGHOVER" category="Caerdon Wardrobe">
+    CaerdonAPI:OpenDebugForHoveredItem()
+ </Binding>
 </Bindings>

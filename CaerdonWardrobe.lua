@@ -8,6 +8,7 @@ local L = NS.L
 BINDING_HEADER_CAERDON = L["Caerdon Addons"]
 BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
 BINDING_NAME_PRINTMOUSEOVERLINKDETAILS = L["Print Mouseover Link Details"]
+BINDING_NAME_CAERDONDEBUGHOVER = L["Open Debug for Hovered Item"]
 
 local availableFeatures = {}
 local registeredFeatures = {}
@@ -755,6 +756,10 @@ end
 
 function CaerdonWardrobeMixin:GetRegisteredFeatures()
     return availableFeatures
+end
+
+function CaerdonWardrobeMixin:GetFeature(name)
+    return registeredFeatures[name] or availableFeatures[name]
 end
 
 function CaerdonWardrobeMixin:ClearButton(button)

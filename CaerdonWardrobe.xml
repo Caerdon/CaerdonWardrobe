@@ -21,6 +21,7 @@
 	<Script file="features\Bank.lua" />
 	<Script file="features\BlackMarket.lua" />
 	<Script file="features\CustomerOrders.lua" />
+	<Script file="features\DressingRoom.lua" />
 	<Script file="features\EncounterJournal.lua" />
 	<Script file="features\GroupLoot.lua" />
 	<Script file="features\GuildBank.lua" />
