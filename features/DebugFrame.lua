@@ -6,6 +6,25 @@ local DebugFrameMixin = {}
 local MAX_DEBUG_ENTRIES = 50
 local cancelFuncs = {}
 
+local function SetWardrobeCollectionSearchText(searchText)
+    if not WardrobeCollectionFrame then
+        return
+    end
+
+    local searchBox = WardrobeCollectionFrame.SearchBox
+        or (WardrobeCollectionFrame.ItemsCollectionFrame and WardrobeCollectionFrame.ItemsCollectionFrame.SearchBox)
+        or _G.WardrobeCollectionFrameSearchBox
+
+    if searchBox and searchBox.SetText then
+        searchBox:SetText(searchText or "")
+        return
+    end
+
+    if searchText and WardrobeCollectionFrame.SetSearch then
+        WardrobeCollectionFrame:SetSearch(searchText)
+    end
+end
+
 function DebugFrameMixin:GetName()
     return "DebugFrame"
 end
@@ -1422,8 +1441,8 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
                                                 -- This ensures the frame has fully loaded before filtering
                                                 C_Timer.After(0.1, function()
                                                     local itemName = C_Item.GetItemNameByID(sourceInfo.itemID)
-                                                    if itemName and WardrobeCollectionFrame.SetSearch then
-                                                        WardrobeCollectionFrame:SetSearch(itemName)
+                                                    if itemName then
+                                                        SetWardrobeCollectionSearchText(itemName)
                                                     end
                                                 end)
                                             end
@@ -1770,8 +1789,8 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
                                                                 C_Timer.After(0.1, function()
                                                                     local itemName = C_Item.GetItemNameByID(sourceInfo
                                                                         .itemID)
-                                                                    if itemName and WardrobeCollectionFrame.SetSearch then
-                                                                        WardrobeCollectionFrame:SetSearch(itemName)
+                                                                    if itemName then
+                                                                        SetWardrobeCollectionSearchText(itemName)
                                                                     end
                                                                 end)
                                                             end
