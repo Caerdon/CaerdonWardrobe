@@ -241,128 +241,168 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 -- Even if you know the appearance from another difficulty/modifier, the ensemble will still
                                 -- teach you this specific source, which counts toward set completion
                                 if not sourceInfo.isCollected then
-                                    hasUncollectedSources = true
+                                    local appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+                                    local appearanceID = appearanceInfo and appearanceInfo.appearanceID or sourceInfo.visualID
+                                    local isLegendary = (sourceInfo.quality == Enum.ItemQuality.Legendary)
+                                    local legendaryAppearanceCollected = appearanceInfo and appearanceInfo.appearanceIsCollected
+                                    local legendaryHasAltCollected = false
 
-                                    local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
-                                    local accountCollectible = hasItemData and canCollect or sourceInfo.playerCanCollect
-                                    local collectibleByPlayer = accountCollectible
-
-                                    local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
-                                        .GetItemInfoInstant(sourceInfo.itemID)
-                                    local _, _, _, _, itemMinLevel = C_Item.GetItemInfo(sourceInfo.itemID)
-                                    if not itemMinLevel then
-                                        requestItemDataByID(sourceInfo.itemID)
-                                        pendingItemDataLoad = true
-                                    end
-                                    local isArmor = (classID == ITEM_CLASS_ARMOR)
-                                    local isCloak = (itemEquipLoc == "INVTYPE_CLOAK")
-                                    local canWearArmorType = CanPlayerWearArmorSubType(itemSubTypeID)
-                                    if isCloak then
-                                        canWearArmorType = true
-                                    end
-                                    local playerEligibleByClass = canWearArmorType and sourceInfo.playerCanCollect
-                                    local levelLocked = itemMinLevel and playerLevel < itemMinLevel
-
-                                    -- Check if this specific source has TRUE class restrictions (Paladin-only, etc.)
-                                    -- This is different from armor type restrictions (cloth/leather/mail/plate)
-                                    local classRestrictedForPlayer = false
-
-                                    -- Method 1: Use useErrorType to distinguish true restrictions from armor type restrictions
-                                    -- TransmogUseErrorType enum values:
-                                    --   7 = Class (Paladin-only, etc.) - TRUE restriction
-                                    --   8 = Race - TRUE restriction
-                                    --   9 = Faction - TRUE restriction
-                                    --  10 = ItemProficiency (plate on priest, etc.) - armor type only
-                                    if not sourceInfo.isValidSourceForPlayer then
-                                        local errorType = sourceInfo.useErrorType
-                                        if errorType == 7 or errorType == 8 or errorType == 9 then
-                                            -- Class, Race, or Faction restriction
-                                            classRestrictedForPlayer = true
+                                    if isLegendary and not legendaryAppearanceCollected and appearanceID then
+                                        local appearanceSources = C_TransmogCollection.GetAppearanceSources(appearanceID,
+                                            sourceInfo.categoryID)
+                                        if appearanceSources then
+                                            for _, appearanceSourceInfo in ipairs(appearanceSources) do
+                                                if appearanceSourceInfo.sourceID ~= sourceID and appearanceSourceInfo.isCollected then
+                                                    legendaryHasAltCollected = true
+                                                    break
+                                                end
+                                            end
                                         end
                                     end
 
-                                    -- Method 2: Check if source is invalid but armor type/weapon is wearable
-                                    -- This catches Paladin-only items on Warriors/DKs who can wear plate
-                                    -- Also verify canCollect=false to ensure it's truly a class restriction,
-                                    -- not just a temporary validity issue (like level requirement)
-                                    if not classRestrictedForPlayer and (not sourceInfo.isValidSourceForPlayer) and canWearArmorType and not canCollect then
-                                        classRestrictedForPlayer = true
-                                    end
+                                    local skipLegendaryDuplicate = isLegendary and (legendaryAppearanceCollected or
+                                                                               legendaryHasAltCollected)
 
-                                    -- Method 3: For items where armor type isn't wearable, use canCollect
-                                    -- If canCollect=false, the item has true class/race/faction restrictions
-                                    -- If canCollect=true, it's just an armor type restriction (collectible account-wide)
-                                    if not classRestrictedForPlayer and not sourceInfo.isValidSourceForPlayer and not canWearArmorType then
-                                        if not canCollect then
-                                            classRestrictedForPlayer = true
+                                    if skipLegendaryDuplicate then
+                                        if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
+                                            table.insert(debugInfo.appearances[1].sources, {
+                                                sourceID = sourceID,
+                                                itemID = sourceInfo.itemID,
+                                                itemLink = GetDebugItemLink(sourceInfo.itemID),
+                                                isCollected = sourceInfo.isCollected,
+                                                isLegendaryDuplicate = true,
+                                                appearanceID = appearanceInfo and appearanceInfo.appearanceID or nil,
+                                                appearanceIsCollected = appearanceInfo and appearanceInfo.appearanceIsCollected or nil,
+                                                hasAlternateCollected = legendaryHasAltCollected
+                                            })
                                         end
-                                    end
-
-                                    if classRestrictedForPlayer then
-                                        hasClassRestrictedSources = true
                                     else
-                                        allSourcesClassRestricted = false
-                                    end
+                                        hasUncollectedSources = true
 
-                                    if not classRestrictedForPlayer and not canWearArmorType and accountCollectible then
-                                        hasArmorTypeRestrictedSources = true
-                                    end
+                                        local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+                                        local accountCollectible = hasItemData and canCollect or sourceInfo.playerCanCollect
+                                        local collectibleByPlayer = accountCollectible
 
-                                    if not canWearArmorType then
-                                        collectibleByPlayer = false
-                                    end
+                                        local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
+                                            .GetItemInfoInstant(sourceInfo.itemID)
+                                        local _, _, _, _, itemMinLevel = C_Item.GetItemInfo(sourceInfo.itemID)
+                                        if not itemMinLevel then
+                                            requestItemDataByID(sourceInfo.itemID)
+                                            pendingItemDataLoad = true
+                                        end
+                                        local isArmor = (classID == ITEM_CLASS_ARMOR)
+                                        local isCloak = (itemEquipLoc == "INVTYPE_CLOAK")
+                                        local canWearArmorType = CanPlayerWearArmorSubType(itemSubTypeID)
+                                        if isCloak then
+                                            canWearArmorType = true
+                                        end
+                                        local playerEligibleByClass = canWearArmorType and sourceInfo.playerCanCollect
+                                        local levelLocked = itemMinLevel and playerLevel < itemMinLevel
 
-                                    if hasItemData and not canCollect and playerEligibleByClass then
-                                        hasRequirementLockedSources = true
-                                    end
+                                        -- Check if this specific source has TRUE class restrictions (Paladin-only, etc.)
+                                        -- This is different from armor type restrictions (cloth/leather/mail/plate)
+                                        local classRestrictedForPlayer = false
 
-                                    if levelLocked then
-                                        hasRequirementLockedSources = true
-                                        hasLevelLockedSources = true
-                                        collectibleByPlayer = false
-                                        -- Only set hasPlayerCanCollectButRequirementsFail if NOT class-restricted
-                                        -- Class-restricted items should trigger otherNoLoot, not lowSkill
-                                        if playerEligibleByClass and not classRestrictedForPlayer then
+                                        -- Method 1: Use useErrorType to distinguish true restrictions from armor type restrictions
+                                        -- TransmogUseErrorType enum values:
+                                        --   7 = Class (Paladin-only, etc.) - TRUE restriction
+                                        --   8 = Race - TRUE restriction
+                                        --   9 = Faction - TRUE restriction
+                                        --  10 = ItemProficiency (plate on priest, etc.) - armor type only
+                                        if not sourceInfo.isValidSourceForPlayer then
+                                            local errorType = sourceInfo.useErrorType
+                                            if errorType == 7 or errorType == 8 or errorType == 9 then
+                                                -- Class, Race, or Faction restriction
+                                                classRestrictedForPlayer = true
+                                            end
+                                        end
+
+                                        -- Method 2: Check if source is invalid but armor type/weapon is wearable
+                                        -- This catches Paladin-only items on Warriors/DKs who can wear plate
+                                        -- Also verify canCollect=false to ensure it's truly a class restriction,
+                                        -- not just a temporary validity issue (like level requirement)
+                                        if not classRestrictedForPlayer and (not sourceInfo.isValidSourceForPlayer) and canWearArmorType and not canCollect then
+                                            classRestrictedForPlayer = true
+                                        end
+
+                                        -- Method 3: For items where armor type isn't wearable, use canCollect
+                                        -- If canCollect=false, the item has true class/race/faction restrictions
+                                        -- If canCollect=true, it's just an armor type restriction (collectible account-wide)
+                                        if not classRestrictedForPlayer and not sourceInfo.isValidSourceForPlayer and not canWearArmorType then
+                                            if not canCollect then
+                                                classRestrictedForPlayer = true
+                                            end
+                                        end
+
+                                        if classRestrictedForPlayer then
+                                            hasClassRestrictedSources = true
+                                        else
+                                            allSourcesClassRestricted = false
+                                        end
+
+                                        if not classRestrictedForPlayer and not canWearArmorType and accountCollectible then
+                                            hasArmorTypeRestrictedSources = true
+                                        end
+
+                                        if not canWearArmorType then
+                                            collectibleByPlayer = false
+                                        end
+
+                                        if hasItemData and not canCollect and playerEligibleByClass then
+                                            hasRequirementLockedSources = true
+                                        end
+
+                                        if levelLocked then
+                                            hasRequirementLockedSources = true
+                                            hasLevelLockedSources = true
+                                            collectibleByPlayer = false
+                                            -- Only set hasPlayerCanCollectButRequirementsFail if NOT class-restricted
+                                            -- Class-restricted items should trigger otherNoLoot, not lowSkill
+                                            if playerEligibleByClass and not classRestrictedForPlayer then
+                                                hasPlayerCanCollectButRequirementsFail = true
+                                            end
+                                        end
+
+                                        if isArmor and collectibleByPlayer and canWearArmorType and not classRestrictedForPlayer then
+                                            hasUncollectedForPlayerInSet = true
+                                        elseif collectibleByPlayer and not classRestrictedForPlayer then
+                                            hasCollectibleNonArmorSources = true
+                                        elseif playerEligibleByClass and not collectibleByPlayer and not classRestrictedForPlayer then
+                                            -- Sometimes playerCanCollect is true but PlayerCanCollectSource returns false (level requirement, etc.)
+                                            -- Only count this if NOT class-restricted (class-restricted should trigger otherNoLoot)
+                                            hasRequirementLockedSources = true
                                             hasPlayerCanCollectButRequirementsFail = true
                                         end
-                                    end
 
-                                    if isArmor and collectibleByPlayer and canWearArmorType and not classRestrictedForPlayer then
-                                        hasUncollectedForPlayerInSet = true
-                                    elseif collectibleByPlayer and not classRestrictedForPlayer then
-                                        hasCollectibleNonArmorSources = true
-                                    elseif playerEligibleByClass and not collectibleByPlayer and not classRestrictedForPlayer then
-                                        -- Sometimes playerCanCollect is true but PlayerCanCollectSource returns false (level requirement, etc.)
-                                        -- Only count this if NOT class-restricted (class-restricted should trigger otherNoLoot)
-                                        hasRequirementLockedSources = true
-                                        hasPlayerCanCollectButRequirementsFail = true
-                                    end
-
-                                    -- Store uncollected sources for debug (first 15)
-                                    if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
-                                        table.insert(debugInfo.appearances[1].sources, {
-                                            sourceID = sourceID,
-                                            itemID = sourceInfo.itemID,
-                                            itemLink = GetDebugItemLink(sourceInfo.itemID),
-                                            itemType = itemType,
-                                            itemEquipLoc = itemEquipLoc,
-                                            classID = classID,
-                                            itemSubTypeID = itemSubTypeID,
-                                            isArmor = isArmor,
-                                            isCloak = isCloak,
-                                            canWearArmorType = canWearArmorType,
-                                            itemMinLevel = itemMinLevel,
-                                            levelLocked = levelLocked,
-                                            isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
-                                            isCollected = sourceInfo.isCollected,
-                                            playerCanCollect = sourceInfo.playerCanCollect,
-                                            playerEligibleByClass = playerEligibleByClass,
-                                            collectibleByPlayer = collectibleByPlayer,
-                                            hasItemDataAPI = hasItemData,
-                                            canCollectAPI = canCollect,
-                                            requirementLocked = hasItemData and not canCollect,
-                                            classRestrictedForPlayer = classRestrictedForPlayer
-                                        })
+                                        -- Store uncollected sources for debug (first 15)
+                                        if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
+                                            table.insert(debugInfo.appearances[1].sources, {
+                                                sourceID = sourceID,
+                                                itemID = sourceInfo.itemID,
+                                                itemLink = GetDebugItemLink(sourceInfo.itemID),
+                                                itemType = itemType,
+                                                itemEquipLoc = itemEquipLoc,
+                                                classID = classID,
+                                                itemSubTypeID = itemSubTypeID,
+                                                isArmor = isArmor,
+                                                isCloak = isCloak,
+                                                canWearArmorType = canWearArmorType,
+                                                itemMinLevel = itemMinLevel,
+                                                levelLocked = levelLocked,
+                                                isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
+                                                isCollected = sourceInfo.isCollected,
+                                                playerCanCollect = sourceInfo.playerCanCollect,
+                                                playerEligibleByClass = playerEligibleByClass,
+                                                collectibleByPlayer = collectibleByPlayer,
+                                                hasItemDataAPI = hasItemData,
+                                                canCollectAPI = canCollect,
+                                                requirementLocked = hasItemData and not canCollect,
+                                                classRestrictedForPlayer = classRestrictedForPlayer,
+                                                appearanceID = appearanceInfo and appearanceInfo.appearanceID or nil,
+                                                appearanceIsCollected = appearanceInfo and appearanceInfo.appearanceIsCollected or nil,
+                                                hasAlternateCollected = legendaryHasAltCollected
+                                            })
+                                        end
                                     end
                                 end
                             end
@@ -455,85 +495,123 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 -- Even if you know the appearance from another difficulty/modifier, the ensemble will still
                                 -- teach you this specific source, which counts toward set completion
                                 if not sourceInfo.isCollected then
-                                    hasUncollectedSources = true
+                                    local appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+                                    local appearanceID = appearanceInfo and appearanceInfo.appearanceID or sourceInfo.visualID
+                                    local isLegendary = (sourceInfo.quality == Enum.ItemQuality.Legendary)
+                                    local legendaryAppearanceCollected = appearanceInfo and appearanceInfo.appearanceIsCollected
+                                    local legendaryHasAltCollected = false
 
-                                    -- Track if ANY uncollected source is valid for the player
-                                    if sourceInfo.isValidSourceForPlayer then
-                                        allSourcesInvalidForPlayer = false
+                                    if isLegendary and not legendaryAppearanceCollected and appearanceID then
+                                        local appearanceSources = C_TransmogCollection.GetAppearanceSources(appearanceID,
+                                            sourceInfo.categoryID)
+                                        if appearanceSources then
+                                            for _, appearanceSourceInfo in ipairs(appearanceSources) do
+                                                if appearanceSourceInfo.sourceID ~= sourceID and appearanceSourceInfo.isCollected then
+                                                    legendaryHasAltCollected = true
+                                                    break
+                                                end
+                                            end
+                                        end
                                     end
 
-                                    -- Check if this specific source has TRUE class restrictions (Paladin-only, etc.)
-                                    -- This is different from armor type restrictions (cloth/leather/mail/plate)
-                                    local classRestrictedForPlayer = false
+                                    local skipLegendaryDuplicate = isLegendary and (legendaryAppearanceCollected or
+                                                                               legendaryHasAltCollected)
 
-                                    -- Method 1: Check if source is invalid but armor type is wearable
-                                    -- This catches Paladin-only items on Warriors/DKs who can wear plate
-                                    if (not sourceInfo.isValidSourceForPlayer) and canWearArmorType then
-                                        classRestrictedForPlayer = true
-                                    end
+                                    if skipLegendaryDuplicate then
+                                        if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
+                                            table.insert(debugInfo.appearances[1].sources, {
+                                                sourceID = sourceID,
+                                                itemID = sourceInfo.itemID,
+                                                appearanceID = sourceInfo.visualID,
+                                                isCollected = sourceInfo.isCollected,
+                                                isLegendaryDuplicate = true,
+                                                appearanceIsCollected = appearanceInfo and appearanceInfo.appearanceIsCollected or nil,
+                                                hasAlternateCollected = legendaryHasAltCollected
+                                            })
+                                        end
+                                    else
+                                        hasUncollectedSources = true
 
-                                    -- Method 2: Use useErrorType to distinguish true restrictions from armor type restrictions
-                                    -- TransmogUseErrorType enum values:
-                                    --   7 = Class (Paladin-only, etc.) - TRUE restriction
-                                    --   8 = Race - TRUE restriction
-                                    --   9 = Faction - TRUE restriction
-                                    --  10 = ItemProficiency (plate on priest, etc.) - armor type only
-                                    if not classRestrictedForPlayer and not sourceInfo.isValidSourceForPlayer then
-                                        local errorType = sourceInfo.useErrorType
-                                        if errorType == 7 or errorType == 8 or errorType == 9 then
-                                            -- Class, Race, or Faction restriction
+                                        -- Track if ANY uncollected source is valid for the player
+                                        if sourceInfo.isValidSourceForPlayer then
+                                            allSourcesInvalidForPlayer = false
+                                        end
+
+                                        -- Check if this specific source has TRUE class restrictions (Paladin-only, etc.)
+                                        -- This is different from armor type restrictions (cloth/leather/mail/plate)
+                                        local classRestrictedForPlayer = false
+
+                                        -- Method 1: Check if source is invalid but armor type is wearable
+                                        -- This catches Paladin-only items on Warriors/DKs who can wear plate
+                                        if (not sourceInfo.isValidSourceForPlayer) and canWearArmorType then
                                             classRestrictedForPlayer = true
                                         end
-                                    end
 
-                                    if classRestrictedForPlayer then
-                                        hasClassRestrictedSources = true
-                                    else
-                                        allSourcesClassRestricted = false
-                                    end
-
-                                    if not classRestrictedForPlayer and not canWearArmorType and accountCollectible then
-                                        hasArmorTypeRestrictedSources = true
-                                    end
-
-                                    -- Track uncollected set armor separately
-                                    if isSetPiece and isArmor then
-                                        hasUncollectedSetArmor = true
-                                    end
-
-                                    -- Track wearable items
-                                    if hasItemData and canCollect and canWearArmorType then
-                                        if isSetPiece and isArmor then
-                                            -- Uncollected set armor piece that player can wear
-                                            hasWearableSetArmor = true
-                                        elseif not isSetPiece then
-                                            -- Uncollected non-set item (like cloak) that player can wear
-                                            hasWearableNonSetItems = true
+                                        -- Method 2: Use useErrorType to distinguish true restrictions from armor type restrictions
+                                        -- TransmogUseErrorType enum values:
+                                        --   7 = Class (Paladin-only, etc.) - TRUE restriction
+                                        --   8 = Race - TRUE restriction
+                                        --   9 = Faction - TRUE restriction
+                                        --  10 = ItemProficiency (plate on priest, etc.) - armor type only
+                                        if not classRestrictedForPlayer and not sourceInfo.isValidSourceForPlayer then
+                                            local errorType = sourceInfo.useErrorType
+                                            if errorType == 7 or errorType == 8 or errorType == 9 then
+                                                -- Class, Race, or Faction restriction
+                                                classRestrictedForPlayer = true
+                                            end
                                         end
-                                        hasUncollectedForPlayer = true
-                                    end
 
-                                    -- Store uncollected sources for debug (first 15)
-                                    if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
-                                        local hasItemDataAPI, canCollectAPI = C_TransmogCollection
-                                            .PlayerCanCollectSource(sourceID)
-                                        table.insert(debugInfo.appearances[1].sources, {
-                                            sourceID = sourceID,
-                                            itemID = sourceInfo.itemID,
-                                            appearanceID = sourceInfo.visualID,
-                                            itemType = itemType,
-                                            itemEquipLoc = itemEquipLoc,
-                                            classID = classID,
-                                            isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
-                                            isCollected = sourceInfo.isCollected,
-                                            playerCanCollect = sourceInfo.playerCanCollect,
-                                            itemSubTypeID = itemSubTypeID,
-                                            canCollectAPI = canCollectAPI,
-                                            canWearArmorType = canWearArmorType,
-                                            isArmor = isArmor,
-                                            isCloak = isCloak,
-                                            isSetPiece = isSetPiece
-                                        })
+                                        if classRestrictedForPlayer then
+                                            hasClassRestrictedSources = true
+                                        else
+                                            allSourcesClassRestricted = false
+                                        end
+
+                                        if not classRestrictedForPlayer and not canWearArmorType and accountCollectible then
+                                            hasArmorTypeRestrictedSources = true
+                                        end
+
+                                        -- Track uncollected set armor separately
+                                        if isSetPiece and isArmor then
+                                            hasUncollectedSetArmor = true
+                                        end
+
+                                        -- Track wearable items
+                                        if hasItemData and canCollect and canWearArmorType then
+                                            if isSetPiece and isArmor then
+                                                -- Uncollected set armor piece that player can wear
+                                                hasWearableSetArmor = true
+                                            elseif not isSetPiece then
+                                                -- Uncollected non-set item (like cloak) that player can wear
+                                                hasWearableNonSetItems = true
+                                            end
+                                            hasUncollectedForPlayer = true
+                                        end
+
+                                        -- Store uncollected sources for debug (first 15)
+                                        if #debugInfo.appearances > 0 and #debugInfo.appearances[1].sources < 15 then
+                                            local hasItemDataAPI, canCollectAPI = C_TransmogCollection
+                                                .PlayerCanCollectSource(sourceID)
+                                            table.insert(debugInfo.appearances[1].sources, {
+                                                sourceID = sourceID,
+                                                itemID = sourceInfo.itemID,
+                                                appearanceID = sourceInfo.visualID,
+                                                itemType = itemType,
+                                                itemEquipLoc = itemEquipLoc,
+                                                classID = classID,
+                                                isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
+                                                isCollected = sourceInfo.isCollected,
+                                                playerCanCollect = sourceInfo.playerCanCollect,
+                                                itemSubTypeID = itemSubTypeID,
+                                                canCollectAPI = canCollectAPI,
+                                                canWearArmorType = canWearArmorType,
+                                                isArmor = isArmor,
+                                                isCloak = isCloak,
+                                                isSetPiece = isSetPiece,
+                                                appearanceIsCollected = appearanceInfo and appearanceInfo.appearanceIsCollected or nil,
+                                                hasAlternateCollected = legendaryHasAltCollected
+                                            })
+                                        end
                                     end
                                 end
                             end
