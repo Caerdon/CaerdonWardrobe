@@ -10,7 +10,7 @@ end
 
 function LiteBagMixin:Init()
     LiteBag_RegisterHook('LiteBagItemButton_Update', function(...) self:UpdateButton(...) end)
-    LiteBag_AddUpdateEvent('TRANSMOG_COLLECTION_UPDATED')
+    LiteBag_AddPluginEvent('TRANSMOG_COLLECTION_UPDATED')
 end
 
 function LiteBagMixin:GetTooltipData(item, locationInfo)
