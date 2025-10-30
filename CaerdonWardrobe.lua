@@ -94,8 +94,8 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
         yBackgroundOffset = options.statusBackgroundOffsetY
     end
 
+    local background = icon.mogStatusBackground
     if not options.fixedStatusPosition then
-        local background = icon.mogStatusBackground
         if background then
             background:ClearAllPoints()
             background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset + xBackgroundOffset,
@@ -104,6 +104,9 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 
         icon:ClearAllPoints()
         icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+    elseif background then
+        background:ClearAllPoints()
+        background:SetPoint("CENTER", icon)
     end
 end
 
