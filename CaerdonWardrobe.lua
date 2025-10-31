@@ -95,6 +95,12 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
     end
 
     local background = icon.mogStatusBackground
+    if background then
+        local parent = icon:GetParent()
+        if parent and background:GetParent() ~= parent then
+            background:SetParent(parent)
+        end
+    end
     if not options.fixedStatusPosition then
         if background then
             background:ClearAllPoints()
