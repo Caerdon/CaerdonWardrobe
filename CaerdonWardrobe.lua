@@ -133,6 +133,15 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
         local mogStatus = button.mogStatus
         if mogStatus then
             local mogStatusBackground = mogStatus.mogStatusBackground
+            if not mogStatus:IsShown() then
+                if mogStatusBackground then
+                    mogStatusBackground:SetAlpha(0)
+                end
+                mogStatus:SetAlpha(0)
+                mogStatus:SetDesaturated(false)
+                return
+            end
+
             local assignedAlpha = mogStatus.assignedAlpha or 1.0
 
             if isFiltered then
@@ -172,6 +181,38 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
         local mogStatus = button:CreateTexture(nil, "ARTWORK", nil, 2)
         mogStatus.mogStatusBackground = mogStatusBackground
         button.mogStatus = mogStatus
+
+        mogStatusBackground:SetAlpha(0)
+        mogStatusBackground:Hide()
+        mogStatus:SetAlpha(0)
+        mogStatus:Hide()
+
+        if not mogStatus._caerdonBackgroundHooked then
+            mogStatus:HookScript("OnHide", function(statusTexture)
+                local background = statusTexture.mogStatusBackground
+                if background then
+                    background._caerdonPrevAlpha = background:GetAlpha()
+                    background:SetAlpha(0)
+                    background:Hide()
+                end
+            end)
+            mogStatus:HookScript("OnShow", function(statusTexture)
+                local background = statusTexture.mogStatusBackground
+                if background then
+                    background:Show()
+                    local alpha = background._caerdonPrevAlpha
+                    if alpha == nil or alpha == 0 then
+                        alpha = statusTexture:GetAlpha()
+                    end
+                    if (alpha == nil or alpha == 0) then
+                        alpha = statusTexture.assignedAlpha or 1
+                    end
+                    background:SetAlpha(alpha)
+                    background._caerdonPrevAlpha = nil
+                end
+            end)
+            mogStatus._caerdonBackgroundHooked = true
+        end
     end
 
     if not button.bindsOnText then
@@ -228,6 +269,21 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         if mogAnim and mogAnim:IsPlaying() then
             mogAnim:Stop()
         end
+        if mogStatusBackground then
+            mogStatusBackground:SetVertexColor(1, 1, 1)
+            mogStatusBackground:SetTexture(nil)
+            mogStatusBackground:SetAlpha(0)
+            mogStatusBackground:Hide()
+        end
+        if mogStatus then
+            mogStatus:SetVertexColor(1, 1, 1)
+            mogStatus:SetTexture(nil)
+            mogStatus:SetAlpha(0)
+            mogStatus:SetDesaturated(false)
+            mogStatus.assignedAlpha = 0
+            mogStatus:Hide()
+        end
+        return
     end
 
     -- local mogFlash = button.mogFlash
@@ -313,6 +369,13 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- 		button.mogAnim = mogAnim
     -- 	end
 
+    if mogStatusBackground then
+        mogStatusBackground:Show()
+    end
+    if mogStatus then
+        mogStatus:Show()
+    end
+
     local displayInfo
     if feature then
         displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
@@ -322,12 +385,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local alpha = 1
 
     mogStatusBackground:SetVertexColor(1, 1, 1)
-    mogStatusBackground:SetTexture("")
     mogStatusBackground:SetTexCoord(0, 1, 0, 1)
+    mogStatusBackground:SetTexture("")
 
     mogStatus:SetVertexColor(1, 1, 1)
-    mogStatus:SetTexture("")
     mogStatus:SetTexCoord(0, 1, 0, 1)
+    mogStatus:SetTexture("")
 
     local isProminent = false
 
@@ -767,6 +830,34 @@ end
 
 function CaerdonWardrobeMixin:ClearButton(button)
     if button.caerdonButton then
+        if self.waitingToProcess then
+            for locationKey, processInfo in pairs(self.waitingToProcess) do
+                if processInfo.button == button then
+                    self.waitingToProcess[locationKey] = nil
+                end
+            end
+        end
+
+        if self.processQueue then
+            for locationKey, processInfo in pairs(self.processQueue) do
+                if processInfo.button == button then
+                    self.processQueue[locationKey] = nil
+                end
+            end
+        end
+
+        if self.featureProcessItems then
+            for feature, items in pairs(self.featureProcessItems) do
+                if items then
+                    for locationKey, processInfo in pairs(items) do
+                        if processInfo.button == button then
+                            items[locationKey] = nil
+                        end
+                    end
+                end
+            end
+        end
+
         self:SetItemButtonStatus(button)
         self:SetItemButtonBindType(button)
     end

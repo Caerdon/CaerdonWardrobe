@@ -8,6 +8,33 @@ function BaganatorMixin:GetName()
     return addonName
 end
 
+function BaganatorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    if not Baganator or not Baganator.API or not Baganator.API.IsCornerWidgetActive then
+        return {}
+    end
+
+    if not Baganator.API.IsCornerWidgetActive("pawn") then
+        return {}
+    end
+
+    if not PawnShouldItemLinkHaveUpgradeArrow then
+        return {}
+    end
+
+    if item and item.GetCaerdonItemType and item:GetCaerdonItemType() == CaerdonItemType.Equipment then
+        local itemLink = item:GetItemLink()
+        if itemLink and PawnShouldItemLinkHaveUpgradeArrow(itemLink, false) then
+            return {
+                upgradeIcon = {
+                    shouldShow = false
+                }
+            }
+        end
+    end
+
+    return {}
+end
+
 local options = {
     fixedStatusPosition = true,
     statusProminentSize = 16,
@@ -35,7 +62,7 @@ function BaganatorMixin:Init()
         end
 
         -- Ideally, we'd only show if we have a status to show, but UpdateButton is running asynchronously, so we can't account for it here.
-        -- Unfortunately, this means that mog status will override options in Baganator's icon corner setup even if it doesn't have anything to show.
+        -- This keeps the widget hidden on empty slots so the background can clear cleanly.
         return shouldShow
     end, function(itemButton)
         -- Create Caerdon Button with nil item to create caerdonButton ahead of time for all slots
@@ -63,9 +90,8 @@ function BaganatorMixin:Init()
             CaerdonWardrobe:UpdateButton(itemButton, item, self, { locationKey = details.itemLink }, options)
         end
 
-        -- Ideally, we'd only show if we have a binding to show, but UpdateButton is running asynchronously, so we can't account for it here.
-        -- Unfortunately, this means that binding will override options in Baganator's icon corner setup even if it doesn't have anything to show.
-        return true
+        -- This keeps the widget hidden on empty slots so the background clears correctly.
+        return shouldShow
     end, function(itemButton)
         CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
         return itemButton.caerdonButton.bindsOnText
