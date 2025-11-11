@@ -1177,11 +1177,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     bindingStatus = equipmentSets[1]
                 end
             else
+                local forceSellable = transmogInfo and transmogInfo.uniqueUpgradeBlocked
                 if mogStatus == "collected" and
                     self:IsSellable() and
-                    not self:GetHasUse() and
-                    not self:GetSetID() and
-                    not bindingResult.hasEquipEffect then
+                    (forceSellable or (not self:GetHasUse() and
+                        not self:GetSetID() and
+                        not bindingResult.hasEquipEffect)) then
                     mogStatus = "sellable"
                 end
             end

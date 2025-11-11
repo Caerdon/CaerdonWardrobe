@@ -32,6 +32,161 @@ local slotTable = {
     INVTYPE_RELIC = 0
 }
 
+local dualSlotInventoryTypes = {
+    INVTYPE_FINGER = { INVSLOT_FINGER1, INVSLOT_FINGER2 },
+    INVTYPE_TRINKET = { INVSLOT_TRINKET1, INVSLOT_TRINKET2 }
+}
+
+local singleSlotCache = {}
+
+local function GetInventorySlotsForType(inventoryType)
+    if not inventoryType then
+        return nil
+    end
+
+    local dualSlots = dualSlotInventoryTypes[inventoryType]
+    if dualSlots then
+        return dualSlots
+    end
+
+    local slotID = slotTable[inventoryType]
+    if slotID then
+        local cached = singleSlotCache[inventoryType]
+        if not cached then
+            cached = { slotID }
+            singleSlotCache[inventoryType] = cached
+        end
+        return cached
+    end
+end
+
+local function GetComparableItemLevel(itemLink, itemLocation)
+    if not itemLink then
+        return nil
+    end
+
+    local itemLevel
+    if itemLocation and itemLocation:IsValid() and C_Item.DoesItemExist(itemLocation) then
+        itemLevel = C_Item.GetCurrentItemLevel(itemLocation)
+    end
+
+    if not itemLevel or itemLevel <= 0 then
+        itemLevel = select(1, GetDetailedItemLevelInfo(itemLink))
+    end
+
+    return itemLevel
+end
+
+local function GetPlayerLootSpecID()
+    local playerSpec = GetSpecialization();
+    if not playerSpec then
+        return nil
+    end
+
+    local playerSpecID = GetSpecializationInfo(playerSpec, nil, nil, nil, UnitSex("player"));
+    local lootSpecID = GetLootSpecialization()
+    if lootSpecID == 0 then
+        lootSpecID = playerSpecID
+    end
+
+    return lootSpecID
+end
+
+local function BuildUniqueCategoryKey(limitCategoryID, limitCategoryName, itemIDOrLink)
+    if limitCategoryID and limitCategoryID ~= 0 then
+        return "id:" .. limitCategoryID
+    elseif limitCategoryName and limitCategoryName ~= "" then
+        return "name:" .. limitCategoryName
+    elseif itemIDOrLink then
+        return "item:" .. tostring(itemIDOrLink)
+    end
+end
+
+local function DetermineUniqueness(itemLinkOrID, itemID)
+    local isUnique, limitCategoryName, limitCategoryCount, limitCategoryID = C_Item.GetItemUniquenessByID(itemLinkOrID)
+    if not isUnique then
+        return nil
+    end
+
+    local key = BuildUniqueCategoryKey(limitCategoryID, limitCategoryName, itemID or itemLinkOrID)
+    if not key then
+        return nil
+    end
+
+    return key, limitCategoryCount or 1
+end
+
+local function GetUniqueUpgradeInfo(item)
+    if not item or not item.GetItemID then
+        return false, false, nil
+    end
+
+    local itemLink = item:GetItemLink()
+    local itemID = item:GetItemID()
+    if not itemLink and not itemID then
+        return false, false, nil
+    end
+
+    local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
+    if not uniqueCategoryKey then
+        return false, false, nil
+    end
+
+    limitCategoryCount = tonumber(limitCategoryCount) or 1
+    local candidateLevel = GetComparableItemLevel(itemLink, item:GetItemLocation())
+    local inventorySlots = GetInventorySlotsForType(item:GetInventoryTypeName())
+    local hasEmptyEquipSlot = false
+    if inventorySlots then
+        for _, equipSlotID in ipairs(inventorySlots) do
+            local equipLocation = ItemLocation:CreateFromEquipmentSlot(equipSlotID)
+            if not (equipLocation and equipLocation:IsValid() and C_Item.DoesItemExist(equipLocation)) then
+                hasEmptyEquipSlot = true
+                break
+            end
+        end
+    end
+
+    local equippedMatches = 0
+    local equippedBetterOrEqual = 0
+    local betterThanEquipped = false
+
+    local function EvaluateMatch(equippedLink, location, equippedCategoryKey)
+        if equippedCategoryKey and equippedCategoryKey == uniqueCategoryKey then
+            equippedMatches = equippedMatches + 1
+
+            local equippedLevel = GetComparableItemLevel(equippedLink, location)
+            if equippedLevel and candidateLevel then
+                if equippedLevel >= candidateLevel then
+                    equippedBetterOrEqual = equippedBetterOrEqual + 1
+                else
+                    betterThanEquipped = true
+                end
+            elseif equippedLevel and not candidateLevel then
+                equippedBetterOrEqual = equippedBetterOrEqual + 1
+            end
+            return true
+        end
+        return false
+    end
+
+    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+        local location = ItemLocation:CreateFromEquipmentSlot(slot)
+        if location and location:IsValid() and C_Item.DoesItemExist(location) then
+            local equippedLink = C_Item.GetItemLink(location)
+            local equippedID = C_Item.GetItemID(location)
+
+            local equippedCategoryKey = select(1, DetermineUniqueness(equippedLink or equippedID, equippedID))
+            EvaluateMatch(equippedLink, location, equippedCategoryKey)
+        end
+    end
+
+    local minMatches = math.min(limitCategoryCount, equippedMatches)
+    local uniqueUpgradeBlocked = equippedMatches >= limitCategoryCount and equippedBetterOrEqual >= minMatches
+    local uniqueUpgradeCandidate = betterThanEquipped or (hasEmptyEquipSlot and equippedMatches < limitCategoryCount)
+
+    return uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey
+end
+
 --[[static]]
 function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
     if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
@@ -89,7 +244,7 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         end
     end
 
-    return function() end  -- No cancel function for now
+    return function() end -- No cancel function for now
 end
 
 -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
@@ -120,7 +275,7 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
             local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
             local equipmentSetID = equipmentSetIDs[setIndex]
             local name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored =
-            C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
+                C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
 
             local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
             if equipLocations then
@@ -130,7 +285,7 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
                     if location ~= nil then
                         -- TODO: Keep an eye out for a new way to do this in the API
                         local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot =
-                        EquipmentManager_UnpackLocation(location)
+                            EquipmentManager_UnpackLocation(location)
                         equipSlot = tonumber(equipSlot)
                         equipBag = tonumber(equipBag)
 
@@ -188,6 +343,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local otherSourceFound = false
     local otherSourceFoundForPlayer = false
     local canCollect = false
+    local playerLootSpecID
+    local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
 
     -- Keep available for debug info
     local appearanceInfo, sourceInfo
@@ -201,6 +358,20 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- Appearance is the visual look - can have many sources
     -- Sets can have multiple appearances (normal vs mythic, etc.)
     local appearanceID, sourceID
+    sourceSpecs = C_Item.GetItemSpecInfo(itemLink)
+    if playerLootSpecID == nil then
+        playerLootSpecID = GetPlayerLootSpecID()
+    end
+
+    if sourceSpecs and #sourceSpecs > 0 and playerLootSpecID and playerLootSpecID > 0 then
+        matchesLootSpec = false
+        for _, validSpecID in ipairs(sourceSpecs) do
+            if validSpecID == playerLootSpecID then
+                matchesLootSpec = true
+                break
+            end
+        end
+    end
 
     if item.extraData and item.extraData.appearanceID and item.extraData.appearanceSourceID then
         appearanceID = item.extraData.appearanceID
@@ -256,8 +427,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         --     print('Info not ready - source ID ' .. tostring(sourceID) .. ' for ' .. itemLink)
         -- end
 
-        sourceSpecs = C_Item.GetItemSpecInfo(itemLink)
-
         -- Only returns for sources that can be transmogged by current toon right now
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
 
@@ -304,7 +473,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     end
 
                     local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item
-                    .GetItemInfoInstant(info.itemID)
+                        .GetItemInfoInstant(info.itemID)
                     -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
                     info.itemSubTypeID = sourceSubTypeID             -- stuff it in here (mostly for debug)
                     info.specs = C_Item.GetItemSpecInfo(info.itemID) -- also this
@@ -347,30 +516,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     end
                 end
             end
-
-            if canCollect and isValidSourceForPlayer then
-                local playerSpecID = -1
-                local playerSpec = GetSpecialization();
-                if (playerSpec) then
-                    playerSpecID = GetSpecializationInfo(playerSpec, nil, nil, nil, UnitSex("player"));
-                end
-                local playerLootSpecID = GetLootSpecialization()
-                if playerLootSpecID == 0 then
-                    playerLootSpecID = playerSpecID
-                end
-
-                if sourceSpecs then
-                    for specIndex = 1, #sourceSpecs do
-                        matchesLootSpec = false
-
-                        local validSpecID = GetSpecializationInfo(specIndex, nil, nil, nil, UnitSex("player"));
-                        if validSpecID == playerLootSpecID then
-                            matchesLootSpec = true
-                            break
-                        end
-                    end
-                end
-            end
         end
     else
         -- No source ID for some reason - last resort effort but assume another toon needs it.
@@ -394,8 +539,28 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     --     end
     -- end
 
+    local shouldShowUpgrade = false
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
-        isUpgrade = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
+        local pawnUpgrade = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
+        if pawnUpgrade then
+            if playerLootSpecID == nil then
+                playerLootSpecID = GetPlayerLootSpecID()
+            end
+
+            if (playerLootSpecID and playerLootSpecID > 0 and not matchesLootSpec) or uniqueUpgradeBlocked then
+                pawnUpgrade = false
+            end
+        elseif uniqueUpgradeCandidate and not uniqueUpgradeBlocked then
+            pawnUpgrade = true
+        end
+
+        shouldShowUpgrade = pawnUpgrade
+    elseif uniqueUpgradeCandidate and not uniqueUpgradeBlocked then
+        shouldShowUpgrade = true
+    end
+
+    if shouldShowUpgrade then
+        isUpgrade = true
     end
 
     return {
@@ -404,6 +569,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         isBindOnPickup = isBindOnPickup,
         appearanceID = appearanceID,
         sourceID = sourceID,
+        uniqueUpgradeBlocked = uniqueUpgradeBlocked,
+        uniqueUpgradeCandidate = uniqueUpgradeCandidate,
+        uniqueCategoryKey = uniqueCategoryKey,
         canEquip = canCollect,
         needsItem = needsItem,
         hasMetRequirements = hasMetRequirements,
@@ -420,7 +588,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             currentSourceFound = currentSourceFound,
             otherSourceFound = otherSourceFound,
             sourceSpecs = sourceSpecs,
-            lowestLevelFound = lowestLevelFound
+            lowestLevelFound = lowestLevelFound,
+            uniqueUpgradeBlocked = uniqueUpgradeBlocked,
+            uniqueUpgradeCandidate = uniqueUpgradeCandidate,
+            uniqueCategoryKey = uniqueCategoryKey
         }
     }
 end
