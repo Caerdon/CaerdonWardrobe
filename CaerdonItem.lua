@@ -999,6 +999,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     local caerdonType = self:GetCaerdonItemType()
     local itemData = self:GetItemData()
     local itemLocation = self:GetItemLocation()
+    local isArtifactItem = false
 
     local bindingResult = self:GetBindingStatus(tooltipData)
     local bindingStatus = bindingResult.bindingStatus
@@ -1110,6 +1111,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     elseif caerdonType == CaerdonItemType.Equipment then
         local transmogInfo = itemData:GetTransmogInfo()
         if transmogInfo then
+            if transmogInfo.isArtifactItem then
+                isArtifactItem = true
+            end
             if transmogInfo.isTransmog then
                 if transmogInfo.needsItem then
                     if not transmogInfo.isCompletionistItem then
@@ -1180,6 +1184,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 local forceSellable = transmogInfo and transmogInfo.uniqueUpgradeBlocked
                 if mogStatus == "collected" and
                     self:IsSellable() and
+                    not isArtifactItem and
                     (forceSellable or (not self:GetHasUse() and
                         not self:GetSetID() and
                         not bindingResult.hasEquipEffect)) then

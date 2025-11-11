@@ -345,6 +345,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local canCollect = false
     local playerLootSpecID
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
+    local isArtifactItem = false
+    local artifactLocation = item:GetItemLocation()
+    if artifactLocation and artifactLocation:IsValid() and C_ArtifactUI and C_ArtifactUI.IsArtifactItem then
+        isArtifactItem = C_ArtifactUI.IsArtifactItem(artifactLocation)
+    end
+    if not isArtifactItem then
+        local itemQuality = item:GetItemQuality()
+        if itemQuality and itemQuality == Enum.ItemQuality.Artifact then
+            isArtifactItem = true
+        end
+    end
 
     -- Keep available for debug info
     local appearanceInfo, sourceInfo
@@ -571,6 +582,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         sourceID = sourceID,
         uniqueUpgradeBlocked = uniqueUpgradeBlocked,
         uniqueUpgradeCandidate = uniqueUpgradeCandidate,
+        isArtifactItem = isArtifactItem,
         uniqueCategoryKey = uniqueCategoryKey,
         canEquip = canCollect,
         needsItem = needsItem,
@@ -591,6 +603,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             lowestLevelFound = lowestLevelFound,
             uniqueUpgradeBlocked = uniqueUpgradeBlocked,
             uniqueUpgradeCandidate = uniqueUpgradeCandidate,
+            isArtifactItem = isArtifactItem,
             uniqueCategoryKey = uniqueCategoryKey
         }
     }
