@@ -187,6 +187,35 @@ local function GetUniqueUpgradeInfo(item)
     return uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey
 end
 
+local function HasBetterOrEqualEquippedItem(item)
+    local inventoryType = item:GetInventoryTypeName()
+    local inventorySlots = GetInventorySlotsForType(inventoryType)
+    if not inventorySlots then
+        return false
+    end
+
+    local candidateLevel = GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
+    if not candidateLevel then
+        return false
+    end
+
+    local filledSlots = 0
+    local strictlyBetterCount = 0
+    for _, slotID in ipairs(inventorySlots) do
+        local location = ItemLocation:CreateFromEquipmentSlot(slotID)
+        if location and location:IsValid() and C_Item.DoesItemExist(location) then
+            filledSlots = filledSlots + 1
+            local equippedLink = C_Item.GetItemLink(location)
+            local equippedLevel = GetComparableItemLevel(equippedLink, location)
+            if equippedLevel and equippedLevel > candidateLevel then
+                strictlyBetterCount = strictlyBetterCount + 1
+            end
+        end
+    end
+
+    return filledSlots > 0 and strictlyBetterCount == filledSlots
+end
+
 --[[static]]
 function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
     if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
@@ -345,6 +374,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local canCollect = false
     local playerLootSpecID
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
+    local betterItemEquipped = HasBetterOrEqualEquippedItem(item)
     local isArtifactItem = false
     local artifactLocation = item:GetItemLocation()
     if artifactLocation and artifactLocation:IsValid() and C_ArtifactUI and C_ArtifactUI.IsArtifactItem then
@@ -582,6 +612,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         sourceID = sourceID,
         uniqueUpgradeBlocked = uniqueUpgradeBlocked,
         uniqueUpgradeCandidate = uniqueUpgradeCandidate,
+        betterItemEquipped = betterItemEquipped,
         isArtifactItem = isArtifactItem,
         uniqueCategoryKey = uniqueCategoryKey,
         canEquip = canCollect,
@@ -603,6 +634,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             lowestLevelFound = lowestLevelFound,
             uniqueUpgradeBlocked = uniqueUpgradeBlocked,
             uniqueUpgradeCandidate = uniqueUpgradeCandidate,
+            betterItemEquipped = betterItemEquipped,
             isArtifactItem = isArtifactItem,
             uniqueCategoryKey = uniqueCategoryKey
         }
