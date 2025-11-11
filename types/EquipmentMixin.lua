@@ -32,10 +32,11 @@ local slotTable = {
     INVTYPE_RELIC = 0
 }
 
---[[static]] function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
-	if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
-		error("Usage: CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)", 2)
-	end
+--[[static]]
+function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
+    if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
+        error("Usage: CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)", 2)
+    end
 
     local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonEquipmentMixin)
     itemType.item = caerdonItem
@@ -78,7 +79,8 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
             -- Using CaerdonItemEventListener instead of CaerdonItem here to avoid recursively diving
             if not waitingForItems[itemID] then
                 waitingForItems[itemID] = true
-                CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID), GenerateClosure(FailTheItem, itemID))
+                CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID),
+                    GenerateClosure(FailTheItem, itemID))
             end
         end
 
@@ -87,7 +89,7 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         end
     end
 
-    return function () end -- No cancel function for now
+    return function() end  -- No cancel function for now
 end
 
 -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. equipment sources)
@@ -114,19 +116,21 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
     -- Use equipment set for binding text if it's assigned to one
     if C_EquipmentSet.CanUseEquipmentSets() then
         local setIndex
-        for setIndex=1, C_EquipmentSet.GetNumEquipmentSets() do
+        for setIndex = 1, C_EquipmentSet.GetNumEquipmentSets() do
             local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
             local equipmentSetID = equipmentSetIDs[setIndex]
-            local name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored = C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
+            local name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored =
+            C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
 
             local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
             if equipLocations then
                 local locationIndex
-                for locationIndex=INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+                for locationIndex = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
                     local location = equipLocations[locationIndex]
                     if location ~= nil then
                         -- TODO: Keep an eye out for a new way to do this in the API
-                        local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot = EquipmentManager_UnpackLocation(location)
+                        local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot =
+                        EquipmentManager_UnpackLocation(location)
                         equipSlot = tonumber(equipSlot)
                         equipBag = tonumber(equipBag)
 
@@ -231,11 +235,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     end
 
     -- if sourceID then
-        -- TODO: Look into this more - doc indicates it's an itemModifiedAppearanceID returned from C_TransmogCollection.GetItemInfo (which may also be sourceID?)
-        -- PlayerKnowsSource just seems broken if that's true, though.
-        -- VisualID == AppearanceID, SourceID == ItemModifiedAppearanceID
-        -- Also check PlayerHasTransmog with the following
-        -- print(itemLink .. ",  PlayerHasTransmogItemModifiedAppearance: " .. tostring(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)) .. ", PlayerKnowsSource: " .. tostring(C_TransmogCollection.PlayerKnowsSource(sourceID)))
+    -- TODO: Look into this more - doc indicates it's an itemModifiedAppearanceID returned from C_TransmogCollection.GetItemInfo (which may also be sourceID?)
+    -- PlayerKnowsSource just seems broken if that's true, though.
+    -- VisualID == AppearanceID, SourceID == ItemModifiedAppearanceID
+    -- Also check PlayerHasTransmog with the following
+    -- print(itemLink .. ",  PlayerHasTransmogItemModifiedAppearance: " .. tostring(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)) .. ", PlayerKnowsSource: " .. tostring(C_TransmogCollection.PlayerKnowsSource(sourceID)))
     -- end
 
     if item:GetMinLevel() and item:GetMinLevel() > UnitLevel("player") then
@@ -263,7 +267,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         if sourceInfo and not sourceInfo.isCollected then
             canCollect = sourceInfo.playerCanCollect
             currentSourceFound = sourceInfo.isCollected
-    
+
             local isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer
             if appearanceID then
                 local sourceIndex, source
@@ -272,14 +276,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 for sourceIndex, source in pairs(appearanceSourceIDs) do
                     local isInfoReadySearch, canCollectSearch = C_TransmogCollection.PlayerCanCollectSource(source)
                     local info = C_TransmogCollection.GetSourceInfo(source)
-                        
+
                     -- TODO: This is how Blizz confirms data is loaded - need to look at CaerdonItem load handling and account for it
                     -- if info and info.quality then
                     --     -- Item is ready
                     -- else
                     --     print('Search SourceInfo quality not available: ' .. itemLink)
                     -- end
-            
+
                     if info then
                         if not appearanceSources then
                             appearanceSources = {}
@@ -299,9 +303,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         end
                     end
 
-                    local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item.GetItemInfoInstant(info.itemID)
+                    local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item
+                    .GetItemInfoInstant(info.itemID)
                     -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
-                    info.itemSubTypeID = sourceSubTypeID -- stuff it in here (mostly for debug)
+                    info.itemSubTypeID = sourceSubTypeID             -- stuff it in here (mostly for debug)
                     info.specs = C_Item.GetItemSpecInfo(info.itemID) -- also this
 
                     local sourceMinLevel = (select(5, C_Item.GetItemInfo(info.itemID)))
@@ -309,7 +314,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         lowestLevelFound = sourceMinLevel
                     end
 
-                    if info.isCollected and (item:GetItemSubTypeID() == info.itemSubTypeID or info.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then 
+                    if info.isCollected and (item:GetItemSubTypeID() == info.itemSubTypeID or info.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then
                         -- Log any matched sources even if they're treated as not found due to other logic below (for debug)
                         table.insert(matchedSources, info)
                     end
@@ -353,11 +358,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 if playerLootSpecID == 0 then
                     playerLootSpecID = playerSpecID
                 end
-            
+
                 if sourceSpecs then
                     for specIndex = 1, #sourceSpecs do
                         matchesLootSpec = false
-    
+
                         local validSpecID = GetSpecializationInfo(specIndex, nil, nil, nil, UnitSex("player"));
                         if validSpecID == playerLootSpecID then
                             matchesLootSpec = true
@@ -365,7 +370,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         end
                     end
                 end
-            end    
+            end
         end
     else
         -- No source ID for some reason - last resort effort but assume another toon needs it.
@@ -376,7 +381,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     end
 
     local isUpgrade = nil
-    
+
     -- TODO: Add check if upgrading item will result in an unlearned appearance.
     -- if item:GetItemID() == 199446 then
     -- local itemLocation = item:GetItemLocation()
@@ -389,8 +394,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     --     end
     -- end
 
-    if PawnShouldItemLinkHaveUpgradeArrow then
-        isUpgrade = PawnShouldItemLinkHaveUpgradeArrow(item:GetItemLink(), false)
+    if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
+        isUpgrade = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
     end
 
     return {
