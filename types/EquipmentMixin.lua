@@ -27,7 +27,7 @@ local slotTable = {
     INVTYPE_HOLDABLE = 17,
     INVTYPE_AMMO = 0,
     INVTYPE_THROWN = 16,
-    INVTYPE_RANGEDRIGHT = 17,
+    INVTYPE_RANGEDRIGHT = 16,
     INVTYPE_QUIVER = 0,
     INVTYPE_RELIC = 0
 }
@@ -38,6 +38,25 @@ local dualSlotInventoryTypes = {
 }
 
 local singleSlotCache = {}
+local offhandInventoryTypes = {
+    INVTYPE_SHIELD = true,
+    INVTYPE_HOLDABLE = true,
+    INVTYPE_WEAPONOFFHAND = true
+}
+
+local twoHandedInventoryTypes = {
+    [Enum.InventoryType.Index2HweaponType] = true,
+    [Enum.InventoryType.IndexRangedType] = true,
+    [Enum.InventoryType.IndexRangedrightType] = true,
+    [Enum.InventoryType.IndexThrownType] = true
+}
+
+local twoHandedInventoryTypeNames = {
+    INVTYPE_2HWEAPON = true,
+    INVTYPE_RANGED = true,
+    INVTYPE_RANGEDRIGHT = true,
+    INVTYPE_THROWN = true
+}
 
 local function GetInventorySlotsForType(inventoryType)
     if not inventoryType then
@@ -75,6 +94,91 @@ local function GetComparableItemLevel(itemLink, itemLocation)
     end
 
     return itemLevel
+end
+
+local function IsTwoHandedMainHandEquipped()
+    local mainHandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_MAINHAND)
+    if not (mainHandLocation and mainHandLocation:IsValid() and C_Item.DoesItemExist(mainHandLocation)) then
+        return false
+    end
+
+    local inventoryType = C_Item.GetItemInventoryType(mainHandLocation)
+    if inventoryType and twoHandedInventoryTypes[inventoryType] then
+        return true
+    end
+
+    if not inventoryType then
+        local itemLink = C_Item.GetItemLink(mainHandLocation)
+        if itemLink then
+            local equipLoc = select(9, GetItemInfo(itemLink))
+            if equipLoc and twoHandedInventoryTypeNames[equipLoc] then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function ShouldIgnoreEmptySlot(slotID, inventoryTypeName)
+    if slotID ~= INVSLOT_OFFHAND then
+        return false
+    end
+
+    if not offhandInventoryTypes[inventoryTypeName] then
+        return false
+    end
+
+    if not IsTwoHandedMainHandEquipped() then
+        return false
+    end
+
+    local offhandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_OFFHAND)
+    if offhandLocation and offhandLocation:IsValid() and C_Item.DoesItemExist(offhandLocation) then
+        return false
+    end
+
+    return true
+end
+
+local function GetBlockedOffhandComparisonLevel()
+    if not IsTwoHandedMainHandEquipped() then
+        return nil
+    end
+
+    local mainHandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_MAINHAND)
+    if not (mainHandLocation and mainHandLocation:IsValid() and C_Item.DoesItemExist(mainHandLocation)) then
+        return nil
+    end
+
+    local mainHandLink = C_Item.GetItemLink(mainHandLocation)
+    return GetComparableItemLevel(mainHandLink, mainHandLocation)
+end
+
+local function IsOffhandSlotBlocked(inventoryTypeName)
+    return ShouldIgnoreEmptySlot(INVSLOT_OFFHAND, inventoryTypeName)
+end
+
+local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel)
+    local location = ItemLocation:CreateFromEquipmentSlot(slotID)
+    if location and location:IsValid() and C_Item.DoesItemExist(location) then
+        local equippedLink = C_Item.GetItemLink(location)
+        local equippedLevel = GetComparableItemLevel(equippedLink, location)
+        if equippedLevel then
+            return candidateLevel - equippedLevel
+        end
+    else
+        if ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
+            local comparisonLevel = GetBlockedOffhandComparisonLevel()
+            if comparisonLevel then
+                return candidateLevel - comparisonLevel
+            else
+                return candidateLevel
+            end
+        else
+            return candidateLevel
+        end
+    end
 end
 
 local function GetPlayerLootSpecID()
@@ -134,14 +238,17 @@ local function GetUniqueUpgradeInfo(item)
 
     limitCategoryCount = tonumber(limitCategoryCount) or 1
     local candidateLevel = GetComparableItemLevel(itemLink, item:GetItemLocation())
-    local inventorySlots = GetInventorySlotsForType(item:GetInventoryTypeName())
+    local inventoryTypeName = item:GetInventoryTypeName()
+    local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
     local hasEmptyEquipSlot = false
     if inventorySlots then
         for _, equipSlotID in ipairs(inventorySlots) do
             local equipLocation = ItemLocation:CreateFromEquipmentSlot(equipSlotID)
             if not (equipLocation and equipLocation:IsValid() and C_Item.DoesItemExist(equipLocation)) then
-                hasEmptyEquipSlot = true
-                break
+                if not ShouldIgnoreEmptySlot(equipSlotID, inventoryTypeName) then
+                    hasEmptyEquipSlot = true
+                    break
+                end
             end
         end
     end
@@ -213,7 +320,65 @@ local function HasBetterOrEqualEquippedItem(item)
         end
     end
 
+    if filledSlots < #inventorySlots then
+        return false
+    end
+
     return filledSlots > 0 and strictlyBetterCount == filledSlots
+end
+
+local function GetUpgradeItemLevelDelta(item)
+    local inventoryType = item:GetInventoryTypeName()
+    local inventorySlots = GetInventorySlotsForType(inventoryType)
+    if not inventorySlots then
+        return nil
+    end
+
+    local candidateLevel = GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
+    if not candidateLevel then
+        return nil
+    end
+
+    local itemLink = item:GetItemLink()
+    local itemID = item:GetItemID()
+    local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
+    local restrictToMatchingUnique = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
+    local matchingUniqueSlots = nil
+    if restrictToMatchingUnique then
+        for _, slotID in ipairs(inventorySlots) do
+            local location = ItemLocation:CreateFromEquipmentSlot(slotID)
+            if location and location:IsValid() and C_Item.DoesItemExist(location) then
+                local equippedLink = C_Item.GetItemLink(location)
+                local equippedID = C_Item.GetItemID(location)
+                local equippedKey = select(1, DetermineUniqueness(equippedLink or equippedID, equippedID))
+                if equippedKey and equippedKey == uniqueCategoryKey then
+                    if not matchingUniqueSlots then
+                        matchingUniqueSlots = {}
+                    end
+                    matchingUniqueSlots[slotID] = true
+                end
+            end
+        end
+        if not matchingUniqueSlots then
+            restrictToMatchingUnique = false
+        end
+    end
+
+    local maxPositiveDiff = nil
+    for _, slotID in ipairs(inventorySlots) do
+        if not restrictToMatchingUnique or (matchingUniqueSlots and matchingUniqueSlots[slotID]) then
+            local diff = GetSlotUpgradeDiff(slotID, inventoryType, candidateLevel)
+            if diff and diff > 0 then
+                if not maxPositiveDiff or diff > maxPositiveDiff then
+                    maxPositiveDiff = diff
+                end
+            end
+        end
+    end
+
+    if maxPositiveDiff then
+        return math.floor(maxPositiveDiff + 0.5)
+    end
 end
 
 --[[static]]
@@ -357,6 +522,7 @@ end
 function CaerdonEquipmentMixin:GetTransmogInfo()
     local item = self.item
     local itemLink = item:GetItemLink()
+    local inventoryTypeName = item:GetInventoryTypeName()
 
     if item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
         return
@@ -375,7 +541,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local playerLootSpecID
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
     local betterItemEquipped = HasBetterOrEqualEquippedItem(item)
+    local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(item)
     local isArtifactItem = false
+    local blockedOffhandSlot = IsOffhandSlotBlocked(inventoryTypeName)
     local artifactLocation = item:GetItemLocation()
     if artifactLocation and artifactLocation:IsValid() and C_ArtifactUI and C_ArtifactUI.IsArtifactItem then
         isArtifactItem = C_ArtifactUI.IsArtifactItem(artifactLocation)
@@ -584,6 +752,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
         local pawnUpgrade = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
         if pawnUpgrade then
+            if blockedOffhandSlot then
+                pawnUpgrade = false
+            end
             if playerLootSpecID == nil then
                 playerLootSpecID = GetPlayerLootSpecID()
             end
@@ -600,6 +771,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         shouldShowUpgrade = true
     end
 
+    if shouldShowUpgrade and blockedOffhandSlot then
+        shouldShowUpgrade = false
+    end
+
     if shouldShowUpgrade then
         isUpgrade = true
     end
@@ -613,6 +788,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         uniqueUpgradeBlocked = uniqueUpgradeBlocked,
         uniqueUpgradeCandidate = uniqueUpgradeCandidate,
         betterItemEquipped = betterItemEquipped,
+        upgradeItemLevelDelta = upgradeItemLevelDelta,
         isArtifactItem = isArtifactItem,
         uniqueCategoryKey = uniqueCategoryKey,
         canEquip = canCollect,
@@ -635,6 +811,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             uniqueUpgradeBlocked = uniqueUpgradeBlocked,
             uniqueUpgradeCandidate = uniqueUpgradeCandidate,
             betterItemEquipped = betterItemEquipped,
+            upgradeItemLevelDelta = upgradeItemLevelDelta,
             isArtifactItem = isArtifactItem,
             uniqueCategoryKey = uniqueCategoryKey
         }

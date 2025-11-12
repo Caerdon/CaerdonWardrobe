@@ -17,20 +17,25 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     -- TODO: Review using VerticalLayoutFrame: https://discord.com/channels/168296152670797824/218957301111848962/1021406980029550642
 
     local frame = CreateFrame("Frame")
-    -- self.scrollChild = CreateFrame("Frame")
-    self.scrollChild = frame
+    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT")
+    scrollFrame:SetPoint("BOTTOMRIGHT", -26, 0)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetPoint("TOPLEFT")
+    scrollChild:SetWidth(1)
+    scrollChild:SetHeight(1)
+    scrollFrame:SetScrollChild(scrollChild)
+    scrollFrame:HookScript("OnSizeChanged", function(_, width)
+        scrollChild:SetWidth(width)
+    end)
+    scrollChild:SetWidth(scrollFrame:GetWidth())
+
+    self.scrollChild = scrollChild
+    self.scrollFrame = scrollFrame
 
     local category = Settings.GetCategory(self.parent);
     local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(category, frame, self:GetTitle());
-
-    -- local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate");
-    -- local scrollFrame = CreateFrame("ScrollFrame", "CaerdonConfigGeneralFrame", frame, "UIPanelScrollFrameTemplate2")
-    -- scrollFrame:SetPoint("TOPLEFT", 8, -4)
-    -- scrollFrame:SetPoint("BOTTOMRIGHT", -27, 4)
-    -- scrollFrame:SetScrollChild(scrollChild)
-    -- scrollChild:SetPoint("LEFT", 0)
-    -- scrollChild:SetPoint("RIGHT", 0)
-    -- scrollChild:SetHeight(1)
 end
 
 function CaerdonWardrobeConfigPanelMixin:ConfigureSection(title, key)

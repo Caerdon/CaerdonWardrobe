@@ -59,6 +59,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if not CaerdonWardrobeConfig.Merchant.Filter then
             CaerdonWardrobeConfig.Merchant.Filter = CopyTable(NS:GetDefaultConfig().Merchant.Filter)
         end
+        if CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta == nil then
+            CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta = NS:GetDefaultConfig().Icon.ShowUpgradeLevelDelta
+        end
 
         CaerdonWardrobe:RefreshItems()
     end
@@ -130,7 +133,8 @@ function NS:GetDefaultConfig()
                 Auction = true
             },
 
-            ShowQuestItems = true
+            ShowQuestItems = true,
+            ShowUpgradeLevelDelta = false
         },
 
         Binding = {

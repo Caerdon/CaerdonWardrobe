@@ -167,6 +167,15 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
                 bindsOnText:SetAlpha(1.0)
             end
         end
+
+        local upgradeDeltaText = button.upgradeDeltaText
+        if upgradeDeltaText then
+            if isFiltered then
+                upgradeDeltaText:SetAlpha(0.3)
+            else
+                upgradeDeltaText:SetAlpha(1.0)
+            end
+        end
     end
 end
 
@@ -224,10 +233,17 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
     if not button.bindsOnText then
         button.bindsOnText = button:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") -- TODO: Note: placing directly on button to enable search fade - need to check on other addons
     end
+
+    if not button.upgradeDeltaText then
+        button.upgradeDeltaText = button:CreateFontString(nil, "ARTWORK", "NumberFontNormalSmall")
+        button.upgradeDeltaText:SetPoint("BOTTOMRIGHT", originalButton, "BOTTOMRIGHT", -2, 2)
+        button.upgradeDeltaText:SetText("")
+        button.upgradeDeltaText:Hide()
+    end
 end
 
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status,
-                                                  bindingStatus)
+                                                  bindingStatus, transmogInfo)
     local button = originalButton.caerdonButton
     -- Make sure it's sitting in front of the frame it's going to overlay
     local levelCheckFrame = originalButton
@@ -266,6 +282,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatusBackground = mogStatus.mogStatusBackground
     end
     local mogAnim = button.mogAnim
+    local upgradeDeltaText = button.upgradeDeltaText
+    if upgradeDeltaText then
+        upgradeDeltaText:SetText("")
+        upgradeDeltaText:Hide()
+    end
 
     if not options then
         options = {}
@@ -289,6 +310,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus.assignedAlpha = 0
             mogStatus:Hide()
         end
+        if upgradeDeltaText then
+            upgradeDeltaText:Hide()
+        end
         return
     end
 
@@ -302,6 +326,29 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     -- 	button.mogFlash = mogFlash
     -- end
+
+    local upgradeDeltaShown = false
+
+    local function ShowUpgradeDeltaText(r, g, b)
+        if not upgradeDeltaText or not transmogInfo or not CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta then
+            return
+        end
+
+        local delta = transmogInfo.upgradeItemLevelDelta
+        if not delta or delta <= 0 then
+            return
+        end
+
+        upgradeDeltaText:SetFormattedText("+%d", delta)
+        if r then
+            upgradeDeltaText:SetTextColor(r, g, b)
+        else
+            upgradeDeltaText:SetTextColor(0.2, 1.0, 0.2)
+        end
+        upgradeDeltaText:SetAlpha(1.0)
+        upgradeDeltaText:Show()
+        upgradeDeltaShown = true
+    end
 
     local showAnim = false
     if status == "waiting" then
@@ -455,6 +502,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
             mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
             mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+            ShowUpgradeDeltaText()
         end
     elseif status == "upgradeLowSkill" then
         isProminent = false
@@ -467,6 +515,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
             mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
             mogStatus:SetVertexColor(0.4, 1, 0)
+            ShowUpgradeDeltaText(0.9, 0.82, 0.1)
         end
     elseif status == "locked" then
         isProminent = true
@@ -596,6 +645,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         -- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
         -- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
         -- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
+    end
+
+    if not upgradeDeltaShown and transmogInfo and transmogInfo.upgradeItemLevelDelta and transmogInfo.upgradeItemLevelDelta > 0 then
+        ShowUpgradeDeltaText()
     end
 
     local iconSize = ICON_PROMINENT_SIZE
@@ -778,8 +831,10 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         return
     end
 
+    local transmogInfo
+
     if caerdonType == CaerdonItemType.Equipment then
-        local transmogInfo = itemData:GetTransmogInfo()
+        transmogInfo = itemData:GetTransmogInfo()
         if transmogInfo then
             if transmogInfo.isTransmog then
                 -- TODO: Exceptions need to be broken out
@@ -810,7 +865,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
     end
 
     if button then
-        self:SetItemButtonStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+        self:SetItemButtonStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus, transmogInfo)
         self:SetItemButtonMogStatusFilter(button, options.isFiltered)
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     end
@@ -900,7 +955,7 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
     end
 
     if not button.caerdonButton then
-        self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil)
+        self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil, nil)
     end
 
     local locationKey = locationInfo.locationKey

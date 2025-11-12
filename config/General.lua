@@ -16,6 +16,7 @@ function CaerdonWardrobeConfigGeneral:Register()
             CaerdonWardrobeConfigGeneral:OpenDebugFrame() end },
         enableIconAnimation = { key = "enableIconAnimation", text = "Show Icon Animation", tooltip = "Turns icon animation on / off (largely in unlearned and openable items)", configSection = "Icon", configValue = "EnableAnimation" },
         iconPosition = { key = "iconPosition", text = "Select Icon Position", tooltip = "Configures placement of the primary collectible icon", configSection = "Icon", configValue = "Position" },
+        showUpgradeLevelDelta = { key = "showUpgradeLevelDelta", text = "Show upgrade item level delta", tooltip = "Displays the +item level difference next to upgrade arrows.", configSection = "Icon", configValue = "ShowUpgradeLevelDelta" },
         sameLookDifferentItem = { key = "sameLookDifferentItem", text = "Include different items w/ the same look (you completionist, you)", tooltip = "Ensures that you learn every single item that provides the same exact appearance for no other reason than you know you don't have that one.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentItem" },
         sameLookDifferentLevel = { key = "sameLookDifferentLevel", text = "Including identical items w/ lower levels", tooltip = "Enable this to ensure that an item will show as learnable if the item's level would allow a lower level toon to use it for transmog than the one you already know.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentLevel", dependsOn = "sameLookDifferentItem" },
         showOldExpansionReagents = { key = "showOldExpansionReagents", text = "Reagents", tooltip = "Add an icon to reagents from older expansions", configSection = "Icon", configSubsection = "ShowOldExpansion", configValue = "Reagents", dependsOn = "OldExpansionSection" },
@@ -42,6 +43,7 @@ function CaerdonWardrobeConfigGeneral:Register()
         { title = "Bottom Left",  value = "BOTTOMLEFT",  tooltip = "Show the primary icon in the bottom left" },
         { title = "Bottom Right", value = "BOTTOMRIGHT", tooltip = "Show the primary icon in the bottom right" }
     })
+    self:ConfigureCheckboxNew(self.options["showUpgradeLevelDelta"])
     self:ConfigureCheckboxNew(self.options["sameLookDifferentItem"])
     self:ConfigureCheckboxNew(self.options["sameLookDifferentLevel"])
 
