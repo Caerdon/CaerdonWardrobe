@@ -316,6 +316,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         return
     end
 
+    local itemData = item and item.GetItemData and item:GetItemData()
+    local equipmentSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
+    local isEquipmentSetItem = equipmentSets and #equipmentSets > 0
+    local showGearSetText = isEquipmentSetItem and bindingStatus and IsGearSetStatus(bindingStatus, item) and
+        CaerdonWardrobeConfig.Binding.ShowGearSets
+    local bindingAnchor = (options and options.overrideBindingPosition) or CaerdonWardrobeConfig.Binding.Position
+    local adjustDeltaForGearSet = false
+    if showGearSetText and bindingAnchor and type(bindingAnchor) == "string" then
+        adjustDeltaForGearSet = string.find(bindingAnchor, "BOTTOM") ~= nil
+    end
+    local deltaAnchorFrame = (options and options.relativeFrame) or originalButton
+
     -- local mogFlash = button.mogFlash
     -- if not mogFlash then
     -- 	mogFlash = button:CreateTexture(nil, "OVERLAY")
@@ -339,6 +351,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             return
         end
 
+        upgradeDeltaText:ClearAllPoints()
+        local deltaYOffset = adjustDeltaForGearSet and 14 or 2
+        if adjustDeltaForBinding then
+            deltaYOffset = deltaYOffset + 10
+        end
+        upgradeDeltaText:SetPoint("BOTTOMRIGHT", deltaAnchorFrame, "BOTTOMRIGHT", -2, deltaYOffset)
         upgradeDeltaText:SetFormattedText("+%d", delta)
         if r then
             upgradeDeltaText:SetTextColor(r, g, b)
@@ -348,6 +366,16 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeDeltaText:SetAlpha(1.0)
         upgradeDeltaText:Show()
         upgradeDeltaShown = true
+    end
+
+    local function ApplyUpgradeArrowColor(defaultR, defaultG, defaultB)
+        if transmogInfo and transmogInfo.upgradeMatchesSpec == false then
+            mogStatus:SetVertexColor(1, 0.35, 0.35)
+        elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
+            mogStatus:SetVertexColor(1, 1, 0)
+        else
+            mogStatus:SetVertexColor(defaultR, defaultG, defaultB)
+        end
     end
 
     local showAnim = false
@@ -434,6 +462,13 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
             bindingStatus)
     end
+    local equipLocation = item and item.GetEquipLocation and item:GetEquipLocation()
+    local isTabard = equipLocation == "INVTYPE_TABARD"
+    local isShirt = equipLocation == "INVTYPE_BODY"
+    local shouldShowUpgradeIcon = displayInfo and displayInfo.upgradeIcon.shouldShow and not isEquipmentSetItem and
+        not isTabard
+    local canEquipForNeutral = transmogInfo and
+        ((transmogInfo.canEquipForPlayer ~= nil and transmogInfo.canEquipForPlayer) or transmogInfo.canEquip)
 
     local alpha = 1
 
@@ -494,7 +529,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
     elseif status == "upgrade" then
         isProminent = false
-        if displayInfo and displayInfo.upgradeIcon.shouldShow then
+        if shouldShowUpgradeIcon then
             iconBackgroundAdjustment = 4
             mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
             mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
@@ -502,11 +537,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
             mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
             mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+            ApplyUpgradeArrowColor(0.4, 1, 0.2)
             ShowUpgradeDeltaText()
         end
     elseif status == "upgradeLowSkill" then
         isProminent = false
-        if displayInfo and displayInfo.upgradeIcon.shouldShow then
+        if shouldShowUpgradeIcon then
             iconBackgroundAdjustment = 4
             mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
             mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
@@ -514,7 +550,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
             mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
             mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-            mogStatus:SetVertexColor(0.4, 1, 0)
+            ApplyUpgradeArrowColor(0.4, 1, 0.2)
             ShowUpgradeDeltaText(0.9, 0.82, 0.1)
         end
     elseif status == "locked" then
@@ -628,7 +664,26 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
         mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
     elseif status == "collected" then
-        if IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
+        local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
+        local showEqualLevel = transmogInfo and
+            transmogInfo.equalItemLevelEquipped and
+            canEquipForNeutral and
+            matchesCurrentSpec and
+            transmogInfo.hasMetRequirements and
+            not transmogInfo.isUpgrade and
+            shouldShowUpgradeIcon and
+            not isShirt
+
+        if showEqualLevel and not isEquipmentSetItem then
+            iconBackgroundAdjustment = 6
+            mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
+            mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+            mogStatusBackground:SetVertexColor(0.85, 0.85, 0.85)
+
+            mogStatus:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            mogStatus:SetTexture("Interface\\PaperDollInfoFrame\\StatSortArrows")
+            mogStatus:SetVertexColor(1, 0.95, 0.75)
+        elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
             mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
             mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
         end
@@ -801,6 +856,10 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     if string.find(bindingPosition, "RIGHT") then
         xOffset = xOffset * -1
     end
+
+    local caerdonButton = button.caerdonButton
+    local bindingHasGearSet = bindingStatus and IsGearSetStatus(bindingStatus, item)
+    local adjustDeltaForBinding = bindingHasGearSet and string.find(bindingPosition or "", "BOTTOM")
 
     if options and options.relativeFrame then
         bindsOnText:SetAllPoints(options.relativeFrame, xOffset, yOffset)

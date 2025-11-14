@@ -22,6 +22,18 @@ This file contains important context and design decisions for the CaerdonWardrob
 - Avoid sprinkling ad‑hoc `C_ArtifactUI`/`C_Item` calls throughout `CaerdonItem` or feature files. Instead, have the mixin gather the data once while building its `Get*Info()` payload and expose a boolean/flag there.
 - When multiple systems need the same flag (icons, tooltips, merchants), prefer extending the mixin return struct and documenting the new field in this file so future work reuses it instead of duplicating API calls.
 
+### Neutral Equal-Level Indicator
+
+- `CaerdonEquipmentMixin:GetTransmogInfo()` exposes `equalItemLevelEquipped`, which is true when the candidate item matches the current equipped item level for the relevant slots and the toon can equip it.
+- `transmogInfo.canEquipForPlayer` augments Blizzard’s `playerCanCollect` logic by falling back to the tooltip binding scan, so bank/bag logic can still consider an item equippable even when transmog APIs say otherwise; equal-ilvl protection only applies when this is true *and* `matchesLootSpec` isn’t false so off-spec gear remains sellable.
+- `transmogInfo.upgradeMatchesSpec` indicates whether the upgrade aligns with the player’s loot spec. Upgrades that fail this check still display the arrow/delta, but the arrow is tinted red to show “usable but off-spec”.
+- Collected items with this flag skip the sellable icon and instead render a neutral balance indicator (unless Pawn/upgrades take priority or the item belongs to a saved equipment set) so players know to evaluate the piece manually.
+- `pawnIdentifiedUpgrade` is true only when Pawn itself flagged the item as an upgrade; Caerdon’s own upgrade detection leaves this false so the UI can color the arrow green for “item level says it’s better” cases.
+- Items that belong to a saved gear set suppress the upgrade arrow altogether; only the item-level delta text remains, and it automatically shifts upward when the gear-set label is visible so the strings do not overlap.
+- When Pawn is silent and the unique-upgrade heuristic doesn’t fire, `upgradeItemLevelDelta > 0` now serves as the fallback trigger for `isUpgrade` (unless the item is unique-blocked), so higher-ilvl uniques like rings still get the green arrow instead of falling back to “sellable.”
+- Tabards (`INVTYPE_TABARD`) never surface as upgrades and never show delta callouts even if their comparison ilvl differs; `upgradeItemLevelDelta` is cleared so they stay visually quiet.
+- Legendary-quality equipment is preserved automatically when it still exposes either an on-use spell or an equip effect in the tooltip; those items bypass the “redundant” sellable check so modern legendaries with gameplay hooks don’t get flagged as vendor trash.
+
 ## Ensemble Classification Logic
 
 Ensembles are collections of transmog items that typically include armor sets and sometimes bonus items like cloaks. The addon displays icons to indicate what the player can learn from each ensemble.

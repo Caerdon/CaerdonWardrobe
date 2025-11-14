@@ -1003,6 +1003,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     local bindingResult = self:GetBindingStatus(tooltipData)
     local bindingStatus = bindingResult.bindingStatus
+    local playerCanEquipItem = not bindingResult.unusableItem
+    local playerCanEquipItem = not bindingResult.unusableItem
 
     local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
     itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID,
@@ -1111,6 +1113,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     elseif caerdonType == CaerdonItemType.Equipment then
         local transmogInfo = itemData:GetTransmogInfo()
         if transmogInfo then
+            if transmogInfo.canEquipForPlayer == nil then
+                transmogInfo.canEquipForPlayer = playerCanEquipItem
+            end
             if transmogInfo.isArtifactItem then
                 isArtifactItem = true
             end
@@ -1182,9 +1187,27 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 end
             else
                 local redundantForPlayer = transmogInfo and (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
+                local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
+                local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
+                local protectEqualItemLevel = transmogInfo and transmogInfo.equalItemLevelEquipped and
+                    canEquipEqualItem and
+                    matchesCurrentSpec and
+                    transmogInfo.hasMetRequirements
+                local equipLocation = self:GetEquipLocation()
+                if equipLocation == "INVTYPE_TABARD" then
+                    protectEqualItemLevel = false
+                end
+
+                local preserveUtility = equipLocation == "INVTYPE_TABARD" and self:GetHasUse()
+                local isLegendaryItem = itemRarity == Enum.ItemQuality.Legendary
+                local preserveLegendary = isLegendaryItem and (self:GetHasUse() or bindingResult.hasEquipEffect)
+
                 if mogStatus == "collected" and
                     self:IsSellable() and
                     not isArtifactItem and
+                    not preserveLegendary and
+                    not preserveUtility and
+                    not protectEqualItemLevel and
                     (redundantForPlayer or (not self:GetHasUse() and
                         not self:GetSetID() and
                         not bindingResult.hasEquipEffect)) then

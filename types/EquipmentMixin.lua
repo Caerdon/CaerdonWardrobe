@@ -294,6 +294,14 @@ local function GetUniqueUpgradeInfo(item)
     return uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey
 end
 
+local function NormalizeItemLevel(level)
+    if not level then
+        return nil
+    end
+
+    return math.floor(level + 0.5)
+end
+
 local function HasBetterOrEqualEquippedItem(item)
     local inventoryType = item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryType)
@@ -306,6 +314,7 @@ local function HasBetterOrEqualEquippedItem(item)
         return false
     end
 
+    local normalizedCandidateLevel = NormalizeItemLevel(candidateLevel)
     local filledSlots = 0
     local strictlyBetterCount = 0
     for _, slotID in ipairs(inventorySlots) do
@@ -314,7 +323,7 @@ local function HasBetterOrEqualEquippedItem(item)
             filledSlots = filledSlots + 1
             local equippedLink = C_Item.GetItemLink(location)
             local equippedLevel = GetComparableItemLevel(equippedLink, location)
-            if equippedLevel and equippedLevel > candidateLevel then
+            if equippedLevel and NormalizeItemLevel(equippedLevel) > normalizedCandidateLevel then
                 strictlyBetterCount = strictlyBetterCount + 1
             end
         end
@@ -325,6 +334,55 @@ local function HasBetterOrEqualEquippedItem(item)
     end
 
     return filledSlots > 0 and strictlyBetterCount == filledSlots
+end
+
+local function HasEqualEquippedItemLevel(item)
+    local itemLink = item:GetItemLink()
+    local itemID = item:GetItemID()
+    local inventoryType = item:GetInventoryTypeName()
+    local inventorySlots = GetInventorySlotsForType(inventoryType)
+    if not inventorySlots then
+        return false
+    end
+
+    local candidateLevel = GetComparableItemLevel(itemLink, item:GetItemLocation())
+    if not candidateLevel then
+        return false
+    end
+
+    local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
+    local uniqueLimitedToOne = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
+    local normalizedCandidateLevel = NormalizeItemLevel(candidateLevel)
+    local betterUniqueEquipped = false
+    local hasEqualMatch = false
+    for _, slotID in ipairs(inventorySlots) do
+        local location = ItemLocation:CreateFromEquipmentSlot(slotID)
+        if location and location:IsValid() and C_Item.DoesItemExist(location) then
+            local equippedLink = C_Item.GetItemLink(location)
+            local equippedLevel = GetComparableItemLevel(equippedLink, location)
+            if equippedLevel then
+                local normalizedEquipped = NormalizeItemLevel(equippedLevel)
+                if normalizedEquipped and normalizedEquipped == normalizedCandidateLevel then
+                    hasEqualMatch = true
+                end
+
+                if uniqueLimitedToOne and not betterUniqueEquipped then
+                    local equippedID = C_Item.GetItemID(location)
+                    local equippedUniqueKey = select(1, DetermineUniqueness(equippedLink or equippedID, equippedID))
+                    if equippedUniqueKey and equippedUniqueKey == uniqueCategoryKey and
+                        normalizedEquipped and normalizedEquipped > normalizedCandidateLevel then
+                        betterUniqueEquipped = true
+                    end
+                end
+            end
+        end
+    end
+
+    if uniqueLimitedToOne and betterUniqueEquipped then
+        return false
+    end
+
+    return hasEqualMatch
 end
 
 local function GetUpgradeItemLevelDelta(item)
@@ -523,6 +581,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local item = self.item
     local itemLink = item:GetItemLink()
     local inventoryTypeName = item:GetInventoryTypeName()
+    local isTabard = inventoryTypeName == "INVTYPE_TABARD"
 
     if item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
         return
@@ -538,9 +597,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local otherSourceFound = false
     local otherSourceFoundForPlayer = false
     local canCollect = false
+    local playerCanUseSource = nil
     local playerLootSpecID
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
     local betterItemEquipped = HasBetterOrEqualEquippedItem(item)
+    local equalItemLevelEquipped = HasEqualEquippedItemLevel(item)
     local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(item)
     local isArtifactItem = false
     local blockedOffhandSlot = IsOffhandSlotBlocked(inventoryTypeName)
@@ -640,6 +701,13 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
 
         local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+        if sourceInfo then
+            if sourceInfo.playerCanCollect or sourceInfo.isValidSourceForPlayer then
+                playerCanUseSource = true
+            elseif playerCanUseSource ~= true then
+                playerCanUseSource = false
+            end
+        end
         -- TODO: If no appearance ID by now, might be able to use VisualID returned from here?  Not sure if needed...
         -- If the source is already collected, we don't need to check anything else for the source / appearance
         if sourceInfo and not sourceInfo.isCollected then
@@ -674,10 +742,18 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                             if info.isCollected then
                                 if info.isValidSourceForPlayer then
                                     otherSourceFoundForPlayer = true
+                                    playerCanUseSource = true
                                 else
                                     otherSourceFound = true
+                                    if playerCanUseSource ~= true then
+                                        playerCanUseSource = false
+                                    end
                                 end
                             end
+                        elseif info.isValidSourceForPlayer then
+                            playerCanUseSource = true
+                        elseif playerCanUseSource ~= true then
+                            playerCanUseSource = false
                         end
                     end
 
@@ -720,9 +796,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         needsItem = true
                         isCompletionistItem = otherSourceFoundForPlayer
                     elseif accountCanCollect then
-                        otherNeedsItem = true
-                        isCompletionistItem = otherSourceFound
-                    end
+        otherNeedsItem = true
+        isCompletionistItem = otherSourceFound
+    end
                 end
             end
         end
@@ -732,7 +808,20 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         needItem = false
         otherNeedsItem = not C_TransmogCollection.PlayerHasTransmogByItemInfo(C_Item.GetItemInfo(item:GetItemLink()))
         canCollect = true
+        if playerCanUseSource == nil then
+            playerCanUseSource = true
+        end
     end
+
+    if playerCanUseSource == nil then
+        playerCanUseSource = true
+    end
+
+    if not isTransmog then
+        playerCanUseSource = true
+    end
+
+    local upgradeMatchesSpec = matchesLootSpec ~= false
 
     local isUpgrade = nil
 
@@ -749,8 +838,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- end
 
     local shouldShowUpgrade = false
+    local pawnIdentifiedUpgrade = false
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
-        local pawnUpgrade = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
+        local pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
+        local pawnUpgrade = pawnRecommended
         if pawnUpgrade then
             if blockedOffhandSlot then
                 pawnUpgrade = false
@@ -766,13 +857,35 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             pawnUpgrade = true
         end
 
+        if pawnUpgrade and pawnRecommended then
+            pawnIdentifiedUpgrade = true
+        end
+
         shouldShowUpgrade = pawnUpgrade
     elseif uniqueUpgradeCandidate and not uniqueUpgradeBlocked then
         shouldShowUpgrade = true
     end
 
+    if not shouldShowUpgrade and upgradeItemLevelDelta and upgradeItemLevelDelta > 0 and not uniqueUpgradeBlocked and
+        not isTabard then
+        shouldShowUpgrade = true
+    end
+
+    if shouldShowUpgrade and not playerCanUseSource then
+        shouldShowUpgrade = false
+    end
+
     if shouldShowUpgrade and blockedOffhandSlot then
         shouldShowUpgrade = false
+    end
+
+    if isTabard then
+        shouldShowUpgrade = false
+        upgradeItemLevelDelta = nil
+    end
+
+    if not playerCanUseSource then
+        upgradeItemLevelDelta = nil
     end
 
     if shouldShowUpgrade then
@@ -788,10 +901,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         uniqueUpgradeBlocked = uniqueUpgradeBlocked,
         uniqueUpgradeCandidate = uniqueUpgradeCandidate,
         betterItemEquipped = betterItemEquipped,
-        upgradeItemLevelDelta = upgradeItemLevelDelta,
+        equalItemLevelEquipped = equalItemLevelEquipped,
+        upgradeItemLevelDelta = shouldShowUpgrade and upgradeItemLevelDelta or nil,
+        pawnIdentifiedUpgrade = pawnIdentifiedUpgrade,
+        upgradeMatchesSpec = upgradeMatchesSpec,
         isArtifactItem = isArtifactItem,
         uniqueCategoryKey = uniqueCategoryKey,
-        canEquip = canCollect,
+        canEquip = playerCanUseSource or canCollect,
+        canEquipForPlayer = playerCanUseSource,
         needsItem = needsItem,
         hasMetRequirements = hasMetRequirements,
         otherNeedsItem = otherNeedsItem,
@@ -811,6 +928,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             uniqueUpgradeBlocked = uniqueUpgradeBlocked,
             uniqueUpgradeCandidate = uniqueUpgradeCandidate,
             betterItemEquipped = betterItemEquipped,
+            equalItemLevelEquipped = equalItemLevelEquipped,
+            pawnIdentifiedUpgrade = pawnIdentifiedUpgrade,
             upgradeItemLevelDelta = upgradeItemLevelDelta,
             isArtifactItem = isArtifactItem,
             uniqueCategoryKey = uniqueCategoryKey
