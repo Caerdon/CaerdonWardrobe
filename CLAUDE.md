@@ -26,7 +26,7 @@ This file contains important context and design decisions for the CaerdonWardrob
 
 - `CaerdonEquipmentMixin:GetTransmogInfo()` exposes `equalItemLevelEquipped`, which is true when the candidate item matches the current equipped item level for the relevant slots and the toon can equip it.
 - `transmogInfo.canEquipForPlayer` augments Blizzard’s `playerCanCollect` logic by falling back to the tooltip binding scan, so bank/bag logic can still consider an item equippable even when transmog APIs say otherwise; equal-ilvl protection only applies when this is true *and* `matchesLootSpec` isn’t false so off-spec gear remains sellable.
-- `transmogInfo.upgradeMatchesSpec` indicates whether the upgrade aligns with the player’s loot spec. Upgrades that fail this check still display the arrow/delta, but the arrow is tinted red to show “usable but off-spec”.
+- `transmogInfo.upgradeMatchesSpec` indicates whether the upgrade aligns with the player’s loot spec. When the “mismatched spec” option is enabled, off-spec upgrades keep the arrow/delta but tint the arrow red to show “usable but off-spec.”
 - Collected items with this flag skip the sellable icon and instead render a neutral balance indicator (unless Pawn/upgrades take priority or the item belongs to a saved equipment set) so players know to evaluate the piece manually.
 - `pawnIdentifiedUpgrade` is true only when Pawn itself flagged the item as an upgrade; Caerdon’s own upgrade detection leaves this false so the UI can color the arrow green for “item level says it’s better” cases.
 - Items that belong to a saved gear set suppress the upgrade arrow altogether; only the item-level delta text remains, and it automatically shifts upward when the gear-set label is visible so the strings do not overlap.

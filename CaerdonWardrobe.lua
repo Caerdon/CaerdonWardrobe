@@ -254,7 +254,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             levelCheckFrame = options.relativeFrame
         end
     end
-
     if levelCheckFrame then
         button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
         button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
@@ -317,15 +316,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     end
 
     local itemData = item and item.GetItemData and item:GetItemData()
+    local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
+    local showNeutralSameLevel = sameLevelBehavior == "neutral"
+    local allowMismatchedSpecUpgrades = CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == true
     local equipmentSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
     local isEquipmentSetItem = equipmentSets and #equipmentSets > 0
     local showGearSetText = isEquipmentSetItem and bindingStatus and IsGearSetStatus(bindingStatus, item) and
         CaerdonWardrobeConfig.Binding.ShowGearSets
     local bindingAnchor = (options and options.overrideBindingPosition) or CaerdonWardrobeConfig.Binding.Position
-    local adjustDeltaForGearSet = false
-    if showGearSetText and bindingAnchor and type(bindingAnchor) == "string" then
-        adjustDeltaForGearSet = string.find(bindingAnchor, "BOTTOM") ~= nil
-    end
+    button.bindingBottomPadding = 0
     local deltaAnchorFrame = (options and options.relativeFrame) or originalButton
 
     -- local mogFlash = button.mogFlash
@@ -351,12 +350,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             return
         end
 
-        upgradeDeltaText:ClearAllPoints()
-        local deltaYOffset = adjustDeltaForGearSet and 14 or 2
-        if adjustDeltaForBinding then
-            deltaYOffset = deltaYOffset + 10
+        local baseYOffset = 2
+        if caerdonButton then
+            caerdonButton.upgradeDeltaBaseYOffset = baseYOffset
+            caerdonButton.upgradeDeltaAnchor = deltaAnchorFrame
         end
-        upgradeDeltaText:SetPoint("BOTTOMRIGHT", deltaAnchorFrame, "BOTTOMRIGHT", -2, deltaYOffset)
         upgradeDeltaText:SetFormattedText("+%d", delta)
         if r then
             upgradeDeltaText:SetTextColor(r, g, b)
@@ -365,11 +363,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
         upgradeDeltaText:SetAlpha(1.0)
         upgradeDeltaText:Show()
+        self:UpdateUpgradeDeltaPosition(originalButton)
         upgradeDeltaShown = true
     end
 
     local function ApplyUpgradeArrowColor(defaultR, defaultG, defaultB)
-        if transmogInfo and transmogInfo.upgradeMatchesSpec == false then
+        if transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
             mogStatus:SetVertexColor(1, 0.35, 0.35)
         elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
             mogStatus:SetVertexColor(1, 1, 0)
@@ -465,8 +464,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local equipLocation = item and item.GetEquipLocation and item:GetEquipLocation()
     local isTabard = equipLocation == "INVTYPE_TABARD"
     local isShirt = equipLocation == "INVTYPE_BODY"
-    local shouldShowUpgradeIcon = displayInfo and displayInfo.upgradeIcon.shouldShow and not isEquipmentSetItem and
+    local globalUpgradeEnabled = CaerdonWardrobeConfig.Icon.ShowUpgradeIcon ~= false
+    local upgradeSlotAvailable = displayInfo and displayInfo.upgradeIcon.shouldShow and not isEquipmentSetItem and
         not isTabard
+    local shouldShowUpgradeIcon = globalUpgradeEnabled and upgradeSlotAvailable
     local canEquipForNeutral = transmogInfo and
         ((transmogInfo.canEquipForPlayer ~= nil and transmogInfo.canEquipForPlayer) or transmogInfo.canEquip)
 
@@ -665,13 +666,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
     elseif status == "collected" then
         local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
+        if shouldShowUpgradeIcon and transmogInfo and transmogInfo.upgradeMatchesSpec == false and
+            not allowMismatchedSpecUpgrades then
+            shouldShowUpgradeIcon = false
+        end
         local showEqualLevel = transmogInfo and
+            showNeutralSameLevel and
             transmogInfo.equalItemLevelEquipped and
             canEquipForNeutral and
             matchesCurrentSpec and
             transmogInfo.hasMetRequirements and
             not transmogInfo.isUpgrade and
-            shouldShowUpgradeIcon and
+            upgradeSlotAvailable and
             not isShirt
 
         if showEqualLevel and not isEquipmentSetItem then
@@ -757,6 +763,27 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     end
 end
 
+function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
+    if not originalButton then return end
+    local caerdonButton = originalButton.caerdonButton
+    if not caerdonButton then return end
+
+    local deltaText = caerdonButton.upgradeDeltaText
+    if not (deltaText and deltaText:IsShown()) then
+        return
+    end
+
+    local anchorFrame = caerdonButton.upgradeDeltaAnchor or originalButton
+    if not anchorFrame then
+        anchorFrame = originalButton
+    end
+    local baseYOffset = caerdonButton.upgradeDeltaBaseYOffset or 0
+    local padding = caerdonButton.bindingBottomPadding or 0
+
+    deltaText:ClearAllPoints()
+    deltaText:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", -2, baseYOffset + padding)
+end
+
 function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
     local caerdonButton = button.caerdonButton
@@ -813,6 +840,10 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     end
 
     bindsOnText:SetText(bindingText)
+    bindsOnText:SetJustifyV("BOTTOM")
+    if caerdonButton then
+        caerdonButton.bindingBottomPadding = 0
+    end
 
     -- Measure text and resize accordingly
     bindsOnText:ClearAllPoints()
@@ -824,7 +855,8 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     if newWidth > button:GetWidth() then
         newWidth = button:GetWidth()
     end
-    local newHeight = bindsOnText:GetHeight()
+    local _, fontHeight = bindsOnText:GetFont()
+    local newHeight = fontHeight or bindsOnText:GetStringHeight() or bindsOnText:GetHeight()
 
     bindsOnText:ClearAllPoints()
     bindsOnText:SetSize(newWidth, newHeight)
@@ -844,8 +876,18 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     local hasCount = (button.count and button.count > 1) or options.hasCount
 
     if string.find(bindingPosition, "BOTTOM") then
+        bindsOnText:SetJustifyV("BOTTOM")
+    elseif string.find(bindingPosition, "TOP") then
+        bindsOnText:SetJustifyV("TOP")
+    else
+        bindsOnText:SetJustifyV("MIDDLE")
+    end
+
+    if string.find(bindingPosition, "BOTTOM") then
         if hasCount then
             yOffset = options.itemCountOffset or 15
+        else
+            yOffset = yOffset - 2
         end
     end
 
@@ -857,18 +899,27 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
         xOffset = xOffset * -1
     end
 
-    local caerdonButton = button.caerdonButton
-    local bindingHasGearSet = bindingStatus and IsGearSetStatus(bindingStatus, item)
-    local adjustDeltaForBinding = bindingHasGearSet and string.find(bindingPosition or "", "BOTTOM")
-
     if options and options.relativeFrame then
-        bindsOnText:SetAllPoints(options.relativeFrame, xOffset, yOffset)
+        bindsOnText:SetPoint(bindingPosition, options.relativeFrame, bindingPosition, xOffset, yOffset)
     else
         bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
     end
 
     if (options.bindingScale) then
         bindsOnText:SetScale(options.bindingScale)
+    end
+
+    if caerdonButton then
+        local hasBindingText = bindingText ~= nil and bindingText ~= ""
+        if hasBindingText and bindingPosition and string.find(bindingPosition, "BOTTOM") then
+            local _, fontHeight = bindsOnText:GetFont()
+            local scale = bindsOnText:GetScale() or 1
+            local bindingHeight = (fontHeight or bindsOnText:GetHeight() or 0) * scale
+            caerdonButton.bindingBottomPadding = bindingHeight + 2
+        else
+            caerdonButton.bindingBottomPadding = 0
+        end
+        self:UpdateUpgradeDeltaPosition(button)
     end
 end
 

@@ -1111,6 +1111,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             mogStatus = "other"
         end
     elseif caerdonType == CaerdonItemType.Equipment then
+        local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
         local transmogInfo = itemData:GetTransmogInfo()
         if transmogInfo then
             if transmogInfo.canEquipForPlayer == nil then
@@ -1189,12 +1190,15 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 local redundantForPlayer = transmogInfo and (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
                 local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
                 local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
-                local protectEqualItemLevel = transmogInfo and transmogInfo.equalItemLevelEquipped and
+                local protectEqualItemLevel = false
+                if sameLevelBehavior ~= "sellable" and transmogInfo and transmogInfo.equalItemLevelEquipped and
                     canEquipEqualItem and
                     matchesCurrentSpec and
-                    transmogInfo.hasMetRequirements
+                    transmogInfo.hasMetRequirements then
+                    protectEqualItemLevel = true
+                end
                 local equipLocation = self:GetEquipLocation()
-                if equipLocation == "INVTYPE_TABARD" then
+                if equipLocation == "INVTYPE_TABARD" or equipLocation == "INVTYPE_BODY" then
                     protectEqualItemLevel = false
                 end
 

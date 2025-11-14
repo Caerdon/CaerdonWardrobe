@@ -37,7 +37,9 @@ function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, featur
     -- TODO: Temporary for merging - revisit after pushing everything into Mixins
     local showBindingStatus = not item:HasItemLocationBankOrBags() or
         CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
-    local showUpgradeIcon = not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Icon.ShowUpgrades.BankAndBags
+    local globalUpgradeEnabled = CaerdonWardrobeConfig.Icon.ShowUpgradeIcon ~= false
+    local showUpgradeIcon = globalUpgradeEnabled and
+        (not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Icon.ShowUpgrades.BankAndBags)
     local showOwnIcon = not item:HasItemLocationBankOrBags() or CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
     local showOtherIcon = not item:HasItemLocationBankOrBags() or
         CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags

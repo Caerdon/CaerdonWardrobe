@@ -62,6 +62,16 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta = NS:GetDefaultConfig().Icon.ShowUpgradeLevelDelta
         end
+        if not CaerdonWardrobeConfig.Icon.SameLevelBehavior then
+            CaerdonWardrobeConfig.Icon.SameLevelBehavior = NS:GetDefaultConfig().Icon.SameLevelBehavior
+        end
+        if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
+            CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
+        end
+        if CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == nil then
+            CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades =
+                NS:GetDefaultConfig().Icon.ShowMismatchedSpecUpgrades
+        end
 
         CaerdonWardrobe:RefreshItems()
     end
@@ -88,7 +98,7 @@ end
 
 function NS:GetDefaultConfig()
     return {
-        Version = 24,
+        Version = 25,
 
         Debug = {
             Enabled = false,
@@ -134,7 +144,10 @@ function NS:GetDefaultConfig()
             },
 
             ShowQuestItems = true,
-            ShowUpgradeLevelDelta = false
+            ShowUpgradeLevelDelta = false,
+            SameLevelBehavior = "none",
+            ShowUpgradeIcon = true,
+            ShowMismatchedSpecUpgrades = false,
         },
 
         Binding = {
