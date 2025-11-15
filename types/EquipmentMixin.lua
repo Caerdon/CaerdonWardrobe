@@ -606,6 +606,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local itemLink = item:GetItemLink()
     local inventoryTypeName = item:GetInventoryTypeName()
     local isTabard = inventoryTypeName == "INVTYPE_TABARD"
+    local isShirt = inventoryTypeName == "INVTYPE_BODY"
 
     if item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
         return
@@ -928,7 +929,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         shouldShowUpgrade = false
     end
 
-    if isTabard then
+    if isTabard or isShirt then
         shouldShowUpgrade = false
         upgradeItemLevelDelta = nil
     end
@@ -991,6 +992,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             shouldShowUpgrade = shouldShowUpgrade,
             blockedOffhandSlot = blockedOffhandSlot,
             isTabard = isTabard,
+            isShirt = isShirt,
             validSourceInfoForPlayer = validSourceInfoForPlayer,
             sourceUseErrorType = sourceUseErrorType,
             sourceUseError = sourceUseError,
