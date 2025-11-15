@@ -276,11 +276,18 @@ end
 
 function CaerdonItemMixin:SetItemLink(itemLink)
     ItemMixin.SetItemLink(self, itemLink)
+    self.cachedTeleportUse = nil
 end
 
 function CaerdonItemMixin:SetItemID(itemID)
     -- Used for embedded item tooltip rewards
     ItemMixin.SetItemID(self, itemID)
+    self.cachedTeleportUse = nil
+end
+
+function CaerdonItemMixin:SetItemLocation(itemLocation)
+    ItemMixin.SetItemLocation(self, itemLocation)
+    self.cachedTeleportUse = nil
 end
 
 -- local itemID, itemType, itemSubType, itemEquipLoc, icon, itemTypeID, itemSubClassID = C_Item.GetItemInfoInstant(self:GetStaticBackingItem())
@@ -327,6 +334,55 @@ function CaerdonItemMixin:GetHasUse() -- requires item data to be loaded
         local spellName, spellID = C_Item.GetItemSpell(self:GetItemID())
         return spellID ~= nil
     end
+end
+
+local teleportKeywords = {
+    string.lower(L["teleport"]),
+    string.lower(L["portal"]),
+    string.lower(L["waygate"]),
+    string.lower(L["waystone"]),
+    string.lower(L["gateway"])
+}
+
+local function MatchesTeleportKeyword(text)
+    if not text or text == "" then
+        return false
+    end
+
+    local lowerText = string.lower(text)
+    for _, keyword in ipairs(teleportKeywords) do
+        if keyword ~= "" and string.find(lowerText, keyword, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function CaerdonItemMixin:HasTeleportUse()
+    if self.cachedTeleportUse ~= nil then
+        return self.cachedTeleportUse
+    end
+
+    self.cachedTeleportUse = false
+    if not self:GetHasUse() or self:IsItemEmpty() then
+        return false
+    end
+
+    local spellName, spellID = C_Item.GetItemSpell(self:GetItemID())
+    if MatchesTeleportKeyword(spellName) then
+        self.cachedTeleportUse = true
+        return true
+    end
+
+    if spellID then
+        local description = C_Spell and C_Spell.GetSpellDescription and C_Spell.GetSpellDescription(spellID)
+        if MatchesTeleportKeyword(description) then
+            self.cachedTeleportUse = true
+        end
+    end
+
+    return self.cachedTeleportUse
 end
 
 -- local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
@@ -1202,17 +1258,24 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     protectEqualItemLevel = false
                 end
 
-                local preserveUtility = equipLocation == "INVTYPE_TABARD" and self:GetHasUse()
+                local hasUseEffect = self:GetHasUse()
+                local preserveUtility = equipLocation == "INVTYPE_TABARD" and hasUseEffect
                 local isLegendaryItem = itemRarity == Enum.ItemQuality.Legendary
-                local preserveLegendary = isLegendaryItem and (self:GetHasUse() or bindingResult.hasEquipEffect)
+                local preserveLegendary = isLegendaryItem and (hasUseEffect or bindingResult.hasEquipEffect)
+                local hasTeleportUse = self:HasTeleportUse()
+                local isCosmeticArmor = itemClassID == Enum.ItemClass.Armor and
+                    itemSubClassID == Enum.ItemArmorSubclass.Cosmetic
+                local preserveCosmeticEquipEffect = isCosmeticArmor and bindingResult.hasEquipEffect
 
                 if mogStatus == "collected" and
                     self:IsSellable() and
                     not isArtifactItem and
                     not preserveLegendary and
                     not preserveUtility and
+                    not preserveCosmeticEquipEffect and
+                    not hasTeleportUse and
                     not protectEqualItemLevel and
-                    (redundantForPlayer or (not self:GetHasUse() and
+                    (redundantForPlayer or (not hasUseEffect and
                         not self:GetSetID() and
                         not bindingResult.hasEquipEffect)) then
                     mogStatus = "sellable"
