@@ -6,6 +6,10 @@ local DebugFrameMixin = {}
 local MAX_DEBUG_ENTRIES = 50
 local cancelFuncs = {}
 
+local DEBUG_ENTRY_LABEL_WIDTH = 300
+local DEBUG_ENTRY_LABEL_LEFT_PADDING = 12
+local DEBUG_ENTRY_VALUE_GAP = 12
+
 local TRANSMOG_USE_ERROR_LABELS = {
     [Enum.TransmogUseErrorType.None] = "None",
     [Enum.TransmogUseErrorType.PlayerCondition] = "Player Condition",
@@ -19,6 +23,84 @@ local TRANSMOG_USE_ERROR_LABELS = {
     [Enum.TransmogUseErrorType.Faction] = "Faction Restriction",
     [Enum.TransmogUseErrorType.ItemProficiency] = "Item Proficiency"
 }
+
+local function FormatSpecIDText(specID)
+    if specID == nil then
+        return "nil"
+    end
+
+    if specID == 0 then
+        return "0 (Follow Current Specialization)"
+    end
+
+    if type(specID) ~= "number" then
+        return tostring(specID)
+    end
+
+    local id, name, _, _, _, role, classFile, className = GetSpecializationInfoByID(specID)
+    if not id then
+        return tostring(specID)
+    end
+
+    local roleText = role or "UNKNOWN_ROLE"
+    local classText = className or classFile or "Unknown Class"
+    return string.format("%s (%s, %s, ID %d)", name or "Unknown Spec", classText, roleText, specID)
+end
+
+local function BuildSpecDescriptions(specIDs)
+    if type(specIDs) ~= "table" or #specIDs == 0 then
+        return nil
+    end
+
+    local descriptions = {}
+    for _, specID in ipairs(specIDs) do
+        table.insert(descriptions, FormatSpecIDText(specID))
+    end
+
+    if #descriptions == 0 then
+        return nil
+    end
+
+    return descriptions
+end
+
+local function CopySpecIDs(specIDs)
+    if type(specIDs) ~= "table" or #specIDs == 0 then
+        return nil
+    end
+
+    local copy = {}
+    for _, specID in ipairs(specIDs) do
+        table.insert(copy, specID)
+    end
+
+    if #copy == 0 then
+        return nil
+    end
+
+    return copy
+end
+
+local function CopySourceInfoFields(sourceInfo)
+    if type(sourceInfo) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    for key, value in pairs(sourceInfo) do
+        if type(value) == "table" then
+            if key == "relicSlotTypeNames" or key == "drops" then
+                copy[key] = #value
+            else
+                copy[key] = CopySourceInfoFields(value)
+            end
+        else
+            copy[key] = value
+        end
+    end
+
+    return copy
+end
 
 local function SetWardrobeCollectionSearchText(searchText)
     if not WardrobeCollectionFrame then
@@ -53,7 +135,7 @@ function DebugFrameMixin:Init()
     self.frame:SetMovable(true)
     self.frame:SetResizable(true)
     self.frame:EnableMouse(true)
-    self.frame:SetResizeBounds(450, 300) -- Set minimum width and height
+    self.frame:SetResizeBounds(620, 300) -- Set minimum width and height
     self.frame:Hide()
 
     -- Set the title in the header
@@ -650,7 +732,14 @@ function DebugFrameMixin:RefreshLayout()
         if entry:IsShown() then
             -- Update entry width
             entry:SetWidth(columnWidth)
-            entry.value:SetWidth(columnWidth - 170)
+            local paddingAdjustment = DEBUG_ENTRY_LABEL_LEFT_PADDING + DEBUG_ENTRY_LABEL_WIDTH + DEBUG_ENTRY_VALUE_GAP
+            local valueWidth = columnWidth - paddingAdjustment
+            if numColumns == 2 then
+                valueWidth = math.max(220, valueWidth)
+            else
+                valueWidth = math.max(260, valueWidth)
+            end
+            entry.value:SetWidth(valueWidth)
 
             -- Clear existing points
             entry:ClearAllPoints()
@@ -703,10 +792,10 @@ end
 function DebugFrameMixin:GetColumnLayout()
     -- Determine if we should use two columns based on frame width
     local frameWidth = self.frame:GetWidth()
-    local minWidthForTwoColumns = 600 -- Lowered threshold since we have minimum width of 450
+    local minWidthForTwoColumns = 1175
 
     if frameWidth >= minWidthForTwoColumns then
-        return 2, (frameWidth - 40) / 2 -- Two columns with some padding
+        return 2, (frameWidth - 80) / 2 -- account for extra gutter
     else
         return 1, frameWidth - 40       -- Single column
     end
@@ -721,12 +810,12 @@ function DebugFrameMixin:AddDebugEntry(label, value, color)
         entry:SetHeight(20)
 
         entry.label = entry:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        entry.label:SetPoint("TOPLEFT", entry, "TOPLEFT", 10, 0)
-        entry.label:SetWidth(150)
+        entry.label:SetPoint("TOPLEFT", entry, "TOPLEFT", DEBUG_ENTRY_LABEL_LEFT_PADDING, 0)
+        entry.label:SetWidth(DEBUG_ENTRY_LABEL_WIDTH)
         entry.label:SetJustifyH("LEFT")
 
         entry.value = entry:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        entry.value:SetPoint("TOPLEFT", entry.label, "TOPRIGHT", 10, 0)
+        entry.value:SetPoint("TOPLEFT", entry.label, "TOPRIGHT", DEBUG_ENTRY_VALUE_GAP, 0)
         entry.value:SetJustifyH("LEFT")
 
         self.debugEntries[index] = entry
@@ -740,7 +829,14 @@ function DebugFrameMixin:AddDebugEntry(label, value, color)
 
     -- Set entry width based on column layout
     entry:SetWidth(columnWidth)
-    entry.value:SetWidth(columnWidth - 170) -- Label width + padding
+    local paddingAdjustment = DEBUG_ENTRY_LABEL_LEFT_PADDING + DEBUG_ENTRY_LABEL_WIDTH + DEBUG_ENTRY_VALUE_GAP
+    local valueWidth = columnWidth - paddingAdjustment
+    if numColumns == 2 then
+        valueWidth = math.max(220, valueWidth)
+    else
+        valueWidth = math.max(260, valueWidth)
+    end
+    entry.value:SetWidth(valueWidth)
 
     -- Position entry based on column layout
     if numColumns == 2 then
@@ -748,17 +844,14 @@ function DebugFrameMixin:AddDebugEntry(label, value, color)
         local row = math.ceil(index / 2)
         local column = ((index - 1) % 2) + 1
 
+        local columnSpacing = 30
         if index == 1 then
-            -- First entry, top left
             entry:SetPoint("TOPLEFT", self.infoFrame, "TOPLEFT", 0, 0)
         elseif column == 1 then
-            -- Left column, new row
             entry:SetPoint("TOPLEFT", self.debugEntries[index - 2], "BOTTOMLEFT", 0, -5)
         else
-            -- Right column
             if index == 2 then
-                -- First entry in right column
-                entry:SetPoint("TOPLEFT", self.infoFrame, "TOPLEFT", columnWidth + 10, 0)
+                entry:SetPoint("TOPLEFT", self.infoFrame, "TOPLEFT", columnWidth + columnSpacing, 0)
             else
                 entry:SetPoint("TOPLEFT", self.debugEntries[index - 2], "BOTTOMLEFT", 0, -5)
             end
@@ -1214,7 +1307,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     addKV(1, "Level", UnitLevel("player"))
 
     local className, classFile, classID = UnitClass("player")
-    addKV(1, "Class", string.format("%s (%s, ID %s)", className or "Unknown", classFile or "?", tostring(classID or "nil")))
+    addKV(1, "Class",
+        string.format("%s (%s, ID %s)", className or "Unknown", classFile or "?", tostring(classID or "nil")))
 
     local specIndex = GetSpecialization()
     local specName
@@ -1244,7 +1338,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
 
     if infoLink then
         itemName, itemLinkFull, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
-        itemEquipLoc, itemTexture, sellPrice, classIDInfo, subclassIDInfo, bindType, expansionID, setID, isCraftingReagent = C_Item.GetItemInfo(infoLink)
+        itemEquipLoc, itemTexture, sellPrice, classIDInfo, subclassIDInfo, bindType, expansionID, setID, isCraftingReagent =
+            C_Item.GetItemInfo(infoLink)
     end
 
     addKV(1, "Name", itemName)
@@ -1299,35 +1394,200 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     end
 
     local itemData = item:GetItemData()
+    local transmogInfo
     if itemData and itemData.GetTransmogInfo then
-        local transmogInfo = itemData:GetTransmogInfo()
-        if transmogInfo then
-            addLine(0, "")
-            addLine(0, "[Transmog Info]")
-            addKV(1, "needsItem", transmogInfo.needsItem)
-            addKV(1, "otherNeedsItem", transmogInfo.otherNeedsItem)
-            addKV(1, "isCompletionistItem", transmogInfo.isCompletionistItem)
-            addKV(1, "matchesLootSpec", transmogInfo.matchesLootSpec)
-            addKV(1, "hasMetRequirements", transmogInfo.hasMetRequirements)
-            addKV(1, "canEquip", transmogInfo.canEquip)
-            addKV(1, "canEquipForPlayer", transmogInfo.canEquipForPlayer)
-            addKV(1, "isTransmog", transmogInfo.isTransmog)
-            addKV(1, "isUpgrade", transmogInfo.isUpgrade)
-            addKV(1, "uniqueUpgradeBlocked", transmogInfo.uniqueUpgradeBlocked)
-            addKV(1, "uniqueUpgradeCandidate", transmogInfo.uniqueUpgradeCandidate)
-            addKV(1, "betterItemEquipped", transmogInfo.betterItemEquipped)
-            addKV(1, "equalItemLevelEquipped", transmogInfo.equalItemLevelEquipped)
-            addKV(1, "upgradeItemLevelDelta", transmogInfo.upgradeItemLevelDelta)
-            addKV(1, "pawnIdentifiedUpgrade", transmogInfo.pawnIdentifiedUpgrade)
-            addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
-            addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
-            addKV(1, "sourceID", transmogInfo.sourceID)
-            addKV(1, "appearanceID", transmogInfo.appearanceID)
+        transmogInfo = itemData:GetTransmogInfo()
+    end
 
-            if transmogInfo.forDebugUseOnly then
-                addTable(1, "forDebugUseOnly", transmogInfo.forDebugUseOnly)
+    local transmogDebugData
+    if identifiedType == CaerdonItemType.Equipment then
+        transmogDebugData = self:CollectTransmogDebugData(item, transmogInfo)
+    end
+
+    if transmogDebugData and transmogDebugData.api then
+        local api = transmogDebugData.api
+
+        local hasAPIInfo = (api.itemInfo and (api.itemInfo.appearanceID or api.itemInfo.sourceID))
+            or api.playerHasTransmog ~= nil
+            or (api.playerSpecs and (api.playerSpecs.lootSpecID or api.playerSpecs.activeSpecID))
+            or (api.itemSpecs and api.itemSpecs.descriptions)
+            or (api.sourceSpecs and api.sourceSpecs.descriptions)
+            or api.playerCanCollectSource or api.accountCanCollectSource
+            or api.sourceInfo or api.appearanceInfo or api.canItemTransmog
+            or api.doesItemContainSpec or api.detailedItemLevelInfo or api.setBonusesForSpec
+            or (api.validSourcesForClass and #api.validSourcesForClass > 0)
+            or api.appearanceSourceInfo or api.artifactInfo
+
+        if hasAPIInfo then
+            addLine(0, "")
+            addLine(0, "[Transmog (API Responses)]")
+
+            if api.itemInfo then
+                local appearanceValue = tostring(api.itemInfo.appearanceID)
+                if api.itemInfo.requestSource then
+                    appearanceValue = appearanceValue .. " (via " .. api.itemInfo.requestSource .. ")"
+                end
+                addKV(1, "C_TransmogCollection.GetItemInfo.appearanceID", appearanceValue)
+                addKV(1, "C_TransmogCollection.GetItemInfo.sourceID", api.itemInfo.sourceID)
+            end
+
+            if api.playerHasTransmog ~= nil then
+                addKV(1, "PlayerHasTransmogItemModifiedAppearance", api.playerHasTransmog)
+            end
+
+            if api.playerSpecs then
+                if api.playerSpecs.lootSpecID ~= nil then
+                    addKV(1, "GetLootSpecialization", api.playerSpecs.lootSpecID)
+                    if api.playerSpecs.lootSpecLabel and api.playerSpecs.lootSpecLabel ~= tostring(api.playerSpecs.lootSpecID) then
+                        addKV(1, "GetLootSpecialization (Label)", api.playerSpecs.lootSpecLabel)
+                    end
+                end
+                if api.playerSpecs.activeSpecID then
+                    addKV(1, "GetSpecializationInfo (Active Spec ID)", api.playerSpecs.activeSpecID)
+                    if api.playerSpecs.activeSpecLabel and
+                        api.playerSpecs.activeSpecLabel ~= tostring(api.playerSpecs.activeSpecID) then
+                        addKV(1, "GetSpecializationInfo (Active Spec Label)", api.playerSpecs.activeSpecLabel)
+                    end
+                end
+            end
+
+            if api.playerClass then
+                addKV(1, "Player Class ID", api.playerClass.classID)
+                if api.playerClass.className then
+                    addKV(2, "Class Name", api.playerClass.className)
+                end
+                if api.playerClass.classFile then
+                    addKV(2, "Class File", api.playerClass.classFile)
+                end
+            end
+
+            if api.itemSpecs and api.itemSpecs.descriptions then
+                addKV(1, "C_Item.GetItemSpecInfo (Item)", table.concat(api.itemSpecs.descriptions, "; "))
+            end
+
+            if api.sourceSpecs and api.sourceSpecs.descriptions then
+                addKV(1, "C_Item.GetItemSpecInfo (Source Item)", table.concat(api.sourceSpecs.descriptions, "; "))
+            end
+
+            if api.doesItemContainSpec then
+                if api.doesItemContainSpec.playerResult ~= nil then
+                    addLine(1, "C_Item.DoesItemContainSpec (Player Spec):")
+                    addKV(2, "Spec ID", api.doesItemContainSpec.playerSpecID)
+                    addKV(2, "Result", api.doesItemContainSpec.playerResult)
+                end
+                if api.doesItemContainSpec.specResults and #api.doesItemContainSpec.specResults > 0 then
+                    addLine(1, "C_Item.DoesItemContainSpec (Per Item Spec):")
+                    for _, specResult in ipairs(api.doesItemContainSpec.specResults) do
+                        addKV(2, FormatSpecIDText(specResult.specID) or tostring(specResult.specID), specResult.result)
+                    end
+                end
+            end
+
+            if api.detailedItemLevelInfo then
+                addLine(1, "C_Item.GetDetailedItemLevelInfo:")
+                addKV(2, "actualItemLevel", api.detailedItemLevelInfo.actualItemLevel)
+                addKV(2, "previewItemLevel", api.detailedItemLevelInfo.previewItemLevel)
+                addKV(2, "sparseItemLevel", api.detailedItemLevelInfo.sparseItemLevel)
+            end
+
+            if api.setBonusesForSpec then
+                addLine(1, "C_Item.GetSetBonusesForSpecializationByItemID:")
+                addKV(2, "specID", api.setBonusesForSpec.specID)
+                if api.setBonusesForSpec.setBonusSpellIDs then
+                    addKV(2, "spellIDs", table.concat(api.setBonusesForSpec.setBonusSpellIDs, ", "))
+                end
+            end
+
+            if api.playerCanCollectSource then
+                addLine(1, "C_TransmogCollection.PlayerCanCollectSource:")
+                addKV(2, "isInfoReady", api.playerCanCollectSource.isInfoReady)
+                addKV(2, "canCollect", api.playerCanCollectSource.canCollect)
+            end
+
+            if api.accountCanCollectSource then
+                addLine(1, "C_TransmogCollection.AccountCanCollectSource:")
+                addKV(2, "isInfoReady", api.accountCanCollectSource.isInfoReady)
+                addKV(2, "canCollect", api.accountCanCollectSource.canCollect)
+            end
+
+            if api.canItemTransmog then
+                addLine(1, "C_Item.CanItemTransmogAppearance:")
+                addKV(2, "canTransmog", api.canItemTransmog.canTransmog)
+                addKV(2, "failureReason", api.canItemTransmog.failureReason)
+                addKV(2, "failureArg", api.canItemTransmog.failureArg)
+            end
+
+            if api.artifactInfo then
+                addLine(1, "C_ArtifactUI:")
+                addKV(2, "IsArtifactItem", api.artifactInfo.isArtifactItem)
+                if api.artifactInfo.isArtifactDisabled ~= nil then
+                    addKV(2, "IsArtifactDisabled", api.artifactInfo.isArtifactDisabled)
+                end
+                if api.artifactInfo.isEquippedArtifactDisabled ~= nil then
+                    addKV(2, "IsEquippedArtifactDisabled", api.artifactInfo.isEquippedArtifactDisabled)
+                end
+            end
+
+            if api.sourceInfo then
+                addTable(1, "C_TransmogCollection.GetSourceInfo", api.sourceInfo)
+                if api.sourceInfo.useErrorType then
+                    addKV(1, "Source useErrorType Label (Derived)",
+                        TRANSMOG_USE_ERROR_LABELS[api.sourceInfo.useErrorType] or "Unknown")
+                end
+            end
+
+            if api.appearanceInfo then
+                addTable(1, "C_TransmogCollection.GetAppearanceInfoBySource", api.appearanceInfo)
+            end
+
+            if api.appearanceSourceInfo then
+                addTable(1, "C_TransmogCollection.GetAppearanceSourceInfo", api.appearanceSourceInfo)
+            end
+
+            if api.validSourcesForClass and #api.validSourcesForClass > 0 then
+                addLine(1, "C_TransmogCollection.GetValidAppearanceSourcesForClass:")
+                for _, sourceInfo in ipairs(api.validSourcesForClass) do
+                    addLine(2, string.format("Source %s (item %s)", tostring(sourceInfo.sourceID),
+                        tostring(sourceInfo.itemID)))
+                    addKV(3, "playerCanCollect", sourceInfo.playerCanCollect)
+                    addKV(3, "isValidSourceForPlayer", sourceInfo.isValidSourceForPlayer)
+                    addKV(3, "useErrorType", sourceInfo.useErrorType)
+                    if sourceInfo.useError then
+                        addKV(3, "useError", sourceInfo.useError)
+                    end
+                end
             end
         end
+    end
+
+    if transmogInfo then
+        addLine(0, "")
+        addLine(0, "[Transmog (Caerdon Processed)]")
+        addKV(1, "needsItem", transmogInfo.needsItem)
+        addKV(1, "otherNeedsItem", transmogInfo.otherNeedsItem)
+        addKV(1, "isCompletionistItem", transmogInfo.isCompletionistItem)
+        addKV(1, "matchesLootSpec", transmogInfo.matchesLootSpec)
+        addKV(1, "hasMetRequirements", transmogInfo.hasMetRequirements)
+        addKV(1, "canEquip", transmogInfo.canEquip)
+        addKV(1, "canEquipForPlayer", transmogInfo.canEquipForPlayer)
+        addKV(1, "isTransmog", transmogInfo.isTransmog)
+        addKV(1, "isUpgrade", transmogInfo.isUpgrade)
+        addKV(1, "uniqueUpgradeBlocked", transmogInfo.uniqueUpgradeBlocked)
+        addKV(1, "uniqueUpgradeCandidate", transmogInfo.uniqueUpgradeCandidate)
+        addKV(1, "betterItemEquipped", transmogInfo.betterItemEquipped)
+        addKV(1, "equalItemLevelEquipped", transmogInfo.equalItemLevelEquipped)
+        addKV(1, "upgradeItemLevelDelta", transmogInfo.upgradeItemLevelDelta)
+        addKV(1, "pawnIdentifiedUpgrade", transmogInfo.pawnIdentifiedUpgrade)
+        addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
+        addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
+        addKV(1, "sourceID", transmogInfo.sourceID)
+        addKV(1, "appearanceID", transmogInfo.appearanceID)
+    end
+
+    if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then
+        addLine(0, "")
+        addLine(0, "[Transmog (Caerdon Debug Internals)]")
+        addTable(1, "Debug Data", transmogDebugData.processed.debugExtras)
     end
 
     if itemData and itemData.GetConsumableInfo then
@@ -1385,15 +1645,16 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             for _, info in ipairs(ensembleData.items) do
                 addLine(2, "- Item " .. tostring(info.itemID))
                 if info.itemLink then
-                addLine(3, "Link: " .. info.itemLink)
-                local itemString = info.itemLink:match("|H(.-)|h")
-                if itemString then
-                    addLine(4, "Item String: " .. itemString)
-                end
+                    addLine(3, "Link: " .. info.itemLink)
+                    local itemString = info.itemLink:match("|H(.-)|h")
+                    if itemString then
+                        addLine(4, "Item String: " .. itemString)
+                    end
                 else
                     addLine(3, "Name: " .. (info.itemName or "Unknown"))
                 end
-                addKV(3, "Item Quality", info.itemQuality and _G[("ITEM_QUALITY%d_DESC"):format(info.itemQuality)] or info.itemQuality)
+                addKV(3, "Item Quality",
+                    info.itemQuality and _G[("ITEM_QUALITY%d_DESC"):format(info.itemQuality)] or info.itemQuality)
                 addKV(3, "Item Min Level", info.itemMinLevel)
                 addKV(3, "Item Type", info.itemType)
                 addKV(3, "Item SubType", info.itemSubType)
@@ -1404,7 +1665,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 if info.sources and #info.sources > 0 then
                     addLine(3, "Sources:")
                     for _, source in ipairs(info.sources) do
-                        addLine(4, "* Source " .. tostring(source.sourceID) .. " (Visual " .. tostring(source.visualID) .. ", Mod " .. tostring(source.itemModID) .. ")")
+                        addLine(4,
+                            "* Source " ..
+                            tostring(source.sourceID) ..
+                            " (Visual " .. tostring(source.visualID) .. ", Mod " .. tostring(source.itemModID) .. ")")
                         addKV(5, "isCollected", source.isCollected)
                         addKV(5, "playerCanCollect", source.playerCanCollect)
                         addKV(5, "isValidSourceForPlayer", source.isValidSourceForPlayer)
@@ -1423,7 +1687,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                             addKV(5, "name", source.name)
                         end
                         if source.useErrorType then
-                            addKV(5, "useErrorType", tostring(source.useErrorType) .. " (" .. self:GetTransmogUseErrorTypeName(source.useErrorType) .. ")")
+                            addKV(5, "useErrorType",
+                                tostring(source.useErrorType) ..
+                                " (" .. self:GetTransmogUseErrorTypeName(source.useErrorType) .. ")")
                         end
                         if source.useError then
                             addKV(5, "useError", source.useError)
@@ -1474,7 +1740,8 @@ function DebugFrameMixin:EnsureCopyOutputFrame()
     frame.instruction:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
     frame.instruction:SetPoint("RIGHT", frame, "RIGHT", -16, 0)
     frame.instruction:SetJustifyH("LEFT")
-    frame.instruction:SetText("Text is highlighted automatically. Press Ctrl-C (Cmd-C on Mac) to copy, then Ctrl-V to paste it into chat or a note.")
+    frame.instruction:SetText(
+        "Text is highlighted automatically. Press Ctrl-C (Cmd-C on Mac) to copy, then Ctrl-V to paste it into chat or a note.")
 
     frame.scrollFrame = CreateFrame("ScrollFrame", "CaerdonDebugCopyScrollFrame", frame, "UIPanelScrollFrameTemplate")
     frame.scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -64)
@@ -1548,47 +1815,450 @@ function DebugFrameMixin:AddPetInfo(item)
     end
 end
 
+function DebugFrameMixin:CollectTransmogDebugData(item, overrideTransmogInfo)
+    local data = {
+        api = {},
+        processed = {}
+    }
+
+    if not item then
+        return data
+    end
+
+    local itemLink = item:GetItemLink()
+    local itemID = item:GetItemID()
+    local appearanceID, sourceID, requestSource
+
+    if itemLink then
+        appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
+        if appearanceID then
+            requestSource = "itemLink"
+        end
+    end
+
+    if not appearanceID and itemID then
+        local fallbackAppearanceID, fallbackSourceID = C_TransmogCollection.GetItemInfo(itemID)
+        if fallbackAppearanceID then
+            appearanceID = fallbackAppearanceID
+            sourceID = fallbackSourceID
+            requestSource = "itemID"
+        end
+    end
+
+    data.api.itemInfo = {
+        appearanceID = appearanceID,
+        sourceID = sourceID,
+        requestSource = requestSource
+    }
+
+    local itemSpecIDs
+    if itemLink then
+        itemSpecIDs = CopySpecIDs(C_Item.GetItemSpecInfo(itemLink))
+    end
+    if not itemSpecIDs and itemID then
+        itemSpecIDs = CopySpecIDs(C_Item.GetItemSpecInfo(itemID))
+    end
+    data.api.itemSpecs = {
+        ids = itemSpecIDs,
+        descriptions = BuildSpecDescriptions(itemSpecIDs)
+    }
+
+    local lootSpecID = GetLootSpecialization()
+    local activeSpecID
+    local specIndex = GetSpecialization()
+    if specIndex then
+        activeSpecID = select(1, GetSpecializationInfo(specIndex))
+    end
+
+    data.api.playerSpecs = {
+        lootSpecID = lootSpecID,
+        lootSpecLabel = FormatSpecIDText(lootSpecID),
+        activeSpecID = activeSpecID,
+        activeSpecLabel = FormatSpecIDText(activeSpecID)
+    }
+
+    local className, classFile, classID = UnitClass("player")
+    data.api.playerClass = {
+        className = className,
+        classFile = classFile,
+        classID = classID
+    }
+
+    local itemInfoToken = itemLink or itemID
+
+    if itemInfoToken and classID and C_Item.DoesItemContainSpec then
+        local specResults = {}
+        if itemSpecIDs then
+            for _, specID in ipairs(itemSpecIDs) do
+                local result = C_Item.DoesItemContainSpec(itemInfoToken, classID, specID)
+                table.insert(specResults, {
+                    specID = specID,
+                    result = result
+                })
+            end
+        end
+
+        local playerSpecResult
+        if activeSpecID then
+            playerSpecResult = C_Item.DoesItemContainSpec(itemInfoToken, classID, activeSpecID)
+        end
+
+        data.api.doesItemContainSpec = {
+            classID = classID,
+            playerSpecID = activeSpecID,
+            playerResult = playerSpecResult,
+            specResults = specResults
+        }
+    end
+
+    if itemInfoToken and C_Item.GetDetailedItemLevelInfo then
+        local actualItemLevel, previewItemLevel, sparseItemLevel = C_Item.GetDetailedItemLevelInfo(itemInfoToken)
+        if actualItemLevel then
+            data.api.detailedItemLevelInfo = {
+                actualItemLevel = actualItemLevel,
+                previewItemLevel = previewItemLevel,
+                sparseItemLevel = sparseItemLevel
+            }
+        end
+    end
+
+    if itemID and activeSpecID and C_Item.GetSetBonusesForSpecializationByItemID then
+        local setBonuses = C_Item.GetSetBonusesForSpecializationByItemID(activeSpecID, itemID)
+        if setBonuses then
+            data.api.setBonusesForSpec = {
+                specID = activeSpecID,
+                setBonusSpellIDs = CopyTable(setBonuses)
+            }
+        end
+    end
+
+    local itemLocation = item:GetItemLocation()
+    if itemLocation and itemLocation:HasAnyLocation() and C_Item.CanItemTransmogAppearance then
+        local canTransmog, failureReason, failureArg = C_Item.CanItemTransmogAppearance(itemLocation)
+        data.api.canItemTransmog = {
+            canTransmog = canTransmog,
+            failureReason = failureReason,
+            failureArg = failureArg
+        }
+
+        if C_ArtifactUI and C_ArtifactUI.IsArtifactItem then
+            local isArtifactItem = C_ArtifactUI.IsArtifactItem(itemLocation)
+            data.api.artifactInfo = {
+                isArtifactItem = isArtifactItem
+            }
+            if C_ArtifactUI.IsArtifactDisabled then
+                data.api.artifactInfo.isArtifactDisabled = C_ArtifactUI.IsArtifactDisabled()
+            end
+            if C_ArtifactUI.IsEquippedArtifactDisabled then
+                data.api.artifactInfo.isEquippedArtifactDisabled = C_ArtifactUI.IsEquippedArtifactDisabled()
+            end
+        end
+    end
+
+    if sourceID then
+        data.api.playerHasTransmog = C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)
+
+        local playerReady, playerCanCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+        data.api.playerCanCollectSource = {
+            isInfoReady = playerReady,
+            canCollect = playerCanCollect
+        }
+
+        local accountReady, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
+        data.api.accountCanCollectSource = {
+            isInfoReady = accountReady,
+            canCollect = accountCanCollect
+        }
+
+        data.api.sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+        data.api.appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+        data.api.appearanceSourceInfo = CopySourceInfoFields(C_TransmogCollection.GetAppearanceSourceInfo(sourceID))
+
+        if data.api.sourceInfo and data.api.sourceInfo.itemID then
+            local sourceSpecIDs = CopySpecIDs(C_Item.GetItemSpecInfo(data.api.sourceInfo.itemID))
+            data.api.sourceSpecs = {
+                ids = sourceSpecIDs,
+                descriptions = BuildSpecDescriptions(sourceSpecIDs)
+            }
+        end
+    end
+
+    local resolvedAppearanceID = (data.api.itemInfo and data.api.itemInfo.appearanceID)
+        or (overrideTransmogInfo and overrideTransmogInfo.appearanceID)
+    if resolvedAppearanceID and classID and C_TransmogCollection.GetValidAppearanceSourcesForClass then
+        local validSources = C_TransmogCollection.GetValidAppearanceSourcesForClass(resolvedAppearanceID, classID)
+        if validSources then
+            local simplifiedSources = {}
+            for _, sourceInfo in ipairs(validSources) do
+                table.insert(simplifiedSources, {
+                    sourceID = sourceInfo.sourceID,
+                    itemID = sourceInfo.itemID,
+                    playerCanCollect = sourceInfo.playerCanCollect,
+                    isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
+                    useErrorType = sourceInfo.useErrorType,
+                    useError = sourceInfo.useError,
+                    name = sourceInfo.name,
+                    invType = sourceInfo.invType
+                })
+            end
+            data.api.validSourcesForClass = simplifiedSources
+        end
+    end
+
+    local transmogInfo = overrideTransmogInfo
+    if not transmogInfo then
+        local itemData = item:GetItemData()
+        if itemData and itemData.GetTransmogInfo then
+            transmogInfo = itemData:GetTransmogInfo()
+        end
+    end
+
+    data.processed.transmogInfo = transmogInfo
+    if transmogInfo then
+        data.processed.debugExtras = transmogInfo.forDebugUseOnly
+    end
+
+    return data
+end
+
 function DebugFrameMixin:AddTransmogInfo(item)
     if not item then
         self:AddDebugEntry("Transmog Info", "Item is nil")
         return
     end
 
-    -- Get transmog info using the WoW API directly
-    local itemLink = item:GetItemLink()
-    if not itemLink then
-        self:AddDebugEntry("Transmog Info", "No item link available")
-        return
-    end
+    local transmogData = self:CollectTransmogDebugData(item)
+    local api = transmogData.api or {}
+    local processed = transmogData.processed or {}
+    local transmogInfo = processed.transmogInfo
+    local debugExtras = processed.debugExtras
 
-    local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
-
-    if not appearanceID then
-        -- Try with item ID as fallback
-        local itemID = item:GetItemID()
-        if itemID then
-            appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemID)
+    if api.itemInfo then
+        local appearanceValue = tostring(api.itemInfo.appearanceID)
+        if api.itemInfo.requestSource then
+            appearanceValue = appearanceValue .. " (via " .. api.itemInfo.requestSource .. ")"
         end
-    end
-
-    if appearanceID then
-        self:AddDebugEntry("Appearance ID", tostring(appearanceID))
-        self:AddDebugEntry("Source ID", tostring(sourceID))
-
-        -- Check if collected
-        local isCollected = C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID)
-        self:AddDebugEntry("Is Collected", tostring(isCollected))
-
-        -- Get source info
-        local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
-        if sourceInfo then
-            self:AddDebugEntry("Is Known", tostring(sourceInfo.isCollected))
-            self:AddDebugEntry("Item ID", tostring(sourceInfo.itemID))
-            self:AddDebugEntry("Item Mod ID", tostring(sourceInfo.itemModID))
-            self:AddDebugEntry("Visual ID", tostring(sourceInfo.visualID))
-        end
+        self:AddDebugEntry("API Appearance ID", appearanceValue)
+        self:AddDebugEntry("API Source ID", tostring(api.itemInfo.sourceID))
     else
-        self:AddDebugEntry("Transmog Info", "Not available for this item")
+        self:AddDebugEntry("API Appearance ID", "Not available for this item")
+    end
+
+    if api.playerHasTransmog ~= nil then
+        self:AddDebugEntry("API PlayerHasTransmogItemModifiedAppearance", tostring(api.playerHasTransmog))
+    end
+
+    if api.playerSpecs then
+        if api.playerSpecs.lootSpecID ~= nil then
+            local lootSpecText = tostring(api.playerSpecs.lootSpecID)
+            if api.playerSpecs.lootSpecLabel and api.playerSpecs.lootSpecLabel ~= lootSpecText then
+                lootSpecText = lootSpecText .. " [" .. api.playerSpecs.lootSpecLabel .. "]"
+            end
+            self:AddDebugEntry("API Loot Spec", lootSpecText)
+        end
+
+        if api.playerSpecs.activeSpecID then
+            local activeSpecText = tostring(api.playerSpecs.activeSpecID)
+            if api.playerSpecs.activeSpecLabel and api.playerSpecs.activeSpecLabel ~= activeSpecText then
+                activeSpecText = activeSpecText .. " [" .. api.playerSpecs.activeSpecLabel .. "]"
+            end
+            self:AddDebugEntry("API Active Spec", activeSpecText)
+        end
+    end
+
+    if api.playerClass and api.playerClass.classID then
+        local classText = tostring(api.playerClass.classID)
+        if api.playerClass.classFile or api.playerClass.className then
+            classText = classText .. " [" ..
+                (api.playerClass.className or api.playerClass.classFile or "Unknown Class") .. "]"
+        end
+        self:AddDebugEntry("API Player Class ID", classText)
+    end
+
+    if api.itemSpecs and api.itemSpecs.descriptions then
+        self:AddDebugEntry("API Item Spec IDs", table.concat(api.itemSpecs.descriptions, ", "))
+    end
+
+    if api.sourceSpecs and api.sourceSpecs.descriptions then
+        self:AddDebugEntry("API Source Spec IDs", table.concat(api.sourceSpecs.descriptions, ", "))
+    end
+
+    if api.doesItemContainSpec then
+        if api.doesItemContainSpec.playerResult ~= nil then
+            local specText = FormatSpecIDText(api.doesItemContainSpec.playerSpecID)
+            self:AddDebugEntry("API DoesItemContainSpec (Player Spec)",
+                tostring(api.doesItemContainSpec.playerResult) ..
+                (specText and (" [" .. specText .. "]") or ""))
+        end
+
+        if api.doesItemContainSpec.specResults and #api.doesItemContainSpec.specResults > 0 then
+            for _, specData in ipairs(api.doesItemContainSpec.specResults) do
+                local specText = FormatSpecIDText(specData.specID)
+                self:AddDebugEntry("API DoesItemContainSpec (Spec " .. tostring(specData.specID) .. ")",
+                    tostring(specData.result) .. (specText and (" [" .. specText .. "]") or ""))
+            end
+        end
+    end
+
+    if api.detailedItemLevelInfo then
+        self:AddDebugEntry("API GetDetailedItemLevelInfo.actual", tostring(api.detailedItemLevelInfo.actualItemLevel))
+        self:AddDebugEntry("API GetDetailedItemLevelInfo.preview", tostring(api.detailedItemLevelInfo.previewItemLevel))
+        self:AddDebugEntry("API GetDetailedItemLevelInfo.sparse", tostring(api.detailedItemLevelInfo.sparseItemLevel))
+    end
+
+    if api.setBonusesForSpec then
+        local specText = FormatSpecIDText(api.setBonusesForSpec.specID)
+        local entryLabel = "API GetSetBonusesForSpecializationByItemID (" ..
+            tostring(api.setBonusesForSpec.specID) .. ")"
+        if specText and specText ~= tostring(api.setBonusesForSpec.specID) then
+            entryLabel = entryLabel .. " [" .. specText .. "]"
+        end
+        local bonuses = api.setBonusesForSpec.setBonusSpellIDs or {}
+        self:AddDebugEntry(entryLabel, (#bonuses > 0) and table.concat(bonuses, ", ") or "none")
+    end
+
+    if api.playerCanCollectSource then
+        local value = tostring(api.playerCanCollectSource.canCollect) ..
+            " (Ready: " .. tostring(api.playerCanCollectSource.isInfoReady) .. ")"
+        self:AddDebugEntry("API PlayerCanCollectSource", value)
+    end
+
+    if api.accountCanCollectSource then
+        local value = tostring(api.accountCanCollectSource.canCollect) ..
+            " (Ready: " .. tostring(api.accountCanCollectSource.isInfoReady) .. ")"
+        self:AddDebugEntry("API AccountCanCollectSource", value)
+    end
+
+    if api.canItemTransmog then
+        local value = tostring(api.canItemTransmog.canTransmog)
+        if api.canItemTransmog.failureReason then
+            value = value .. " (Reason: " .. tostring(api.canItemTransmog.failureReason) .. ")"
+        end
+        if api.canItemTransmog.failureArg then
+            value = value .. " (Arg: " .. tostring(api.canItemTransmog.failureArg) .. ")"
+        end
+        self:AddDebugEntry("API CanItemTransmogAppearance", value)
+    end
+
+    if api.artifactInfo then
+        self:AddDebugEntry("API Artifact IsArtifactItem", tostring(api.artifactInfo.isArtifactItem))
+        if api.artifactInfo.isArtifactDisabled ~= nil then
+            self:AddDebugEntry("API Artifact IsArtifactDisabled", tostring(api.artifactInfo.isArtifactDisabled))
+        end
+        if api.artifactInfo.isEquippedArtifactDisabled ~= nil then
+            self:AddDebugEntry("API Artifact IsEquippedArtifactDisabled",
+                tostring(api.artifactInfo.isEquippedArtifactDisabled))
+        end
+    end
+
+    if api.sourceInfo then
+        self:AddDebugEntry("API Source Item ID", tostring(api.sourceInfo.itemID))
+        self:AddDebugEntry("API Source InvType", tostring(api.sourceInfo.invType))
+        self:AddDebugEntry("API Source IsCollected", tostring(api.sourceInfo.isCollected))
+        self:AddDebugEntry("API Source ValidForPlayer", tostring(api.sourceInfo.isValidSourceForPlayer))
+        self:AddDebugEntry("API Source useErrorType", tostring(api.sourceInfo.useErrorType))
+        if api.sourceInfo.useErrorType then
+            self:AddDebugEntry("Derived useError Label",
+                TRANSMOG_USE_ERROR_LABELS[api.sourceInfo.useErrorType] or "Unknown")
+        end
+        if api.sourceInfo.useErrorData then
+            self:AddDebugEntry("API Source useErrorData", tostring(api.sourceInfo.useErrorData))
+        end
+    end
+
+    if api.appearanceInfo then
+        self:AddDebugEntry("API Appearance Collected", tostring(api.appearanceInfo.appearanceIsCollected))
+        self:AddDebugEntry("API Source Collected", tostring(api.appearanceInfo.sourceIsCollected))
+        self:AddDebugEntry("API Appearance Has Non-Level Req",
+            tostring(api.appearanceInfo.appearanceHasAnyNonLevelRequirements))
+        self:AddDebugEntry("API Appearance Meets Non-Level Req",
+            tostring(api.appearanceInfo.appearanceMeetsNonLevelRequirements))
+        self:AddDebugEntry("API Meets Player Condition",
+            tostring(api.appearanceInfo.meetsTransmogPlayerCondition))
+    end
+
+    if api.appearanceSourceInfo then
+        self:AddDebugEntry("API AppearanceSourceInfo ItemLink", tostring(api.appearanceSourceInfo.itemLink))
+        self:AddDebugEntry("API AppearanceSourceInfo TransmogLink", tostring(api.appearanceSourceInfo.transmoglink))
+        self:AddDebugEntry("API AppearanceSourceInfo SourceType", tostring(api.appearanceSourceInfo.sourceType))
+    end
+
+    if api.validSourcesForClass and #api.validSourcesForClass > 0 then
+        self:AddDebugEntry("API Valid Sources For Class", tostring(#api.validSourcesForClass))
+        for _, sourceInfo in ipairs(api.validSourcesForClass) do
+            local label = string.format("  Source %s (Item %s)", tostring(sourceInfo.sourceID),
+                tostring(sourceInfo.itemID))
+            local details = string.format("playerCanCollect=%s, validForPlayer=%s, useErrorType=%s",
+                tostring(sourceInfo.playerCanCollect),
+                tostring(sourceInfo.isValidSourceForPlayer),
+                tostring(sourceInfo.useErrorType))
+            if sourceInfo.useError then
+                details = details .. ", useError=" .. tostring(sourceInfo.useError)
+            end
+            self:AddDebugEntry(label, details)
+        end
+    end
+
+    if transmogInfo then
+        self:AddDebugEntry("Processed isTransmog", tostring(transmogInfo.isTransmog))
+        self:AddDebugEntry("Processed isUpgrade", tostring(transmogInfo.isUpgrade))
+        self:AddDebugEntry("Processed upgradeItemLevelDelta", tostring(transmogInfo.upgradeItemLevelDelta))
+        self:AddDebugEntry("Processed upgradeMatchesSpec", tostring(transmogInfo.upgradeMatchesSpec))
+        self:AddDebugEntry("Processed pawnIdentifiedUpgrade", tostring(transmogInfo.pawnIdentifiedUpgrade))
+        self:AddDebugEntry("Processed needsItem", tostring(transmogInfo.needsItem))
+        self:AddDebugEntry("Processed otherNeedsItem", tostring(transmogInfo.otherNeedsItem))
+        self:AddDebugEntry("Processed isCompletionistItem", tostring(transmogInfo.isCompletionistItem))
+        self:AddDebugEntry("Processed matchesLootSpec", tostring(transmogInfo.matchesLootSpec))
+        self:AddDebugEntry("Processed hasMetRequirements", tostring(transmogInfo.hasMetRequirements))
+        self:AddDebugEntry("Processed canEquip", tostring(transmogInfo.canEquip))
+        self:AddDebugEntry("Processed canEquipForPlayer", tostring(transmogInfo.canEquipForPlayer))
+        self:AddDebugEntry("Processed uniqueUpgradeBlocked", tostring(transmogInfo.uniqueUpgradeBlocked))
+        self:AddDebugEntry("Processed uniqueUpgradeCandidate", tostring(transmogInfo.uniqueUpgradeCandidate))
+        self:AddDebugEntry("Processed betterItemEquipped", tostring(transmogInfo.betterItemEquipped))
+        self:AddDebugEntry("Processed equalItemLevelEquipped", tostring(transmogInfo.equalItemLevelEquipped))
+        self:AddDebugEntry("Processed uniqueCategoryKey", tostring(transmogInfo.uniqueCategoryKey))
+    end
+
+    if debugExtras then
+        if debugExtras.playerLootSpecID then
+            local label = tostring(debugExtras.playerLootSpecID)
+            local formatted = FormatSpecIDText(debugExtras.playerLootSpecID)
+            if formatted and formatted ~= label then
+                label = label .. " [" .. formatted .. "]"
+            end
+            self:AddDebugEntry("Debug Player Loot Spec", label)
+        end
+        if debugExtras.matchedSources then
+            self:AddDebugEntry("Debug Matched Sources", tostring(#debugExtras.matchedSources))
+            local matchedNames = {}
+            for _, info in ipairs(debugExtras.matchedSources) do
+                if info and info.name then
+                    table.insert(matchedNames, info.name)
+                end
+            end
+            if #matchedNames > 0 then
+                self:AddDebugEntry("Debug Matched Source Names", table.concat(matchedNames, ", "))
+            end
+        end
+        if debugExtras.appearanceSources then
+            self:AddDebugEntry("Debug Appearance Sources", tostring(#debugExtras.appearanceSources))
+        end
+        self:AddDebugEntry("Debug playerCanUseSource", tostring(debugExtras.playerCanUseSource))
+        self:AddDebugEntry("Debug canCollect", tostring(debugExtras.canCollect))
+        self:AddDebugEntry("Debug accountCanCollect", tostring(debugExtras.accountCanCollect))
+        self:AddDebugEntry("Debug otherSourceFound", tostring(debugExtras.otherSourceFound))
+        self:AddDebugEntry("Debug otherSourceFoundForPlayer", tostring(debugExtras.otherSourceFoundForPlayer))
+        self:AddDebugEntry("Debug currentSourceFound", tostring(debugExtras.currentSourceFound))
+        self:AddDebugEntry("Debug lowestLevelFound", tostring(debugExtras.lowestLevelFound))
+        self:AddDebugEntry("Debug shouldShowUpgrade", tostring(debugExtras.shouldShowUpgrade))
+        self:AddDebugEntry("Debug blockedOffhandSlot", tostring(debugExtras.blockedOffhandSlot))
+        self:AddDebugEntry("Debug isArtifactItem", tostring(debugExtras.isArtifactItem))
+        if debugExtras.matchesLootSpecRaw ~= nil then
+            self:AddDebugEntry("Debug matchesLootSpecRaw", tostring(debugExtras.matchesLootSpecRaw))
+        end
+        if debugExtras.isTabard ~= nil then
+            self:AddDebugEntry("Debug isTabard", tostring(debugExtras.isTabard))
+        end
     end
 end
 
@@ -1621,59 +2291,6 @@ function DebugFrameMixin:AddEquipmentInfo(item)
         local equipmentSets = itemData:GetEquipmentSets()
         if equipmentSets and #equipmentSets > 0 then
             self:AddDebugEntry("Equipment Sets", table.concat(equipmentSets, ", "))
-        end
-    end
-    if itemData and itemData.GetTransmogInfo then
-        local transmogInfo = itemData:GetTransmogInfo()
-        if transmogInfo then
-            -- Add detailed transmog information
-            if transmogInfo.needsItem ~= nil then
-                self:AddDebugEntry("Needs Item", tostring(transmogInfo.needsItem))
-            end
-            if transmogInfo.otherNeedsItem ~= nil then
-                self:AddDebugEntry("Other Needs Item", tostring(transmogInfo.otherNeedsItem))
-            end
-            if transmogInfo.isCompletionistItem ~= nil then
-                self:AddDebugEntry("Is Completionist Item", tostring(transmogInfo.isCompletionistItem))
-            end
-            if transmogInfo.matchesLootSpec ~= nil then
-                self:AddDebugEntry("Matches Loot Spec", tostring(transmogInfo.matchesLootSpec))
-            end
-            if transmogInfo.hasMetRequirements ~= nil then
-                self:AddDebugEntry("Has Met Requirements", tostring(transmogInfo.hasMetRequirements))
-            end
-            if transmogInfo.canEquip ~= nil then
-                self:AddDebugEntry("Can Equip", tostring(transmogInfo.canEquip))
-            end
-
-            -- Add item min level
-            local minLevel = item:GetMinLevel()
-            if minLevel then
-                self:AddDebugEntry("Item Min Level", tostring(minLevel))
-            end
-
-            -- Check for matched sources
-            local matchedSources = transmogInfo.forDebugUseOnly and transmogInfo.forDebugUseOnly.matchedSources
-            if matchedSources and #matchedSources > 0 then
-                for k, v in pairs(matchedSources) do
-                    self:AddDebugEntry("Matched Source", v.name)
-                end
-            else
-                self:AddDebugEntry("Matched Source", "false")
-            end
-
-            -- Check appearance info from debug data
-            local appearanceInfo = transmogInfo.forDebugUseOnly and transmogInfo.forDebugUseOnly.appearanceInfo
-            if appearanceInfo then
-                self:AddDebugEntry("Appearance Collected", tostring(appearanceInfo.appearanceIsCollected))
-                self:AddDebugEntry("Source Collected", tostring(appearanceInfo.sourceIsCollected))
-                self:AddDebugEntry("Is Conditionally Known", tostring(appearanceInfo.sourceIsCollectedConditional))
-                self:AddDebugEntry("Is Permanently Known", tostring(appearanceInfo.sourceIsCollectedPermanent))
-                self:AddDebugEntry("Has Non-level Reqs", tostring(appearanceInfo.appearanceHasAnyNonLevelRequirements))
-                self:AddDebugEntry("Meets Non-level Reqs", tostring(appearanceInfo.appearanceMeetsNonLevelRequirements))
-                self:AddDebugEntry("Appearance Is Usable", tostring(appearanceInfo.appearanceIsUsable))
-                self:AddDebugEntry("Meets Condition", tostring(appearanceInfo.meetsTransmogPlayerCondition))
-            end
         end
     end
 end

@@ -167,6 +167,30 @@ local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel)
         if equippedLevel then
             return candidateLevel - equippedLevel
         end
+
+        if appearanceID and playerClassID and C_TransmogCollection.GetValidAppearanceSourcesForClass then
+            local validSources = C_TransmogCollection.GetValidAppearanceSourcesForClass(appearanceID, playerClassID)
+            if type(validSources) == "table" then
+                for _, validSource in ipairs(validSources) do
+                    if validSource.sourceID == sourceID then
+                        validSourceInfoForPlayer = validSource
+                        if not sourceUseErrorType and validSource.useErrorType then
+                            sourceUseErrorType = validSource.useErrorType
+                        end
+                        if not sourceUseError and validSource.useError then
+                            sourceUseError = validSource.useError
+                        end
+
+                        if validSource.playerCanCollect then
+                            playerCanUseSource = true
+                        elseif playerCanUseSource ~= true then
+                            playerCanUseSource = validSource.isValidSourceForPlayer
+                        end
+                        break
+                    end
+                end
+            end
+        end
     else
         if ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
             local comparisonLevel = GetBlockedOffhandComparisonLevel()
@@ -599,6 +623,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local canCollect = false
     local playerCanUseSource = nil
     local playerLootSpecID
+    local _, _, playerClassID = UnitClass("player")
+    local sourceUseErrorType
+    local sourceUseError
+    local validSourceInfoForPlayer
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
     local betterItemEquipped = HasBetterOrEqualEquippedItem(item)
     local equalItemLevelEquipped = HasEqualEquippedItemLevel(item)
@@ -700,8 +728,15 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- Only returns for sources that can be transmogged by current toon right now
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
 
-        local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+        sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         if sourceInfo then
+            if not sourceUseErrorType and sourceInfo.useErrorType then
+                sourceUseErrorType = sourceInfo.useErrorType
+            end
+            if not sourceUseError and sourceInfo.useError then
+                sourceUseError = sourceInfo.useError
+            end
+
             if sourceInfo.playerCanCollect or sourceInfo.isValidSourceForPlayer then
                 playerCanUseSource = true
             elseif playerCanUseSource ~= true then
@@ -738,6 +773,15 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         table.insert(appearanceSources, info)
 
                         -- Check if we've already collected it and if it works for the current toon
+                        if info.sourceID == sourceID then
+                            if not sourceUseErrorType and info.useErrorType then
+                                sourceUseErrorType = info.useErrorType
+                            end
+                            if not sourceUseError and info.useError then
+                                sourceUseError = info.useError
+                            end
+                        end
+
                         if info.sourceID ~= sourceID then -- already checked the current item's info
                             if info.isCollected then
                                 if info.isValidSourceForPlayer then
@@ -811,6 +855,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         if playerCanUseSource == nil then
             playerCanUseSource = true
         end
+    end
+
+    local sourceUseErrorBlocks = sourceUseErrorType and sourceUseErrorType ~= Enum.TransmogUseErrorType.None
+    if sourceUseErrorBlocks then
+        playerCanUseSource = false
     end
 
     if playerCanUseSource == nil then
@@ -923,6 +972,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             itemTypeData = itemTypeData,
             currentSourceFound = currentSourceFound,
             otherSourceFound = otherSourceFound,
+            otherSourceFoundForPlayer = otherSourceFoundForPlayer,
             sourceSpecs = sourceSpecs,
             lowestLevelFound = lowestLevelFound,
             uniqueUpgradeBlocked = uniqueUpgradeBlocked,
@@ -932,7 +982,19 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             pawnIdentifiedUpgrade = pawnIdentifiedUpgrade,
             upgradeItemLevelDelta = upgradeItemLevelDelta,
             isArtifactItem = isArtifactItem,
-            uniqueCategoryKey = uniqueCategoryKey
+            uniqueCategoryKey = uniqueCategoryKey,
+            playerCanUseSource = playerCanUseSource,
+            canCollect = canCollect,
+            accountCanCollect = accountCanCollect,
+            matchesLootSpecRaw = matchesLootSpec,
+            playerLootSpecID = playerLootSpecID,
+            shouldShowUpgrade = shouldShowUpgrade,
+            blockedOffhandSlot = blockedOffhandSlot,
+            isTabard = isTabard,
+            validSourceInfoForPlayer = validSourceInfoForPlayer,
+            sourceUseErrorType = sourceUseErrorType,
+            sourceUseError = sourceUseError,
+            sourceUseErrorBlocks = sourceUseErrorBlocks
         }
     }
 end
