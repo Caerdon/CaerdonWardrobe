@@ -37,6 +37,14 @@ CaerdonItemBind = {
     WarboundUntilEquip = "Warbound until Equip"
 }
 
+local function EnsureProfessionsFrameLoaded()
+    local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_Professions"))
+        or (IsAddOnLoaded and IsAddOnLoaded("Blizzard_Professions"))
+    if (not isLoaded) and ProfessionsFrame_LoadUI then
+        ProfessionsFrame_LoadUI()
+    end
+end
+
 local function CreateItem()
     local item = CreateFromMixins(
         ItemMixin,
@@ -277,17 +285,20 @@ end
 function CaerdonItemMixin:SetItemLink(itemLink)
     ItemMixin.SetItemLink(self, itemLink)
     self.cachedTeleportUse = nil
+    self.cachedIsRecraftable = nil
 end
 
 function CaerdonItemMixin:SetItemID(itemID)
     -- Used for embedded item tooltip rewards
     ItemMixin.SetItemID(self, itemID)
     self.cachedTeleportUse = nil
+    self.cachedIsRecraftable = nil
 end
 
 function CaerdonItemMixin:SetItemLocation(itemLocation)
     ItemMixin.SetItemLocation(self, itemLocation)
     self.cachedTeleportUse = nil
+    self.cachedIsRecraftable = nil
 end
 
 -- local itemID, itemType, itemSubType, itemEquipLoc, icon, itemTypeID, itemSubClassID = C_Item.GetItemInfoInstant(self:GetStaticBackingItem())
@@ -383,6 +394,38 @@ function CaerdonItemMixin:HasTeleportUse()
     end
 
     return self.cachedTeleportUse
+end
+
+function CaerdonItemMixin:IsRecraftable()
+    if self.cachedIsRecraftable ~= nil then
+        return self.cachedIsRecraftable
+    end
+
+    self.cachedIsRecraftable = false
+
+    if not (C_TradeSkillUI and C_TradeSkillUI.GetOriginalCraftRecipeID) then
+        return false
+    end
+
+    EnsureProfessionsFrameLoaded()
+
+    local itemLocation = self:GetItemLocation()
+    if not (itemLocation and itemLocation:IsValid() and C_Item and C_Item.DoesItemExist(itemLocation)) then
+        return false
+    end
+
+    local itemGUID = C_Item.GetItemGUID and C_Item.GetItemGUID(itemLocation)
+    if not itemGUID then
+        return false
+    end
+
+    local recipeID = select(1, C_TradeSkillUI.GetOriginalCraftRecipeID(itemGUID))
+    if recipeID then
+        self.cachedIsRecraftable = true
+        return true
+    end
+
+    return false
 end
 
 -- local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
@@ -1266,6 +1309,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 local isCosmeticArmor = itemClassID == Enum.ItemClass.Armor and
                     itemSubClassID == Enum.ItemArmorSubclass.Cosmetic
                 local preserveCosmeticEquipEffect = isCosmeticArmor and bindingResult.hasEquipEffect
+                local protectRecraftPotential = transmogInfo and transmogInfo.isRecraftable
+                if protectRecraftPotential then
+                    redundantForPlayer = false
+                end
 
                 if mogStatus == "collected" and
                     self:IsSellable() and
@@ -1275,6 +1322,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     not preserveCosmeticEquipEffect and
                     not hasTeleportUse and
                     not protectEqualItemLevel and
+                    not protectRecraftPotential and
                     (redundantForPlayer or (not hasUseEffect and
                         not self:GetSetID() and
                         not bindingResult.hasEquipEffect)) then

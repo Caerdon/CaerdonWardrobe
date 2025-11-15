@@ -1582,6 +1582,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
         addKV(1, "sourceID", transmogInfo.sourceID)
         addKV(1, "appearanceID", transmogInfo.appearanceID)
+        addKV(1, "isRecraftable", transmogInfo.isRecraftable)
     end
 
     if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then

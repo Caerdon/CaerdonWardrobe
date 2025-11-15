@@ -607,6 +607,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local inventoryTypeName = item:GetInventoryTypeName()
     local isTabard = inventoryTypeName == "INVTYPE_TABARD"
     local isShirt = inventoryTypeName == "INVTYPE_BODY"
+    local itemLocation = item:GetItemLocation()
 
     if item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
         return
@@ -634,9 +635,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(item)
     local isArtifactItem = false
     local blockedOffhandSlot = IsOffhandSlotBlocked(inventoryTypeName)
-    local artifactLocation = item:GetItemLocation()
-    if artifactLocation and artifactLocation:IsValid() and C_ArtifactUI and C_ArtifactUI.IsArtifactItem then
-        isArtifactItem = C_ArtifactUI.IsArtifactItem(artifactLocation)
+    local isRecraftable = item:IsRecraftable()
+    if itemLocation and itemLocation:IsValid() and C_ArtifactUI and C_ArtifactUI.IsArtifactItem then
+        isArtifactItem = C_ArtifactUI.IsArtifactItem(itemLocation)
     end
     if not isArtifactItem then
         local itemQuality = item:GetItemQuality()
@@ -964,6 +965,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         otherNeedsItem = otherNeedsItem,
         isCompletionistItem = isCompletionistItem,
         matchesLootSpec = matchesLootSpec,
+        isRecraftable = isRecraftable,
         forDebugUseOnly = CaerdonWardrobeConfig.Debug.Enabled and {
             matchedSources = matchedSources,
             isInfoReady = isInfoReady,
