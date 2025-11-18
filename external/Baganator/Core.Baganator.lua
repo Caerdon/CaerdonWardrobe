@@ -4,6 +4,44 @@ local L = namespace.L
 local addonName = "Baganator"
 local BaganatorMixin = {}
 
+local baganatorButtonMixins = {
+    "BaganatorRetailCachedItemButtonMixin",
+    "BaganatorRetailLiveContainerItemButtonMixin",
+    "BaganatorRetailLiveGuildItemButtonMixin",
+    "BaganatorClassicCachedItemButtonMixin",
+    "BaganatorClassicLiveContainerItemButtonMixin",
+    "BaganatorClassicLiveGuildItemButtonMixin",
+}
+
+local function ShouldClearBaganatorButton(details)
+    if type(details) ~= "table" then
+        return true
+    end
+
+    if details.itemID or details.itemLink or details.hyperlink or details.itemKey or details.battlePetSpeciesID then
+        return false
+    end
+
+    return true
+end
+
+local function HookBaganatorButtonMixins()
+    for _, mixinName in ipairs(baganatorButtonMixins) do
+        local mixin = _G[mixinName]
+        if mixin and not mixin.CaerdonWardrobeClearsOnEmpty then
+            mixin.CaerdonWardrobeClearsOnEmpty = true
+
+            hooksecurefunc(mixin, "SetItemDetails", function(button, details)
+                if not ShouldClearBaganatorButton(details) then
+                    return
+                end
+
+                CaerdonWardrobe:ClearButton(button)
+            end)
+        end
+    end
+end
+
 function BaganatorMixin:GetName()
     return addonName
 end
@@ -41,6 +79,8 @@ local options = {
 }
 
 function BaganatorMixin:Init()
+    HookBaganatorButtonMixins()
+
     Baganator.API.RegisterCornerWidget("Caerdon Status", "caerdon_wardrobe_status", function(caerdonButton, details)
         local shouldShow = false
 
@@ -67,7 +107,8 @@ function BaganatorMixin:Init()
     end, function(itemButton)
         -- Create Caerdon Button with nil item to create caerdonButton ahead of time for all slots
         CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
-        return itemButton.caerdonButton.mogStatus
+        local caerdonButton = CaerdonWardrobe:GetCaerdonButton(itemButton)
+        return caerdonButton and caerdonButton.mogStatus
     end, { corner = "top_right", priority = 1 })
 
     Baganator.API.RegisterCornerWidget("Caerdon Binding", "caerdon_wardrobe_binding", function(bindsOnText, details)
@@ -94,7 +135,8 @@ function BaganatorMixin:Init()
         return shouldShow
     end, function(itemButton)
         CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
-        return itemButton.caerdonButton.bindsOnText
+        local caerdonButton = CaerdonWardrobe:GetCaerdonButton(itemButton)
+        return caerdonButton and caerdonButton.bindsOnText
     end, { corner = "bottom_left", priority = 2 })
 end
 

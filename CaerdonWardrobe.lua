@@ -15,6 +15,70 @@ local registeredFeatures = {}
 
 CaerdonWardrobeMixin = {}
 
+local buttonState = setmetatable({}, { __mode = "k" })
+
+local function GetButtonState(originalButton, create)
+    if not originalButton then
+        return nil
+    end
+
+    local state = buttonState[originalButton]
+    if not state and create then
+        state = {}
+        buttonState[originalButton] = state
+    end
+
+    return state
+end
+
+function CaerdonWardrobeMixin:GetCaerdonButton(originalButton)
+    local state = GetButtonState(originalButton)
+    return state and state.caerdonButton
+end
+
+function CaerdonWardrobeMixin:EnsureCaerdonButton(originalButton)
+    local state = GetButtonState(originalButton, true)
+    if not state.caerdonButton then
+        local frame = CreateFrame("Frame", nil, originalButton)
+        frame.searchOverlay = originalButton.searchOverlay
+        state.caerdonButton = frame
+    end
+
+    return state.caerdonButton
+end
+
+function CaerdonWardrobeMixin:SetButtonLocationKey(originalButton, locationKey)
+    local state = GetButtonState(originalButton, locationKey ~= nil)
+    if state then
+        state.locationKey = locationKey
+    end
+end
+
+function CaerdonWardrobeMixin:GetButtonLocationKey(originalButton)
+    local state = GetButtonState(originalButton)
+    return state and state.locationKey
+end
+
+function CaerdonWardrobeMixin:SetButtonItemID(originalButton, itemID)
+    local state = GetButtonState(originalButton, itemID ~= nil)
+    if state then
+        state.itemID = itemID
+    end
+end
+
+function CaerdonWardrobeMixin:GetButtonItemID(originalButton)
+    local state = GetButtonState(originalButton)
+    return state and state.itemID
+end
+
+function CaerdonWardrobeMixin:ClearButtonState(originalButton)
+    local state = GetButtonState(originalButton)
+    if state then
+        state.locationKey = nil
+        state.itemID = nil
+    end
+end
+
 function CaerdonWardrobeMixin:OnLoad()
     -- AddonCompartmentFrame:RegisterAddon({
     -- 	text = 'Caerdon Wardrobe',
@@ -50,6 +114,11 @@ local ICON_SIZE_DIFFERENTIAL = 0.8
 function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
     if not item then return end
+
+    local caerdonButton = self:GetCaerdonButton(button)
+    if not caerdonButton then
+        return
+    end
 
     -- Scaling values if the icon is different than prominent-sized
     local iconWidth, iconHeight = icon:GetSize()
@@ -104,12 +173,12 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
     if not options.fixedStatusPosition then
         if background then
             background:ClearAllPoints()
-            background:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset + xBackgroundOffset,
+            background:SetPoint("CENTER", caerdonButton, statusPosition, xOffset + xBackgroundOffset,
                 yOffset + yBackgroundOffset)
         end
 
         icon:ClearAllPoints()
-        icon:SetPoint("CENTER", button.caerdonButton, statusPosition, xOffset, yOffset)
+        icon:SetPoint("CENTER", caerdonButton, statusPosition, xOffset, yOffset)
     elseif background then
         background:ClearAllPoints()
         background:SetPoint("CENTER", icon)
@@ -134,9 +203,9 @@ function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoot
 end
 
 function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFiltered)
-    local button = originalButton.caerdonButton
-    if button then
-        local mogStatus = button.mogStatus
+    local caerdonButton = self:GetCaerdonButton(originalButton)
+    if caerdonButton then
+        local mogStatus = caerdonButton.mogStatus
         if mogStatus then
             local mogStatusBackground = mogStatus.mogStatusBackground
             if not mogStatus:IsShown() then
@@ -159,7 +228,7 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
             end
         end
 
-        local bindsOnText = button.bindsOnText
+        local bindsOnText = caerdonButton.bindsOnText
         if bindsOnText then
             if isFiltered then
                 bindsOnText:SetAlpha(0.3)
@@ -168,7 +237,7 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
             end
         end
 
-        local upgradeDeltaText = button.upgradeDeltaText
+        local upgradeDeltaText = caerdonButton.upgradeDeltaText
         if upgradeDeltaText then
             if isFiltered then
                 upgradeDeltaText:SetAlpha(0.3)
@@ -184,11 +253,11 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
         return
     end
 
-    local button = originalButton.caerdonButton
+    local button = self:GetCaerdonButton(originalButton)
+    local createdNew = false
     if not button then
-        button = CreateFrame("Frame", nil, originalButton)
-        button.searchOverlay = originalButton.searchOverlay
-        originalButton.caerdonButton = button
+        button = self:EnsureCaerdonButton(originalButton)
+        createdNew = true
     end
 
     if not button.mogStatus then
@@ -240,11 +309,17 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
         button.upgradeDeltaText:SetText("")
         button.upgradeDeltaText:Hide()
     end
+
+    return button, createdNew
 end
 
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status,
                                                   bindingStatus, transmogInfo)
-    local button = originalButton.caerdonButton
+    local caerdonButton = self:GetCaerdonButton(originalButton)
+    if not caerdonButton then
+        return
+    end
+
     -- Make sure it's sitting in front of the frame it's going to overlay
     local levelCheckFrame = originalButton
     if options and options.relativeFrame then
@@ -255,17 +330,17 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
     end
     if levelCheckFrame then
-        button:SetFrameStrata(levelCheckFrame:GetFrameStrata())
-        button:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
+        caerdonButton:SetFrameStrata(levelCheckFrame:GetFrameStrata())
+        caerdonButton:SetFrameLevel(levelCheckFrame:GetFrameLevel() + 1)
     end
 
-    button:ClearAllPoints()
-    button:SetSize(0, 0)
+    caerdonButton:ClearAllPoints()
+    caerdonButton:SetSize(0, 0)
 
     if options and options.relativeFrame then
-        button:SetAllPoints(options.relativeFrame)
+        caerdonButton:SetAllPoints(options.relativeFrame)
     else
-        button:SetAllPoints(originalButton)
+        caerdonButton:SetAllPoints(originalButton)
     end
 
     -- Had some addons messing with frame level resulting in this getting covered by the parent button.
@@ -275,13 +350,13 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- button:SetFrameLevel(originalButton:GetFrameLevel() + 100)
 
     local iconBackgroundAdjustment = 0
-    local mogStatus = button.mogStatus
+    local mogStatus = caerdonButton.mogStatus
     local mogStatusBackground
     if mogStatus then
         mogStatusBackground = mogStatus.mogStatusBackground
     end
-    local mogAnim = button.mogAnim
-    local upgradeDeltaText = button.upgradeDeltaText
+    local mogAnim = caerdonButton.mogAnim
+    local upgradeDeltaText = caerdonButton.upgradeDeltaText
     if upgradeDeltaText then
         upgradeDeltaText:SetText("")
         upgradeDeltaText:Hide()
@@ -324,18 +399,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local showGearSetText = isEquipmentSetItem and bindingStatus and IsGearSetStatus(bindingStatus, item) and
         CaerdonWardrobeConfig.Binding.ShowGearSets
     local bindingAnchor = (options and options.overrideBindingPosition) or CaerdonWardrobeConfig.Binding.Position
-    button.bindingBottomPadding = 0
+    caerdonButton.bindingBottomPadding = 0
     local deltaAnchorFrame = (options and options.relativeFrame) or originalButton
 
-    -- local mogFlash = button.mogFlash
+    -- local mogFlash = caerdonButton.mogFlash
     -- if not mogFlash then
-    -- 	mogFlash = button:CreateTexture(nil, "OVERLAY")
+    -- 	mogFlash = caerdonButton:CreateTexture(nil, "OVERLAY")
     -- 	mogFlash:SetAlpha(0)
     -- 	mogFlash:SetBlendMode("ADD")
     -- 	mogFlash:SetAtlas("bags-glow-flash", true)
     -- 	mogFlash:SetPoint("CENTER")
 
-    -- 	button.mogFlash = mogFlash
+    -- 	caerdonButton.mogFlash = mogFlash
     -- end
 
     local upgradeDeltaShown = false
@@ -381,37 +456,37 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     if status == "waiting" then
         showAnim = true
 
-        if mogAnim and not button.isWaitingIcon then
+        if mogAnim and not caerdonButton.isWaitingIcon then
             if mogAnim:IsPlaying() then
                 mogAnim:Finish()
             end
 
             mogAnim = nil
-            button.mogAnim = nil
-            button.isWaitingIcon = false
+            caerdonButton.mogAnim = nil
+            caerdonButton.isWaitingIcon = false
         end
 
-        if not mogAnim or not button.isWaitingIcon then
+        if not mogAnim or not caerdonButton.isWaitingIcon then
             mogAnim = mogStatus:CreateAnimationGroup()
 
             self:AddRotation(mogAnim, 1, 360, 0.5, "IN_OUT")
 
             mogAnim:SetLooping("REPEAT")
-            button.mogAnim = mogAnim
-            button.isWaitingIcon = true
+            caerdonButton.mogAnim = mogAnim
+            caerdonButton.isWaitingIcon = true
         end
     else
         if status == "readyToCombine" or status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgradeNonEquipment" or status == "readyToCombine" then
             showAnim = true
 
-            if mogAnim and button.isWaitingIcon then
+            if mogAnim and caerdonButton.isWaitingIcon then
                 if mogAnim:IsPlaying() then
                     mogAnim:Finish()
                 end
 
                 mogAnim = nil
-                button.mogAnim = nil
-                button.isWaitingIcon = false
+                caerdonButton.mogAnim = nil
+                caerdonButton.isWaitingIcon = false
             end
 
             if not mogAnim then
@@ -427,8 +502,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
                 end
 
                 mogAnim:SetLooping("REPEAT")
-                button.mogAnim = mogAnim
-                button.isWaitingIcon = false
+                caerdonButton.mogAnim = mogAnim
+                caerdonButton.isWaitingIcon = false
             end
         else
             showAnim = false
@@ -446,7 +521,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- 		mogAnim.alpha1:SetFromAlpha(1);
     -- 		mogAnim.alpha1:SetToAlpha(0);
 
-    -- 		button.mogAnim = mogAnim
+    -- 		caerdonButton.mogAnim = mogAnim
     -- 	end
 
     if mogStatusBackground then
@@ -734,7 +809,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus.assignedAlpha = alpha
 
     C_Timer.After(0, function()
-        if (button.searchOverlay and button.searchOverlay:IsShown()) then
+        if (caerdonButton.searchOverlay and caerdonButton.searchOverlay:IsShown()) then
             mogStatusBackground:SetAlpha(0.3)
             mogStatus:SetAlpha(0.3)
         end
@@ -765,7 +840,7 @@ end
 
 function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
     if not originalButton then return end
-    local caerdonButton = originalButton.caerdonButton
+    local caerdonButton = self:GetCaerdonButton(originalButton)
     if not caerdonButton then return end
 
     local deltaText = caerdonButton.upgradeDeltaText
@@ -786,7 +861,7 @@ end
 
 function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
-    local caerdonButton = button.caerdonButton
+    local caerdonButton = self:GetCaerdonButton(button)
 
     local bindsOnText = caerdonButton and caerdonButton.bindsOnText
     if bindsOnText then
@@ -1000,7 +1075,8 @@ function CaerdonWardrobeMixin:GetFeature(name)
 end
 
 function CaerdonWardrobeMixin:ClearButton(button)
-    if button.caerdonButton then
+    local caerdonButton = self:GetCaerdonButton(button)
+    if caerdonButton then
         if self.waitingToProcess then
             for locationKey, processInfo in pairs(self.waitingToProcess) do
                 if processInfo.button == button then
@@ -1054,7 +1130,7 @@ function CaerdonWardrobeMixin:CancelPending(feature)
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
-    self:SetupCaerdonButton(button, item, feature, locationInfo, options)
+    local _, createdNew = self:SetupCaerdonButton(button, item, feature, locationInfo, options)
 
     if item == nil then
         self:ClearButton(button)
@@ -1064,7 +1140,7 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
         return
     end
 
-    if not button.caerdonButton then
+    if createdNew then
         self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil, nil)
     end
 
@@ -1078,12 +1154,12 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 
     if locationKey then -- opt-in to coroutine-based update
         locationKey = format("%s-%s", feature:GetName(), locationKey)
-        button.caerdonKey = locationKey
+        self:SetButtonLocationKey(button, locationKey)
 
         if not item:IsItemEmpty() then
             local itemID = item:GetItemID()
-            if not button.caerdonItemID or button.caerdonItemID ~= itemID then
-                button.caerdonItemID = itemID
+            if self:GetButtonItemID(button) ~= itemID then
+                self:SetButtonItemID(button, itemID)
                 self:ClearButton(button)
             end
         end
@@ -1107,7 +1183,7 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
             local itemCount = 0
             for locationKey, processInfo in pairs(self.waitingToProcess) do
                 -- Don't process item if the key is different than expected
-                if processInfo.button.caerdonKey == locationKey then
+                if self:GetButtonLocationKey(processInfo.button) == locationKey then
                     itemCount = itemCount + 1
                     self.processQueue[locationKey] = processInfo
                 end
@@ -1125,14 +1201,14 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
                 local locationInfo = processInfo.locationInfo
                 local options = processInfo.options
 
-                if feature:IsSameItem(button, item, locationInfo) and button.caerdonKey == locationKey then
+                if feature:IsSameItem(button, item, locationInfo) and self:GetButtonLocationKey(button) == locationKey then
                     if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
                         self:ProcessItem(button, item, feature, locationInfo, options)
                         itemsProcessedThisFrame = itemsProcessedThisFrame + 1
                     else
                         -- Check if item is already cached to process immediately
                         if item:IsItemDataCached() then
-                            if button.caerdonKey == locationKey then
+                            if self:GetButtonLocationKey(button) == locationKey then
                                 self:ProcessItem(button, item, feature, locationInfo, options)
                                 itemsProcessedThisFrame = itemsProcessedThisFrame + 1
                             else

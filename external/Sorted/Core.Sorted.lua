@@ -47,7 +47,7 @@ function SortedMixin:Init()
     end
 
     local UpdateIcon = function(frame, iconSize, borderThickness, iconShape)
-        local button = frame.caerdonButton
+        local button = CaerdonWardrobe:GetCaerdonButton(frame)
         if not button then return end
 
         local mogStatus = button.mogStatus
