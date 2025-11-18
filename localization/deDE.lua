@@ -8,4 +8,8 @@ if LOCALE == "deDE" then
 	L["BoA"] = "BoA"
 	L["BoE"] = "BoE"
 	L["Equip:"] = "Equip:"
-return end
+elseif LOCALE == "ruRU" then
+	L["BoA"] = "BoA"
+	L["BoE"] = "BoE"
+	L["Equip:"] = "При над.:"
+end
