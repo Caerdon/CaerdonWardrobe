@@ -559,20 +559,18 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
                 for locationIndex = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
                     local location = equipLocations[locationIndex]
                     if location ~= nil then
-                        -- TODO: Keep an eye out for a new way to do this in the API
-                        local isPlayer, isBank, isBags, isVoidStorage, equipSlot, equipBag, equipTab, equipVoidSlot =
-                            EquipmentManager_UnpackLocation(location)
-                        equipSlot = tonumber(equipSlot)
-                        equipBag = tonumber(equipBag)
+                        local locationData = EquipmentManager_GetLocationData(location)
+                        local equipSlot = tonumber(locationData.slot)
+                        local equipBag = tonumber(locationData.bag)
 
                         local isFound = false
 
-                        if isBank and not equipBag then -- main bank container
+                        if locationData.isBank and not locationData.bag then -- main bank container
                             local foundLink = GetInventoryItemLink("player", equipSlot)
                             if foundLink == self.item:GetItemLink() then
                                 isFound = true
                             end
-                        elseif isBank or isBags then -- any other bag
+                        elseif locationData.isBank or locationData.isBags then -- any other bag
                             local itemLocation = ItemLocation:CreateFromBagAndSlot(equipBag, equipSlot)
                             if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
                                 local foundLink = C_Item.GetItemLink(itemLocation)
@@ -842,9 +840,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         needsItem = true
                         isCompletionistItem = otherSourceFoundForPlayer
                     elseif accountCanCollect then
-        otherNeedsItem = true
-        isCompletionistItem = otherSourceFound
-    end
+                        otherNeedsItem = true
+                        isCompletionistItem = otherSourceFound
+                    end
                 end
             end
         end
