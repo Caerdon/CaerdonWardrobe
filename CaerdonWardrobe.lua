@@ -1039,8 +1039,23 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                     elseif transmogInfo.otherNeedsItem then
                         local playerCanCollectSource = transmogInfo.playerCanCollectSource
                         local isBindOnPickup = bindingResult and bindingResult.isBindOnPickup
-                        local shouldShowNoLoot = not playerCanCollectSource
-                            or (featureName == "EncounterJournal" and isBindOnPickup)
+                        local playerCollectRestricted = playerCanCollectSource == false
+                        local shouldShowNoLoot
+
+                        if featureName == "EncounterJournal" then
+                            -- Encounter Journal entries should flag as no-loot when the source is
+                            -- class/faction locked or when the drop itself is BoP (old behavior).
+                            shouldShowNoLoot = playerCollectRestricted or isBindOnPickup
+                        elseif featureName == "Merchant" then
+                            -- Merchant ensembles often surface as consumables, so fall back to the
+                            -- pre-commit behavior of only suppressing icons when the item is BoP.
+                            shouldShowNoLoot = isBindOnPickup
+                        else
+                            -- Customer Orders (and any other features that land here) still benefit
+                            -- from the new player-can-collect signal so completionists can see when
+                            -- the recipe truly cannot be learned.
+                            shouldShowNoLoot = playerCollectRestricted
+                        end
 
                         if shouldShowNoLoot then
                             if not transmogInfo.isCompletionistItem then

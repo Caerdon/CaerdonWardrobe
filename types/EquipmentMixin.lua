@@ -698,8 +698,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 if transmogInfo then
                     sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
                     if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
-                        local appearanceSourceInfo = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
-                        if appearanceSourceInfo then
+                        local appearanceSourceInfo = CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo and
+                            CaerdonAPI:GetAppearanceSourceInfo(sourceID)
+                        if appearanceSourceInfo and appearanceSourceInfo.appearanceID then
                             appearanceID = appearanceSourceInfo.appearanceID
                         end
                     end

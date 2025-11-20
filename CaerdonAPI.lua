@@ -1017,21 +1017,19 @@ function CaerdonAPIMixin:OpenDebugForHoveredItem()
                 end
             end
 
-            if C_TransmogCollection.GetAppearanceSourceInfo then
-                local sourceInfo = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
-                if sourceInfo then
-                    local infoItemID = sourceInfo.itemID or sourceInfo.itemId
-                    if infoItemID and infoItemID > 0 then
-                        self:OpenDebugFrameWithItemID(debugFeature, infoItemID)
-                        return
-                    end
+            local sourceInfo = self:GetAppearanceSourceInfo(sourceID)
+            if sourceInfo then
+                local infoItemID = sourceInfo.itemID or sourceInfo.itemId
+                if infoItemID and infoItemID > 0 then
+                    self:OpenDebugFrameWithItemID(debugFeature, infoItemID)
+                    return
+                end
 
-                    local infoLink = sourceInfo.hyperlink or sourceInfo.link or sourceInfo.itemLink
-                    if IsItemLink(infoLink) then
-                        debugFeature.frame:Show()
-                        debugFeature:SetCurrentItem(infoLink)
-                        return
-                    end
+                local infoLink = sourceInfo.hyperlink or sourceInfo.link or sourceInfo.itemLink
+                if IsItemLink(infoLink) then
+                    debugFeature.frame:Show()
+                    debugFeature:SetCurrentItem(infoLink)
+                    return
                 end
             end
 
@@ -1057,6 +1055,35 @@ function CaerdonAPIMixin:CopyLink(itemLink)
     local dialog = StaticPopup_Show("CopyLinkPopup")
     dialog.editBox:SetText(gsub(itemLink, "\124", "\124\124"))
     dialog.editBox:HighlightText()
+end
+
+function CaerdonAPIMixin:GetAppearanceSourceInfo(sourceID)
+    if not (sourceID and C_TransmogCollection and C_TransmogCollection.GetAppearanceSourceInfo) then
+        return nil
+    end
+
+    local categoryID, itemAppearanceID, canHaveIllusion, icon, isCollected, itemLink, transmogLink, sourceType, itemSubClass =
+        C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+    if not categoryID then
+        return nil
+    end
+
+    return {
+        category = categoryID,
+        categoryID = categoryID,
+        appearanceID = itemAppearanceID,
+        itemAppearanceID = itemAppearanceID,
+        canHaveIllusion = canHaveIllusion,
+        icon = icon,
+        isCollected = isCollected,
+        itemLink = itemLink,
+        link = itemLink,
+        transmoglink = transmogLink,
+        hyperlink = transmogLink,
+        sourceType = sourceType,
+        itemSubClass = itemSubClass,
+        sourceID = sourceID
+    }
 end
 
 function CaerdonAPIMixin:MergeTable(destination, source)

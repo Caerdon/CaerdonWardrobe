@@ -138,8 +138,8 @@ local function EnsureSourceItemLink(sourceID, itemID)
         return nil
     end
 
-    local appearanceSourceInfo = C_TransmogCollection.GetAppearanceSourceInfo and
-        C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+    local appearanceSourceInfo = CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo and
+        CaerdonAPI:GetAppearanceSourceInfo(sourceID)
     local itemLink = appearanceSourceInfo and appearanceSourceInfo.itemLink
     if itemLink then
         return itemLink
@@ -156,8 +156,8 @@ local function EnsureSourceItemLink(sourceID, itemID)
         end
     end
 
-    if C_TransmogCollection and C_TransmogCollection.GetAppearanceSourceInfo then
-        local refreshed = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+    if CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo then
+        local refreshed = CaerdonAPI:GetAppearanceSourceInfo(sourceID)
         return refreshed and refreshed.itemLink or nil
     end
 
@@ -2653,7 +2653,11 @@ function DebugFrameMixin:CollectTransmogDebugData(item, overrideTransmogInfo)
 
         data.api.sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         data.api.appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
-        data.api.appearanceSourceInfo = CopySourceInfoFields(C_TransmogCollection.GetAppearanceSourceInfo(sourceID))
+        local appearanceSourceInfo = CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo and
+            CaerdonAPI:GetAppearanceSourceInfo(sourceID)
+        if appearanceSourceInfo then
+            data.api.appearanceSourceInfo = CopySourceInfoFields(appearanceSourceInfo)
+        end
 
         if data.api.sourceInfo and data.api.sourceInfo.itemID then
             local sourceSpecIDs = CopySpecIDs(C_Item.GetItemSpecInfo(data.api.sourceInfo.itemID))
@@ -3316,7 +3320,8 @@ function DebugFrameMixin:AddSharedAppearanceInfo(item, appearanceSources, curren
             currentIsCollected = C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(currentSourceID)
         end
         local currentAppearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(currentSourceID)
-        local currentSourceAppearanceInfo = C_TransmogCollection.GetAppearanceSourceInfo(currentSourceID)
+        local currentSourceAppearanceInfo = CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo and
+            CaerdonAPI:GetAppearanceSourceInfo(currentSourceID)
         local currentSourceLink = currentSourceAppearanceInfo and currentSourceAppearanceInfo.itemLink
 
         local currentItemLink = item:GetItemLink() or currentSourceLink
@@ -4598,7 +4603,9 @@ function DebugFrameMixin:HandleAppearanceLink(link)
         return
     end
 
-    local categoryID = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+    local appearanceSourceInfo = CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo and
+        CaerdonAPI:GetAppearanceSourceInfo(sourceID)
+    local categoryID = appearanceSourceInfo and appearanceSourceInfo.categoryID
     local transmogLocation = TransmogUtil.GetTransmogLocation(slotID, Enum.TransmogType.Appearance,
         Enum.TransmogModification.Main)
 
