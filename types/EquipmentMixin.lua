@@ -622,6 +622,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local otherSourceFoundForPlayer = false
     local canCollect = false
     local playerCanUseSource = nil
+    local playerCanCollectSource = false
+    local playerCollectInfoReady = false
     local playerLootSpecID
     local _, _, playerClassID = UnitClass("player")
     local sourceUseErrorType
@@ -696,7 +698,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 if transmogInfo then
                     sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
                     if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
-                        appearanceID = select(2, C_TransmogCollection.GetAppearanceSourceInfo(sourceID))
+                        local appearanceSourceInfo = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+                        if appearanceSourceInfo then
+                            appearanceID = appearanceSourceInfo.appearanceID
+                        end
                     end
                 end
             end
@@ -720,6 +725,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
         local hasItemData
         hasItemData, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
+        playerCollectInfoReady, playerCanCollectSource = C_TransmogCollection.PlayerCanCollectSource(sourceID)
 
         -- if not isInfoReady then
         --     print('Info not ready - source ID ' .. tostring(sourceID) .. ' for ' .. itemLink)
@@ -727,6 +733,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
         -- Only returns for sources that can be transmogged by current toon right now
         appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+        if not appearanceID and appearanceInfo and appearanceInfo.appearanceID then
+            appearanceID = appearanceInfo.appearanceID
+        end
 
         sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         if sourceInfo then
@@ -737,7 +746,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 sourceUseError = sourceInfo.useError
             end
 
-            if sourceInfo.playerCanCollect or sourceInfo.isValidSourceForPlayer then
+            if (playerCollectInfoReady and playerCanCollectSource) or sourceInfo.playerCanCollect or sourceInfo.isValidSourceForPlayer then
                 playerCanUseSource = true
             elseif playerCanUseSource ~= true then
                 playerCanUseSource = false
@@ -746,7 +755,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- TODO: If no appearance ID by now, might be able to use VisualID returned from here?  Not sure if needed...
         -- If the source is already collected, we don't need to check anything else for the source / appearance
         if sourceInfo and not sourceInfo.isCollected then
-            canCollect = sourceInfo.playerCanCollect
+            if playerCollectInfoReady then
+                canCollect = playerCanCollectSource
+            else
+                canCollect = sourceInfo.playerCanCollect
+            end
             currentSourceFound = sourceInfo.isCollected
 
             local isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer
@@ -844,6 +857,13 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         isCompletionistItem = otherSourceFound
                     end
                 end
+            else
+                -- No appearance ID means we can't enumerate alternates, but we still know the source is collectible.
+                if canCollect and isValidSourceForPlayer then
+                    needsItem = true
+                elseif accountCanCollect then
+                    otherNeedsItem = true
+                end
             end
         end
     else
@@ -852,6 +872,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         needItem = false
         otherNeedsItem = not C_TransmogCollection.PlayerHasTransmogByItemInfo(C_Item.GetItemInfo(item:GetItemLink()))
         canCollect = true
+        playerCanCollectSource = true
+        playerCollectInfoReady = true
         if playerCanUseSource == nil then
             playerCanUseSource = true
         end
@@ -961,6 +983,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         needsItem = needsItem,
         hasMetRequirements = hasMetRequirements,
         otherNeedsItem = otherNeedsItem,
+        playerCanCollectSource = playerCollectInfoReady and playerCanCollectSource or canCollect,
         isCompletionistItem = isCompletionistItem,
         matchesLootSpec = matchesLootSpec,
         isRecraftable = isRecraftable,
@@ -986,6 +1009,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             uniqueCategoryKey = uniqueCategoryKey,
             playerCanUseSource = playerCanUseSource,
             canCollect = canCollect,
+            playerCanCollectSource = playerCollectInfoReady and playerCanCollectSource or canCollect,
             accountCanCollect = accountCanCollect,
             matchesLootSpecRaw = matchesLootSpec,
             playerLootSpecID = playerLootSpecID,

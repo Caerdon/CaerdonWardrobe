@@ -1024,8 +1024,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
             if transmogInfo.isTransmog then
                 -- TODO: Exceptions need to be broken out
                 -- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
-                if feature:GetName() == "EncounterJournal" or feature:GetName() == "Merchant" or feature:GetName() == "CustomerOrders" then
-                    if transmogInfo.needsItem and not feature:GetName() == "Merchant" then
+                local featureName = feature and feature:GetName()
+                if featureName == "EncounterJournal" or featureName == "Merchant" or featureName == "CustomerOrders" then
+                    if transmogInfo.needsItem and featureName ~= "Merchant" then
                         if not transmogInfo.matchesLootSpec then
                             if mogStatus == "own" or mogStatus == "lowSkill" then
                                 mogStatus = "otherSpecPlus"
@@ -1036,7 +1037,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                             end
                         end
                     elseif transmogInfo.otherNeedsItem then
-                        if bindingResult and bindingResult.isBindOnPickup then
+                        local playerCanCollectSource = transmogInfo.playerCanCollectSource
+                        local isBindOnPickup = bindingResult and bindingResult.isBindOnPickup
+                        local shouldShowNoLoot = not playerCanCollectSource
+                            or (featureName == "EncounterJournal" and isBindOnPickup)
+
+                        if shouldShowNoLoot then
                             if not transmogInfo.isCompletionistItem then
                                 mogStatus = "otherNoLoot"
                             else

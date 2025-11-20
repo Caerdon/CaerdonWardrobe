@@ -4,6 +4,12 @@ local L = NS.L
 local DebugFrameMixin = {}
 
 local MAX_DEBUG_ENTRIES = 50
+local MAX_SHARED_APPEARANCE_DEBUG_ENTRIES = 15
+local MAX_SHARED_APPEARANCE_UI_ENTRIES = 12
+local APPEARANCE_ITEM_COLLAPSED_HEIGHT = 68
+local DETAIL_SECTION_RIGHT_PADDING = 10
+local MIN_APPEARANCE_SECTION_WIDTH = 520
+local BuildSharedStatusParts
 local cancelFuncs = {}
 
 local DEBUG_ENTRY_LABEL_WIDTH = 300
@@ -23,6 +29,31 @@ local TRANSMOG_USE_ERROR_LABELS = {
     [Enum.TransmogUseErrorType.Faction] = "Faction Restriction",
     [Enum.TransmogUseErrorType.ItemProficiency] = "Item Proficiency"
 }
+
+local function FormatItemLinkForDebug(itemID, overrideLink)
+    if overrideLink then
+        return overrideLink
+    end
+
+    if not itemID then
+        return "Unknown Item"
+    end
+
+    local itemName, itemLink = C_Item.GetItemInfo(itemID)
+    if itemLink then
+        return itemLink
+    end
+
+    if C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(itemID)
+    end
+
+    if itemName then
+        return string.format("[%s] (ItemID %d)", itemName, itemID)
+    end
+
+    return string.format("item:%d", itemID)
+end
 
 local function FormatSpecIDText(specID)
     if specID == nil then
@@ -102,6 +133,443 @@ local function CopySourceInfoFields(sourceInfo)
     return copy
 end
 
+local function EnsureSourceItemLink(sourceID, itemID)
+    if not sourceID then
+        return nil
+    end
+
+    local appearanceSourceInfo = C_TransmogCollection.GetAppearanceSourceInfo and
+        C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+    local itemLink = appearanceSourceInfo and appearanceSourceInfo.itemLink
+    if itemLink then
+        return itemLink
+    end
+
+    if itemID then
+        itemLink = select(2, C_Item.GetItemInfo(itemID))
+        if itemLink then
+            return itemLink
+        end
+
+        if C_Item and C_Item.RequestLoadItemDataByID and itemID then
+            C_Item.RequestLoadItemDataByID(itemID)
+        end
+    end
+
+    if C_TransmogCollection and C_TransmogCollection.GetAppearanceSourceInfo then
+        local refreshed = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+        return refreshed and refreshed.itemLink or nil
+    end
+
+    return nil
+end
+
+local function BuildVariantDescriptorText(data)
+    if not data then
+        return ""
+    end
+
+    local descriptorParts = {}
+    if data.itemLevel then
+        table.insert(descriptorParts, ("ilvl %d"):format(data.itemLevel))
+    end
+    if data.variantDifficultyText then
+        table.insert(descriptorParts, data.variantDifficultyText)
+    end
+    if data.variantTierText then
+        table.insert(descriptorParts, data.variantTierText)
+    end
+
+    if #descriptorParts == 0 then
+        return ""
+    end
+
+    return " [" .. table.concat(descriptorParts, " - ") .. "]"
+end
+
+local function GetDetailedLevelFromLink(itemLink, itemID, sourceInfo, encounterJournalFallback)
+    local function GetLinkQuality(link)
+        if type(link) ~= "string" then
+            return 1
+        end
+
+        if link:find("|Hitem:") then
+            return 3
+        elseif link:find("|Htransmog") then
+            return 1
+        end
+
+        return 2
+    end
+
+    local function TryDetailedLevelWithLink(link, label)
+        if not link then
+            return nil
+        end
+
+        local detailedLevel = (GetDetailedItemLevelInfo and GetDetailedItemLevelInfo(link)) or
+            (C_Item and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link))
+
+        if detailedLevel then
+            return detailedLevel, GetLinkQuality(link), label or "Linked Item"
+        end
+
+        return nil
+    end
+
+    if sourceInfo and encounterJournalFallback then
+        local ejLink = encounterJournalFallback(sourceInfo)
+        if ejLink then
+            local ejLevel, ejQuality = TryDetailedLevelWithLink(ejLink, "Encounter Journal")
+            if ejLevel then
+                return ejLevel, ejQuality, ejLink, "Encounter Journal"
+            end
+        end
+    end
+
+    local detailedLevel, quality = TryDetailedLevelWithLink(itemLink, "Transmog Link")
+    if detailedLevel then
+        return detailedLevel, quality, itemLink, "Transmog Link"
+    end
+
+    if (itemLink or itemID) and C_Item and C_Item.GetItemInfo then
+        local baseName, baseLink, _, baseLevel = C_Item.GetItemInfo(itemLink or itemID)
+        if baseLevel then
+            return baseLevel, 3, baseLink, "C_Item.GetItemInfo"
+        end
+
+        if C_Item and C_Item.RequestLoadItemDataByID then
+            C_Item.RequestLoadItemDataByID(itemID)
+        end
+
+        if baseLink then
+            local fallbackLevel, fallbackQuality = TryDetailedLevelWithLink(baseLink, "C_Item.GetItemInfo Link")
+            if fallbackLevel then
+                return fallbackLevel, fallbackQuality, baseLink, "C_Item.GetItemInfo Link"
+            end
+        end
+    end
+
+    return nil, 0, nil, nil
+end
+
+local function UpdateVariantMetadata(target, sourceInfo, sourceLink, metadataCache, encounterJournalFallback)
+    if not target or not sourceInfo then
+        return
+    end
+
+    local itemLevel, levelQuality, resolvedLink, levelSource = GetDetailedLevelFromLink(sourceLink, sourceInfo.itemID, sourceInfo, encounterJournalFallback)
+    if itemLevel then
+        local existingQuality = target.itemLevelQuality or 0
+        if not target.itemLevel or levelQuality > existingQuality or
+            (levelQuality == existingQuality and itemLevel ~= target.itemLevel) then
+            target.itemLevel = itemLevel
+            target.itemLevelQuality = levelQuality
+            target.itemLevelSource = levelSource
+        end
+    end
+
+    if metadataCache and sourceInfo.sourceID then
+        local cacheEntry = metadataCache[sourceInfo.sourceID] or {}
+        metadataCache[sourceInfo.sourceID] = cacheEntry
+        if target.itemLevel then
+            cacheEntry.itemLevel = target.itemLevel
+            cacheEntry.itemLevelQuality = target.itemLevelQuality
+        end
+        if target.itemLevelSource then
+            cacheEntry.itemLevelSource = target.itemLevelSource
+        end
+        if resolvedLink or sourceLink then
+            cacheEntry.preferredLink = resolvedLink or sourceLink
+        end
+    end
+
+    if C_TransmogCollection and C_TransmogCollection.GetAppearanceSourceDrops and sourceInfo.sourceID then
+        local needsDifficulty = not target.variantDifficultyText
+        local needsTier = not target.variantTierText
+        local needsInstance = not target.variantInstanceText
+        local needsEncounter = not target.variantEncounterText
+        if needsDifficulty or needsTier or needsInstance or needsEncounter then
+            local drops = C_TransmogCollection.GetAppearanceSourceDrops(sourceInfo.sourceID)
+            if drops then
+                for _, dropInfo in ipairs(drops) do
+                    if needsDifficulty and dropInfo.difficulties and #dropInfo.difficulties > 0 then
+                        target.variantDifficultyText = table.concat(dropInfo.difficulties, " / ")
+                        needsDifficulty = false
+                    end
+                    if needsTier and dropInfo.tiers and #dropInfo.tiers > 0 then
+                        target.variantTierText = table.concat(dropInfo.tiers, " / ")
+                        needsTier = false
+                    end
+                    if needsInstance and dropInfo.instance and dropInfo.instance ~= "" then
+                        target.variantInstanceText = dropInfo.instance
+                        needsInstance = false
+                    end
+                    if needsEncounter and dropInfo.encounter and dropInfo.encounter ~= "" then
+                        target.variantEncounterText = dropInfo.encounter
+                        needsEncounter = false
+                    end
+
+                    if not needsDifficulty and not needsTier and not needsInstance and not needsEncounter then
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    if metadataCache and sourceInfo.sourceID then
+        local cacheEntry = metadataCache[sourceInfo.sourceID] or {}
+        metadataCache[sourceInfo.sourceID] = cacheEntry
+        if target.variantDifficultyText then
+            cacheEntry.variantDifficultyText = target.variantDifficultyText
+        end
+        if target.variantTierText then
+            cacheEntry.variantTierText = target.variantTierText
+        end
+        if target.variantInstanceText then
+            cacheEntry.variantInstanceText = target.variantInstanceText
+        end
+        if target.variantEncounterText then
+            cacheEntry.variantEncounterText = target.variantEncounterText
+        end
+    end
+end
+
+local function EnsureEncounterJournalLoaded()
+    if not (C_EncounterJournal and EJ_GetNumTiers) then
+        if not IsAddOnLoaded("Blizzard_EncounterJournal") then
+            LoadAddOn("Blizzard_EncounterJournal")
+        end
+    end
+end
+
+local EJ_DIFFICULTY_NAME_TO_ID = {
+    ["Looking For Raid"] = 17,
+    ["Raid Finder"] = 17,
+    ["LFR"] = 17,
+    ["Normal"] = 14,
+    ["Heroic"] = 15,
+    ["Mythic"] = 16
+}
+
+local function FindEncounterJournalInstanceID(instanceName)
+    if not instanceName or instanceName == "" then
+        return nil
+    end
+
+    EnsureEncounterJournalLoaded()
+    if not (C_EncounterJournal and EJ_GetNumTiers) then
+        return nil
+    end
+
+    local numTiers = EJ_GetNumTiers and EJ_GetNumTiers() or 0
+    for tier = 1, numTiers do
+        EJ_SelectTier(tier)
+        for _, isRaid in ipairs({ true, false }) do
+            local index = 1
+            while true do
+                local instanceID, name = EJ_GetInstanceByIndex(index, isRaid)
+                if not instanceID then
+                    break
+                end
+                if name == instanceName then
+                    return instanceID
+                end
+                index = index + 1
+            end
+        end
+    end
+
+    return nil
+end
+
+local function FindEncounterJournalEncounterID(instanceID, encounterName)
+    if not instanceID or not encounterName or encounterName == "" then
+        return nil
+    end
+
+    EnsureEncounterJournalLoaded()
+    if not EJ_GetEncounterInfoByIndex then
+        return nil
+    end
+
+    EJ_SelectInstance(instanceID)
+    local index = 1
+    while true do
+        local name, _, encounterID = EJ_GetEncounterInfoByIndex(index)
+        if not name then
+            break
+        end
+        if name == encounterName then
+            return encounterID
+        end
+        index = index + 1
+    end
+
+    return nil
+end
+
+local variantEJDiagnostics = {}
+
+local function RecordEJDiagnostic(sourceID, data)
+    if sourceID then
+        variantEJDiagnostics[sourceID] = data
+    end
+end
+
+local function GetEncounterJournalLinkByItemID(sourceInfo, diag)
+    if not sourceInfo or not sourceInfo.itemID then
+        return nil
+    end
+
+    EnsureEncounterJournalLoaded()
+    if not C_EncounterJournal or not C_EncounterJournal.GetLootInfo then
+        diag.failureReason = "EJUnavailable"
+        return nil
+    end
+
+    local lootInfo = C_EncounterJournal.GetLootInfo(sourceInfo.itemID)
+    if lootInfo and lootInfo.link then
+        diag.lootInfoLink = lootInfo.link
+        diag.finalLinkSource = "EncounterJournal.GetLootInfo"
+        diag.finalLink = lootInfo.link
+        return lootInfo.link
+    end
+
+    diag.lootInfoLink = lootInfo and lootInfo.link
+    return nil
+end
+
+local function GetEncounterJournalLinkForSource(sourceInfo)
+    if not sourceInfo or not sourceInfo.sourceID then
+        return nil
+    end
+
+    local diag = {
+        itemID = sourceInfo.itemID,
+        sourceType = sourceInfo.sourceType,
+        sourceID = sourceInfo.sourceID
+    }
+
+    if not Enum.TransmogSourceType then
+        diag.note = "EnumMissing"
+    elseif sourceInfo.sourceType ~= Enum.TransmogSourceType.BossDrop then
+        diag.note = "NonBossDrop"
+    end
+
+    local directLink = GetEncounterJournalLinkByItemID(sourceInfo, diag)
+    if directLink then
+        RecordEJDiagnostic(sourceInfo.sourceID, diag)
+        return directLink
+    end
+
+    local drops = C_TransmogCollection.GetAppearanceSourceDrops and
+        C_TransmogCollection.GetAppearanceSourceDrops(sourceInfo.sourceID)
+    local dropInfo = drops and drops[1]
+    if dropInfo then
+        diag.dropInstanceName = dropInfo.instance
+        diag.dropEncounterName = dropInfo.encounter
+        diag.dropDifficultyName = dropInfo.difficulties and dropInfo.difficulties[1]
+    end
+
+    if diag.dropDifficultyName then
+        diag.difficultyID = EJ_DIFFICULTY_NAME_TO_ID[diag.dropDifficultyName]
+    end
+
+    if not dropInfo then
+        diag.failureReason = diag.failureReason or "NoDropInfo"
+        RecordEJDiagnostic(sourceInfo.sourceID, diag)
+        return nil
+    end
+
+    local difficultyID = diag.difficultyID
+    if not difficultyID then
+        diag.failureReason = "UnknownDifficulty"
+        RecordEJDiagnostic(sourceInfo.sourceID, diag)
+        return nil
+    end
+
+    local instanceID = FindEncounterJournalInstanceID(dropInfo.instance)
+    if not instanceID then
+        diag.failureReason = "InstanceNotFound"
+        RecordEJDiagnostic(sourceInfo.sourceID, diag)
+        return nil
+    end
+    diag.instanceID = instanceID
+
+    local encounterID = FindEncounterJournalEncounterID(instanceID, dropInfo.encounter)
+    if not encounterID then
+        diag.failureReason = "EncounterNotFound"
+        RecordEJDiagnostic(sourceInfo.sourceID, diag)
+        return nil
+    end
+    diag.encounterID = encounterID
+
+    EnsureEncounterJournalLoaded()
+    if not C_EncounterJournal or not C_EncounterJournal.GetLootInfoByIndex then
+        diag.failureReason = "EJUnavailable"
+        RecordEJDiagnostic(sourceInfo.sourceID, diag)
+        return nil
+    end
+
+    EJ_SelectInstance(instanceID)
+    EJ_SetDifficulty(difficultyID)
+    EJ_SelectEncounter(encounterID)
+
+    local index = 1
+    while true do
+        local itemInfo = C_EncounterJournal.GetLootInfoByIndex(index)
+        if not itemInfo then
+            break
+        end
+
+        if itemInfo.itemID == sourceInfo.itemID and itemInfo.link then
+            diag.finalLink = itemInfo.link
+            diag.finalLinkSource = "EncounterJournal.GetLootInfoByIndex"
+            RecordEJDiagnostic(sourceInfo.sourceID, diag)
+            return itemInfo.link
+        end
+
+        index = index + 1
+    end
+
+    diag.failureReason = "LinkNotFound"
+    RecordEJDiagnostic(sourceInfo.sourceID, diag)
+    return nil
+end
+
+local function ApplyCachedVariantMetadata(target, metadataCache, sourceID)
+    if not target or not metadataCache or not sourceID then
+        return
+    end
+
+    local cached = metadataCache[sourceID]
+    if not cached then
+        return
+    end
+
+    if cached.itemLevel then
+        target.itemLevel = cached.itemLevel
+        target.itemLevelQuality = cached.itemLevelQuality
+    end
+    if cached.itemLevelSource then
+        target.itemLevelSource = cached.itemLevelSource
+    end
+    if cached.variantDifficultyText then
+        target.variantDifficultyText = cached.variantDifficultyText
+    end
+    if cached.variantTierText then
+        target.variantTierText = cached.variantTierText
+    end
+    if cached.variantInstanceText then
+        target.variantInstanceText = cached.variantInstanceText
+    end
+    if cached.variantEncounterText then
+        target.variantEncounterText = cached.variantEncounterText
+    end
+end
+
 local function SetWardrobeCollectionSearchText(searchText)
     if not WardrobeCollectionFrame then
         return
@@ -166,15 +634,6 @@ function DebugFrameMixin:Init()
             self.frame:StartSizing("BOTTOMRIGHT")
         end
     end)
-    self.frame.resizeButton:SetScript("OnMouseUp", function()
-        self.frame:StopMovingOrSizing()
-        -- Update content width to match scroll frame (minus scrollbar width and padding)
-        local contentWidth = self.scrollFrame:GetWidth() - 35
-        self.content:SetWidth(contentWidth)
-        -- Refresh layout after resize
-        self:RefreshLayout()
-    end)
-
     -- Setup item frame for displaying item info (fixed header, doesn't scroll)
     self.itemFrame = CreateFrame("Frame", "CaerdonDebugItemFrame", self.frame)
     self.itemFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 10, -30)
@@ -194,6 +653,61 @@ function DebugFrameMixin:Init()
     local contentWidth = self.scrollFrame:GetWidth() - 35
     self.content:SetSize(contentWidth, 1) -- Height will be adjusted as content is added
     self.scrollFrame:SetScrollChild(self.content)
+
+    local function RefreshSectionSizing()
+        if self.sharedAppearanceContainer then
+            if self.sharedAppearanceContainer:IsShown() then
+                self:RefreshSharedAppearanceLayout()
+            else
+                self.sharedAppearanceContainer:SetWidth(self:GetDetailSectionWidth())
+            end
+        end
+
+        if self.appearanceVariationContainer then
+            if self.appearanceVariationContainer:IsShown() then
+                self:RefreshAppearanceVariationLayout()
+            else
+                self.appearanceVariationContainer:SetWidth(self:GetDetailSectionWidth())
+            end
+        end
+
+        if self.ensembleContainer then
+            if self.ensembleContainer:IsShown() then
+                self:RefreshEnsembleLayout()
+            else
+                self.ensembleContainer:SetWidth(self:GetDetailSectionWidth())
+            end
+        end
+    end
+
+    self.scrollFrame:HookScript("OnSizeChanged", function(_, width)
+        local contentWidth = (width or 0) - 35
+        if contentWidth > 0 then
+            self.content:SetWidth(contentWidth)
+        end
+        RefreshSectionSizing()
+    end)
+
+    self.frame:HookScript("OnSizeChanged", function()
+        local scrollWidth = self.scrollFrame:GetWidth()
+        if scrollWidth and scrollWidth > 0 then
+            self.content:SetWidth(scrollWidth - 35)
+        end
+        RefreshSectionSizing()
+    end)
+
+    self.frame.resizeButton:SetScript("OnMouseUp", function()
+        self.frame:StopMovingOrSizing()
+        local contentWidth = self.scrollFrame:GetWidth() - 35
+        if contentWidth > 0 then
+            self.content:SetWidth(contentWidth)
+        end
+        self:RefreshLayout()
+        RefreshSectionSizing()
+    end)
+
+    -- Ensure section widths are initialized when the frame is first built
+    RefreshSectionSizing()
 
     -- Clear and Refresh buttons
     self.clearButton = CreateFrame("Button", nil, self.frame, "UIPanelButtonTemplate")
@@ -504,6 +1018,7 @@ function DebugFrameMixin:Init()
     self.currentCaerdonItem = nil
     self.currentEnsembleData = nil
     self.copyCancelFunc = nil
+    self.variantMetadataCache = {}
 
 
     -- Register slash command
@@ -576,6 +1091,8 @@ end
 
 function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
     if not item then return end
+
+    wipe(variantEJDiagnostics)
 
     self.currentEnsembleData = nil
     if self.copyCancelFunc then
@@ -661,6 +1178,8 @@ function DebugFrameMixin:ClearDebugDisplay()
     self.currentEnsembleClassCandidates = nil
     self.currentCaerdonItem = nil
     self.currentEnsembleData = nil
+    self.currentSharedAppearanceItems = nil
+    self.currentAppearanceVariations = nil
     if self.copyCancelFunc then
         self.copyCancelFunc()
         self.copyCancelFunc = nil
@@ -707,6 +1226,44 @@ function DebugFrameMixin:ClearDebugDisplay()
             end
         end
     end
+
+    if self.sharedAppearanceContainer then
+        self.sharedAppearanceContainer:Hide()
+        if self.sharedAppearanceItemFrames then
+            for _, frame in ipairs(self.sharedAppearanceItemFrames) do
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+        if self.sharedAppearanceOverflowText then
+            self.sharedAppearanceOverflowText:Hide()
+        end
+    end
+
+    if self.appearanceVariationContainer then
+        self.appearanceVariationContainer:Hide()
+        if self.appearanceVariationItemFrames then
+            for _, frame in ipairs(self.appearanceVariationItemFrames) do
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+        if self.appearanceVariationOverflowText then
+            self.appearanceVariationOverflowText:Hide()
+        end
+    end
+
+    self:UpdateContentHeight()
 end
 
 function DebugFrameMixin:ClearDebugEntries()
@@ -721,7 +1278,25 @@ function DebugFrameMixin:ClearDebugEntries()
 
     -- Reset content height
     self.infoFrame:SetHeight(1)
-    self.content:SetHeight(self.infoFrame:GetHeight())
+    self:UpdateContentHeight()
+end
+
+function DebugFrameMixin:UpdateContentHeight()
+    local totalHeight = self.infoFrame:GetHeight()
+
+    if self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() then
+        totalHeight = totalHeight + 10 + self.sharedAppearanceContainer:GetHeight()
+    end
+
+    if self.appearanceVariationContainer and self.appearanceVariationContainer:IsShown() then
+        totalHeight = totalHeight + 10 + self.appearanceVariationContainer:GetHeight()
+    end
+
+    if self.ensembleContainer and self.ensembleContainer:IsShown() then
+        totalHeight = totalHeight + 10 + self.ensembleContainer:GetHeight()
+    end
+
+    self.content:SetHeight(math.max(totalHeight, 1))
 end
 
 function DebugFrameMixin:RefreshLayout()
@@ -781,12 +1356,7 @@ function DebugFrameMixin:RefreshLayout()
     local numRows = numColumns == 2 and math.ceil(visibleCount / 2) or visibleCount
     self.infoFrame:SetHeight((numRows * 25) + 10)
 
-    -- Update total content height including ensemble container if present
-    local totalHeight = self.infoFrame:GetHeight()
-    if self.ensembleContainer and self.ensembleContainer:IsShown() then
-        totalHeight = totalHeight + 10 + self.ensembleContainer:GetHeight()
-    end
-    self.content:SetHeight(totalHeight)
+    self:UpdateContentHeight()
 end
 
 function DebugFrameMixin:GetColumnLayout()
@@ -877,7 +1447,7 @@ function DebugFrameMixin:AddDebugEntry(label, value, color)
     -- Update frame heights based on column layout
     local numRows = numColumns == 2 and math.ceil(index / 2) or index
     self.infoFrame:SetHeight((numRows * 25) + 10)
-    self.content:SetHeight(self.infoFrame:GetHeight())
+    self:UpdateContentHeight()
 
     return entry
 end
@@ -1169,6 +1739,36 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
         addLine(indent, label .. ":")
         appendTable(tbl, indent + 1)
+    end
+
+    local function AddEJDiagnostics(indent, sources)
+        if not sources then
+            return
+        end
+
+        for _, sourceID in ipairs(sources) do
+            local diag = variantEJDiagnostics[sourceID]
+            if diag then
+                local finalSource = diag.finalLinkSource or diag.failureReason or "none"
+                local linkSummary = diag.finalLink or diag.lootInfoLink or "nil"
+                addLine(indent, string.format("EJ Source %s: final=%s, link=%s",
+                    tostring(sourceID), finalSource, linkSummary))
+
+                if diag.dropInstanceName or diag.dropEncounterName or diag.dropDifficultyName then
+                    addLine(indent + 1, string.format("Drop: %s - %s (%s)",
+                        tostring(diag.dropInstanceName or "unknown"),
+                        tostring(diag.dropEncounterName or "unknown"),
+                        tostring(diag.dropDifficultyName or "unknown")))
+                end
+
+                if diag.instanceID or diag.encounterID or diag.difficultyID then
+                    addLine(indent + 1, string.format("IDs: instance=%s encounter=%s difficulty=%s",
+                        tostring(diag.instanceID or "nil"),
+                        tostring(diag.encounterID or "nil"),
+                        tostring(diag.difficultyID or "nil")))
+                end
+            end
+        end
     end
 
     addLine(0, "=== CaerdonWardrobe Debug Export ===")
@@ -1570,6 +2170,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "hasMetRequirements", transmogInfo.hasMetRequirements)
         addKV(1, "canEquip", transmogInfo.canEquip)
         addKV(1, "canEquipForPlayer", transmogInfo.canEquipForPlayer)
+        addKV(1, "playerCanCollectSource", transmogInfo.playerCanCollectSource)
         addKV(1, "isTransmog", transmogInfo.isTransmog)
         addKV(1, "isUpgrade", transmogInfo.isUpgrade)
         addKV(1, "uniqueUpgradeBlocked", transmogInfo.uniqueUpgradeBlocked)
@@ -1606,6 +2207,85 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "canEquip", consumableInfo.canEquip)
             addKV(1, "isEnsemble", consumableInfo.isEnsemble)
         end
+    end
+
+    local sharedItems = self.currentSharedAppearanceItems
+    addLine(0, "")
+    addLine(0, "[Shared Appearance Items]")
+    if sharedItems and #sharedItems > 0 then
+        addKV(1, "count", #sharedItems)
+        for _, info in ipairs(sharedItems) do
+            local itemLink = FormatItemLinkForDebug(info.itemID, info.itemLink)
+            local prefix = info.isCurrentItem and "[Current] " or ""
+            local descriptorText = BuildVariantDescriptorText(info)
+            addLine(1, prefix .. (itemLink or ("Item " .. tostring(info.itemID))) .. descriptorText)
+            if info.sources and #info.sources > 0 then
+                addLine(2, "Source IDs: " .. table.concat(info.sources, ", "))
+            end
+            if info.variantInstanceText or info.variantEncounterText then
+                local sourceParts = {}
+                if info.variantInstanceText then
+                    table.insert(sourceParts, info.variantInstanceText)
+                end
+                if info.variantEncounterText then
+                    table.insert(sourceParts, info.variantEncounterText)
+                end
+                addLine(2, "Source: " .. table.concat(sourceParts, " - "))
+            end
+            if info.itemLevelSource then
+                addLine(2, "Item Level Source: " .. tostring(info.itemLevelSource))
+            end
+            AddEJDiagnostics(2, info.sources)
+
+            local statusParts = BuildSharedStatusParts(info, true)
+            local statusLine = statusParts
+            if info.isCollected ~= nil then
+                statusLine = statusLine or {}
+                table.insert(statusLine, 1, info.isCollected and "collected" or "uncollected")
+            end
+            if #statusParts > 0 then
+                addLine(2, "Status: " .. table.concat(statusParts, ", "))
+            end
+        end
+    else
+        addLine(1, "None")
+    end
+
+    local variationItems = self.currentAppearanceVariations
+    addLine(0, "")
+    addLine(0, "[Appearance Variation Items]")
+    if variationItems and #variationItems > 0 then
+        addKV(1, "count", #variationItems)
+        for _, info in ipairs(variationItems) do
+            local itemText = FormatItemLinkForDebug(info.itemID, info.itemLink)
+            local descriptorText = BuildVariantDescriptorText(info)
+            addLine(1, string.format("%s%s (mod %s, visual %s, appearance %s)", itemText, descriptorText,
+                tostring(info.itemModID or 0),
+                tostring(info.visualID or "nil"), tostring(info.appearanceID or "nil")))
+            if info.sources and #info.sources > 0 then
+                addLine(2, "Source IDs: " .. table.concat(info.sources, ", "))
+            end
+            if info.variantInstanceText or info.variantEncounterText then
+                local sourceParts = {}
+                if info.variantInstanceText then
+                    table.insert(sourceParts, info.variantInstanceText)
+                end
+                if info.variantEncounterText then
+                    table.insert(sourceParts, info.variantEncounterText)
+                end
+                addLine(2, "Source: " .. table.concat(sourceParts, " - "))
+            end
+            if info.itemLevelSource then
+                addLine(2, "Item Level Source: " .. tostring(info.itemLevelSource))
+            end
+            AddEJDiagnostics(2, info.sources)
+            local statusParts = BuildSharedStatusParts(info, true)
+            if #statusParts > 0 then
+                addLine(2, "Status: " .. table.concat(statusParts, ", "))
+            end
+        end
+    else
+        addLine(1, "None")
     end
 
     local ensembleData = self.currentEnsembleData
@@ -2015,6 +2695,7 @@ function DebugFrameMixin:CollectTransmogDebugData(item, overrideTransmogInfo)
     end
 
     data.processed.transmogInfo = transmogInfo
+    data.processed.resolvedAppearanceID = resolvedAppearanceID
     if transmogInfo then
         data.processed.debugExtras = transmogInfo.forDebugUseOnly
     end
@@ -2213,6 +2894,7 @@ function DebugFrameMixin:AddTransmogInfo(item)
         self:AddDebugEntry("Processed hasMetRequirements", tostring(transmogInfo.hasMetRequirements))
         self:AddDebugEntry("Processed canEquip", tostring(transmogInfo.canEquip))
         self:AddDebugEntry("Processed canEquipForPlayer", tostring(transmogInfo.canEquipForPlayer))
+        self:AddDebugEntry("Processed playerCanCollectSource", tostring(transmogInfo.playerCanCollectSource))
         self:AddDebugEntry("Processed uniqueUpgradeBlocked", tostring(transmogInfo.uniqueUpgradeBlocked))
         self:AddDebugEntry("Processed uniqueUpgradeCandidate", tostring(transmogInfo.uniqueUpgradeCandidate))
         self:AddDebugEntry("Processed betterItemEquipped", tostring(transmogInfo.betterItemEquipped))
@@ -2261,6 +2943,1001 @@ function DebugFrameMixin:AddTransmogInfo(item)
             self:AddDebugEntry("Debug isTabard", tostring(debugExtras.isTabard))
         end
     end
+
+    local resolvedAppearanceID = processed.resolvedAppearanceID
+        or (transmogInfo and transmogInfo.appearanceID)
+        or (api.itemInfo and api.itemInfo.appearanceID)
+
+    if not resolvedAppearanceID and api.itemInfo and api.itemInfo.sourceID then
+        local appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(api.itemInfo.sourceID)
+        resolvedAppearanceID = appearanceInfo and appearanceInfo.appearanceID
+    end
+
+    local appearanceSources = (debugExtras and debugExtras.appearanceSources) or
+        self:GetAppearanceSourcesForItem(resolvedAppearanceID)
+
+    local currentItemID = item and item:GetItemID()
+    local categoryID = api.sourceInfo and api.sourceInfo.categoryID
+    if currentItemID and categoryID then
+        local variantSources = self:GetVariantAppearanceSourcesForItem(currentItemID, resolvedAppearanceID, categoryID)
+        if variantSources and #variantSources > 0 then
+            local existing = {}
+            if appearanceSources then
+                for _, sourceInfo in ipairs(appearanceSources) do
+                    if sourceInfo.sourceID then
+                        existing[sourceInfo.sourceID] = true
+                    end
+                end
+            else
+                appearanceSources = {}
+            end
+
+            for _, sourceInfo in ipairs(variantSources) do
+                if not existing[sourceInfo.sourceID] then
+                    table.insert(appearanceSources, sourceInfo)
+                    if sourceInfo.sourceID then
+                        existing[sourceInfo.sourceID] = true
+                    end
+                end
+            end
+        end
+    end
+
+    self:AddSharedAppearanceInfo(item, appearanceSources, api.sourceInfo and api.sourceInfo.sourceID,
+        api.sourceInfo)
+end
+
+function DebugFrameMixin:GetAppearanceSourcesForItem(appearanceID)
+    if not appearanceID then
+        return nil
+    end
+
+    local sourceIDs = C_TransmogCollection.GetAllAppearanceSources and
+        C_TransmogCollection.GetAllAppearanceSources(appearanceID)
+    if not sourceIDs or #sourceIDs == 0 then
+        return nil
+    end
+
+    local sources = {}
+    for _, sourceID in ipairs(sourceIDs) do
+        local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+        if sourceInfo then
+            EnsureSourceItemLink(sourceInfo.sourceID, sourceInfo.itemID)
+            table.insert(sources, sourceInfo)
+        end
+    end
+
+    if #sources == 0 then
+        return nil
+    end
+
+    return sources
+end
+
+function DebugFrameMixin:GetVariantAppearanceSourcesForItem(itemID, currentAppearanceID, categoryID)
+    if not itemID or not categoryID or not C_TransmogCollection.GetCategoryAppearances then
+        return nil
+    end
+
+    local categoryAppearances = C_TransmogCollection.GetCategoryAppearances(categoryID)
+    if not categoryAppearances or #categoryAppearances == 0 then
+        return nil
+    end
+
+    local variantSources
+    for _, appearanceInfo in ipairs(categoryAppearances) do
+        local appearanceID = appearanceInfo.visualID
+        if appearanceID and appearanceID ~= currentAppearanceID then
+            local sources = C_TransmogCollection.GetAppearanceSources(appearanceID)
+            if sources then
+                for _, source in ipairs(sources) do
+                    if source.itemID == itemID then
+                        local detailedSource = C_TransmogCollection.GetSourceInfo(source.sourceID)
+                        if detailedSource then
+                            EnsureSourceItemLink(detailedSource.sourceID, detailedSource.itemID)
+                            variantSources = variantSources or {}
+                            table.insert(variantSources, detailedSource)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return variantSources
+end
+
+BuildSharedStatusParts = function(grouped, includeUseError)
+    local statusParts = {}
+
+    local isCollected = grouped.isCollected
+    if (isCollected == nil or isCollected == false) and grouped.sources and #grouped.sources > 0 then
+        for _, sourceID in ipairs(grouped.sources) do
+            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+            if sourceInfo and sourceInfo.isCollected then
+                isCollected = true
+                break
+            end
+        end
+
+        if not isCollected then
+            for _, sourceID in ipairs(grouped.sources) do
+                if C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID) then
+                    isCollected = true
+                    break
+                end
+            end
+        end
+    end
+
+    if isCollected ~= nil then
+        table.insert(statusParts, isCollected and "collected" or "uncollected")
+    end
+    if grouped.playerCanCollect ~= nil then
+        table.insert(statusParts, grouped.playerCanCollect and "playerCanCollect" or "playerCannotCollect")
+    end
+    if grouped.isValidSourceForPlayer ~= nil then
+        table.insert(statusParts, grouped.isValidSourceForPlayer and "validForPlayer" or "invalidForPlayer")
+    end
+    if includeUseError and grouped.useErrorType and grouped.useErrorType ~= Enum.TransmogUseErrorType.None then
+        table.insert(statusParts, TRANSMOG_USE_ERROR_LABELS[grouped.useErrorType] or
+            ("useErrorType " .. tostring(grouped.useErrorType)))
+    end
+
+    return statusParts
+end
+
+function DebugFrameMixin:BuildSharedAppearanceItems(item, appearanceSources, currentSourceID, currentSourceInfo)
+    if not item or type(appearanceSources) ~= "table" or #appearanceSources == 0 then
+        return nil, nil
+    end
+
+    local currentItemID = item:GetItemID()
+    local normalizedCurrentMod
+    if currentSourceInfo and currentSourceInfo.itemModID ~= nil then
+        normalizedCurrentMod = currentSourceInfo.itemModID
+    elseif currentSourceInfo then
+        normalizedCurrentMod = 0
+    end
+    local currentVisualID = currentSourceInfo and currentSourceInfo.visualID
+    local metadataCache = self.variantMetadataCache
+
+    local sourceAppearanceCache = {}
+    local sourceLinkCache = {}
+    local function GetSourceAppearanceID(sourceID)
+        if not sourceID then
+            return nil
+        end
+
+        if sourceAppearanceCache[sourceID] ~= nil then
+            return sourceAppearanceCache[sourceID] or nil
+        end
+
+        local appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+        local appearanceID = appearanceInfo and appearanceInfo.appearanceID
+        sourceAppearanceCache[sourceID] = appearanceID or false
+        return appearanceID
+    end
+
+    local function GetSourceItemLink(sourceID, itemID)
+        if not sourceID then
+            return nil
+        end
+
+        if sourceLinkCache[sourceID] ~= nil then
+            return sourceLinkCache[sourceID] or nil
+        end
+
+        local itemLink = EnsureSourceItemLink(sourceID, itemID)
+        sourceLinkCache[sourceID] = itemLink or false
+        return itemLink
+    end
+
+    local currentAppearanceID = currentSourceID and GetSourceAppearanceID(currentSourceID)
+
+    local function NormalizeModID(modID)
+        return modID or 0
+    end
+
+    local function IsSameVariant(sourceInfo, sourceAppearanceID)
+        if currentAppearanceID and sourceAppearanceID then
+            if sourceAppearanceID ~= currentAppearanceID then
+                return false
+            end
+        elseif normalizedCurrentMod and NormalizeModID(sourceInfo.itemModID) ~= normalizedCurrentMod then
+            return false
+        end
+
+        if currentVisualID and sourceInfo.visualID and sourceInfo.visualID ~= currentVisualID then
+            return false
+        end
+
+        return true
+    end
+
+    local sharedByItem = {}
+    local sharedOrdered = {}
+    local variationsByKey = {}
+    local variationOrdered = {}
+
+    local function BuildKey(itemID, itemModID, visualID, appearanceID, isVariation)
+        if not isVariation then
+            return itemID
+        end
+
+        local modKey = NormalizeModID(itemModID)
+        local visualKey = visualID or "novisual"
+        local appearanceKey = appearanceID or "noappearance"
+        if itemID then
+            return string.format("%d:%d:%s:%s", itemID, modKey, tostring(visualKey), tostring(appearanceKey))
+        end
+
+        return string.format("unknown:%d:%s:%s", modKey, tostring(visualKey), tostring(appearanceKey))
+    end
+
+    local function InsertEntry(container, ordered, key, sourceInfo, appearanceID)
+        local grouped = container[key]
+        local cachedEntry = metadataCache and sourceInfo.sourceID and metadataCache[sourceInfo.sourceID]
+        local preferredLink = cachedEntry and cachedEntry.preferredLink
+        local sourceLink = preferredLink or GetSourceItemLink(sourceInfo.sourceID, sourceInfo.itemID)
+        if not grouped then
+            grouped = {
+                itemID = sourceInfo.itemID,
+                itemModID = sourceInfo.itemModID,
+                sources = {},
+                visualID = sourceInfo.visualID,
+                appearanceID = appearanceID,
+                itemLink = sourceLink,
+                isCollected = sourceInfo.isCollected,
+                playerCanCollect = sourceInfo.playerCanCollect,
+                isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,
+                useErrorType = sourceInfo.useErrorType
+            }
+            container[key] = grouped
+            table.insert(ordered, grouped)
+        else
+            if sourceInfo.isCollected then
+                grouped.isCollected = true
+            end
+            if sourceInfo.playerCanCollect then
+                grouped.playerCanCollect = true
+            end
+            if sourceInfo.isValidSourceForPlayer then
+                grouped.isValidSourceForPlayer = true
+            end
+            if not grouped.useErrorType and sourceInfo.useErrorType then
+                grouped.useErrorType = sourceInfo.useErrorType
+            end
+            if not grouped.appearanceID and appearanceID then
+                grouped.appearanceID = appearanceID
+            end
+            if not grouped.itemLink and sourceLink then
+                grouped.itemLink = sourceLink
+            end
+        end
+
+        if sourceInfo.sourceID then
+            table.insert(grouped.sources, sourceInfo.sourceID)
+        end
+
+        if sourceInfo.sourceID then
+            ApplyCachedVariantMetadata(grouped, metadataCache, sourceInfo.sourceID)
+        end
+
+        UpdateVariantMetadata(grouped, sourceInfo, sourceLink, metadataCache, GetEncounterJournalLinkForSource)
+    end
+
+    for _, sourceInfo in ipairs(appearanceSources) do
+        local sourceItemID = sourceInfo.itemID
+        local isCurrentSource = currentSourceID and sourceInfo.sourceID == currentSourceID
+        local sourceAppearanceID = GetSourceAppearanceID(sourceInfo.sourceID)
+        local sameVariant = IsSameVariant(sourceInfo, sourceAppearanceID)
+
+        if sourceItemID and sourceItemID ~= currentItemID and sameVariant then
+            local key = BuildKey(sourceItemID, sourceInfo.itemModID, sourceInfo.visualID, sourceAppearanceID, false)
+            InsertEntry(sharedByItem, sharedOrdered, key, sourceInfo, sourceAppearanceID)
+        elseif not isCurrentSource and not sameVariant then
+            local key = BuildKey(sourceItemID, sourceInfo.itemModID, sourceInfo.visualID, sourceAppearanceID, true)
+            InsertEntry(variationsByKey, variationOrdered, key, sourceInfo, sourceAppearanceID)
+        elseif not sourceItemID and not isCurrentSource and not sameVariant then
+            local key = BuildKey(nil, sourceInfo.itemModID, sourceInfo.visualID, sourceAppearanceID, true)
+            InsertEntry(variationsByKey, variationOrdered, key, sourceInfo, sourceAppearanceID)
+        end
+    end
+
+    if #sharedOrdered == 0 then
+        sharedOrdered = nil
+    else
+        table.sort(sharedOrdered, function(a, b)
+            if a.itemID and b.itemID then
+                return a.itemID < b.itemID
+            end
+            return tostring(a.itemID) < tostring(b.itemID)
+        end)
+    end
+
+    if variationOrdered and #variationOrdered == 0 then
+        variationOrdered = nil
+    elseif variationOrdered then
+        table.sort(variationOrdered, function(a, b)
+            local aQuality = a.itemLevelQuality or 0
+            local bQuality = b.itemLevelQuality or 0
+            if aQuality ~= bQuality then
+                return aQuality > bQuality
+            end
+
+            local aLevel = a.itemLevel or -1
+            local bLevel = b.itemLevel or -1
+            if aLevel ~= bLevel then
+                return aLevel > bLevel
+            end
+
+            local aDifficulty = a.variantDifficultyText or ""
+            local bDifficulty = b.variantDifficultyText or ""
+            if aDifficulty ~= bDifficulty then
+                return aDifficulty < bDifficulty
+            end
+
+            local aTier = a.variantTierText or ""
+            local bTier = b.variantTierText or ""
+            if aTier ~= bTier then
+                return aTier < bTier
+            end
+
+            local aID = a.itemID or math.huge
+            local bID = b.itemID or math.huge
+            if aID == bID then
+                local aMod = NormalizeModID(a.itemModID)
+                local bMod = NormalizeModID(b.itemModID)
+                if aMod == bMod then
+                    local aAppearance = a.appearanceID or 0
+                    local bAppearance = b.appearanceID or 0
+                    if aAppearance == bAppearance then
+                        return (a.visualID or 0) < (b.visualID or 0)
+                    end
+                    return aAppearance < bAppearance
+                end
+                return aMod < bMod
+            end
+            return aID < bID
+        end)
+    end
+
+    return sharedOrdered, variationOrdered
+end
+
+function DebugFrameMixin:AddSharedAppearanceInfo(item, appearanceSources, currentSourceID, currentSourceInfo)
+    local sharedItems, variationItems = self:BuildSharedAppearanceItems(item, appearanceSources, currentSourceID,
+        currentSourceInfo)
+
+    if currentSourceInfo and currentSourceID then
+        local currentIsCollected = currentSourceInfo.isCollected
+        if currentIsCollected == nil then
+            currentIsCollected = C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(currentSourceID)
+        end
+        local currentAppearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(currentSourceID)
+        local currentSourceAppearanceInfo = C_TransmogCollection.GetAppearanceSourceInfo(currentSourceID)
+        local currentSourceLink = currentSourceAppearanceInfo and currentSourceAppearanceInfo.itemLink
+
+        local currentItemLink = item:GetItemLink() or currentSourceLink
+
+        local currentEntry = {
+            itemID = currentSourceInfo.itemID or item:GetItemID(),
+            sources = { currentSourceID },
+            isCollected = currentIsCollected,
+            playerCanCollect = currentSourceInfo.playerCanCollect,
+            isValidSourceForPlayer = currentSourceInfo.isValidSourceForPlayer,
+            useErrorType = currentSourceInfo.useErrorType,
+            isCurrentItem = true,
+            itemModID = currentSourceInfo.itemModID,
+            visualID = currentSourceInfo.visualID,
+            appearanceID = currentAppearanceInfo and currentAppearanceInfo.appearanceID,
+            itemLink = currentItemLink
+        }
+        ApplyCachedVariantMetadata(currentEntry, self.variantMetadataCache, currentSourceID)
+        UpdateVariantMetadata(currentEntry, currentSourceInfo, currentItemLink, self.variantMetadataCache, GetEncounterJournalLinkForSource)
+        if sharedItems then
+            table.insert(sharedItems, 1, currentEntry)
+        else
+            sharedItems = { currentEntry }
+        end
+    end
+    self.currentSharedAppearanceItems = sharedItems
+
+    self.currentAppearanceVariations = variationItems
+
+    self:UpdateSharedAppearanceUI(sharedItems)
+    self:UpdateAppearanceVariationsUI(variationItems)
+end
+
+function DebugFrameMixin:GetDetailSectionWidth()
+    local infoWidth = (self.infoFrame and self.infoFrame:GetWidth()) or 0
+    local contentWidth = (self.content and self.content:GetWidth()) or infoWidth
+    local scrollWidth = (self.scrollFrame and self.scrollFrame:GetWidth()) or contentWidth
+    local frameWidth = (self.frame and self.frame:GetWidth()) or scrollWidth
+
+    if contentWidth > 0 then
+        contentWidth = contentWidth - DETAIL_SECTION_RIGHT_PADDING
+    end
+    if scrollWidth > 0 then
+        scrollWidth = scrollWidth - 25
+    end
+    if frameWidth > 0 then
+        frameWidth = frameWidth - 60
+    end
+
+    local targetWidth = math.max(infoWidth, contentWidth, scrollWidth, frameWidth)
+    if targetWidth <= 0 then
+        return MIN_APPEARANCE_SECTION_WIDTH
+    end
+
+    return targetWidth
+end
+
+function DebugFrameMixin:AcquireAppearanceItemFrame(frameTable, container, prefix, index, layoutRefreshFunc)
+    local frame = frameTable[index]
+    if not frame then
+        local frameName = prefix .. index
+        frame = CreateFrame("Frame", frameName, container, "BackdropTemplate")
+        frame:SetBackdrop({
+            bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 }
+        })
+        frame.defaultBgColor = { 0.05, 0.05, 0.05, 0.8 }
+        frame.defaultBorderColor = { 0.3, 0.3, 0.3, 1 }
+        frame.hoverBgColor = { 0.1, 0.1, 0.15, 0.9 }
+        frame.hoverBorderColor = { 0.5, 0.5, 0.6, 1 }
+        frame:SetBackdropColor(unpack(frame.defaultBgColor))
+        frame:SetBackdropBorderColor(unpack(frame.defaultBorderColor))
+
+        frame.itemButton = CreateFrame("ItemButton", frameName .. "Button", frame)
+        frame.itemButton:SetSize(40, 40)
+        frame.itemButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
+        frame.itemButton:RegisterForDrag("LeftButton")
+        frame.itemButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        frame.itemButton:SetScript("OnEnter", function(button)
+            GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+            if button.itemLink then
+                GameTooltip:SetHyperlink(button.itemLink)
+            elseif button.itemID then
+                GameTooltip:SetItemByID(button.itemID)
+            end
+            GameTooltip:Show()
+        end)
+        frame.itemButton:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        frame.itemButton:SetScript("OnClick", function(button)
+            local link = button.itemLink
+            if not link and button.itemID then
+                link = select(2, C_Item.GetItemInfo(button.itemID))
+            end
+
+            if link and IsModifiedClick() then
+                HandleModifiedItemClick(link)
+            end
+        end)
+        frame.itemButton:SetScript("OnDragStart", function(button)
+            if button.itemLink then
+                PickupItem(button.itemLink)
+            elseif button.itemID then
+                PickupItem(button.itemID)
+            end
+        end)
+
+        frame.itemNameText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        frame.itemNameText:SetPoint("TOPLEFT", frame.itemButton, "TOPRIGHT", 8, 0)
+        frame.itemNameText:SetJustifyH("LEFT")
+        frame.itemNameText:SetWordWrap(false)
+
+        frame.descriptorText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        frame.descriptorText:SetPoint("TOPLEFT", frame.itemNameText, "BOTTOMLEFT", 0, -2)
+        frame.descriptorText:SetJustifyH("LEFT")
+        frame.descriptorText:SetTextColor(0.8, 0.8, 0.8)
+
+        frame.statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        frame.statusText:SetPoint("TOPLEFT", frame.descriptorText, "BOTTOMLEFT", 0, -2)
+        frame.statusText:SetJustifyH("LEFT")
+        frame.statusText:SetTextColor(0.7, 0.9, 0.7)
+
+        frame.itemNameButton = CreateFrame("Button", nil, frame)
+        frame.itemNameButton:SetScript("OnClick", function(button)
+            local link = button.itemLink
+            if not link then
+                local parentFrame = button:GetParent()
+                if parentFrame and parentFrame.itemButton then
+                    link = parentFrame.itemButton.itemLink
+                    if not link and parentFrame.itemButton.itemID then
+                        link = select(2, C_Item.GetItemInfo(parentFrame.itemButton.itemID))
+                    end
+                    button.itemLink = link
+                end
+            end
+            if not link then
+                local parentFrame = button:GetParent()
+                if parentFrame and parentFrame.itemButton and parentFrame.itemButton.itemID and
+                    C_Item and C_Item.RequestLoadItemDataByID then
+                    C_Item.RequestLoadItemDataByID(parentFrame.itemButton.itemID)
+                    print("Caerdon Wardrobe Debug: Item data not ready yet.")
+                end
+                return
+            end
+
+            if IsModifiedClick("CHATLINK") then
+                ChatEdit_InsertLink(link)
+                return
+            end
+
+            if IsControlKeyDown() then
+                local owner = frame.debugOwner
+                if owner and owner.HandleAppearanceLink then
+                    owner:HandleAppearanceLink(link)
+                else
+                    DressUpLink(link)
+                end
+                return
+            end
+
+            if ItemRefTooltip:IsShown() and ItemRefTooltip.itemLink == link then
+                ItemRefTooltip:Hide()
+            else
+                ShowUIPanel(ItemRefTooltip)
+                if not ItemRefTooltip:IsShown() then
+                    ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE")
+                end
+                ItemRefTooltip:SetHyperlink(link)
+                ItemRefTooltip.itemLink = link
+            end
+        end)
+
+        frame.expandButton = CreateFrame("Button", nil, frame)
+        frame.expandButton:SetSize(20, 20)
+        frame.expandButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+        frame.expandButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+        frame.expandButton:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+        frame.expandButton:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
+
+        frame.detailsFrame = CreateFrame("Frame", nil, frame)
+        frame.detailsFrame:SetPoint("TOPLEFT", frame.itemButton, "BOTTOMLEFT", 0, -5)
+        frame.detailsFrame:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
+        frame.detailsFrame:Hide()
+        frame.detailTexts = {}
+
+        frame.ToggleDetails = function(entryFrame, desiredState)
+            local shouldShow = desiredState
+            if shouldShow == nil then
+                shouldShow = not entryFrame.detailsFrame:IsShown()
+            end
+
+            if shouldShow then
+                entryFrame.detailsFrame:Show()
+                entryFrame.expandButton:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+                entryFrame.expandButton:SetPushedTexture("Interface\\Buttons\\UI-MinusButton-Down")
+                local detailsHeight = entryFrame.detailsFrame:GetHeight()
+                entryFrame:SetHeight(APPEARANCE_ITEM_COLLAPSED_HEIGHT + detailsHeight + 5)
+                entryFrame.isExpanded = true
+            else
+                entryFrame.detailsFrame:Hide()
+                entryFrame.expandButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+                entryFrame.expandButton:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+                entryFrame:SetHeight(APPEARANCE_ITEM_COLLAPSED_HEIGHT)
+                entryFrame.isExpanded = false
+            end
+
+            if entryFrame.layoutRefreshFunc then
+                entryFrame.layoutRefreshFunc()
+            end
+        end
+
+        frame.expandButton:SetScript("OnClick", function()
+            frame:ToggleDetails()
+        end)
+
+        frame:EnableMouse(true)
+        frame:SetScript("OnEnter", function(selfFrame)
+            selfFrame:SetBackdropColor(unpack(selfFrame.hoverBgColor))
+            selfFrame:SetBackdropBorderColor(unpack(selfFrame.hoverBorderColor))
+        end)
+        frame:SetScript("OnLeave", function(selfFrame)
+            selfFrame:SetBackdropColor(unpack(selfFrame.defaultBgColor))
+            selfFrame:SetBackdropBorderColor(unpack(selfFrame.defaultBorderColor))
+        end)
+        frame:SetScript("OnMouseDown", function(selfFrame, button)
+            if button ~= "LeftButton" then
+                return
+            end
+
+            local foci = GetMouseFoci and GetMouseFoci() or {}
+            if #foci == 0 then
+                local focus = GetMouseFocus()
+                if focus then
+                    table.insert(foci, focus)
+                end
+            end
+
+            for _, focus in ipairs(foci) do
+                if focus == selfFrame.itemButton or focus == selfFrame.itemNameButton or focus == selfFrame.expandButton then
+                    return
+                end
+            end
+
+            selfFrame:ToggleDetails()
+        end)
+
+        frameTable[index] = frame
+    end
+
+    frame.layoutRefreshFunc = layoutRefreshFunc
+    frame.debugOwner = self
+    frame:SetHeight(APPEARANCE_ITEM_COLLAPSED_HEIGHT)
+    frame.detailsFrame:Hide()
+    frame.expandButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+    frame.expandButton:SetPushedTexture("Interface\\Buttons\\UI-PlusButton-Down")
+    frame.isExpanded = false
+
+    return frame
+end
+
+function DebugFrameMixin:ResetAppearanceFrameDetails(frame)
+    if frame.detailTexts then
+        for _, region in ipairs(frame.detailTexts) do
+            if region.Hide then
+                region:Hide()
+            end
+            if region.ClearAllPoints then
+                region:ClearAllPoints()
+            end
+        end
+        wipe(frame.detailTexts)
+    else
+        frame.detailTexts = {}
+    end
+end
+
+function DebugFrameMixin:CreateAppearanceDetailBuilder(frame)
+    local detailY = 0
+    local function AddLine(text, color, indent)
+        local fontString = frame.detailsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        fontString:SetPoint("TOPLEFT", frame.detailsFrame, "TOPLEFT", indent or 8, -detailY)
+        fontString:SetJustifyH("LEFT")
+        fontString:SetText(text)
+        local r, g, b = 0.9, 0.9, 0.9
+        if color then
+            r, g, b = color[1], color[2], color[3]
+        end
+        fontString:SetTextColor(r, g, b)
+        table.insert(frame.detailTexts, fontString)
+        detailY = detailY + 16
+    end
+
+    local function AddSpacer(amount)
+        detailY = detailY + (amount or 4)
+    end
+
+    local function GetHeight()
+        return detailY
+    end
+
+    return AddLine, AddSpacer, GetHeight
+end
+
+function DebugFrameMixin:AddVariantDiagnosticDetailLines(addLine, addSpacer, sources)
+    if not sources then
+        return
+    end
+
+    for _, sourceID in ipairs(sources) do
+        local diag = variantEJDiagnostics[sourceID]
+        if diag then
+            addLine(string.format("EJ Source %s: final=%s, link=%s",
+                tostring(sourceID),
+                diag.finalLinkSource or diag.failureReason or "none",
+                diag.finalLink or diag.lootInfoLink or "nil"), { 0.8, 0.8, 1 }, 8)
+
+            if diag.dropInstanceName or diag.dropEncounterName or diag.dropDifficultyName then
+                addLine(string.format("Drop: %s - %s (%s)",
+                    tostring(diag.dropInstanceName or "unknown"),
+                    tostring(diag.dropEncounterName or "unknown"),
+                    tostring(diag.dropDifficultyName or "unknown")), { 0.7, 0.7, 0.7 }, 16)
+            end
+
+            if diag.instanceID or diag.encounterID or diag.difficultyID then
+                addLine(string.format("IDs: instance=%s encounter=%s difficulty=%s",
+                    tostring(diag.instanceID or "nil"),
+                    tostring(diag.encounterID or "nil"),
+                    tostring(diag.difficultyID or "nil")), { 0.7, 0.7, 0.7 }, 16)
+            end
+
+            addSpacer(2)
+        end
+    end
+end
+
+local function GetDebugItemDisplayInfo(data)
+    local itemID = data and data.itemID
+    local lookupItem = data and (data.itemLink or itemID)
+    local itemName, resolvedLink, itemQuality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(lookupItem)
+    return {
+        itemID = itemID,
+        itemLink = data and data.itemLink or resolvedLink,
+        icon = icon,
+        quality = itemQuality,
+        fallbackName = itemName
+    }
+end
+
+local function ApplyItemButtonState(button, displayInfo)
+    button.itemID = displayInfo.itemID
+    button.itemLink = displayInfo.itemLink
+    if button.icon then
+        button.icon:SetTexture(displayInfo.icon or 134400)
+        button.icon:Show()
+    end
+
+    if button.IconBorder then
+        if displayInfo.quality then
+            local r, g, b = GetItemQualityColor(displayInfo.quality)
+            button.IconBorder:SetVertexColor(r, g, b)
+            button.IconBorder:Show()
+        else
+            button.IconBorder:Hide()
+        end
+    end
+end
+
+local function SetAppearanceName(frame, displayInfo, descriptorText, isCurrent)
+    local linkText = displayInfo.itemLink or FormatItemLinkForDebug(displayInfo.itemID, displayInfo.itemLink)
+    if not linkText and displayInfo.fallbackName then
+        linkText = string.format("[%s] (ItemID %d)", displayInfo.fallbackName, displayInfo.itemID or 0)
+    end
+    if not linkText then
+        linkText = "Unknown Item"
+    end
+
+    local prefix = isCurrent and "|cff00ff00[Current]|r " or ""
+    frame.itemNameText:SetText(prefix .. linkText .. (descriptorText or ""))
+    frame.itemNameButton:ClearAllPoints()
+    frame.itemNameButton:SetPoint("TOPLEFT", frame.itemNameText, "TOPLEFT", 0, 0)
+    frame.itemNameButton:SetPoint("BOTTOMRIGHT", frame.itemNameText, "BOTTOMRIGHT", 0, 0)
+    frame.itemNameButton.itemLink = displayInfo.itemLink
+end
+
+function DebugFrameMixin:PopulateSharedAppearanceFrame(frame, data, index)
+    local displayInfo = GetDebugItemDisplayInfo(data)
+    ApplyItemButtonState(frame.itemButton, displayInfo)
+    SetAppearanceName(frame, displayInfo, BuildVariantDescriptorText(data), data.isCurrentItem)
+
+    local statusParts = BuildSharedStatusParts(data, true)
+    if #statusParts > 0 then
+        frame.statusText:SetText("Status: " .. table.concat(statusParts, ", "))
+    else
+        frame.statusText:SetText("Status: none")
+    end
+
+    if data.variantInstanceText or data.variantEncounterText then
+        local pieces = {}
+        if data.variantInstanceText then
+            table.insert(pieces, data.variantInstanceText)
+        end
+        if data.variantEncounterText then
+            table.insert(pieces, data.variantEncounterText)
+        end
+        frame.descriptorText:SetText(table.concat(pieces, " - "))
+    else
+        frame.descriptorText:SetText("")
+    end
+
+    CaerdonWardrobe:ClearButton(frame.itemButton)
+    local caerdonItem
+    if displayInfo.itemLink then
+        caerdonItem = CaerdonItem:CreateFromItemLink(displayInfo.itemLink)
+    elseif displayInfo.itemID then
+        caerdonItem = CaerdonItem:CreateFromItemID(displayInfo.itemID)
+    end
+
+    if caerdonItem then
+        CaerdonWardrobe:UpdateButton(frame.itemButton, caerdonItem, self, {
+            locationKey = string.format("shared-item-%s-%d", tostring(displayInfo.itemID or "unknown"), index),
+            isDebugFrame = true
+        }, {
+            statusProminentSize = 20,
+            bindingScale = 1.0
+        })
+    end
+
+    self:ResetAppearanceFrameDetails(frame)
+    local addLine, addSpacer, getHeight = self:CreateAppearanceDetailBuilder(frame)
+
+    if data.sources and #data.sources > 0 then
+        addLine("Source IDs: " .. table.concat(data.sources, ", "), { 1, 0.82, 0 })
+    end
+
+    if data.variantDifficultyText or data.variantTierText then
+        local variants = {}
+        if data.variantDifficultyText then
+            table.insert(variants, data.variantDifficultyText)
+        end
+        if data.variantTierText then
+            table.insert(variants, data.variantTierText)
+        end
+        addLine("Variant: " .. table.concat(variants, " - "), { 0.7, 0.7, 0.7 })
+    end
+
+    if data.itemLevel then
+        addLine("Item Level: " .. tostring(data.itemLevel), { 0.7, 0.7, 0.7 })
+    end
+
+    if data.itemLevelSource then
+        addLine("Item Level Source: " .. tostring(data.itemLevelSource), { 0.7, 0.7, 0.7 })
+    end
+
+    if data.playerCanCollect ~= nil or data.isValidSourceForPlayer ~= nil then
+        addLine(string.format("playerCanCollect=%s | isValidForPlayer=%s",
+            tostring(data.playerCanCollect), tostring(data.isValidSourceForPlayer)), { 0.7, 0.7, 0.7 })
+    end
+
+    if data.useErrorType and data.useErrorType ~= Enum.TransmogUseErrorType.None then
+        local label = TRANSMOG_USE_ERROR_LABELS[data.useErrorType] or ("Use Error " .. tostring(data.useErrorType))
+        addLine("useErrorType: " .. label, { 1, 0.4, 0.4 })
+    end
+
+    self:AddVariantDiagnosticDetailLines(addLine, addSpacer, data.sources)
+
+    frame.detailsFrame:SetHeight(getHeight() + 8)
+    frame:SetHeight(APPEARANCE_ITEM_COLLAPSED_HEIGHT)
+    frame.detailsFrame:Hide()
+    frame.isExpanded = false
+    frame:Show()
+end
+
+function DebugFrameMixin:PopulateAppearanceVariationFrame(frame, data, index)
+    local displayInfo = GetDebugItemDisplayInfo(data)
+    ApplyItemButtonState(frame.itemButton, displayInfo)
+    local modSummary = string.format("Mod %s | Visual %s | Appearance %s",
+        tostring(data.itemModID or 0),
+        tostring(data.visualID or "nil"),
+        tostring(data.appearanceID or "nil"))
+    local descriptorText = BuildVariantDescriptorText(data)
+    SetAppearanceName(frame, displayInfo, descriptorText ~= "" and descriptorText or "", false)
+    frame.descriptorText:SetText(modSummary)
+
+    local statusParts = BuildSharedStatusParts(data, true)
+    if #statusParts > 0 then
+        frame.statusText:SetText("Status: " .. table.concat(statusParts, ", "))
+    else
+        frame.statusText:SetText("Status: none")
+    end
+
+    CaerdonWardrobe:ClearButton(frame.itemButton)
+    local caerdonItem
+    if displayInfo.itemLink then
+        caerdonItem = CaerdonItem:CreateFromItemLink(displayInfo.itemLink)
+    elseif displayInfo.itemID then
+        caerdonItem = CaerdonItem:CreateFromItemID(displayInfo.itemID)
+    end
+
+    if caerdonItem then
+        CaerdonWardrobe:UpdateButton(frame.itemButton, caerdonItem, self, {
+            locationKey = string.format("variation-item-%s-%d", tostring(displayInfo.itemID or "unknown"), index),
+            isDebugFrame = true
+        }, {
+            statusProminentSize = 20,
+            bindingScale = 1.0
+        })
+    end
+
+    self:ResetAppearanceFrameDetails(frame)
+    local addLine, addSpacer, getHeight = self:CreateAppearanceDetailBuilder(frame)
+
+    if data.sources and #data.sources > 0 then
+        addLine("Source IDs: " .. table.concat(data.sources, ", "), { 1, 0.82, 0 })
+    end
+
+    addLine("Visual ID: " .. tostring(data.visualID or "nil"), { 0.7, 0.7, 0.7 })
+    addLine("Appearance ID: " .. tostring(data.appearanceID or "nil"), { 0.7, 0.7, 0.7 })
+    addLine("Item Mod ID: " .. tostring(data.itemModID or 0), { 0.7, 0.7, 0.7 })
+
+    if data.itemLevel then
+        addLine("Item Level: " .. tostring(data.itemLevel), { 0.7, 0.7, 0.7 })
+    end
+
+    addLine(string.format("playerCanCollect=%s | isValidForPlayer=%s",
+        tostring(data.playerCanCollect), tostring(data.isValidSourceForPlayer)), { 0.7, 0.7, 0.7 })
+
+    if data.useErrorType and data.useErrorType ~= Enum.TransmogUseErrorType.None then
+        local label = TRANSMOG_USE_ERROR_LABELS[data.useErrorType] or ("Use Error " .. tostring(data.useErrorType))
+        addLine("useErrorType: " .. label, { 1, 0.4, 0.4 })
+    end
+
+    if data.variantInstanceText or data.variantEncounterText then
+        local pieces = {}
+        if data.variantInstanceText then
+            table.insert(pieces, data.variantInstanceText)
+        end
+        if data.variantEncounterText then
+            table.insert(pieces, data.variantEncounterText)
+        end
+        addLine("Source: " .. table.concat(pieces, " - "), { 0.8, 0.8, 0.8 })
+    end
+
+    self:AddVariantDiagnosticDetailLines(addLine, addSpacer, data.sources)
+
+    frame.detailsFrame:SetHeight(getHeight() + 8)
+    frame:SetHeight(APPEARANCE_ITEM_COLLAPSED_HEIGHT)
+    frame.detailsFrame:Hide()
+    frame.isExpanded = false
+    frame:Show()
+end
+
+function DebugFrameMixin:RefreshSharedAppearanceLayout()
+    if not self.sharedAppearanceContainer or not self.sharedAppearanceContainer:IsShown() then
+        return
+    end
+
+    self.sharedAppearanceContainer:ClearAllPoints()
+    self.sharedAppearanceContainer:SetPoint("TOPLEFT", self.infoFrame, "BOTTOMLEFT", 0, -10)
+    self.sharedAppearanceContainer:SetWidth(self:GetDetailSectionWidth())
+
+    local headerHeight = 25
+    local yOffset = headerHeight
+    if self.sharedAppearanceItemFrames then
+        for _, frame in ipairs(self.sharedAppearanceItemFrames) do
+            if frame:IsShown() then
+                frame:ClearAllPoints()
+                frame:SetPoint("TOPLEFT", self.sharedAppearanceContainer, "TOPLEFT", 0, -yOffset)
+                frame:SetPoint("TOPRIGHT", self.sharedAppearanceContainer, "TOPRIGHT", -15, -yOffset)
+                yOffset = yOffset + frame:GetHeight() + 5
+            end
+        end
+    end
+
+    if self.sharedAppearanceOverflowText and self.sharedAppearanceOverflowText:IsShown() then
+        self.sharedAppearanceOverflowText:ClearAllPoints()
+        self.sharedAppearanceOverflowText:SetPoint("TOPLEFT", self.sharedAppearanceContainer, "TOPLEFT", 8, -yOffset)
+        yOffset = yOffset + 16
+    end
+
+    self.sharedAppearanceContainer:SetHeight(math.max(yOffset, headerHeight))
+    self:UpdateContentHeight()
+end
+
+function DebugFrameMixin:RefreshAppearanceVariationLayout()
+    if not self.appearanceVariationContainer or not self.appearanceVariationContainer:IsShown() then
+        return
+    end
+
+    local anchor = self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() and
+        self.sharedAppearanceContainer or self.infoFrame
+    self.appearanceVariationContainer:ClearAllPoints()
+    self.appearanceVariationContainer:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
+    self.appearanceVariationContainer:SetWidth(self:GetDetailSectionWidth())
+
+    local headerHeight = 25
+    local yOffset = headerHeight
+    if self.appearanceVariationItemFrames then
+        for _, frame in ipairs(self.appearanceVariationItemFrames) do
+            if frame:IsShown() then
+                frame:ClearAllPoints()
+                frame:SetPoint("TOPLEFT", self.appearanceVariationContainer, "TOPLEFT", 0, -yOffset)
+                frame:SetPoint("TOPRIGHT", self.appearanceVariationContainer, "TOPRIGHT", -15, -yOffset)
+                yOffset = yOffset + frame:GetHeight() + 5
+            end
+        end
+    end
+
+    if self.appearanceVariationOverflowText and self.appearanceVariationOverflowText:IsShown() then
+        self.appearanceVariationOverflowText:ClearAllPoints()
+        self.appearanceVariationOverflowText:SetPoint("TOPLEFT", self.appearanceVariationContainer, "TOPLEFT", 8,
+            -yOffset)
+        yOffset = yOffset + 16
+    end
+
+    self.appearanceVariationContainer:SetHeight(math.max(yOffset, headerHeight))
+    self:UpdateContentHeight()
 end
 
 function DebugFrameMixin:AddEquipmentInfo(item)
@@ -2294,6 +3971,169 @@ function DebugFrameMixin:AddEquipmentInfo(item)
             self:AddDebugEntry("Equipment Sets", table.concat(equipmentSets, ", "))
         end
     end
+end
+
+function DebugFrameMixin:UpdateSharedAppearanceUI(sharedItems)
+    if not self.sharedAppearanceContainer then
+        self.sharedAppearanceContainer = CreateFrame("Frame", "CaerdonDebugSharedAppearanceContainer", self.content)
+        self.sharedAppearanceHeader = self.sharedAppearanceContainer:CreateFontString(nil, "OVERLAY",
+            "GameFontNormalLarge")
+        self.sharedAppearanceHeader:SetPoint("TOPLEFT", self.sharedAppearanceContainer, "TOPLEFT", 0, 0)
+        self.sharedAppearanceHeader:SetTextColor(0.5, 0.8, 1)
+        self.sharedAppearanceItemFrames = {}
+    end
+
+    if not sharedItems or #sharedItems == 0 then
+        self.sharedAppearanceContainer:Hide()
+        if self.sharedAppearanceItemFrames then
+            for _, frame in ipairs(self.sharedAppearanceItemFrames) do
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+        if self.sharedAppearanceOverflowText then
+            self.sharedAppearanceOverflowText:Hide()
+        end
+        self:UpdateContentHeight()
+        if self.ensembleContainer and self.ensembleContainer:IsShown() then
+            self:RefreshEnsembleLayout()
+        end
+        return
+    end
+
+    self.sharedAppearanceContainer:Show()
+    local headerText = string.format("Shared Appearance Items (%d)", #sharedItems)
+    self.sharedAppearanceHeader:SetText(headerText)
+
+    if not self.sharedAppearanceItemFrames then
+        self.sharedAppearanceItemFrames = {}
+    end
+
+    local displayed = math.min(#sharedItems, MAX_SHARED_APPEARANCE_UI_ENTRIES)
+    for index = 1, displayed do
+        local data = sharedItems[index]
+        local frame = self:AcquireAppearanceItemFrame(self.sharedAppearanceItemFrames, self.sharedAppearanceContainer,
+            "CaerdonDebugSharedAppearanceItem", index, function()
+                self:RefreshSharedAppearanceLayout()
+            end)
+        self:PopulateSharedAppearanceFrame(frame, data, index)
+    end
+
+    if self.sharedAppearanceItemFrames then
+        for index = displayed + 1, #self.sharedAppearanceItemFrames do
+            local frame = self.sharedAppearanceItemFrames[index]
+            if frame then
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+    end
+
+    if #sharedItems > displayed then
+        if not self.sharedAppearanceOverflowText then
+            self.sharedAppearanceOverflowText = self.sharedAppearanceContainer:CreateFontString(nil, "OVERLAY",
+                "GameFontNormalSmall")
+            self.sharedAppearanceOverflowText:SetTextColor(0.7, 0.7, 0.7)
+        end
+        self.sharedAppearanceOverflowText:SetText(string.format("...and %d more", #sharedItems - displayed))
+        self.sharedAppearanceOverflowText:Show()
+    elseif self.sharedAppearanceOverflowText then
+        self.sharedAppearanceOverflowText:Hide()
+    end
+
+    self:RefreshSharedAppearanceLayout()
+end
+
+function DebugFrameMixin:UpdateAppearanceVariationsUI(variationItems)
+    if not self.appearanceVariationContainer then
+        self.appearanceVariationContainer = CreateFrame("Frame", "CaerdonDebugAppearanceVariations", self.content)
+        self.appearanceVariationHeader = self.appearanceVariationContainer:CreateFontString(nil, "OVERLAY",
+            "GameFontNormalLarge")
+        self.appearanceVariationHeader:SetPoint("TOPLEFT", self.appearanceVariationContainer, "TOPLEFT", 0, 0)
+        self.appearanceVariationHeader:SetTextColor(0.5, 0.8, 1)
+        self.appearanceVariationItemFrames = {}
+    end
+
+    if not variationItems or #variationItems == 0 then
+        self.appearanceVariationContainer:Hide()
+        if self.appearanceVariationItemFrames then
+            for _, frame in ipairs(self.appearanceVariationItemFrames) do
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+        if self.appearanceVariationOverflowText then
+            self.appearanceVariationOverflowText:Hide()
+        end
+        self:UpdateContentHeight()
+        if self.ensembleContainer and self.ensembleContainer:IsShown() then
+            self:RefreshEnsembleLayout()
+        end
+        return
+    end
+
+    self.appearanceVariationContainer:Show()
+
+    local headerText = string.format("Appearance Variations (%d)", #variationItems)
+    self.appearanceVariationHeader:SetText(headerText)
+
+    local displayed = math.min(#variationItems, MAX_SHARED_APPEARANCE_UI_ENTRIES)
+    if not self.appearanceVariationItemFrames then
+        self.appearanceVariationItemFrames = {}
+    end
+
+    for index = 1, displayed do
+        local data = variationItems[index]
+        local frame = self:AcquireAppearanceItemFrame(self.appearanceVariationItemFrames,
+            self.appearanceVariationContainer, "CaerdonDebugAppearanceVariationItem", index, function()
+                self:RefreshAppearanceVariationLayout()
+            end)
+        self:PopulateAppearanceVariationFrame(frame, data, index)
+    end
+
+    if self.appearanceVariationItemFrames then
+        for index = displayed + 1, #self.appearanceVariationItemFrames do
+            local frame = self.appearanceVariationItemFrames[index]
+            if frame then
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+    end
+
+    if #variationItems > displayed then
+        if not self.appearanceVariationOverflowText then
+            self.appearanceVariationOverflowText = self.appearanceVariationContainer:CreateFontString(nil, "OVERLAY",
+                "GameFontNormalSmall")
+            self.appearanceVariationOverflowText:SetTextColor(0.7, 0.7, 0.7)
+        end
+        self.appearanceVariationOverflowText:SetText(string.format("...and %d more", #variationItems - displayed))
+        self.appearanceVariationOverflowText:Show()
+    elseif self.appearanceVariationOverflowText then
+        self.appearanceVariationOverflowText:Hide()
+    end
+
+    self:RefreshAppearanceVariationLayout()
 end
 
 function DebugFrameMixin:AddConduitInfo(item)
@@ -2474,8 +4314,12 @@ function DebugFrameMixin:AddEnsembleInfo(item)
 
     -- Update container position and width to match content area
     self.ensembleContainer:ClearAllPoints()
-    self.ensembleContainer:SetPoint("TOPLEFT", self.infoFrame, "BOTTOMLEFT", 0, -10)
-    self.ensembleContainer:SetPoint("TOPRIGHT", self.infoFrame, "BOTTOMRIGHT", 0, -10)
+    local ensembleAnchor = self.appearanceVariationContainer and self.appearanceVariationContainer:IsShown() and
+        self.appearanceVariationContainer
+        or (self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() and self.sharedAppearanceContainer)
+        or self.infoFrame
+    self.ensembleContainer:SetPoint("TOPLEFT", ensembleAnchor, "BOTTOMLEFT", 0, -10)
+    self.ensembleContainer:SetPoint("TOPRIGHT", ensembleAnchor, "BOTTOMRIGHT", 0, -10)
 
     -- Clear existing ensemble item frames
     for _, frame in ipairs(self.ensembleItemFrames) do
@@ -2508,10 +4352,7 @@ function DebugFrameMixin:AddEnsembleInfo(item)
     -- Update container height (include header height)
     self.ensembleContainer:SetHeight(math.max(yOffset, headerHeight))
     self.ensembleContainer:Show()
-
-    -- Update content height to include ensemble container
-    local totalHeight = self.infoFrame:GetHeight() + 10 + self.ensembleContainer:GetHeight()
-    self.content:SetHeight(totalHeight)
+    self:UpdateContentHeight()
 end
 
 function DebugFrameMixin:GetClassCandidatesForSet(setInfo)
@@ -3271,6 +5112,14 @@ function DebugFrameMixin:RefreshEnsembleLayout()
         return
     end
 
+    self.ensembleContainer:ClearAllPoints()
+    local ensembleAnchor = (self.appearanceVariationContainer and self.appearanceVariationContainer:IsShown() and
+        self.appearanceVariationContainer) or
+        (self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() and self.sharedAppearanceContainer) or
+        self.infoFrame
+    self.ensembleContainer:SetPoint("TOPLEFT", ensembleAnchor, "BOTTOMLEFT", 0, -10)
+    self.ensembleContainer:SetWidth(self:GetDetailSectionWidth())
+
     -- Recalculate positions and heights
     local headerHeight = 25
     local yOffset = headerHeight
@@ -3284,10 +5133,7 @@ function DebugFrameMixin:RefreshEnsembleLayout()
     end
 
     self.ensembleContainer:SetHeight(math.max(yOffset, headerHeight))
-
-    -- Update total content height
-    local totalHeight = self.infoFrame:GetHeight() + 10 + self.ensembleContainer:GetHeight()
-    self.content:SetHeight(totalHeight)
+    self:UpdateContentHeight()
 end
 
 function DebugFrameMixin:AddCurrencyInfo(item)
