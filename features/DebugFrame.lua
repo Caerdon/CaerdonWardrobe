@@ -1607,6 +1607,8 @@ function DebugFrameMixin:DisplayItemInfo(item)
     elseif identifiedType == CaerdonItemType.Equipment then
         self:AddTransmogInfo(item)
         self:AddEquipmentInfo(item)
+    elseif identifiedType == CaerdonItemType.Housing then
+        self:AddHousingInfo(item)
     elseif identifiedType == CaerdonItemType.Conduit then
         self:AddConduitInfo(item)
     elseif identifiedType == CaerdonItemType.Consumable then
@@ -2190,6 +2192,30 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addLine(0, "")
         addLine(0, "[Transmog (Caerdon Debug Internals)]")
         addTable(1, "Debug Data", transmogDebugData.processed.debugExtras)
+    end
+
+    if identifiedType == CaerdonItemType.Housing then
+        local housingInfo = itemData and itemData.GetHousingInfo and itemData:GetHousingInfo()
+        if housingInfo then
+            addLine(0, "")
+            addLine(0, "[Housing]")
+            addKV(1, "Entry Type", housingInfo.entryType)
+            addKV(1, "Entry Subtype", housingInfo.entrySubtype)
+            addKV(1, "Record ID", housingInfo.recordID)
+            addKV(1, "Subclass ID", housingInfo.subClassID)
+            addKV(1, "Owned Stored", housingInfo.ownedStored)
+            addKV(1, "Remaining Redeemable", housingInfo.entryInfo and housingInfo.entryInfo.remainingRedeemable)
+            addKV(1, "Placed Count", housingInfo.placedCount)
+            addKV(1, "Bag Count", housingInfo.bagCount)
+            addKV(1, "Total Owned", housingInfo.totalOwned)
+            addKV(1, "First Acquisition Bonus", housingInfo.firstAcquisitionBonus)
+            addKV(1, "Show Quantity", housingInfo.showQuantity)
+            addKV(1, "Max Stack", housingInfo.maxStack)
+            addKV(1, "Icon Atlas", housingInfo.iconAtlas)
+            addKV(1, "Icon Texture", housingInfo.iconTexture)
+            addKV(1, "Source Text", housingInfo.sourceText)
+            addKV(1, "Is Pending", housingInfo.isPending)
+        end
     end
 
     if itemData and itemData.GetConsumableInfo then
@@ -4173,6 +4199,30 @@ function DebugFrameMixin:AddConsumableInfo(item)
             self:AddEnsembleInfo(item)
         end
     end
+end
+
+function DebugFrameMixin:AddHousingInfo(item)
+    local itemData = item:GetItemData()
+    if not itemData or not itemData.GetHousingInfo then return end
+
+    local info = itemData:GetHousingInfo()
+    if not info then return end
+
+    self:AddDebugEntry("Entry Type", tostring(info.entryType))
+    self:AddDebugEntry("Entry Subtype", tostring(info.entrySubtype))
+    self:AddDebugEntry("Record ID", tostring(info.recordID))
+    self:AddDebugEntry("Subclass ID", tostring(info.subClassID))
+    self:AddDebugEntry("Owned Stored", tostring(info.ownedStored))
+    self:AddDebugEntry("Remaining Redeemable", info.entryInfo and tostring(info.entryInfo.remainingRedeemable) or "nil")
+    self:AddDebugEntry("Placed Count", tostring(info.placedCount))
+    self:AddDebugEntry("Bag Count", tostring(info.bagCount))
+    self:AddDebugEntry("Total Owned", tostring(info.totalOwned))
+    self:AddDebugEntry("First Acquisition Bonus", tostring(info.firstAcquisitionBonus))
+    self:AddDebugEntry("Show Quantity", tostring(info.showQuantity))
+    self:AddDebugEntry("Max Stack", tostring(info.maxStack))
+    self:AddDebugEntry("Icon Atlas", tostring(info.iconAtlas))
+    self:AddDebugEntry("Icon Texture", tostring(info.iconTexture))
+    self:AddDebugEntry("Source Text", tostring(info.sourceText))
 end
 
 function DebugFrameMixin:AddEnsembleInfo(item)

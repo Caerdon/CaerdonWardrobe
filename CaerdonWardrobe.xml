@@ -66,6 +66,7 @@
 	<Script file="types\ConsumableMixin.lua" />
 	<Script file="types\CurrencyMixin.lua" />
 	<Script file="types\EquipmentMixin.lua" />
+	<Script file="types\HousingMixin.lua" />
 	<Script file="types\MountMixin.lua" />
 	<Script file="types\ProfessionMixin.lua" />
 	<Script file="types\QuestMixin.lua" />

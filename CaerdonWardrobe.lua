@@ -4,6 +4,7 @@ local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 82800
 local ADDON_NAME, NS = ...
 local L = NS.L
+local isHousingSupported = select(4, GetBuildInfo()) >= 120000 and Enum and Enum.ItemClass and Enum.ItemClass.Housing ~= nil
 
 BINDING_HEADER_CAERDON = L["Caerdon Addons"]
 BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
@@ -99,6 +100,14 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
     self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
     self:RegisterEvent "VARIABLES_LOADED"
+    if isHousingSupported then
+        self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
+        self:RegisterEvent "HOUSING_STORAGE_UPDATED"
+        self:RegisterEvent "HOUSE_DECOR_ADDED_TO_CHEST"
+        self:RegisterEvent "DYE_COLOR_UPDATED"
+        self:RegisterEvent "DYE_COLOR_CATEGORY_UPDATED"
+        self:WarmHousingData()
+    end
 
     hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
 end
@@ -310,6 +319,12 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
         button.upgradeDeltaText:Hide()
     end
 
+    if not button.housingCountText then
+        button.housingCountText = button:CreateFontString(nil, "ARTWORK", "NumberFontNormalSmall")
+        button.housingCountText:SetText("")
+        button.housingCountText:Hide()
+    end
+
     return button, createdNew
 end
 
@@ -361,6 +376,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeDeltaText:SetText("")
         upgradeDeltaText:Hide()
     end
+    if caerdonButton.housingCountText then
+        caerdonButton.housingCountText:SetText("")
+        caerdonButton.housingCountText:Hide()
+    end
 
     if not options then
         options = {}
@@ -386,6 +405,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
         if upgradeDeltaText then
             upgradeDeltaText:Hide()
+        end
+        if caerdonButton.housingCountText then
+            caerdonButton.housingCountText:SetText("")
+            caerdonButton.housingCountText:Hide()
         end
         return
     end
@@ -557,6 +580,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus:SetTexture("")
 
     local isProminent = false
+    local caerdonType = item and item.GetCaerdonItemType and item:GetCaerdonItemType()
+    local housingInfo = (caerdonType == CaerdonItemType.Housing and item:GetItemData() and item:GetItemData():GetHousingInfo()) or nil
 
     -- TODO: Possible gear set indicators
     -- MINIMAP / TempleofKotmogu_ball_cyan.PNG
@@ -694,6 +719,39 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             -- if status == "ownPlus" then
             -- 	mogStatus:SetVertexColor(0.4, 1, 0)
             -- end
+        end
+    elseif status == "housingOwned" then
+        isProminent = true
+        iconBackgroundAdjustment = 2
+
+        local housingIconSet = false
+        if housingInfo then
+            if housingInfo.iconAtlas and mogStatus.SetAtlas then
+                mogStatus:SetAtlas(housingInfo.iconAtlas, false)
+                mogStatus:SetTexCoord(0, 1, 0, 1)
+                housingIconSet = true
+            elseif housingInfo.iconTexture then
+                mogStatus:SetTexture(housingInfo.iconTexture)
+                housingIconSet = true
+            end
+        end
+
+        if not housingIconSet then
+            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
+            mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+        end
+
+        local countWidget = caerdonButton.housingCountText
+        if countWidget and housingInfo then
+            -- Always show total owned for housing, even if showQuantity is false.
+            if housingInfo.totalOwned and housingInfo.totalOwned > 0 then
+                countWidget:ClearAllPoints()
+                countWidget:SetPoint("BOTTOMRIGHT", mogStatus, "BOTTOMRIGHT", -1, 1)
+                countWidget:SetText(housingInfo.totalOwned)
+                countWidget:SetTextColor(1, 1, 1, 1)
+                countWidget:Show()
+                options.hasCount = options.hasCount or true
+            end
         end
     elseif status == "own" or status == "ownPlus" then
         isProminent = true
@@ -1328,6 +1386,9 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 end
 
 function CaerdonWardrobeMixin:PLAYER_ENTERING_WORLD()
+    if isHousingSupported then
+        self:WarmHousingData()
+    end
 end
 
 function CaerdonWardrobeMixin:PLAYER_LOGOUT()
@@ -1388,4 +1449,70 @@ end
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
     -- Can change while logged in!
     self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:WarmHousingData()
+    if self.hasWarmedHousing or not isHousingSupported then
+        return
+    end
+
+    -- Load lightweight housing event handler to ensure housing events are wired even outside the housing UI.
+    if C_AddOns and C_AddOns.LoadAddOn then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_HousingEventHandler")
+    elseif LoadAddOn then
+        pcall(LoadAddOn, "Blizzard_HousingEventHandler")
+    end
+
+    if C_HousingCatalog then
+        -- Trigger backend to populate storage/market info.
+        if C_HousingCatalog.RequestHousingMarketInfoRefresh then
+            pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
+        end
+        if C_HousingCatalog.GetDecorTotalOwnedCount then
+            pcall(C_HousingCatalog.GetDecorTotalOwnedCount)
+        end
+        if C_HousingCatalog.SearchCatalogCategories then
+            pcall(C_HousingCatalog.SearchCatalogCategories, { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
+        end
+        if C_HousingCatalog.SearchCatalogSubcategories then
+            pcall(C_HousingCatalog.SearchCatalogSubcategories, { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
+        end
+    end
+
+    self.hasWarmedHousing = true
+end
+
+function CaerdonWardrobeMixin:HOUSING_STORAGE_ENTRY_UPDATED()
+    if isHousingSupported then
+        self:RefreshItems()
+        C_Timer.After(0.5, function() self:RefreshItems() end)
+    end
+end
+
+function CaerdonWardrobeMixin:HOUSING_STORAGE_UPDATED()
+    if isHousingSupported then
+        self:RefreshItems()
+        C_Timer.After(0.5, function() self:RefreshItems() end)
+    end
+end
+
+function CaerdonWardrobeMixin:HOUSE_DECOR_ADDED_TO_CHEST()
+    if isHousingSupported then
+        self:RefreshItems()
+        C_Timer.After(0.5, function() self:RefreshItems() end)
+    end
+end
+
+function CaerdonWardrobeMixin:DYE_COLOR_UPDATED()
+    if isHousingSupported then
+        self:RefreshItems()
+        C_Timer.After(0.5, function() self:RefreshItems() end)
+    end
+end
+
+function CaerdonWardrobeMixin:DYE_COLOR_CATEGORY_UPDATED()
+    if isHousingSupported then
+        self:RefreshItems()
+        C_Timer.After(0.5, function() self:RefreshItems() end)
+    end
 end

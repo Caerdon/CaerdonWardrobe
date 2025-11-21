@@ -6,6 +6,8 @@ CaerdonItemMixin = {}
 
 local version, build, date, tocversion = GetBuildInfo()
 local isWarWithin = select(4, GetBuildInfo()) >= 110000
+local isMidnightOrLater = select(4, GetBuildInfo()) >= 120000
+local ITEM_CLASS_HOUSING = (isMidnightOrLater and Enum and Enum.ItemClass and Enum.ItemClass.Housing) or nil
 
 -- Should not be translated - used to provide me with screenshots for debugging.
 CaerdonItemType = {
@@ -20,6 +22,7 @@ CaerdonItemType = {
     Equipment = "Equipment",
     Miscellaneous = "Miscellaneous",
     Mount = "Mount",
+    Housing = "Housing",
     Profession = "Profession",
     Recipe = "Recipe",
     Quest = "Quest",
@@ -591,6 +594,8 @@ function CaerdonItemMixin:GetCaerdonItemType()
                 caerdonType = CaerdonItemType.Recipe
             elseif typeID == Enum.ItemClass.Profession then
                 caerdonType = CaerdonItemType.Profession
+            elseif ITEM_CLASS_HOUSING and typeID == ITEM_CLASS_HOUSING then
+                caerdonType = CaerdonItemType.Housing
             else
                 print("Caerdon: Unknown item type " ..
                     tostring(typeID) .. ", " .. tostring(linkType) .. " (unknown): " .. itemLink)
@@ -921,6 +926,7 @@ function CaerdonItemMixin:IsCollectible()
     return caerdonType == CaerdonItemType.BattlePet or
         caerdonType == CaerdonItemType.CompanionPet or
         caerdonType == CaerdonItemType.Mount or
+        caerdonType == CaerdonItemType.Housing or
         caerdonType == CaerdonItemType.Recipe or
         caerdonType == CaerdonItemType.Toy
 end
@@ -1208,6 +1214,28 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             mogStatus = "own"
         elseif currencyInfo.otherNeedsItem then
             mogStatus = "other"
+        end
+    elseif caerdonType == CaerdonItemType.Housing then
+        local housingInfo = itemData and itemData.GetHousingInfo and itemData:GetHousingInfo()
+        if housingInfo then
+            local isServiceItem = housingInfo.isServiceItem
+            local treatAsUnowned = housingInfo.isUnowned or housingInfo.isPending
+            if treatAsUnowned then
+                if housingInfo.firstAcquisitionBonus and housingInfo.firstAcquisitionBonus > 0 then
+                    mogStatus = "own"
+                elseif isServiceItem then
+                    mogStatus = "own"
+                else
+                    mogStatus = "ownPlus"
+                end
+            else
+                local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and housingInfo.totalOwned >= housingInfo.maxStack
+                if isServiceItem and atCap then
+                    mogStatus = ""
+                else
+                    mogStatus = "housingOwned"
+                end
+            end
         end
     elseif caerdonType == CaerdonItemType.Equipment then
         local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
@@ -1532,6 +1560,8 @@ function CaerdonItemMixin:GetItemData()
             self.caerdonItemData = CaerdonConsumable:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Currency then
             self.caerdonItemData = CaerdonCurrency:CreateFromCaerdonItem(self)
+        elseif caerdonType == CaerdonItemType.Housing then
+            self.caerdonItemData = CaerdonHousing:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Equipment then
             self.caerdonItemData = CaerdonEquipment:CreateFromCaerdonItem(self)
         elseif caerdonType == CaerdonItemType.Mount then
