@@ -6,8 +6,7 @@ CaerdonItemMixin = {}
 
 local version, build, date, tocversion = GetBuildInfo()
 local isWarWithin = select(4, GetBuildInfo()) >= 110000
-local isMidnightOrLater = select(4, GetBuildInfo()) >= 120000
-local ITEM_CLASS_HOUSING = (isMidnightOrLater and Enum and Enum.ItemClass and Enum.ItemClass.Housing) or nil
+local ITEM_CLASS_HOUSING = (Enum.ItemClass and Enum.ItemClass.Housing) or nil
 
 -- Should not be translated - used to provide me with screenshots for debugging.
 CaerdonItemType = {
@@ -1229,7 +1228,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     mogStatus = "ownPlus"
                 end
             else
-                local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and housingInfo.totalOwned >= housingInfo.maxStack
+                local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and
+                housingInfo.totalOwned >= housingInfo.maxStack
                 if isServiceItem and atCap then
                     mogStatus = ""
                 else
@@ -1314,7 +1314,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     bindingStatus = equipmentSets[1]
                 end
             else
-                local redundantForPlayer = transmogInfo and (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
+                local redundantForPlayer = transmogInfo and
+                (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
                 local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
                 local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
                 local protectEqualItemLevel = false

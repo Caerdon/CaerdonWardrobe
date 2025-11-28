@@ -4,7 +4,7 @@ local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 82800
 local ADDON_NAME, NS = ...
 local L = NS.L
-local isHousingSupported = select(4, GetBuildInfo()) >= 120000 and Enum and Enum.ItemClass and
+local isHousingSupported = select(4, GetBuildInfo()) >= 110207 and Enum and Enum.ItemClass and
     Enum.ItemClass.Housing ~= nil
 
 BINDING_HEADER_CAERDON = L["Caerdon Addons"]

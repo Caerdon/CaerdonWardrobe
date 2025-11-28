@@ -4,12 +4,13 @@ CaerdonHousingMixin = {}
 local ADDON_NAME, NS = ...
 
 local interfaceVersion = select(4, GetBuildInfo())
-local hasHousingSupport = interfaceVersion >= 120000 and Enum and Enum.ItemClass and Enum.ItemClass.Housing ~= nil
+local hasHousingSupport = interfaceVersion >= 110207 and Enum and Enum.ItemClass and Enum.ItemClass.Housing ~= nil
 
---[[static]] function CaerdonHousing:CreateFromCaerdonItem(caerdonItem)
-	if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
-		error("Usage: CaerdonHousing:CreateFromCaerdonItem(caerdonItem)", 2)
-	end
+--[[static]]
+function CaerdonHousing:CreateFromCaerdonItem(caerdonItem)
+    if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
+        error("Usage: CaerdonHousing:CreateFromCaerdonItem(caerdonItem)", 2)
+    end
 
     local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonHousingMixin)
     itemType.item = caerdonItem
@@ -31,7 +32,8 @@ function CaerdonHousingMixin:GetHousingInfo()
         return nil
     end
 
-    local catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem and C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, true) or nil
+    local catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem and
+    C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, true) or nil
 
     local ownedStored = 0
     local placedCount = 0
@@ -46,7 +48,8 @@ function CaerdonHousingMixin:GetHousingInfo()
     local subClassID = item:GetItemSubTypeID()
     local itemID = item:GetItemID()
     local entrySubtypeOwned = Enum and Enum.HousingCatalogEntrySubtype
-    local isServiceItem = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.ServiceItem and subClassID == Enum.ItemHousingSubclass.ServiceItem
+    local isServiceItem = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.ServiceItem and
+    subClassID == Enum.ItemHousingSubclass.ServiceItem
 
     local isOwnedSubtype = false
 
@@ -110,7 +113,8 @@ function CaerdonHousingMixin:GetHousingInfo()
             iconTexture = ownedInfo.iconTexture or iconTexture
             iconAtlas = ownedInfo.iconAtlas or iconAtlas
             sourceText = ownedInfo.sourceText or sourceText
-            entrySubtype = ownedInfo.entryID and ownedInfo.entryID.entrySubtype or Enum.HousingCatalogEntrySubtype.OwnedUnmodifiedStack
+            entrySubtype = ownedInfo.entryID and ownedInfo.entryID.entrySubtype or
+            Enum.HousingCatalogEntrySubtype.OwnedUnmodifiedStack
             isOwnedSubtype = true
         end
     end
