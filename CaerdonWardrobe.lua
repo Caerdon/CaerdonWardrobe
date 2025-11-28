@@ -4,7 +4,8 @@ local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 82800
 local ADDON_NAME, NS = ...
 local L = NS.L
-local isHousingSupported = select(4, GetBuildInfo()) >= 120000 and Enum and Enum.ItemClass and Enum.ItemClass.Housing ~= nil
+local isHousingSupported = select(4, GetBuildInfo()) >= 120000 and Enum and Enum.ItemClass and
+    Enum.ItemClass.Housing ~= nil
 
 BINDING_HEADER_CAERDON = L["Caerdon Addons"]
 BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
@@ -106,7 +107,6 @@ function CaerdonWardrobeMixin:OnLoad()
         self:RegisterEvent "HOUSE_DECOR_ADDED_TO_CHEST"
         self:RegisterEvent "DYE_COLOR_UPDATED"
         self:RegisterEvent "DYE_COLOR_CATEGORY_UPDATED"
-        self:WarmHousingData()
     end
 
     hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
@@ -581,7 +581,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     local isProminent = false
     local caerdonType = item and item.GetCaerdonItemType and item:GetCaerdonItemType()
-    local housingInfo = (caerdonType == CaerdonItemType.Housing and item:GetItemData() and item:GetItemData():GetHousingInfo()) or nil
+    local housingInfo = (caerdonType == CaerdonItemType.Housing and item:GetItemData() and item:GetItemData():GetHousingInfo()) or
+        nil
 
     -- TODO: Possible gear set indicators
     -- MINIMAP / TempleofKotmogu_ball_cyan.PNG
@@ -1472,10 +1473,12 @@ function CaerdonWardrobeMixin:WarmHousingData()
             pcall(C_HousingCatalog.GetDecorTotalOwnedCount)
         end
         if C_HousingCatalog.SearchCatalogCategories then
-            pcall(C_HousingCatalog.SearchCatalogCategories, { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
+            pcall(C_HousingCatalog.SearchCatalogCategories,
+                { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
         end
         if C_HousingCatalog.SearchCatalogSubcategories then
-            pcall(C_HousingCatalog.SearchCatalogSubcategories, { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
+            pcall(C_HousingCatalog.SearchCatalogSubcategories,
+                { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
         end
     end
 
