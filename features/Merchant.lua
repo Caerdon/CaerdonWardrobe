@@ -21,7 +21,9 @@ function MerchantMixin:Init()
     -- Store processed items for filtering
     self.merchantItems = {}
 
-    return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE" }
+    self.bagCacheDirty = true
+
+    return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE", "BAG_UPDATE_DELAYED" }
 end
 
 function MerchantMixin:MERCHANT_UPDATE()
@@ -36,6 +38,72 @@ function MerchantMixin:TOOLTIP_DATA_UPDATE()
     self.refreshTimer = C_Timer.NewTimer(0.1, function()
         self:Refresh()
     end, 1)
+end
+
+function MerchantMixin:BAG_UPDATE_DELAYED()
+    self.bagCacheDirty = true
+
+    if MerchantFrame:IsShown() then
+        self:Refresh()
+    end
+end
+
+function MerchantMixin:GetTrackedBagIDs()
+    local bagIDs = { BACKPACK_CONTAINER }
+    local numBags = NUM_BAG_SLOTS or 4
+
+    for bagIndex = 1, numBags do
+        table.insert(bagIDs, bagIndex)
+    end
+
+    if REAGENTBAG_CONTAINER then
+        table.insert(bagIDs, REAGENTBAG_CONTAINER)
+    elseif Enum and Enum.BagIndex and Enum.BagIndex.Reagentbag then
+        table.insert(bagIDs, Enum.BagIndex.Reagentbag)
+    end
+
+    return bagIDs
+end
+
+function MerchantMixin:RefreshBagCache()
+    if not self.bagCacheDirty then
+        return
+    end
+
+    self.bagCacheDirty = false
+    self.bagItemIDs = wipe(self.bagItemIDs or {})
+
+    if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo) then
+        return
+    end
+
+    for _, bagID in ipairs(self:GetTrackedBagIDs()) do
+        local numSlots = C_Container.GetContainerNumSlots(bagID)
+
+        if numSlots and numSlots > 0 then
+            for slot = 1, numSlots do
+                local containerItemInfo = C_Container.GetContainerItemInfo(bagID, slot)
+                if containerItemInfo and containerItemInfo.itemID then
+                    self.bagItemIDs[containerItemInfo.itemID] = true
+                end
+            end
+        end
+    end
+end
+
+function MerchantMixin:IsItemInBags(item)
+    if not item then
+        return false
+    end
+
+    self:RefreshBagCache()
+
+    local itemID = item:GetItemID()
+    if not itemID or not self.bagItemIDs then
+        return false
+    end
+
+    return self.bagItemIDs[itemID] == true
 end
 
 function MerchantMixin:GetTooltipData(item, locationInfo)
@@ -63,6 +131,7 @@ function MerchantMixin:SetTooltipItem(tooltip, item, locationInfo)
 end
 
 function MerchantMixin:Refresh()
+    self:RefreshBagCache()
     CaerdonWardrobeFeatureMixin:Refresh(self)
     if MerchantFrame:IsShown() then
         if MerchantFrame.selectedTab == 1 then
@@ -73,16 +142,18 @@ function MerchantMixin:Refresh()
     end
 end
 
-function MerchantMixin:GetDisplayInfo()
+function MerchantMixin:GetDisplayInfo(button, item)
+    local hasBagCopy = self:IsItemInBags(item)
+
     return {
         bindingStatus = {
             shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.Merchant
         },
         ownIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and not hasBagCopy
         },
         otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and not hasBagCopy
         },
         oldExpansionIcon = {
             shouldShow = false
