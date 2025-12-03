@@ -2340,6 +2340,15 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Total Sources", ensembleData.totalSources)
         addKV(1, "Total Unique Items", ensembleData.totalItems)
 
+        if ensembleData.sourceSummary then
+            addLine(1, "Source Summary:")
+            addKV(2, "Uncollected Sources", ensembleData.sourceSummary.uncollectedSources)
+            addKV(2, "- New Appearances", ensembleData.sourceSummary.uncollectedAppearanceSources)
+            addKV(2, "- Duplicate Appearances", ensembleData.sourceSummary.uncollectedDuplicateSources)
+            addKV(2, "- Known via Other Source", ensembleData.sourceSummary.uncollectedKnownViaAltSources)
+            addKV(2, "- Legendary Duplicate Skip", ensembleData.sourceSummary.uncollectedLegendaryDuplicateSources)
+        end
+
         if ensembleData.sourceIDs and #ensembleData.sourceIDs > 0 then
             addLine(1, "Source IDs:")
             for _, sourceID in ipairs(ensembleData.sourceIDs) do
@@ -4313,6 +4322,14 @@ function DebugFrameMixin:AddEnsembleInfo(item)
     end
 
     -- Now collect source information for each item
+    local sourceSummary = {
+        uncollectedSources = 0,
+        uncollectedAppearanceSources = 0,
+        uncollectedDuplicateSources = 0,
+        uncollectedLegendaryDuplicateSources = 0,
+        uncollectedKnownViaAltSources = 0
+    }
+
     for _, itemInfo in ipairs(itemDetails) do
         for _, sourceID in ipairs(sourceIDs) do
             local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
@@ -4320,6 +4337,26 @@ function DebugFrameMixin:AddEnsembleInfo(item)
                 local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
                 local accountHasItemData, accountCanCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
                 local appearanceInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+                local appearanceID = appearanceInfo and appearanceInfo.appearanceID
+                local appearanceIsCollected = appearanceInfo and appearanceInfo.appearanceIsCollected
+                local isLegendary = sourceInfo.quality == Enum.ItemQuality.Legendary
+                local legendaryHasAltCollected = false
+                local appearanceHasAltCollected = false
+
+                if appearanceID then
+                    local appearanceSources = C_TransmogCollection.GetAppearanceSources(appearanceID, sourceInfo.categoryID)
+                    if appearanceSources then
+                        for _, appearanceSourceInfo in ipairs(appearanceSources) do
+                            if appearanceSourceInfo.sourceID ~= sourceID and appearanceSourceInfo.isCollected then
+                                appearanceHasAltCollected = true
+                                if isLegendary then
+                                    legendaryHasAltCollected = true
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
 
                 local sourceDetail = {
                     sourceID = sourceID,
@@ -4342,10 +4379,26 @@ function DebugFrameMixin:AddEnsembleInfo(item)
                     quality = sourceInfo.quality,
                     accountHasItemDataAPI = accountHasItemData,
                     accountCanCollectAPI = accountCanCollect,
-                    appearanceInfo = appearanceInfo and CopyTable(appearanceInfo) or nil
+                    appearanceInfo = appearanceInfo and CopyTable(appearanceInfo) or nil,
+                    hasAlternateCollected = legendaryHasAltCollected or appearanceHasAltCollected,
+                    appearanceHasAltCollected = appearanceHasAltCollected
                 }
 
                 table.insert(itemInfo.sources, sourceDetail)
+
+                if not sourceInfo.isCollected then
+                    sourceSummary.uncollectedSources = sourceSummary.uncollectedSources + 1
+
+                    if isLegendary and (appearanceIsCollected or legendaryHasAltCollected) then
+                        sourceSummary.uncollectedLegendaryDuplicateSources = sourceSummary.uncollectedLegendaryDuplicateSources + 1
+                    elseif appearanceIsCollected then
+                        sourceSummary.uncollectedDuplicateSources = sourceSummary.uncollectedDuplicateSources + 1
+                    elseif appearanceHasAltCollected then
+                        sourceSummary.uncollectedKnownViaAltSources = sourceSummary.uncollectedKnownViaAltSources + 1
+                    else
+                        sourceSummary.uncollectedAppearanceSources = sourceSummary.uncollectedAppearanceSources + 1
+                    end
+                end
             end
         end
     end
@@ -4353,6 +4406,7 @@ function DebugFrameMixin:AddEnsembleInfo(item)
     if self.currentEnsembleData then
         self.currentEnsembleData.items = itemDetails
         self.currentEnsembleData.totalItems = #itemDetails
+        self.currentEnsembleData.sourceSummary = sourceSummary
     end
 
     -- Create an ensemble items container if it doesn't exist
