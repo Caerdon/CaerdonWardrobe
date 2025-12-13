@@ -1476,34 +1476,34 @@ end
 function CaerdonWardrobeMixin:HOUSING_STORAGE_ENTRY_UPDATED()
     if isHousingSupported then
         self:RefreshItems()
-        C_Timer.After(0.5, function() self:RefreshItems() end)
+        C_Timer.After(0.1, function() self:RefreshItems() end)
     end
 end
 
 function CaerdonWardrobeMixin:HOUSING_STORAGE_UPDATED()
     if isHousingSupported then
         self:RefreshItems()
-        C_Timer.After(0.5, function() self:RefreshItems() end)
+        C_Timer.After(0.1, function() self:RefreshItems() end)
     end
 end
 
 function CaerdonWardrobeMixin:HOUSE_DECOR_ADDED_TO_CHEST()
     if isHousingSupported then
         self:RefreshItems()
-        C_Timer.After(0.5, function() self:RefreshItems() end)
+        C_Timer.After(0.1, function() self:RefreshItems() end)
     end
 end
 
 function CaerdonWardrobeMixin:DYE_COLOR_UPDATED()
     if isHousingSupported then
         self:RefreshItems()
-        C_Timer.After(0.5, function() self:RefreshItems() end)
+        C_Timer.After(0.1, function() self:RefreshItems() end)
     end
 end
 
 function CaerdonWardrobeMixin:DYE_COLOR_CATEGORY_UPDATED()
     if isHousingSupported then
         self:RefreshItems()
-        C_Timer.After(0.5, function() self:RefreshItems() end)
+        C_Timer.After(0.1, function() self:RefreshItems() end)
     end
 end
