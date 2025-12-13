@@ -1217,22 +1217,26 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     elseif caerdonType == CaerdonItemType.Housing then
         local housingInfo = itemData and itemData.GetHousingInfo and itemData:GetHousingInfo()
         if housingInfo then
+            if housingInfo.isPending then
+                -- Defer icon decisions until housing data finishes loading so we don't show locks erroneously.
+                isReady = false
+                return isReady
+            end
+
             local isServiceItem = housingInfo.isServiceItem
-            local treatAsUnowned = housingInfo.isUnowned or housingInfo.isPending
+            local treatAsUnowned = housingInfo.isUnowned
             if treatAsUnowned then
                 if housingInfo.firstAcquisitionBonus and housingInfo.firstAcquisitionBonus > 0 then
                     mogStatus = "own"
                 elseif isServiceItem then
                     mogStatus = "own"
                 else
-                    mogStatus = "ownPlus"
+                    mogStatus = "own"
                 end
             else
                 local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and
-                housingInfo.totalOwned >= housingInfo.maxStack
-                if isServiceItem and atCap then
-                    mogStatus = ""
-                else
+                    housingInfo.totalOwned >= housingInfo.maxStack
+                if not atCap or housingInfo.totalOwned == 0 then
                     mogStatus = "housingOwned"
                 end
             end
@@ -1315,7 +1319,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 end
             else
                 local redundantForPlayer = transmogInfo and
-                (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
+                    (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
                 local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
                 local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
                 local protectEqualItemLevel = false

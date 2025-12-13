@@ -107,6 +107,20 @@ function Tests:DataChangeCanary()
     AreEqual(11, infoCount)
 end
 
+function Tests:HousingPendingRequiresMissingDataOnly()
+    if not CaerdonHousingMixin or not CaerdonHousingMixin.DebugIsHousingDataPending then
+        return
+    end
+
+    local debugPending = CaerdonHousingMixin.DebugIsHousingDataPending
+
+    -- No catalog/tooltip/dye data should be treated as pending.
+    IsTrue(debugPending({ hasCatalogEntry = false, hasTooltipCounts = false, hasDyeInfo = false }))
+
+    -- Catalog data alone is enough to treat the housing item as ready (even when unowned).
+    IsFalse(debugPending({ hasCatalogEntry = true, hasTooltipCounts = false, hasDyeInfo = false }))
+end
+
 -- function Tests:MockingTest()
 --     Replace('GetRealmName', function() return 'Horseshoe' end)
 --     AreEqual('Horseshoe!', Realm())

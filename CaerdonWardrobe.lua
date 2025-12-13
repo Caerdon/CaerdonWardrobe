@@ -319,12 +319,6 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
         button.upgradeDeltaText:Hide()
     end
 
-    if not button.housingCountText then
-        button.housingCountText = button:CreateFontString(nil, "ARTWORK", "NumberFontNormalSmall")
-        button.housingCountText:SetText("")
-        button.housingCountText:Hide()
-    end
-
     return button, createdNew
 end
 
@@ -376,11 +370,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeDeltaText:SetText("")
         upgradeDeltaText:Hide()
     end
-    if caerdonButton.housingCountText then
-        caerdonButton.housingCountText:SetText("")
-        caerdonButton.housingCountText:Hide()
-    end
-
     if not options then
         options = {}
     end
@@ -405,10 +394,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
         if upgradeDeltaText then
             upgradeDeltaText:Hide()
-        end
-        if caerdonButton.housingCountText then
-            caerdonButton.housingCountText:SetText("")
-            caerdonButton.housingCountText:Hide()
         end
         return
     end
@@ -740,19 +725,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         if not housingIconSet then
             mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
             mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
-        end
-
-        local countWidget = caerdonButton.housingCountText
-        if countWidget and housingInfo then
-            -- Always show total owned for housing, even if showQuantity is false.
-            if housingInfo.totalOwned and housingInfo.totalOwned > 0 then
-                countWidget:ClearAllPoints()
-                countWidget:SetPoint("BOTTOMRIGHT", mogStatus, "BOTTOMRIGHT", -1, 1)
-                countWidget:SetText(housingInfo.totalOwned)
-                countWidget:SetTextColor(1, 1, 1, 1)
-                countWidget:Show()
-                options.hasCount = options.hasCount or true
-            end
         end
     elseif status == "own" or status == "ownPlus" then
         isProminent = true
@@ -1452,9 +1424,24 @@ function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
     self:RefreshItems()
 end
 
-function CaerdonWardrobeMixin:WarmHousingData()
-    if self.hasWarmedHousing or not isHousingSupported then
+function CaerdonWardrobeMixin:WarmHousingData(force)
+    if not isHousingSupported then
         return
+    end
+
+    if self.hasWarmedHousing and not force then
+        return
+    end
+
+    if force then
+        local now = GetTime and GetTime() or 0
+        if now > 0 then
+            self.lastHousingWarmup = self.lastHousingWarmup or 0
+            if (now - self.lastHousingWarmup) < 2 then
+                return
+            end
+            self.lastHousingWarmup = now
+        end
     end
 
     -- Load lightweight housing event handler to ensure housing events are wired even outside the housing UI.
@@ -1465,6 +1452,7 @@ function CaerdonWardrobeMixin:WarmHousingData()
     end
 
     if C_HousingCatalog then
+        local ownedOnly = not force
         -- Trigger backend to populate storage/market info.
         if C_HousingCatalog.RequestHousingMarketInfoRefresh then
             pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
@@ -1474,11 +1462,11 @@ function CaerdonWardrobeMixin:WarmHousingData()
         end
         if C_HousingCatalog.SearchCatalogCategories then
             pcall(C_HousingCatalog.SearchCatalogCategories,
-                { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
+                { withOwnedEntriesOnly = ownedOnly, includeFeaturedCategory = false })
         end
         if C_HousingCatalog.SearchCatalogSubcategories then
             pcall(C_HousingCatalog.SearchCatalogSubcategories,
-                { withOwnedEntriesOnly = true, includeFeaturedCategory = false })
+                { withOwnedEntriesOnly = ownedOnly, includeFeaturedCategory = false })
         end
     end
 

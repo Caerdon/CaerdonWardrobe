@@ -5,6 +5,58 @@ local ADDON_NAME, NS = ...
 
 local interfaceVersion = select(4, GetBuildInfo())
 local hasHousingSupport = interfaceVersion >= 110207 and Enum and Enum.ItemClass and Enum.ItemClass.Housing ~= nil
+local lastHousingWarmupRequest = 0
+local pendingRetryCounts = {}
+
+local function IsHousingDataPending(flags)
+    -- Treat data as pending only when we have no concrete signals from catalog, tooltip, or dye APIs.
+    if not flags then
+        return true
+    end
+
+    return not (flags.hasCatalogEntry or flags.hasTooltipCounts or flags.hasDyeInfo)
+end
+
+-- Expose a narrow test hook so we can assert the pending gate without live API calls.
+CaerdonHousingMixin.DebugIsHousingDataPending = function(flags)
+    return IsHousingDataPending(flags)
+end
+
+local function ParseTooltipCounts(itemLink)
+    if not C_TooltipInfo or not itemLink then
+        return nil
+    end
+
+    local tooltipData = C_TooltipInfo.GetHyperlink(itemLink)
+    if not tooltipData or not tooltipData.lines then
+        return nil
+    end
+
+    local function ToNumber(text)
+        if not text then return nil end
+        local cleaned = tostring(text):gsub("%D", "")
+        return tonumber(cleaned)
+    end
+
+    for _, line in ipairs(tooltipData.lines) do
+        local text = line.leftText
+        if text and text:find("Owned") then -- coarse gate to avoid extra work
+            local owned = ToNumber(text:match("Owned:%s*([%d,]+)"))
+            local placed = ToNumber(text:match("Placed:%s*([%d,]+)"))
+            local stored = ToNumber(text:match("Storage:%s*([%d,]+)")) or ToNumber(text:match("Stored:%s*([%d,]+)"))
+
+            if owned or placed or stored then
+                return {
+                    owned = owned,
+                    placed = placed,
+                    stored = stored
+                }
+            end
+        end
+    end
+
+    return nil
+end
 
 --[[static]]
 function CaerdonHousing:CreateFromCaerdonItem(caerdonItem)
@@ -54,10 +106,10 @@ function CaerdonHousingMixin:GetHousingInfo()
     local isOwnedSubtype = false
 
     if catalogEntryInfo then
-        ownedStored = (catalogEntryInfo.quantity or 0) + (catalogEntryInfo.remainingRedeemable or 0)
+        ownedStored = catalogEntryInfo.quantity or 0
         remainingRedeemable = catalogEntryInfo.remainingRedeemable or 0
         placedCount = catalogEntryInfo.numPlaced or 0
-        totalOwned = ownedStored + placedCount
+        totalOwned = math.max(ownedStored, remainingRedeemable) + placedCount
         firstAcquisitionBonus = catalogEntryInfo.firstAcquisitionBonus or 0
         showQuantity = catalogEntryInfo.showQuantity ~= false
         iconTexture = catalogEntryInfo.iconTexture
@@ -87,10 +139,10 @@ function CaerdonHousingMixin:GetHousingInfo()
             }
             local info = C_HousingCatalog.GetCatalogEntryInfo(entryID)
             if info then
-                local q = (info.quantity or 0) + (info.remainingRedeemable or 0)
+                local q = info.quantity or 0
                 local p = info.numPlaced or 0
                 local r = info.remainingRedeemable or 0
-                local total = q + p
+                local total = math.max(q, r) + p
                 if total > 0 then
                     return info, q, p, r
                 end
@@ -107,7 +159,7 @@ function CaerdonHousingMixin:GetHousingInfo()
             ownedStored = q
             remainingRedeemable = r or remainingRedeemable
             placedCount = p
-            totalOwned = q + p
+            totalOwned = math.max(ownedStored, remainingRedeemable) + placedCount
             firstAcquisitionBonus = ownedInfo.firstAcquisitionBonus or firstAcquisitionBonus
             showQuantity = ownedInfo.showQuantity ~= false
             iconTexture = ownedInfo.iconTexture or iconTexture
@@ -131,9 +183,10 @@ function CaerdonHousingMixin:GetHousingInfo()
             local fallbackInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(guessEntryType, itemID, true)
             if fallbackInfo then
                 catalogEntryInfo = fallbackInfo
-                ownedStored = (fallbackInfo.quantity or 0) + (fallbackInfo.remainingRedeemable or 0)
+                ownedStored = fallbackInfo.quantity or 0
+                remainingRedeemable = fallbackInfo.remainingRedeemable or remainingRedeemable
                 placedCount = fallbackInfo.numPlaced or 0
-                totalOwned = ownedStored + placedCount
+                totalOwned = math.max(ownedStored, remainingRedeemable) + placedCount
                 firstAcquisitionBonus = fallbackInfo.firstAcquisitionBonus or 0
                 showQuantity = fallbackInfo.showQuantity ~= false
                 iconTexture = fallbackInfo.iconTexture
@@ -151,6 +204,21 @@ function CaerdonHousingMixin:GetHousingInfo()
                     end
                 end
             end
+        end
+    end
+
+    local tooltipOwnedTotal
+    local isPending
+
+    if not catalogEntryInfo then
+        local tooltipCounts = ParseTooltipCounts(itemLink)
+        if tooltipCounts then
+            ownedStored = tooltipCounts.stored or ownedStored
+            placedCount = tooltipCounts.placed or placedCount
+            tooltipOwnedTotal = tooltipCounts.owned
+            totalOwned = tooltipCounts.owned or (ownedStored + placedCount) or totalOwned
+            showQuantity = true
+            isPending = false
         end
     end
 
@@ -187,10 +255,6 @@ function CaerdonHousingMixin:GetHousingInfo()
         totalOwned = math.max(totalOwned, 1)
     end
 
-    -- Consider the info pending when no catalog data OR when owned state may lag (zero totals for non-service items).
-    local isPending = (catalogEntryInfo == nil and not dyeColorID)
-        or (not isServiceItem and catalogEntryInfo ~= nil and ownedStored == 0 and remainingRedeemable == 0 and placedCount == 0)
-
     local function SanitizeCount(value)
         if not value or value < 0 then
             return 0
@@ -216,11 +280,79 @@ function CaerdonHousingMixin:GetHousingInfo()
         -- For service items, treat any count anywhere as owned; avoid double-counting by taking the max.
         totalOwned = math.max(placedCount, ownedStored, remainingRedeemable, bagCount)
     else
-        totalOwned = placedCount + ownedStored + remainingRedeemable
+        -- Decor items frequently report both quantity and remainingRedeemable for the same stack; prefer the larger of the two to avoid double-counting.
+        local catalogOwned = placedCount + math.max(ownedStored, remainingRedeemable)
+        if tooltipOwnedTotal and tooltipOwnedTotal > 0 then
+            totalOwned = math.max(tooltipOwnedTotal, catalogOwned)
+        else
+            totalOwned = catalogOwned
+        end
+
     end
+
+    local hasTooltipCounts = tooltipOwnedTotal ~= nil
+    isPending = IsHousingDataPending({
+        hasCatalogEntry = catalogEntryInfo ~= nil,
+        hasTooltipCounts = hasTooltipCounts,
+        hasDyeInfo = dyeColorID ~= nil
+    })
 
     if totalOwned > 0 then
         isPending = false
+    end
+
+    if itemID and not isPending then
+        pendingRetryCounts[itemID] = 0
+    end
+
+    if isPending then
+        local now = GetTime and GetTime() or 0
+        local retries = itemID and (pendingRetryCounts[itemID] or 0) or 0
+        if (now - lastHousingWarmupRequest) >= 2 or now == 0 then
+            if retries >= 6 then
+                -- Avoid spinning forever if the API never returns data.
+                pendingRetryCounts[itemID or 0] = retries
+                return {
+                    entryInfo = catalogEntryInfo,
+                    entryType = entryType,
+                    entrySubtype = entrySubtype,
+                    recordID = recordID,
+                    subClassID = subClassID,
+                    maxStack = maxStack,
+                    bagCount = bagCount,
+                    remainingRedeemable = remainingRedeemable,
+                    isServiceItem = isServiceItem,
+                    ownedStored = ownedStored,
+                    placedCount = placedCount,
+                    totalOwned = totalOwned,
+                    isUnowned = totalOwned == 0,
+                    firstAcquisitionBonus = firstAcquisitionBonus,
+                    showQuantity = showQuantity,
+                    iconTexture = iconTexture,
+                    iconAtlas = iconAtlas,
+                    sourceText = sourceText,
+                    dyeColorID = dyeColorID,
+                    isDyeOwned = isDyeOwned,
+                    isPending = isPending
+                }
+            end
+
+            lastHousingWarmupRequest = now
+            pendingRetryCounts[itemID or 0] = retries + 1
+
+            if CaerdonWardrobe and CaerdonWardrobe.WarmHousingData then
+                pcall(CaerdonWardrobe.WarmHousingData, CaerdonWardrobe, true)
+            elseif C_HousingCatalog and C_HousingCatalog.RequestHousingMarketInfoRefresh then
+                pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
+            end
+
+            if C_Timer and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
+                local delay = math.min(1 + retries * 0.5, 3)
+                C_Timer.After(delay, function()
+                    CaerdonWardrobe:RefreshItems()
+                end)
+            end
+        end
     end
 
     return {
