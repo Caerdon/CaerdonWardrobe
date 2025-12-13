@@ -1078,9 +1078,10 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                             -- class/faction locked or when the drop itself is BoP (old behavior).
                             shouldShowNoLoot = playerCollectRestricted or isBindOnPickup
                         elseif featureName == "Merchant" then
-                            -- Merchant ensembles often surface as consumables, so fall back to the
-                            -- pre-commit behavior of only suppressing icons when the item is BoP.
-                            shouldShowNoLoot = isBindOnPickup
+                            -- Merchant items should only show no-loot when this character truly can't
+                            -- collect the source (class/race/faction restriction). BoP cosmetics and
+                            -- cross-armor pieces remain completionist-learnable, so keep them visible.
+                            shouldShowNoLoot = playerCollectRestricted
                         else
                             -- Customer Orders (and any other features that land here) still benefit
                             -- from the new player-can-collect signal so completionists can see when
