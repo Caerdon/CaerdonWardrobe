@@ -1426,6 +1426,10 @@ function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 end
 
 function CaerdonWardrobeMixin:WarmHousingData(force)
+    if true then
+        return
+    end
+
     if not isHousingSupported then
         return
     end

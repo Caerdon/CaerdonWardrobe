@@ -85,7 +85,7 @@ function CaerdonHousingMixin:GetHousingInfo()
     end
 
     local catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem and
-    C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, true) or nil
+        C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, true) or nil
 
     local ownedStored = 0
     local placedCount = 0
@@ -101,7 +101,7 @@ function CaerdonHousingMixin:GetHousingInfo()
     local itemID = item:GetItemID()
     local entrySubtypeOwned = Enum and Enum.HousingCatalogEntrySubtype
     local isServiceItem = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.ServiceItem and
-    subClassID == Enum.ItemHousingSubclass.ServiceItem
+        subClassID == Enum.ItemHousingSubclass.ServiceItem
 
     local isOwnedSubtype = false
 
@@ -166,7 +166,7 @@ function CaerdonHousingMixin:GetHousingInfo()
             iconAtlas = ownedInfo.iconAtlas or iconAtlas
             sourceText = ownedInfo.sourceText or sourceText
             entrySubtype = ownedInfo.entryID and ownedInfo.entryID.entrySubtype or
-            Enum.HousingCatalogEntrySubtype.OwnedUnmodifiedStack
+                Enum.HousingCatalogEntrySubtype.OwnedUnmodifiedStack
             isOwnedSubtype = true
         end
     end
@@ -210,7 +210,9 @@ function CaerdonHousingMixin:GetHousingInfo()
     local tooltipOwnedTotal
     local isPending
 
-    if not catalogEntryInfo then
+    -- Service items currently don't surface catalog entry data and have empty tooltips, so skip the tooltip pass.
+    if not catalogEntryInfo and not isServiceItem then
+        print("catalogEntryInfo is nil: " .. itemLink)
         local tooltipCounts = ParseTooltipCounts(itemLink)
         if tooltipCounts then
             ownedStored = tooltipCounts.stored or ownedStored
@@ -287,7 +289,6 @@ function CaerdonHousingMixin:GetHousingInfo()
         else
             totalOwned = catalogOwned
         end
-
     end
 
     local hasTooltipCounts = tooltipOwnedTotal ~= nil
@@ -340,11 +341,11 @@ function CaerdonHousingMixin:GetHousingInfo()
             lastHousingWarmupRequest = now
             pendingRetryCounts[itemID or 0] = retries + 1
 
-            if CaerdonWardrobe and CaerdonWardrobe.WarmHousingData then
-                pcall(CaerdonWardrobe.WarmHousingData, CaerdonWardrobe, true)
-            elseif C_HousingCatalog and C_HousingCatalog.RequestHousingMarketInfoRefresh then
-                pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
-            end
+            -- if CaerdonWardrobe and CaerdonWardrobe.WarmHousingData then
+            --     pcall(CaerdonWardrobe.WarmHousingData, CaerdonWardrobe, true)
+            -- elseif C_HousingCatalog and C_HousingCatalog.RequestHousingMarketInfoRefresh then
+            --     pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
+            -- end
 
             if C_Timer and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
                 local delay = math.min(1 + retries * 0.5, 3)
