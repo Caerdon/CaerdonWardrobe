@@ -210,9 +210,9 @@ function CaerdonHousingMixin:GetHousingInfo()
     local tooltipOwnedTotal
     local isPending
 
-    -- Service items currently don't surface catalog entry data and have empty tooltips, so skip the tooltip pass.
-    if not catalogEntryInfo and not isServiceItem then
-        print("catalogEntryInfo is nil: " .. itemLink)
+    -- Service items and dyes currently don't surface catalog entry data and have empty tooltips, so skip the tooltip pass.
+    if not catalogEntryInfo and not isServiceItem and not dyeColorID then
+        -- print("catalogEntryInfo is nil: " .. itemLink)
         local tooltipCounts = ParseTooltipCounts(itemLink)
         if tooltipCounts then
             ownedStored = tooltipCounts.stored or ownedStored
@@ -235,16 +235,16 @@ function CaerdonHousingMixin:GetHousingInfo()
         end
     end
 
-    local dyeColorID, isDyeOwned
-    if not catalogEntryInfo and C_DyeColor then
-        dyeColorID = C_DyeColor.GetDyeColorForItem and C_DyeColor.GetDyeColorForItem(itemLink)
-        if dyeColorID then
-            isDyeOwned = C_DyeColor.IsDyeColorOwned and C_DyeColor.IsDyeColorOwned(dyeColorID) or false
-            totalOwned = isDyeOwned and 1 or 0
-            ownedStored = totalOwned
-            showQuantity = true
-        end
-    end
+    -- local dyeColorID, isDyeOwned
+    -- if not catalogEntryInfo and C_DyeColor then
+    --     dyeColorID = C_DyeColor.GetDyeColorForItem and C_DyeColor.GetDyeColorForItem(itemLink)
+    --     if dyeColorID then
+    --         isDyeOwned = C_DyeColor.IsDyeColorOwned and C_DyeColor.IsDyeColorOwned(dyeColorID) or false
+    --         totalOwned = isDyeOwned and 1 or 0
+    --         ownedStored = totalOwned
+    --         showQuantity = true
+    --     end
+    -- end
 
     -- Only treat bag copies as owned for service items (consumable-use items). For decor, we want bag copies to stay unowned until redeemed.
     if isServiceItem then
