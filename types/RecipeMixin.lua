@@ -234,7 +234,8 @@ function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
             rank = professionInfo.skillLevel
         end
 
-        if professionInfo.skillLevel and professionInfo.skillLevel >= tonumber(requiredRank) then
+        local requiredRankNum = tonumber(requiredRank)
+        if professionInfo.skillLevel and requiredRankNum and professionInfo.skillLevel >= requiredRankNum then
             meetsMinRank = true
         end
     end
