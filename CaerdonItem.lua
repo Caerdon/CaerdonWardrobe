@@ -467,8 +467,10 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
         elseif bindType == 8 then -- BoA, apparently
             -- TODO: This was working... and then seemingly not... keep an eye out.
             binding = CaerdonItemBind.BindOnAccount
+        elseif bindType == 9 then -- WuE
+            binding = CaerdonItemBind.WarboundUntilEquip
         elseif bindType ~= nil then
-            print(self:GetItemLink() .. ": Please report - Unknown binding type " .. tostring(bindType))
+            print("Caerdon: " .. self:GetItemLink() .. ": Please report - Unknown binding type " .. tostring(bindType))
         end
     else
         binding = CaerdonItemBind.None
