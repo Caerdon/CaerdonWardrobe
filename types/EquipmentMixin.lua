@@ -96,6 +96,16 @@ local function GetComparableItemLevel(itemLink, itemLocation)
     return itemLevel
 end
 
+-- Get the candidate item level for comparison, checking for override first (used by AH items)
+local function GetCandidateItemLevel(item)
+    -- Check for override first (set by Auction feature for correct AH item levels)
+    if item.extraData and item.extraData.overrideItemLevel then
+        return item.extraData.overrideItemLevel
+    end
+
+    return GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
+end
+
 local function IsTwoHandedMainHandEquipped()
     local mainHandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_MAINHAND)
     if not (mainHandLocation and mainHandLocation:IsValid() and C_Item.DoesItemExist(mainHandLocation)) then
@@ -261,7 +271,7 @@ local function GetUniqueUpgradeInfo(item)
     end
 
     limitCategoryCount = tonumber(limitCategoryCount) or 1
-    local candidateLevel = GetComparableItemLevel(itemLink, item:GetItemLocation())
+    local candidateLevel = GetCandidateItemLevel(item)
     local inventoryTypeName = item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
     local hasEmptyEquipSlot = false
@@ -333,7 +343,7 @@ local function HasBetterOrEqualEquippedItem(item)
         return false
     end
 
-    local candidateLevel = GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
+    local candidateLevel = GetCandidateItemLevel(item)
     if not candidateLevel then
         return false
     end
@@ -369,7 +379,7 @@ local function HasEqualEquippedItemLevel(item)
         return false
     end
 
-    local candidateLevel = GetComparableItemLevel(itemLink, item:GetItemLocation())
+    local candidateLevel = GetCandidateItemLevel(item)
     if not candidateLevel then
         return false
     end
@@ -416,7 +426,7 @@ local function GetUpgradeItemLevelDelta(item)
         return nil
     end
 
-    local candidateLevel = GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
+    local candidateLevel = GetCandidateItemLevel(item)
     if not candidateLevel then
         return nil
     end

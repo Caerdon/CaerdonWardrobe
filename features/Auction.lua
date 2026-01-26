@@ -133,9 +133,22 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		-- Using appearance link if it's available due to not getting full item link from AH in any other way right now.
 		-- This fixes Nimble Hexweave Cloak, for example, but doesn't fix Ceremonious Greaves (which doesn't have appearanceLink)
 		local appearanceSourceID = string.match(rowData.appearanceLink, ".*transmogappearance:(%d*)")
-		local category, itemAppearanceID, canHaveIllusion, icon, isCollected, itemLink, transmoglink, sourceType, itemSubClass = 
+		local category, itemAppearanceID, canHaveIllusion, icon, isCollected, itemLink, transmoglink, sourceType, itemSubClass =
 			C_TransmogCollection.GetAppearanceSourceInfo(appearanceSourceID)
-		item = CaerdonItem:CreateFromItemLink(itemLink, { appearanceSourceID = appearanceSourceID, appearanceID = itemAppearanceID })
+
+		-- Pass itemKey.itemLevel directly as overrideItemLevel since item links from AH don't encode the actual listing's ilvl
+		local extraData = {
+			appearanceSourceID = appearanceSourceID,
+			appearanceID = itemAppearanceID,
+			overrideItemLevel = itemKey.itemLevel
+		}
+
+		if itemLink then
+			item = CaerdonItem:CreateFromItemLink(itemLink, extraData)
+		else
+			item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+			item.extraData = extraData
+		end
 
 		CaerdonAPI:CompareCIMI(self, item)
 
@@ -144,22 +157,18 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 			itemKey = itemKey
 		}, options)
 	else
-		-- local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
-		-- local tooltipInfo = C_TooltipInfo and C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
-		-- local tooltipData = CaerdonAPI:ProcessTooltipData(tooltipInfo)
-		local tooltipData = nil
+		-- Pass itemKey.itemLevel directly as overrideItemLevel since item links from AH don't encode the actual listing's ilvl
+		local extraData = { overrideItemLevel = itemKey.itemLevel }
 
-		if tooltipData then
-			if tooltipData.isRetrieving then -- shouldn't hit here because of previous check on GetItemKeyInfo... but just in case.
-				C_Timer.After(0.1, function () -- TODO: Switch to a waiting to process queue tied to TOOLTIP_DATA_UPDATE
-					self:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
-				end)
-				return
-			elseif tooltipData.hyperlink then
-				item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink)
-			end
+		local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
+		local tooltipData = C_TooltipInfo and C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
+
+		if tooltipData and tooltipData.hyperlink then
+			item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink, extraData)
 		else
+			-- Fall back to itemID if we can't get a proper link
 			item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+			item.extraData = extraData
 		end
 
 		CaerdonAPI:CompareCIMI(self, item)
