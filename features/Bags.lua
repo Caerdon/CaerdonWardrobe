@@ -5,25 +5,19 @@ function BagsMixin:GetName()
 end
 
 function BagsMixin:Init()
-    -- TODO: Review for better hooks
-    hooksecurefunc(ContainerFrame1, "UpdateItems", function(...) self:OnUpdateItems(...) end)
-    hooksecurefunc(ContainerFrame1, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
-    hooksecurefunc(ContainerFrame2, "UpdateItems", function(...) self:OnUpdateItems(...) end)
-    hooksecurefunc(ContainerFrame2, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
-    hooksecurefunc(ContainerFrame3, "UpdateItems", function(...) self:OnUpdateItems(...) end)
-    hooksecurefunc(ContainerFrame3, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
-    hooksecurefunc(ContainerFrame4, "UpdateItems", function(...) self:OnUpdateItems(...) end)
-    hooksecurefunc(ContainerFrame4, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
-    hooksecurefunc(ContainerFrame5, "UpdateItems", function(...) self:OnUpdateItems(...) end)
-    hooksecurefunc(ContainerFrame5, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
-    hooksecurefunc(ContainerFrame6, "UpdateItems", function(...) self:OnUpdateItems(...) end)
-    hooksecurefunc(ContainerFrame6, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+    for i = 1, NUM_TOTAL_BAG_FRAMES + 1 do
+        local frame = _G["ContainerFrame" .. i]
+        if frame then
+            hooksecurefunc(frame, "UpdateItems", function(...) self:OnUpdateItems(...) end)
+            hooksecurefunc(frame, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
+        end
+    end
     hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", function(...) self:OnUpdateItems(...) end)
     hooksecurefunc(ContainerFrameCombinedBags, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
 
     EventRegistry:RegisterCallback("ContainerFrame.OpenBag", self.BagOpened, self)
 
-    return { "UNIT_SPELLCAST_SUCCEEDED", "TOOLTIP_DATA_UPDATE" }
+    return { "UNIT_SPELLCAST_SUCCEEDED" }
 end
 
 function BagsMixin:BagOpened(frame, too)
@@ -44,15 +38,6 @@ function BagsMixin:UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
     end
 end
 
-function BagsMixin:TOOLTIP_DATA_UPDATE(dataInstanceID)
-    if self.refreshTimer then
-        self.refreshTimer:Cancel()
-    end
-
-    self.refreshTimer = C_Timer.NewTimer(0.1, function()
-        self:Refresh()
-    end, 1)
-end
 
 function BagsMixin:GetTooltipData(item, locationInfo)
     local tooltipInfo = C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
@@ -61,6 +46,7 @@ end
 
 function BagsMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
+    self.forceFullUpdate = true
     for i = 1, NUM_TOTAL_BAG_FRAMES + 1, 1 do
         local frame = _G["ContainerFrame" .. i]
         if (frame:IsShown()) then
@@ -71,6 +57,7 @@ function BagsMixin:Refresh()
     if ContainerFrameCombinedBags:IsShown() then
         self:OnUpdateItems(ContainerFrameCombinedBags)
     end
+    self.forceFullUpdate = false
 end
 
 function BagsMixin:OnUpdateSearchResults(frame)
@@ -92,16 +79,36 @@ end
 
 function BagsMixin:OnUpdateItems(frame)
     for i, button in frame:EnumerateValidItems() do
-        -- local isFiltered = select(8, C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID()));
-        -- button:SetMatchesSearch(not isFiltered);
         local slot, bag = button:GetSlotAndBagID()
-        local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-        -- CaerdonAPI:CompareCIMI(self, item, bag, slot)
-        CaerdonWardrobe:UpdateButton(button, item, self, {
-            bag = bag,
-            slot = slot
-        }, {
-        })
+        local shouldUpdate = true
+
+        -- Skip slots whose item hasn't changed since last processing,
+        -- unless a full refresh was requested (e.g. transmog collection update).
+        -- When the item ID and location key both match, the slot is either
+        -- already fully processed or already queued — either way, skip it.
+        if not self.forceFullUpdate then
+            local itemID = C_Container.GetContainerItemID(bag, slot)
+            local cachedID = CaerdonWardrobe:GetButtonItemID(button)
+            if itemID == nil and cachedID ~= nil then
+                -- Slot was emptied — clear cached state so the item is
+                -- properly re-processed if it returns to this slot.
+                CaerdonWardrobe:ClearButtonState(button)
+            elseif itemID == cachedID and itemID ~= nil then
+                local locationKey = format("Bags-bag%d-slot%d", bag, slot)
+                if CaerdonWardrobe:GetButtonLocationKey(button) == locationKey then
+                    shouldUpdate = false
+                end
+            end
+        end
+
+        if shouldUpdate then
+            local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+            CaerdonWardrobe:UpdateButton(button, item, self, {
+                bag = bag,
+                slot = slot
+            }, {
+            })
+        end
     end
 end
 

@@ -14,6 +14,7 @@ BINDING_NAME_CAERDONDEBUGHOVER = L["Open Debug for Hovered Item"]
 
 local availableFeatures = {}
 local registeredFeatures = {}
+local eventFeatureHandlers = {} -- event name -> list of {instance, handler}
 
 CaerdonWardrobeMixin = {}
 
@@ -1043,7 +1044,43 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 
     isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
     if not isReady then
-        self:UpdateButton(button, item, feature, locationInfo, options)
+        -- Tooltip data shows "Retrieving item information". Instead of
+        -- polling through the coroutine, stash the item and let a single
+        -- deferred timer batch-retry all pending items once.
+        local locationKey = locationInfo.locationKey
+        if item:HasItemLocationBankOrBags() then
+            local itemLocation = item:GetItemLocation()
+            local b, s = itemLocation:GetBagAndSlot()
+            locationKey = format("%s-bag%d-slot%d", feature:GetName(), b, s)
+        end
+
+        if not options then options = {} end
+        options.retriesNotReady = (options.retriesNotReady or 0) + 1
+        if options.retriesNotReady <= 10 then
+            self.pendingTooltipRetries = self.pendingTooltipRetries or {}
+            self.pendingTooltipRetries[locationKey] = {
+                button = button,
+                item = item,
+                feature = feature,
+                locationInfo = locationInfo,
+                options = options,
+                expectedKey = locationKey,
+            }
+            if not self.tooltipRetryTimer then
+                self.tooltipRetryTimer = C_Timer.NewTimer(1.0, function()
+                    self.tooltipRetryTimer = nil
+                    local pending = self.pendingTooltipRetries
+                    self.pendingTooltipRetries = nil
+                    if pending then
+                        for key, info in pairs(pending) do
+                            if self:GetButtonLocationKey(info.button) == info.expectedKey then
+                                self:UpdateButton(info.button, info.item, info.feature, info.locationInfo, info.options)
+                            end
+                        end
+                    end
+                end)
+            end
+        end
         return
     end
 
@@ -1245,7 +1282,7 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
             end
 
             local itemsProcessedThisFrame = 0
-            local maxItemsPerFrame = 12 -- Process only a few items per frame
+            local maxItemsPerFrame = 4 -- Process only a few items per frame
 
             for locationKey, processInfo in pairs(self.processQueue) do
                 local button = processInfo.button
@@ -1323,10 +1360,11 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
         handler(self, ...)
     end
 
-    for name, instance in pairs(registeredFeatures) do
-        handler = instance[event]
-        if (handler) then
-            handler(instance, ...)
+    local handlers = eventFeatureHandlers[event]
+    if handlers then
+        for i = 1, #handlers do
+            local entry = handlers[i]
+            entry.handler(entry.instance, ...)
         end
     end
 end
@@ -1352,11 +1390,6 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 
         self.timeSinceLastUpdate = 0
     end
-
-    local name, instance
-    for name, instance in pairs(registeredFeatures) do
-        instance:OnUpdate(elapsed)
-    end
 end
 
 function CaerdonWardrobeMixin:PLAYER_ENTERING_WORLD()
@@ -1379,8 +1412,18 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
             local instanceEvents = instance:Init(self)
             if instanceEvents then
                 for i = 1, #instanceEvents do
-                    -- TODO: Hook up to debugging
-                    self:RegisterEvent(instanceEvents[i])
+                    local eventName = instanceEvents[i]
+                    self:RegisterEvent(eventName)
+                    if not eventFeatureHandlers[eventName] then
+                        eventFeatureHandlers[eventName] = {}
+                    end
+                    local handler = instance[eventName]
+                    if handler then
+                        eventFeatureHandlers[eventName][#eventFeatureHandlers[eventName] + 1] = {
+                            instance = instance,
+                            handler = handler,
+                        }
+                    end
                 end
             end
         end

@@ -10,17 +10,7 @@ function BankMixin:Init()
     hooksecurefunc(BankPanel, "UpdateSearchResults", function(...) self:OnUpdateSearchResults(...) end)
     hooksecurefunc(BankPanel, "RefreshBankPanel", function(...) self:Refresh(...) end)
 
-    return { "TOOLTIP_DATA_UPDATE" }
-end
-
-function BankMixin:TOOLTIP_DATA_UPDATE()
-    if self.refreshTimer then
-        self.refreshTimer:Cancel()
-    end
-
-    self.refreshTimer = C_Timer.NewTimer(0.1, function()
-        self:Refresh()
-    end, 1)
+    return {}
 end
 
 function BankMixin:GetTooltipData(item, locationInfo)

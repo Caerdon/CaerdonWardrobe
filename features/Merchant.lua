@@ -31,11 +31,15 @@ function MerchantMixin:MERCHANT_UPDATE()
 end
 
 function MerchantMixin:TOOLTIP_DATA_UPDATE()
+    if not MerchantFrame:IsShown() then
+        return
+    end
+
     if self.refreshTimer then
         self.refreshTimer:Cancel()
     end
 
-    self.refreshTimer = C_Timer.NewTimer(0.1, function()
+    self.refreshTimer = C_Timer.NewTimer(0.5, function()
         self:Refresh()
     end, 1)
 end
