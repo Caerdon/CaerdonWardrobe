@@ -83,7 +83,8 @@ function BagnonMixin:OnUpdateSlot(bagnonItem)
 	else
 		if bag ~= "vault" then
 			local tab = GetCurrentGuildBankTab()
-			if Bagnon:InGuild() and tab == bag then
+			local owner = bagnonItem.frame and bagnonItem.frame.GetOwner and bagnonItem.frame:GetOwner()
+			if owner and owner.isguild and tab == bag then
 				local itemLink = GetGuildBankItemLink(tab, slot)
 				if itemLink then
 					local item = CaerdonItem:CreateFromItemLink(itemLink)
