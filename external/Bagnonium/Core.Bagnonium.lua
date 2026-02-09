@@ -1,15 +1,15 @@
-local addonName = "Combuctor"
-local CombuctorMixin = {}
+local addonName = "Bagnonium"
+local BagnoniumMixin = {}
 
-function CombuctorMixin:GetName()
+function BagnoniumMixin:GetName()
     return addonName
 end
 
-function CombuctorMixin:Init()
-	hooksecurefunc(Combuctor.Item, "Update", function(...) self:OnUpdateSlot(...) end)
+function BagnoniumMixin:Init()
+	hooksecurefunc(Bagnonium.Item, "Update", function(...) self:OnUpdateSlot(...) end)
 end
 
-function CombuctorMixin:GetTooltipData(item, locationInfo)
+function BagnoniumMixin:GetTooltipData(item, locationInfo)
 	if locationInfo.isOffline then
 		if not item:IsItemEmpty() then
 			return C_TooltipInfo.GetHyperlink(item:GetItemLink())
@@ -23,17 +23,17 @@ function CombuctorMixin:GetTooltipData(item, locationInfo)
 	end
 end
 
-function CombuctorMixin:Refresh()
-	Combuctor.Frames:Update()
+function BagnoniumMixin:Refresh()
+	Bagnonium.Frames:Update()
 end
 
-function CombuctorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+function BagnoniumMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	if locationInfo.isOffline then
 		local showBindingStatus = CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
 		local showOwnIcon = CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
 		local showOtherIcon = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
 		local showSellableIcon = CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
-	
+
 		return {
 			bindingStatus = {
 				shouldShow = showBindingStatus
@@ -68,7 +68,7 @@ function CombuctorMixin:GetDisplayInfo(button, item, feature, locationInfo, opti
 	end
 end
 
-function CombuctorMixin:OnUpdateSlot(button)
+function BagnoniumMixin:OnUpdateSlot(button)
 	local bag, slot = button:GetBag(), button:GetID()
 	if button.info.cached then
 		if button.info.link then
@@ -83,7 +83,8 @@ function CombuctorMixin:OnUpdateSlot(button)
 	else
 		if bag ~= "vault" then
 			local tab = GetCurrentGuildBankTab()
-			if Combuctor:InGuild() and tab == bag then
+			local owner = button.frame and button.frame.GetOwner and button.frame:GetOwner()
+			if owner and owner.isguild and tab == bag then
 				local itemLink = GetGuildBankItemLink(tab, slot)
 				if itemLink then
 					local item = CaerdonItem:CreateFromItemLink(itemLink)
@@ -109,7 +110,7 @@ local isActive = false
 if select(4, C_AddOns.GetAddOnInfo(addonName)) then
 	if C_AddOns.IsAddOnLoaded(addonName) then
 		Version = C_AddOns.GetAddOnMetadata(addonName, "Version")
-		CaerdonWardrobe:RegisterFeature(CombuctorMixin)
+		CaerdonWardrobe:RegisterFeature(BagnoniumMixin)
 		isActive = true
 	end
 end

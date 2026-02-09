@@ -1,5 +1,9 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\FrameXML\UI.xsd">
+<Ui
+    xmlns="http://www.blizzard.com/wow/ui/"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd"
+>
 	<Script file="CaerdonAsyncCallbackSystem.lua" />
 	<Script file="FeatureMixin.lua" />
 	<Script file="ItemDataMixin.lua" />
@@ -7,9 +11,9 @@
 
 	<Frame name="CaerdonWardrobe" secureMixin="CaerdonWardrobeMixin">
 		<Scripts>
-			<OnLoad method="OnLoad"/>
-			<OnEvent method="OnEvent"/>
-      <OnUpdate method="OnUpdate"/>
+			<OnLoad method="OnLoad" />
+			<OnEvent method="OnEvent" />
+      <OnUpdate method="OnUpdate" />
 		</Scripts>
     </Frame>
 
@@ -41,10 +45,10 @@
 	<Script file="external\Auctionator\Core.Auctionator.lua" />
 	<Script file="external\Baganator\Core.Baganator.lua" />
 	<Script file="external\Bagnon\Core.Bagnon.lua" />
+	<Script file="external\Bagnonium\Core.Bagnonium.lua" />
 	<Script file="external\BaudBag\Core.BaudBag.lua" />
 	<Script file="external\BetterBags\Core.BetterBags.lua" />
 	<Script file="external\CargBags\Core.CargBags.lua" />
-	<Script file="external\Combuctor\Core.Combuctor.lua" />
 	<Script file="external\ElvUI\Core.ElvUI.lua" />
 	<Script file="external\Inventorian\Core.Inventorian.lua" />
 	<Script file="external\KkthnxUI\Core.KkthnxUI.lua" />

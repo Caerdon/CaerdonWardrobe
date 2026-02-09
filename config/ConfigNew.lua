@@ -14,7 +14,7 @@ local CaerdonWardrobeConfigMixin = {}
 
 -- Caerdon Wardrobe leverages a set of icons and text where appropriate to call out all of the above items in the following locations: Bank & Bags, Guild Banks, Auction House, Merchants, Dungeon and Raid Journal, Loot Pickup, Group Loot Roll, and the World Map.
 
--- It also provides integration for your favorite bag add-ons: AdiBags, ArkInventory, Bagnon, Baud Bag, cargBags_Nivaya, Combuctor, ElvUI, Inventorian, and LiteBag.  Additionally it supports a few other World Quest addons: World Quest Tab and Zygor World Quest Planner.
+-- It also provides integration for your favorite bag add-ons: AdiBags, ArkInventory, Bagnon, Bagnonium, Baud Bag, cargBags_Nivaya, ElvUI, Inventorian, and LiteBag.  Additionally it supports a few other World Quest addons: World Quest Tab and Zygor World Quest Planner.
 
 -- I don't like slow addons and try my best to keep this addon from impacting your fun.  If Caerdon Wardrobe is causing a performance impact on your game, please let me know!
 -- ]] ]
@@ -114,7 +114,7 @@ end
 -- 		local name = "Enable Debug"
 --         local tooltip = "Adds additional debugging info to tooltips"
 --         local defaultValue = false
-    
+
 --         local setting = Settings.RegisterProxySetting(category, variable, CaerdonWardrobeConfig, type(defaultValue), name, defaultValue)
 --         Settings.CreateCheckBox(category, setting, tooltip)
 --     end
@@ -139,7 +139,7 @@ securecall(SettingsRegistrar.AddRegistrant, SettingsRegistrar, Register)
 -- 		-- if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
 -- 		-- 	CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
 -- 		-- end
-	
+
 -- 		-- CaerdonWardrobe:RefreshItems()
 -- 	elseif ( event == "FIRST_FRAME_RENDERED" ) then
 -- 		C_Timer.After(0, function ()
@@ -159,7 +159,7 @@ securecall(SettingsRegistrar.AddRegistrant, SettingsRegistrar, Register)
 -- function NS:GetDefaultConfig()
 -- 	return {
 -- 		Version = 21,
-		
+
 -- 		Debug = {
 -- 			Enabled = false
 -- 		},
