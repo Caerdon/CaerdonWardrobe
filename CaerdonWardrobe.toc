@@ -1,4 +1,4 @@
-## Interface: 110205, 110207, 120000
+## Interface: 110205, 110207, 120000, 120001
 ## X-Curse-Project-ID: 101123
 ## X-WoWI-ID: 26357
 ## X-Wago-ID: pkNMoqKz
@@ -16,7 +16,7 @@
 ## Category-zhTW: 戰隊收藏
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v4.8.0
+## Version: v4.8.1
 ## SavedVariables: CaerdonWardrobeConfig, CaerdonProfessionData, CaerdonRecipeData
 ## OptionalDeps: WoWUnit, AdiBags, AngrierWorldQuests, ArkInventory, Auctionator, Baganator, Bagnon, Bagnonium, BaudBag, BetterBags, cargBags_Nivaya, ElvUI, Inventorian, KkthnxUI, LegionRemixHelper, LiteBag, Narcissus, Pawn, Skillet, Sorted, TradeSkillMaster, VenturePlan, WorldQuestsList, WorldQuestTracker, ZygorGuidesViewer
 
