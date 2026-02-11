@@ -710,7 +710,10 @@ function CaerdonItemMixin:GetTooltipData(data)
                                 tooltipData.canLearn = false
                                 -- print(self:GetItemLink() .. " already learned")
                             else
-                                tooltipData.canLearn = true
+                                -- Also verify the player has the required profession - old recipes
+                                -- may lack a RestrictedSkill tooltip line so the profession check
+                                -- in that handler never fires.
+                                tooltipData.canLearn = C_TradeSkillUI.IsRecipeProfessionLearned(recipeInfo.recipeID)
                                 -- print("Can learn " .. self:GetItemLink() .. " creates " .. data.hyperlink)
                             end
                             -- TODO: Likely don't need this now that profession data load is handled upfront.
