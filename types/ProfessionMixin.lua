@@ -86,13 +86,13 @@ function CaerdonProfessionMixin:GetProfessionInfo()
                         result.needsItem = true
                     else
                         local matchingItem = nil
+                        local _, _, _, itemCategoryID = C_Item.GetItemUniquenessByID(self.item:GetItemLink())
                         for i = 1, #accessoryGears do
                             local accessoryGear = accessoryGears[i]
                             -- local tooltipInfo = C_TooltipInfo.GetHyperlink(accessoryGear.link)
                             -- DevTools_Dump(tooltipInfo)
                             local isUnique, limitCategoryName, limitCategoryCount, limitCategoryID = C_Item.GetItemUniquenessByID(accessoryGear.link)
                             if isUnique and limitCategoryCount == 1 then -- assuming we can just equip if more than one of the category is allowed
-                                local itemCategoryID = select(4, C_Item.GetItemUniquenessByID(self.item:GetItemLink()))
                                 if itemCategoryID == limitCategoryID then
                                     matchingItem = accessoryGear
                                 end

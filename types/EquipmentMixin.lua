@@ -574,9 +574,8 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
 
     -- Use equipment set for binding text if it's assigned to one
     if C_EquipmentSet.CanUseEquipmentSets() then
-        local setIndex
-        for setIndex = 1, C_EquipmentSet.GetNumEquipmentSets() do
-            local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
+        local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
+        for setIndex = 1, #equipmentSetIDs do
             local equipmentSetID = equipmentSetIDs[setIndex]
             local name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored =
                 C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
