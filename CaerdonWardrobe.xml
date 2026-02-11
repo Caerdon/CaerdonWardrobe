@@ -35,6 +35,7 @@
 	<Script file="features\Mission.lua" />
 	<Script file="features\QuestLog.lua" />
 	<Script file="features\TradeSkill.lua" />
+	<Script file="features\WeeklyRewards.lua" />
 	<Script file="features\WorldMap.lua" />
 	<Script file="features\Tooltip.lua" />
 	<Script file="features\DebugFrame.lua" />
