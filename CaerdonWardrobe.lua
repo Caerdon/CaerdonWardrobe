@@ -1282,7 +1282,7 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
             end
 
             local itemsProcessedThisFrame = 0
-            local maxItemsPerFrame = 4 -- Process only a few items per frame
+            local maxItemsPerFrame = 20 -- Raised from 4; per-item cost is low with status/source caching
 
             for locationKey, processInfo in pairs(self.processQueue) do
                 local button = processInfo.button
@@ -1373,7 +1373,7 @@ local next = next -- faster lookup as a local apparently (haven't measured)
 
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
     self.timeSinceLastUpdate = (self.timeSinceLastUpdate or 0) + elapsed
-    if (self.timeSinceLastUpdate > 0.1) then
+    if (self.timeSinceLastUpdate > 0.05) then
         if self.processItemCoroutine then
             if coroutine.status(self.processItemCoroutine) ~= "dead" then
                 local ok, result = coroutine.resume(self.processItemCoroutine)
