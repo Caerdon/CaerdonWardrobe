@@ -171,32 +171,6 @@ local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel)
         if equipped.level then
             return candidateLevel - equipped.level
         end
-
-        -- NOTE: The following block references module-scope variables (appearanceID, playerClassID)
-        -- that are always nil at this scope. Kept for historical reference but effectively dead code.
-        if appearanceID and playerClassID and C_TransmogCollection.GetValidAppearanceSourcesForClass then
-            local validSources = C_TransmogCollection.GetValidAppearanceSourcesForClass(appearanceID, playerClassID)
-            if type(validSources) == "table" then
-                for _, validSource in ipairs(validSources) do
-                    if validSource.sourceID == sourceID then
-                        validSourceInfoForPlayer = validSource
-                        if not sourceUseErrorType and validSource.useErrorType then
-                            sourceUseErrorType = validSource.useErrorType
-                        end
-                        if not sourceUseError and validSource.useError then
-                            sourceUseError = validSource.useError
-                        end
-
-                        if validSource.playerCanCollect then
-                            playerCanUseSource = true
-                        elseif playerCanUseSource ~= true then
-                            playerCanUseSource = validSource.isValidSourceForPlayer
-                        end
-                        break
-                    end
-                end
-            end
-        end
     else
         if ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
             local comparisonLevel = GetBlockedOffhandComparisonLevel()
