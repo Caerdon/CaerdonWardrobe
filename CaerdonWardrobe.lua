@@ -1442,6 +1442,7 @@ function CaerdonWardrobeMixin:RefreshItems()
 
     -- Invalidate cached status results since game state has changed
     CaerdonItem:InvalidateStatusCache()
+    CaerdonEquipment:InvalidateCaches()
 
     self.refreshTimer = C_Timer.NewTimer(0.1, function()
         local name, instance

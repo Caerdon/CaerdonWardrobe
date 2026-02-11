@@ -58,6 +58,8 @@ local twoHandedInventoryTypeNames = {
     INVTYPE_THROWN = true
 }
 
+local GetEquippedGearSnapshot -- forward declaration; defined after NormalizeItemLevel/DetermineUniqueness
+
 local function GetInventorySlotsForType(inventoryType)
     if not inventoryType then
         return nil
@@ -107,23 +109,20 @@ local function GetCandidateItemLevel(item)
 end
 
 local function IsTwoHandedMainHandEquipped()
-    local mainHandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_MAINHAND)
-    if not (mainHandLocation and mainHandLocation:IsValid() and C_Item.DoesItemExist(mainHandLocation)) then
+    local snapshot = GetEquippedGearSnapshot()
+    local mainHand = snapshot[INVSLOT_MAINHAND]
+    if not mainHand then
         return false
     end
 
-    local inventoryType = C_Item.GetItemInventoryType(mainHandLocation)
-    if inventoryType and twoHandedInventoryTypes[inventoryType] then
+    if mainHand.inventoryType and twoHandedInventoryTypes[mainHand.inventoryType] then
         return true
     end
 
-    if not inventoryType then
-        local itemLink = C_Item.GetItemLink(mainHandLocation)
-        if itemLink then
-            local equipLoc = select(9, GetItemInfo(itemLink))
-            if equipLoc and twoHandedInventoryTypeNames[equipLoc] then
-                return true
-            end
+    if not mainHand.inventoryType and mainHand.link then
+        local equipLoc = select(9, GetItemInfo(mainHand.link))
+        if equipLoc and twoHandedInventoryTypeNames[equipLoc] then
+            return true
         end
     end
 
@@ -143,12 +142,8 @@ local function ShouldIgnoreEmptySlot(slotID, inventoryTypeName)
         return false
     end
 
-    local offhandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_OFFHAND)
-    if offhandLocation and offhandLocation:IsValid() and C_Item.DoesItemExist(offhandLocation) then
-        return false
-    end
-
-    return true
+    local snapshot = GetEquippedGearSnapshot()
+    return not snapshot[INVSLOT_OFFHAND]
 end
 
 local function GetBlockedOffhandComparisonLevel()
@@ -156,13 +151,13 @@ local function GetBlockedOffhandComparisonLevel()
         return nil
     end
 
-    local mainHandLocation = ItemLocation:CreateFromEquipmentSlot(INVSLOT_MAINHAND)
-    if not (mainHandLocation and mainHandLocation:IsValid() and C_Item.DoesItemExist(mainHandLocation)) then
+    local snapshot = GetEquippedGearSnapshot()
+    local mainHand = snapshot[INVSLOT_MAINHAND]
+    if not mainHand then
         return nil
     end
 
-    local mainHandLink = C_Item.GetItemLink(mainHandLocation)
-    return GetComparableItemLevel(mainHandLink, mainHandLocation)
+    return mainHand.level
 end
 
 local function IsOffhandSlotBlocked(inventoryTypeName)
@@ -170,14 +165,15 @@ local function IsOffhandSlotBlocked(inventoryTypeName)
 end
 
 local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel)
-    local location = ItemLocation:CreateFromEquipmentSlot(slotID)
-    if location and location:IsValid() and C_Item.DoesItemExist(location) then
-        local equippedLink = C_Item.GetItemLink(location)
-        local equippedLevel = GetComparableItemLevel(equippedLink, location)
-        if equippedLevel then
-            return candidateLevel - equippedLevel
+    local snapshot = GetEquippedGearSnapshot()
+    local equipped = snapshot[slotID]
+    if equipped then
+        if equipped.level then
+            return candidateLevel - equipped.level
         end
 
+        -- NOTE: The following block references module-scope variables (appearanceID, playerClassID)
+        -- that are always nil at this scope. Kept for historical reference but effectively dead code.
         if appearanceID and playerClassID and C_TransmogCollection.GetValidAppearanceSourcesForClass then
             local validSources = C_TransmogCollection.GetValidAppearanceSourcesForClass(appearanceID, playerClassID)
             if type(validSources) == "table" then
@@ -274,11 +270,11 @@ local function GetUniqueUpgradeInfo(item)
     local candidateLevel = GetCandidateItemLevel(item)
     local inventoryTypeName = item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
+    local snapshot = GetEquippedGearSnapshot()
     local hasEmptyEquipSlot = false
     if inventorySlots then
         for _, equipSlotID in ipairs(inventorySlots) do
-            local equipLocation = ItemLocation:CreateFromEquipmentSlot(equipSlotID)
-            if not (equipLocation and equipLocation:IsValid() and C_Item.DoesItemExist(equipLocation)) then
+            if not snapshot[equipSlotID] then
                 if not ShouldIgnoreEmptySlot(equipSlotID, inventoryTypeName) then
                     hasEmptyEquipSlot = true
                     break
@@ -291,33 +287,20 @@ local function GetUniqueUpgradeInfo(item)
     local equippedBetterOrEqual = 0
     local betterThanEquipped = false
 
-    local function EvaluateMatch(equippedLink, location, equippedCategoryKey)
-        if equippedCategoryKey and equippedCategoryKey == uniqueCategoryKey then
+    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+        local equipped = snapshot[slot]
+        if equipped and equipped.categoryKey and equipped.categoryKey == uniqueCategoryKey then
             equippedMatches = equippedMatches + 1
 
-            local equippedLevel = GetComparableItemLevel(equippedLink, location)
-            if equippedLevel and candidateLevel then
-                if equippedLevel >= candidateLevel then
+            if equipped.level and candidateLevel then
+                if equipped.level >= candidateLevel then
                     equippedBetterOrEqual = equippedBetterOrEqual + 1
                 else
                     betterThanEquipped = true
                 end
-            elseif equippedLevel and not candidateLevel then
+            elseif equipped.level and not candidateLevel then
                 equippedBetterOrEqual = equippedBetterOrEqual + 1
             end
-            return true
-        end
-        return false
-    end
-
-    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
-        local location = ItemLocation:CreateFromEquipmentSlot(slot)
-        if location and location:IsValid() and C_Item.DoesItemExist(location) then
-            local equippedLink = C_Item.GetItemLink(location)
-            local equippedID = C_Item.GetItemID(location)
-
-            local equippedCategoryKey = select(1, DetermineUniqueness(equippedLink or equippedID, equippedID))
-            EvaluateMatch(equippedLink, location, equippedCategoryKey)
         end
     end
 
@@ -336,6 +319,49 @@ local function NormalizeItemLevel(level)
     return math.floor(level + 0.5)
 end
 
+-- Transmog source API caches (invalidated via CaerdonEquipment:InvalidateCaches)
+local sourceInfoCache = {}
+local appearanceSourcesCache = {}
+
+-- Lazy-built snapshot of equipped gear data, shared by all upgrade helper functions.
+-- Built once per invalidation cycle (equipment/transmog change), avoids repeated
+-- ItemLocation creation and API calls across all bag items.
+local equippedGearSnapshot = nil
+
+GetEquippedGearSnapshot = function()
+    if equippedGearSnapshot then
+        return equippedGearSnapshot
+    end
+
+    equippedGearSnapshot = {}
+    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+        local location = ItemLocation:CreateFromEquipmentSlot(slot)
+        if location and location:IsValid() and C_Item.DoesItemExist(location) then
+            local link = C_Item.GetItemLink(location)
+            local id = C_Item.GetItemID(location)
+            local level = GetComparableItemLevel(link, location)
+            local categoryKey, limitCount = DetermineUniqueness(link or id, id)
+            equippedGearSnapshot[slot] = {
+                link = link,
+                id = id,
+                level = level,
+                normalizedLevel = NormalizeItemLevel(level),
+                categoryKey = categoryKey,
+                limitCount = limitCount,
+                inventoryType = C_Item.GetItemInventoryType(location),
+            }
+        end
+    end
+
+    return equippedGearSnapshot
+end
+
+function CaerdonEquipment:InvalidateCaches()
+    wipe(sourceInfoCache)
+    wipe(appearanceSourcesCache)
+    equippedGearSnapshot = nil
+end
+
 local function HasBetterOrEqualEquippedItem(item)
     local inventoryType = item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryType)
@@ -348,16 +374,15 @@ local function HasBetterOrEqualEquippedItem(item)
         return false
     end
 
+    local snapshot = GetEquippedGearSnapshot()
     local normalizedCandidateLevel = NormalizeItemLevel(candidateLevel)
     local filledSlots = 0
     local strictlyBetterCount = 0
     for _, slotID in ipairs(inventorySlots) do
-        local location = ItemLocation:CreateFromEquipmentSlot(slotID)
-        if location and location:IsValid() and C_Item.DoesItemExist(location) then
+        local equipped = snapshot[slotID]
+        if equipped then
             filledSlots = filledSlots + 1
-            local equippedLink = C_Item.GetItemLink(location)
-            local equippedLevel = GetComparableItemLevel(equippedLink, location)
-            if equippedLevel and NormalizeItemLevel(equippedLevel) > normalizedCandidateLevel then
+            if equipped.normalizedLevel and equipped.normalizedLevel > normalizedCandidateLevel then
                 strictlyBetterCount = strictlyBetterCount + 1
             end
         end
@@ -384,29 +409,23 @@ local function HasEqualEquippedItemLevel(item)
         return false
     end
 
+    local snapshot = GetEquippedGearSnapshot()
     local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
     local uniqueLimitedToOne = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
     local normalizedCandidateLevel = NormalizeItemLevel(candidateLevel)
     local betterUniqueEquipped = false
     local hasEqualMatch = false
     for _, slotID in ipairs(inventorySlots) do
-        local location = ItemLocation:CreateFromEquipmentSlot(slotID)
-        if location and location:IsValid() and C_Item.DoesItemExist(location) then
-            local equippedLink = C_Item.GetItemLink(location)
-            local equippedLevel = GetComparableItemLevel(equippedLink, location)
-            if equippedLevel then
-                local normalizedEquipped = NormalizeItemLevel(equippedLevel)
-                if normalizedEquipped and normalizedEquipped == normalizedCandidateLevel then
-                    hasEqualMatch = true
-                end
+        local equipped = snapshot[slotID]
+        if equipped and equipped.normalizedLevel then
+            if equipped.normalizedLevel == normalizedCandidateLevel then
+                hasEqualMatch = true
+            end
 
-                if uniqueLimitedToOne and not betterUniqueEquipped then
-                    local equippedID = C_Item.GetItemID(location)
-                    local equippedUniqueKey = select(1, DetermineUniqueness(equippedLink or equippedID, equippedID))
-                    if equippedUniqueKey and equippedUniqueKey == uniqueCategoryKey and
-                        normalizedEquipped and normalizedEquipped > normalizedCandidateLevel then
-                        betterUniqueEquipped = true
-                    end
+            if uniqueLimitedToOne and not betterUniqueEquipped then
+                if equipped.categoryKey and equipped.categoryKey == uniqueCategoryKey and
+                    equipped.normalizedLevel > normalizedCandidateLevel then
+                    betterUniqueEquipped = true
                 end
             end
         end
@@ -431,6 +450,7 @@ local function GetUpgradeItemLevelDelta(item)
         return nil
     end
 
+    local snapshot = GetEquippedGearSnapshot()
     local itemLink = item:GetItemLink()
     local itemID = item:GetItemID()
     local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
@@ -438,17 +458,12 @@ local function GetUpgradeItemLevelDelta(item)
     local matchingUniqueSlots = nil
     if restrictToMatchingUnique then
         for _, slotID in ipairs(inventorySlots) do
-            local location = ItemLocation:CreateFromEquipmentSlot(slotID)
-            if location and location:IsValid() and C_Item.DoesItemExist(location) then
-                local equippedLink = C_Item.GetItemLink(location)
-                local equippedID = C_Item.GetItemID(location)
-                local equippedKey = select(1, DetermineUniqueness(equippedLink or equippedID, equippedID))
-                if equippedKey and equippedKey == uniqueCategoryKey then
-                    if not matchingUniqueSlots then
-                        matchingUniqueSlots = {}
-                    end
-                    matchingUniqueSlots[slotID] = true
+            local equipped = snapshot[slotID]
+            if equipped and equipped.categoryKey and equipped.categoryKey == uniqueCategoryKey then
+                if not matchingUniqueSlots then
+                    matchingUniqueSlots = {}
                 end
+                matchingUniqueSlots[slotID] = true
             end
         end
         if not matchingUniqueSlots then
@@ -777,17 +792,19 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             if appearanceID then
                 local sourceIndex, source
                 -- GetAllAppearanceSources includes hidden and otherwise unusable sources, so it's the most thorough
-                local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
+                local appearanceSourceIDs = appearanceSourcesCache[appearanceID]
+                if not appearanceSourceIDs then
+                    appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
+                    appearanceSourcesCache[appearanceID] = appearanceSourceIDs
+                end
                 for sourceIndex, source in pairs(appearanceSourceIDs) do
-                    local isInfoReadySearch, canCollectSearch = C_TransmogCollection.PlayerCanCollectSource(source)
-                    local info = C_TransmogCollection.GetSourceInfo(source)
-
-                    -- TODO: This is how Blizz confirms data is loaded - need to look at CaerdonItem load handling and account for it
-                    -- if info and info.quality then
-                    --     -- Item is ready
-                    -- else
-                    --     print('Search SourceInfo quality not available: ' .. itemLink)
-                    -- end
+                    local info = sourceInfoCache[source]
+                    if not info then
+                        info = C_TransmogCollection.GetSourceInfo(source)
+                        if info then
+                            sourceInfoCache[source] = info
+                        end
+                    end
 
                     if info then
                         if not appearanceSources then
@@ -825,13 +842,21 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         end
                     end
 
-                    local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item
-                        .GetItemInfoInstant(info.itemID)
-                    -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
-                    info.itemSubTypeID = sourceSubTypeID             -- stuff it in here (mostly for debug)
-                    info.specs = C_Item.GetItemSpecInfo(info.itemID) -- also this
+                    -- Populate derived fields on cached info only once
+                    if not info.itemSubTypeID then
+                        local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item
+                            .GetItemInfoInstant(info.itemID)
+                        -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
+                        info.itemSubTypeID = sourceSubTypeID             -- stuff it in here (mostly for debug)
+                    end
+                    if not info.specs then
+                        info.specs = C_Item.GetItemSpecInfo(info.itemID) -- also this
+                    end
 
-                    local sourceMinLevel = (select(5, C_Item.GetItemInfo(info.itemID)))
+                    if info.cachedMinLevel == nil then
+                        info.cachedMinLevel = (select(5, C_Item.GetItemInfo(info.itemID))) or false
+                    end
+                    local sourceMinLevel = info.cachedMinLevel or nil
                     if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
                         lowestLevelFound = sourceMinLevel
                     end
