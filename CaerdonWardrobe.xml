@@ -29,6 +29,7 @@
 	<Script file="features\EncounterJournal.lua" />
 	<Script file="features\GroupLoot.lua" />
 	<Script file="features\GuildBank.lua" />
+	<Script file="features\ItemConversion.lua" />
 	<Script file="features\Loot.lua" />
 	<Script file="features\Mail.lua" />
 	<Script file="features\Merchant.lua" />
