@@ -43,6 +43,7 @@ function CaerdonWardrobeMixin:EnsureCaerdonButton(originalButton)
     local state = GetButtonState(originalButton, true)
     if not state.caerdonButton then
         local frame = CreateFrame("Frame", nil, originalButton)
+        frame:SetAllPoints(originalButton)
         frame.searchOverlay = originalButton.searchOverlay
         state.caerdonButton = frame
     end
@@ -954,6 +955,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 
     -- Measure text and resize accordingly
     bindsOnText:ClearAllPoints()
+    bindsOnText:SetScale(1) -- Reset scale before measuring so GetStringWidth is accurate
     bindsOnText:SetSize(0, 0)
     bindsOnText:SetPoint("LEFT")
     bindsOnText:SetPoint("RIGHT")
@@ -965,10 +967,14 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     local _, fontHeight = bindsOnText:GetFont()
     local newHeight = fontHeight or bindsOnText:GetStringHeight() or bindsOnText:GetHeight()
 
-    bindsOnText:ClearAllPoints()
-    bindsOnText:SetSize(newWidth, newHeight)
-
+    -- When bindingScale < 1, the font string needs extra logical width to prevent
+    -- text truncation after SetScale shrinks the effective render area.
     local bindingScale = options.bindingScale or 1
+    local scaledWidth = (bindingScale < 1) and (newWidth / bindingScale) or newWidth
+
+    bindsOnText:ClearAllPoints()
+    bindsOnText:SetSize(scaledWidth, newHeight)
+
     local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
     local xOffset = 1
     if options.bindingOffsetX ~= nil then
@@ -1273,92 +1279,99 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 end
 
 function CaerdonWardrobeMixin:ProcessItem_Coroutine()
-    if self.processQueue == nil then
-        self.processQueue = {}
+    -- Always reset processQueue so stale ContinuableContainer callbacks from a
+    -- previous coroutine don't block this one.  Those callbacks can set
+    -- processQueue to non-nil after the old coroutine exits, which previously
+    -- caused the nil-guard to skip all processing permanently.
+    self.processQueue = {}
 
-        while true do
-            local itemCount = 0
-            for locationKey, processInfo in pairs(self.waitingToProcess) do
-                -- Don't process item if the key is different than expected
-                if self:GetButtonLocationKey(processInfo.button) == locationKey then
-                    itemCount = itemCount + 1
-                    self.processQueue[locationKey] = processInfo
-                end
-
-                self.waitingToProcess[locationKey] = nil
+    while true do
+        local itemCount = 0
+        for locationKey, processInfo in pairs(self.waitingToProcess) do
+            -- Don't process item if the key is different than expected
+            if self:GetButtonLocationKey(processInfo.button) == locationKey then
+                itemCount = itemCount + 1
+                self.processQueue[locationKey] = processInfo
             end
 
-            local itemsProcessedThisFrame = 0
-            local maxItemsPerFrame = 20 -- Raised from 4; per-item cost is low with status/source caching
-
-            for locationKey, processInfo in pairs(self.processQueue) do
-                local button = processInfo.button
-                local item = processInfo.item
-                local feature = processInfo.feature
-                local locationInfo = processInfo.locationInfo
-                local options = processInfo.options
-
-                if feature:IsSameItem(button, item, locationInfo) and self:GetButtonLocationKey(button) == locationKey then
-                    if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-                        self:ProcessItem(button, item, feature, locationInfo, options)
-                        itemsProcessedThisFrame = itemsProcessedThisFrame + 1
-                    else
-                        -- Check if item is already cached to process immediately
-                        if item:IsItemDataCached() then
-                            if self:GetButtonLocationKey(button) == locationKey then
-                                self:ProcessItem(button, item, feature, locationInfo, options)
-                                itemsProcessedThisFrame = itemsProcessedThisFrame + 1
-                            else
-                                self:ClearButton(button)
-                            end
-                        else
-                            -- Item not cached, add to continuable container
-                            self.featureProcessContinuables[feature] = self.featureProcessContinuables[feature] or
-                                ContinuableContainer:Create();
-                            self.featureProcessContinuables[feature]:AddContinuable(item);
-                            self.featureProcessItems[feature] = self.featureProcessItems[feature] or {}
-                            self.featureProcessItems[feature][locationKey] = processInfo
-                        end
-                    end
-                else
-                    self:ClearButton(button)
-                end
-
-                self.processQueue[locationKey] = nil
-
-                -- Yield after processing a few items to maintain frame rate
-                if itemsProcessedThisFrame >= maxItemsPerFrame then
-                    coroutine.yield()
-                    itemsProcessedThisFrame = 0
-                end
-            end
-
-            for feature, continuableContainer in pairs(self.featureProcessContinuables) do
-                continuableContainer:ContinueOnLoad(function()
-                    local items = self.featureProcessItems[feature]
-                    -- Store items that need processing back into the queue
-                    if items then
-                        for locationKey, processInfo in pairs(items) do
-                            if not self.processQueue then
-                                self.processQueue = {}
-                            end
-                            self.processQueue[locationKey] = processInfo
-                        end
-                        self.featureProcessItems[feature] = nil
-                    end
-                end)
-                self.featureProcessContinuables[feature] = nil
-            end
-
-            if itemCount == 0 and itemsProcessedThisFrame == 0 then
-                break
-            end
-
-            coroutine.yield()
+            self.waitingToProcess[locationKey] = nil
         end
 
-        self.processQueue = nil
+        local itemsProcessedThisFrame = 0
+        local maxItemsPerFrame = 20 -- Raised from 4; per-item cost is low with status/source caching
+
+        for locationKey, processInfo in pairs(self.processQueue) do
+            local button = processInfo.button
+            local item = processInfo.item
+            local feature = processInfo.feature
+            local locationInfo = processInfo.locationInfo
+            local options = processInfo.options
+
+            if feature:IsSameItem(button, item, locationInfo) and self:GetButtonLocationKey(button) == locationKey then
+                if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
+                    self:ProcessItem(button, item, feature, locationInfo, options)
+                    itemsProcessedThisFrame = itemsProcessedThisFrame + 1
+                else
+                    -- Check if item is already cached to process immediately
+                    if item:IsItemDataCached() then
+                        if self:GetButtonLocationKey(button) == locationKey then
+                            self:ProcessItem(button, item, feature, locationInfo, options)
+                            itemsProcessedThisFrame = itemsProcessedThisFrame + 1
+                        else
+                            self:ClearButton(button)
+                        end
+                    else
+                        -- Item not cached, add to continuable container
+                        self.featureProcessContinuables[feature] = self.featureProcessContinuables[feature] or
+                            ContinuableContainer:Create();
+                        self.featureProcessContinuables[feature]:AddContinuable(item);
+                        self.featureProcessItems[feature] = self.featureProcessItems[feature] or {}
+                        self.featureProcessItems[feature][locationKey] = processInfo
+                    end
+                end
+            else
+                self:ClearButton(button)
+            end
+
+            self.processQueue[locationKey] = nil
+
+            -- Yield after processing a few items to maintain frame rate
+            if itemsProcessedThisFrame >= maxItemsPerFrame then
+                coroutine.yield()
+                itemsProcessedThisFrame = 0
+            end
+        end
+
+        for feature, continuableContainer in pairs(self.featureProcessContinuables) do
+            continuableContainer:ContinueOnLoad(function()
+                local items = self.featureProcessItems[feature]
+                -- Store items that need processing back into the queue.
+                -- Route through waitingToProcess so items are picked up even if
+                -- this callback fires after the current coroutine has exited.
+                if items then
+                    for locationKey, processInfo in pairs(items) do
+                        self.waitingToProcess[locationKey] = processInfo
+                    end
+                    self.featureProcessItems[feature] = nil
+
+                    -- Re-register OnUpdate so a new coroutine is created if needed
+                    if not self:GetScript("OnUpdate") then
+                        self.timeSinceLastUpdate = 0
+                        self:SetScript("OnUpdate", self.OnUpdate)
+                    end
+                end
+            end)
+            self.featureProcessContinuables[feature] = nil
+        end
+
+        if itemCount == 0 and itemsProcessedThisFrame == 0 then
+            break
+        end
+
+        coroutine.yield()
     end
+
+    self.processQueue = nil
 end
 
 function CaerdonWardrobeMixin:OnEvent(event, ...)

@@ -483,6 +483,17 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         -- TODO: Not sure why this is the case?  EncounterJournal links aren't returning source info
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(self.item:GetItemID())
     end
+    -- Fallback to extraData for items from SetSelectionPanel etc. where GetItemInfo may return nil
+    if not sourceID and self.item.extraData and self.item.extraData.appearanceSourceID then
+        sourceID = self.item.extraData.appearanceSourceID
+        appearanceID = self.item.extraData.appearanceID
+    end
+    if not appearanceID and sourceID then
+        local info = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+        if info then
+            appearanceID = info.appearanceID
+        end
+    end
 
     local waitingForItems = {}
     local continuableContainer = ContinuableContainer:Create();
@@ -674,9 +685,15 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         end
     end
 
-    if item.extraData and item.extraData.appearanceID and item.extraData.appearanceSourceID then
-        appearanceID = item.extraData.appearanceID
+    if item.extraData and item.extraData.appearanceSourceID then
         sourceID = item.extraData.appearanceSourceID
+        appearanceID = item.extraData.appearanceID
+        if not appearanceID then
+            local extraInfo = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+            if extraInfo then
+                appearanceID = extraInfo.appearanceID
+            end
+        end
     else
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
         if (not sourceID or not appearanceID) and C_Item.IsDressableItemByID(item:GetItemID()) then -- not finding via transmog collection so need to do the DressUp hack

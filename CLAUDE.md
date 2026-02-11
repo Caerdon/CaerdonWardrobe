@@ -185,6 +185,52 @@ All of these indicate the item will teach you something if used, so they should 
 
 **Impact:** If ensembles can teach class-restricted sources, we need to revise our classification logic to not show "otherNoLoot" based solely on `useErrorType=7/8/9`. We may need to find a different API indicator for truly unlearnable sources, or accept that all ensemble sources are learnable.
 
+## Processing Pipeline Architecture
+
+### Coroutine Processing
+- `UpdateButton()` queues items into `waitingToProcess` keyed by `locationKey`
+- `ProcessItem_Coroutine` (runs via `OnUpdate` every 50ms) moves items to `processQueue` and processes them
+- Items where `IsItemDataCached()` is false go to a `ContinuableContainer` async path
+- `IsItemDataCached()` requires BOTH `IsItemCached()` (WoW cache) AND `customDataLoaded` (CaerdonItem flag)
+- Features MUST call `ContinueOnItemLoad` before `UpdateButton` so `customDataLoaded=true`; without this, items go to the ContinuableContainer path and may never process directly
+
+### ContinuableContainer Callback Routing
+- ContinuableContainer callbacks route items back through `waitingToProcess` (not `processQueue`) and re-register `OnUpdate` if needed
+- This ensures items are picked up even if the callback fires after the current coroutine has exited
+- `processQueue` is always reset to `{}` at coroutine start to prevent stale state from blocking processing
+
+### Caerdon Button Overlay
+- `EnsureCaerdonButton()` creates a child `Frame` of the original button with `SetAllPoints(originalButton)`
+- Holds `mogStatus` textures, `bindsOnText` FontString, and `upgradeDeltaText` FontString
+- `buttonState` uses weak keys (`__mode="k"`); entries auto-GC when button frames are collected
+
+### Binding Text and SetScale
+- When `bindingScale < 1`, the font string width must be divided by the scale factor (`SetSize(width / scale, height)`) to prevent text truncation after `SetScale` shrinks the render area
+- Scale is reset to 1.0 before measuring with `GetStringWidth()` to ensure accurate measurement
+
+## DressingRoom Feature
+
+### Hook Setup
+- `TryHookDressUp()` installs hooks in independent groups because required Blizzard globals load from different addons:
+  - `DressUpFrameTransmogSetButtonMixin` → `Blizzard_SharedXMLGame`
+  - `DressUpFrame` → `Blizzard_UIPanels_Game`
+  - `DressUpOutfitDetailsSlotMixin` → Not in public source code; loads later from an unknown addon
+- `ADDON_LOADED` retries `TryHookDressUp()` on every addon load until both hook groups are installed
+- `hooksecurefunc` on mixin tables works with ScrollBox buttons because `Mixin()` copies the already-hooked function to new instances
+
+### SetSelectionPanel Items
+- Individual ensemble items in the SetSelectionPanel are Equipment type (not Consumable)
+- `UpdateSetSelectionButton` sets `extraData.appearanceSourceID` from `elementData.itemModifiedAppearanceID` so the Equipment pipeline can identify the transmog source
+- Uses `ContinueOnItemLoad` → `doUpdate` pattern to ensure `customDataLoaded=true` before calling `UpdateButton`
+- Display options use smaller sizes for the 24×24 icons: `statusProminentSize=13`, `bindingScale=0.7`
+
+## LoadSources `#waitingForItems` — Known Quirk (Do NOT Change)
+
+- `waitingForItems` uses item IDs (large numbers) as keys, not sequential integers
+- Lua's `#` operator returns 0 for non-sequential keys, so `#waitingForItems == 0` always evaluates true immediately after the loop
+- This is **intentionally left as-is**: the immediate `callbackFunction()` is harmless because `ProcessTheItem`/`FailTheItem` handle real completion using `not next(waitingForItems)`
+- Changing to `not next(waitingForItems)` causes `LoadSources` to actually wait for all source items to load, which blocks the entire `ContinuableContainer` including Consumable/ensemble items from the same batch — this caused a regression where all ensembles showed as unlearnable
+
 ## Important Context
 
 - The addon displays icons on various UI elements (bags, merchant frames, etc.) to show transmog collection status

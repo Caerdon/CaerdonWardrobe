@@ -159,35 +159,38 @@ function DressingRoomMixin:Init()
 end
 
 function DressingRoomMixin:TryHookDressUp()
-    if self.hooked then
-        return
-    end
-
-    if not DressUpFrame or not DressUpFrameTransmogSetButtonMixin or not DressUpOutfitDetailsSlotMixin then
-        return
-    end
-
-    self.hooked = true
     local feature = self
 
-    local function updateSetSelectionButton(button)
-        feature:UpdateSetSelectionButton(button)
+    -- Hook SetSelectionPanel buttons (ensemble item list)
+    if not self.hookedSetSelection and DressUpFrame and DressUpFrameTransmogSetButtonMixin then
+        self.hookedSetSelection = true
+
+        local function updateSetSelectionButton(button)
+            feature:UpdateSetSelectionButton(button)
+        end
+
+        hooksecurefunc(DressUpFrameTransmogSetButtonMixin, "InitItem", updateSetSelectionButton)
+        hooksecurefunc(DressUpFrameTransmogSetButtonMixin, "Refresh", updateSetSelectionButton)
     end
 
-    hooksecurefunc(DressUpFrameTransmogSetButtonMixin, "InitItem", updateSetSelectionButton)
-    hooksecurefunc(DressUpFrameTransmogSetButtonMixin, "Refresh", updateSetSelectionButton)
+    -- Hook outfit detail slots (separate mixin, may load later)
+    if not self.hookedOutfitSlots and DressUpOutfitDetailsSlotMixin then
+        self.hookedOutfitSlots = true
 
-    hooksecurefunc(DressUpOutfitDetailsSlotMixin, "SetAppearance", function(slotFrame, slotID, transmogID, isSecondary)
-        feature:UpdateOutfitSlot(slotFrame, transmogID)
-    end)
+        hooksecurefunc(DressUpOutfitDetailsSlotMixin, "SetAppearance", function(slotFrame, slotID, transmogID, isSecondary)
+            feature:UpdateOutfitSlot(slotFrame, transmogID)
+        end)
 
-    hooksecurefunc(DressUpOutfitDetailsSlotMixin, "SetIllusion", function(slotFrame, slotID, transmogID)
-        feature:UpdateOutfitSlot(slotFrame, transmogID)
-    end)
+        hooksecurefunc(DressUpOutfitDetailsSlotMixin, "SetIllusion", function(slotFrame, slotID, transmogID)
+            feature:UpdateOutfitSlot(slotFrame, transmogID)
+        end)
+    end
+
+    self.hooked = self.hookedSetSelection and self.hookedOutfitSlots
 end
 
 function DressingRoomMixin:ADDON_LOADED(name)
-    if name == "Blizzard_UIPanels_Game" or name == "Blizzard_SharedXMLGame" then
+    if not self.hooked then
         self:TryHookDressUp()
     end
 end
@@ -222,6 +225,14 @@ function DressingRoomMixin:UpdateSetSelectionButton(button)
     end
 
     local item = CaerdonItem:CreateFromItemID(itemID)
+    -- Pass the sourceID from the set element data so the Equipment pipeline can
+    -- identify the transmog source without relying on C_TransmogCollection.GetItemInfo,
+    -- which often returns nil for items created from a bare itemID.
+    if elementData.itemModifiedAppearanceID then
+        item.extraData = {
+            appearanceSourceID = elementData.itemModifiedAppearanceID
+        }
+    end
     local panel = DressUpFrame and DressUpFrame.SetSelectionPanel
     local setID = panel and panel.setID or 0
     local appearanceID = elementData.itemModifiedAppearanceID or itemID
@@ -232,15 +243,28 @@ function DressingRoomMixin:UpdateSetSelectionButton(button)
 
     local options = {
         relativeFrame = button.Icon,
-        bindingScale = 0.8,
-        statusProminentSize = 15,
+        bindingScale = 0.7,
+        statusProminentSize = 13,
         statusOffsetX = 1,
         statusOffsetY = 1
     }
 
-    CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
+    local function doUpdate()
+        -- Guard: button may have been recycled while waiting for item data
+        if button.elementData and button.elementData.itemID == itemID then
+            CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
+            SetDebugContext(button, item, appearanceID)
+        end
+    end
 
-    SetDebugContext(button, item, appearanceID)
+    -- Ensure item data (including Equipment source loading) is fully cached before
+    -- entering the coroutine pipeline. Without this, customDataLoaded stays false
+    -- and items are never processed by ProcessItem.
+    if item:IsItemDataCached() then
+        doUpdate()
+    else
+        item:ContinueOnItemLoad(doUpdate)
+    end
 end
 
 function DressingRoomMixin:UpdateOutfitSlot(slotFrame, transmogIDOverride)
@@ -307,9 +331,16 @@ function DressingRoomMixin:UpdateOutfitSlot(slotFrame, transmogIDOverride)
         statusOffsetY = 3
     }
 
-    CaerdonWardrobe:UpdateButton(slotFrame, item, self, locationInfo, options)
+    local function doUpdate()
+        CaerdonWardrobe:UpdateButton(slotFrame, item, self, locationInfo, options)
+        SetDebugContext(slotFrame, item, transmogID)
+    end
 
-    SetDebugContext(slotFrame, item, transmogID)
+    if item:IsItemDataCached() then
+        doUpdate()
+    else
+        item:ContinueOnItemLoad(doUpdate)
+    end
 end
 
 function DressingRoomMixin:ClearOutfitSlot(slotFrame)
@@ -328,6 +359,20 @@ end
 
 function DressingRoomMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
+
+    if not DressUpFrame or not DressUpFrame:IsShown() then
+        return
+    end
+
+    -- Re-process visible SetSelectionPanel buttons after cache invalidation
+    local panel = DressUpFrame.SetSelectionPanel
+    if panel and panel:IsShown() and panel.ScrollBox then
+        panel.ScrollBox:ForEachFrame(function(button)
+            if button and button.elementData and button:IsShown() then
+                self:UpdateSetSelectionButton(button)
+            end
+        end)
+    end
 end
 
 function DressingRoomMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)

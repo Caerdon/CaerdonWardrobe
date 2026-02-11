@@ -1204,6 +1204,11 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     elseif caerdonType == CaerdonItemType.Consumable then
         local consumableInfo = itemData:GetConsumableInfo()
+        if consumableInfo.isNotReady then
+            -- Transmog source data not yet available; defer to avoid caching a wrong result.
+            isReady = false
+            return isReady
+        end
         if consumableInfo.needsItem then
             -- Use canEquip instead of validForCharacter to handle ensembles with cross-class sources
             if consumableInfo.canEquip then

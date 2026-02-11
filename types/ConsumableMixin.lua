@@ -144,6 +144,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
     local otherNoLootItem = false  -- Nothing here is learnable by the current character
     local validForCharacter = true
     local canEquipEnsemble = false -- Track if player can equip uncollected sources from ensemble
+    local hasPendingSourceInfo = false
     local playerLevel = UnitLevel("player")
     local _, _, playerClassID = UnitClass("player")
     local playerClassMask = playerClassID and bit_lshift(1, playerClassID - 1) or nil
@@ -468,6 +469,8 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                         end
                                     end
                                 end
+                            else
+                                hasPendingSourceInfo = true
                             end
                         end
 
@@ -707,6 +710,8 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                         end
                                     end
                                 end
+                            else
+                                hasPendingSourceInfo = true
                             end
                         end
 
@@ -767,7 +772,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
             local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
             for sourceIDIndex = 1, #sourceIDs do
                 local sourceInfo = GetCachedSourceInfo(sourceIDs[sourceIDIndex])
-                if sourceInfo and not sourceInfo.isCollected then
+                if not sourceInfo then
+                    hasPendingSourceInfo = true
+                elseif not sourceInfo.isCollected then
                     needsItem = true
                     -- Have to iterate through all sources provided in case some are not valid for the toon
                     if not validForCharacter then
@@ -847,6 +854,10 @@ function CaerdonConsumableMixin:GetConsumableInfo()
         -- For ensembles, canEquip should reflect if player can equip uncollected sources
         -- Not just if the set itself is marked as valid for character
         canEquip = validForCharacter or canEquipEnsemble,
-        isEnsemble = transmogSetID ~= nil
+        isEnsemble = transmogSetID ~= nil,
+        -- Any missing source data means the classification may be wrong (partial data
+        -- can produce incorrect results like "other" instead of "own"). Always defer
+        -- so the retry mechanism re-evaluates once all source info is available.
+        isNotReady = hasPendingSourceInfo
     }
 end
