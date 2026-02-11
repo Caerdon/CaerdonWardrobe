@@ -39,6 +39,44 @@ CaerdonItemBind = {
     WarboundUntilEquip = "Warbound until Equip"
 }
 
+-- Static lookup table for binding text in tooltip parsing (constant, avoids per-call recreation)
+local bindTextTable = {
+    [ITEM_ACCOUNTBOUND]        = L["BoA"],
+    [ITEM_BNETACCOUNTBOUND]    = L["BoA"],
+    [ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
+    [ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
+}
+
+-- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state)
+-- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
+local statusCache = {}
+function CaerdonItem:InvalidateStatusCache()
+    wipe(statusCache)
+end
+
+-- Reusable table for GetTooltipData output to avoid per-call allocation.
+-- Safe because GetTooltipData is only called synchronously within GetCaerdonStatus.
+local recycledTooltipData = {}
+local function ResetTooltipData(embeddedLink)
+    local t = recycledTooltipData
+    t.canLearn = false
+    t.canCombine = false
+    t.hasEquipEffect = false
+    t.isRelearn = false
+    t.bindingStatus = nil
+    t.isRetrieving = false
+    t.isSoulbound = false
+    t.isKnownSpell = false
+    t.isLocked = false
+    t.isOpenable = false
+    t.supercedingSpellNotKnown = false
+    t.foundRedRequirements = false
+    t.requiredTradeSkillMissingOrUnleveled = false
+    t.requiredTradeSkillTooLow = false
+    t.embeddedLink = embeddedLink
+    return t
+end
+
 local function EnsureProfessionsFrameLoaded()
     local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_Professions"))
         or (IsAddOnLoaded and IsAddOnLoaded("Blizzard_Professions"))
@@ -625,34 +663,11 @@ function CaerdonItemMixin:GetTooltipData(data)
         data = C_TooltipInfo and C_TooltipInfo.GetHyperlink(self:GetItemLink()) or nil
     end
 
-    if not data then return {} end
+    if not data then return ResetTooltipData(nil) end
 
-    local bindTextTable = {
-        [ITEM_ACCOUNTBOUND]        = L["BoA"],
-        [ITEM_BNETACCOUNTBOUND]    = L["BoA"],
-        [ITEM_BIND_TO_ACCOUNT]     = L["BoA"],
-        [ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
-        -- [ITEM_BIND_ON_EQUIP]       = L["BoE"],
-        -- [ITEM_BIND_ON_USE]         = L["BoE"]
-    }
-
-    local tooltipData = {
-        canLearn = false,
-        canCombine = false,
-        hasEquipEffect = false,
-        isRelearn = false,
-        bindingStatus = nil,
-        isRetrieving = false,
-        isSoulbound = false,
-        isKnownSpell = false,
-        isLocked = false,
-        isOpenable = false,
-        supercedingSpellNotKnown = false,
-        foundRedRequirements = false,
-        requiredTradeSkillMissingOrUnleveled = false,
-        requiredTradeSkillTooLow = false,
-        embeddedLink = data.hyperlink
-    }
+    -- bindTextTable is now module-level (constant)
+    -- tooltipData is recycled to avoid per-call allocation
+    local tooltipData = ResetTooltipData(data.hyperlink)
 
     -- TODO: Hack to handle Pet Cage - need to move down into BattlePetMixin and get CaerdonItem to handle it upfront if needed.
     local isBattlePet = self:GetCaerdonItemType() == CaerdonItemType.BattlePet
@@ -1089,9 +1104,20 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         return
     end
 
+    -- Pet Cage results depend on feature/location so they can't be cached by itemLink alone
+    local isPetCage = self:GetItemName() == L["Pet Cage"]
+    local statusCacheKey
+    if not isPetCage then
+        local isBound = self:IsSoulbound()
+        statusCacheKey = isBound and (itemLink .. "|B") or itemLink
+        local cached = statusCache[statusCacheKey]
+        if cached then
+            return cached[1], cached[2], cached[3], cached[4]
+        end
+    end
 
     local data = nil
-    if self:GetItemName() == L["Pet Cage"] then
+    if isPetCage then
         -- Was hoping to just use the item link but battlepets in particular cause issues showing up as Pet Cage.
         -- Could check CaerdonItemType for BattlePet, but just going to do this for now.
         data = C_TooltipInfo and feature and feature:GetTooltipData(self, locationInfo) or nil
@@ -1101,7 +1127,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
         isReady = false
-        return isReady
+        return isReady -- Don't cache: result will change once tooltip data loads
     end
 
     local itemID = self:GetItemID()
@@ -1551,6 +1577,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 end
             end
         end
+    end
+
+    if statusCacheKey then
+        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult}
     end
 
     return isReady, mogStatus, bindingStatus, bindingResult
