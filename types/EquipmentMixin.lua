@@ -320,8 +320,11 @@ local function NormalizeItemLevel(level)
 end
 
 -- Transmog source API caches (invalidated via CaerdonEquipment:InvalidateCaches)
+-- Exposed on CaerdonEquipment so ConsumableMixin can share them
 local sourceInfoCache = {}
 local appearanceSourcesCache = {}
+CaerdonEquipment.sourceInfoCache = sourceInfoCache
+CaerdonEquipment.appearanceSourcesCache = appearanceSourcesCache
 
 -- Lazy-built snapshot of equipped gear data, shared by all upgrade helper functions.
 -- Built once per invalidation cycle (equipment/transmog change), avoids repeated

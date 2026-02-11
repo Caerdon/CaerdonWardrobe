@@ -1261,6 +1261,13 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
             locationInfo = locationInfo,
             options = options
         }
+
+        -- Re-register OnUpdate if it was unregistered while idle
+        if not self:GetScript("OnUpdate") then
+            self.timeSinceLastUpdate = 0
+            self:SetScript("OnUpdate", self.OnUpdate)
+        end
+
         return
     end
 end
@@ -1386,6 +1393,9 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
             return
         elseif next(self.waitingToProcess) ~= nil then
             self.processItemCoroutine = coroutine.create(function() self:ProcessItem_Coroutine() end)
+        else
+            -- Nothing to process - unregister until new work arrives
+            self:SetScript("OnUpdate", nil)
         end
 
         self.timeSinceLastUpdate = 0

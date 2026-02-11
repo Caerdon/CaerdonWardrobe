@@ -28,6 +28,40 @@ do
     end
 end
 
+-- Shared transmog source API caches (created by EquipmentMixin, referenced lazily here)
+local sourceInfoCache
+local appearanceSourcesCache
+
+local function GetCachedSourceInfo(sourceID)
+    if not sourceInfoCache then
+        sourceInfoCache = CaerdonEquipment and CaerdonEquipment.sourceInfoCache
+    end
+    if sourceInfoCache then
+        local info = sourceInfoCache[sourceID]
+        if not info then
+            info = C_TransmogCollection.GetSourceInfo(sourceID)
+            if info then sourceInfoCache[sourceID] = info end
+        end
+        return info
+    end
+    return C_TransmogCollection.GetSourceInfo(sourceID)
+end
+
+local function GetCachedAppearanceSources(appearanceID)
+    if not appearanceSourcesCache then
+        appearanceSourcesCache = CaerdonEquipment and CaerdonEquipment.appearanceSourcesCache
+    end
+    if appearanceSourcesCache then
+        local sources = appearanceSourcesCache[appearanceID]
+        if not sources then
+            sources = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
+            if sources then appearanceSourcesCache[appearanceID] = sources end
+        end
+        return sources
+    end
+    return C_TransmogCollection.GetAllAppearanceSources(appearanceID)
+end
+
 local function GetDebugItemLink(itemID)
     if not itemID then
         return nil
@@ -170,7 +204,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         local sources = C_TransmogSets.GetSourcesForSlot(transmogSetID, appearanceInfo.appearanceID)
                         if sources and #sources > 0 then
                             -- Get the first source and extract its visualID
-                            local sourceInfo = C_TransmogCollection.GetSourceInfo(sources[1])
+                            local sourceInfo = GetCachedSourceInfo(sources[1])
                             if sourceInfo and sourceInfo.visualID then
                                 collectedAppearanceIDs[sourceInfo.visualID] = true
                             end
@@ -183,13 +217,13 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         -- Get all sources for this appearance to check player eligibility
                         -- Note: GetAllAppearanceSources only returns sources valid for current class
                         -- So if validForCharacter is false, this will return empty
-                        local appearanceSources = C_TransmogCollection.GetAllAppearanceSources(appearanceInfo
+                        local appearanceSources = GetCachedAppearanceSources(appearanceInfo
                             .appearanceID)
                         appearanceDebug.sourceCount = appearanceSources and #appearanceSources or 0
 
                         if appearanceSources then
                             for _, sourceID in ipairs(appearanceSources) do
-                                local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                                local sourceInfo = GetCachedSourceInfo(sourceID)
                                 if sourceInfo then
                                     table.insert(appearanceDebug.sources, {
                                         sourceID = sourceID,
@@ -237,7 +271,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         local pendingItemDataLoad = false
 
                         for _, sourceID in ipairs(sourceIDs) do
-                            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                            local sourceInfo = GetCachedSourceInfo(sourceID)
                             if sourceInfo then
                                 -- For ensembles, we care about the actual SOURCE being collected, not just the appearance
                                 -- Even if you know the appearance from another difficulty/modifier, the ensemble will still
@@ -297,9 +331,22 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                             allSourcesAccountLocked = false
                                         end
 
-                                        local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
-                                            .GetItemInfoInstant(sourceInfo.itemID)
-                                        local _, _, _, _, itemMinLevel = C_Item.GetItemInfo(sourceInfo.itemID)
+                                        if sourceInfo._classID == nil then
+                                            local _, _, _, equipLoc, _, cID, subTypeID = C_Item.GetItemInfoInstant(sourceInfo.itemID)
+                                            sourceInfo._classID = cID
+                                            sourceInfo._itemEquipLoc = equipLoc
+                                            sourceInfo.itemSubTypeID = sourceInfo.itemSubTypeID or subTypeID
+                                        end
+                                        local classID = sourceInfo._classID
+                                        local itemEquipLoc = sourceInfo._itemEquipLoc
+                                        local itemSubTypeID = sourceInfo.itemSubTypeID
+                                        local itemMinLevel = sourceInfo.cachedMinLevel
+                                        if itemMinLevel == nil then
+                                            itemMinLevel = select(5, C_Item.GetItemInfo(sourceInfo.itemID))
+                                            if itemMinLevel then
+                                                sourceInfo.cachedMinLevel = itemMinLevel
+                                            end
+                                        end
                                         if not itemMinLevel then
                                             requestItemDataByID(sourceInfo.itemID)
                                             pendingItemDataLoad = true
@@ -486,7 +533,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                         local allSourcesInvalidForPlayer = true
 
                         for _, sourceID in ipairs(sourceIDs) do
-                            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                            local sourceInfo = GetCachedSourceInfo(sourceID)
                             if sourceInfo then
                                 -- Check if this uncollected source is valid for current player
                                 -- Call PlayerCanCollectSource directly to verify (more reliable than sourceInfo fields)
@@ -507,9 +554,15 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 end
 
                                 -- Get item info to determine armor type
-                                local _, itemType, _, itemEquipLoc, _, classID, itemSubTypeID = C_Item
-                                    .GetItemInfoInstant(
-                                        sourceInfo.itemID)
+                                if sourceInfo._classID == nil then
+                                    local _, _, _, equipLoc, _, cID, subTypeID = C_Item.GetItemInfoInstant(sourceInfo.itemID)
+                                    sourceInfo._classID = cID
+                                    sourceInfo._itemEquipLoc = equipLoc
+                                    sourceInfo.itemSubTypeID = sourceInfo.itemSubTypeID or subTypeID
+                                end
+                                local classID = sourceInfo._classID
+                                local itemEquipLoc = sourceInfo._itemEquipLoc
+                                local itemSubTypeID = sourceInfo.itemSubTypeID
                                 local canWearArmorType = CanPlayerWearArmorSubType(itemSubTypeID)
                                 local isArmor = (classID == 4)
 
@@ -713,7 +766,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
 
             local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
             for sourceIDIndex = 1, #sourceIDs do
-                local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceIDs[sourceIDIndex])
+                local sourceInfo = GetCachedSourceInfo(sourceIDs[sourceIDIndex])
                 if sourceInfo and not sourceInfo.isCollected then
                     needsItem = true
                     -- Have to iterate through all sources provided in case some are not valid for the toon
