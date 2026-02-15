@@ -665,6 +665,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local currentSourceFound
     local sourceSpecs
     local lowestLevelFound
+    local isNotReady = false
     local matchedSources = {}
 
     -- Appearance is the visual look - can have many sources
@@ -696,6 +697,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         end
     else
         appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
+        if not sourceID or not appearanceID then
+            -- Fallback: try with just the itemID (handles world quest items with bonus IDs
+            -- that GetItemInfo(itemLink) doesn't recognize)
+            local itemID = item:GetItemID()
+            if itemID then
+                appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemID)
+            end
+        end
         if (not sourceID or not appearanceID) and C_Item.IsDressableItemByID(item:GetItemID()) then -- not finding via transmog collection so need to do the DressUp hack
             local inventoryType = item:GetInventoryTypeName()
             local slotID = slotTable[inventoryType]
@@ -774,9 +783,15 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- TODO: If no appearance ID by now, might be able to use VisualID returned from here?  Not sure if needed...
         -- If the source is already collected, we don't need to check anything else for the source / appearance
         if sourceInfo and not sourceInfo.isCollected then
+            -- Cross-check: if another API confirms this source IS collected, sourceInfo is stale
+            if (appearanceInfo and appearanceInfo.sourceIsCollected) or
+               C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(sourceID) then
+                isNotReady = true
+            end
             if playerCollectInfoReady then
                 canCollect = playerCanCollectSource
             else
+                isNotReady = true
                 canCollect = sourceInfo.playerCanCollect
             end
             currentSourceFound = sourceInfo.isCollected
@@ -1014,6 +1029,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         otherNeedsItem = otherNeedsItem,
         playerCanCollectSource = playerCollectInfoReady and playerCanCollectSource or canCollect,
         isCompletionistItem = isCompletionistItem,
+        isNotReady = isNotReady,
         matchesLootSpec = matchesLootSpec,
         isRecraftable = isRecraftable,
         forDebugUseOnly = CaerdonWardrobeConfig.Debug.Enabled and {

@@ -1,6 +1,29 @@
 local WorldMapMixin = {}
 local version, build, date, tocversion = GetBuildInfo()
 
+local function EnsureHoverHook(pin)
+	if not pin or type(pin.HookScript) ~= "function" or pin.caerdonDebugHoverHooked then
+		return
+	end
+
+	pin.caerdonDebugHoverHooked = true
+
+	pin:HookScript("OnEnter", function(self)
+		if CaerdonAPI and CaerdonAPI.SetManualHoverContext then
+			local context = {
+				itemLink = self.caerdonDebugItemLink,
+			}
+			CaerdonAPI:SetManualHoverContext(self, context)
+		end
+	end)
+
+	pin:HookScript("OnLeave", function(self)
+		if CaerdonAPI and CaerdonAPI.ClearManualHoverContext then
+			CaerdonAPI:ClearManualHoverContext(self)
+		end
+	end)
+end
+
 function WorldMapMixin:GetName()
 	return "WorldMap"
 end
@@ -18,6 +41,15 @@ function WorldMapMixin:GetTooltipData(item, locationInfo)
 end
 
 function WorldMapMixin:Refresh()
+	CaerdonWardrobeFeatureMixin:Refresh(self)
+	if not WorldMapFrame or not WorldMapFrame:IsShown() then
+		return
+	end
+	for pin in WorldMapFrame:EnumeratePinsByTemplate("WorldMap_WorldQuestPinTemplate") do
+		if pin.questID then
+			self:UpdatePin(pin)
+		end
+	end
 end
 
 function WorldMapMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
@@ -64,10 +96,11 @@ function WorldMapMixin:UpdatePin(pin)
 		local questItem = CaerdonItem:CreateFromItemLink(questLink)
 		local itemData = questItem:GetItemData()
 		if not itemData then
+			pin.caerdonDebugItemLink = nil
 			CaerdonWardrobe:ClearButton(pin)
 			return
 		end
-		
+
 		-- local questInfo = itemData:GetQuestInfo()
 
 		-- TODO: Review if necessary to iterate through rewards and find unknown ones...
@@ -79,19 +112,23 @@ function WorldMapMixin:UpdatePin(pin)
 		-- 	reward = questInfo.choices[bestIndex]
 		-- end
 
-		if not bestType then 
+		if not bestType then
+			pin.caerdonDebugItemLink = nil
 			CaerdonWardrobe:ClearButton(pin)
 			return
 		end
 
 		local itemLink = GetQuestLogItemLink(bestType, bestIndex, pin.questID)
 		if not itemLink then
+			pin.caerdonDebugItemLink = nil
 			CaerdonWardrobe:ClearButton(pin)
 			return
 		end
 
 		local item = CaerdonItem:CreateFromItemLink(itemLink)
-		CaerdonWardrobe:UpdateButton(pin, item, self, { 
+		pin.caerdonDebugItemLink = itemLink
+		EnsureHoverHook(pin)
+		CaerdonWardrobe:UpdateButton(pin, item, self, {
 			locationKey = format("%d", pin.questID),
 			questID = pin.questID,
 			questItem

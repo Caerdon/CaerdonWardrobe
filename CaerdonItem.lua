@@ -1281,6 +1281,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
         local transmogInfo = itemData:GetTransmogInfo()
         if transmogInfo then
+            if transmogInfo.isNotReady then
+                isReady = false
+                return isReady
+            end
             if transmogInfo.canEquipForPlayer == nil then
                 transmogInfo.canEquipForPlayer = playerCanEquipItem
             end
