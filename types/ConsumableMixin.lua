@@ -317,7 +317,10 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                         hasUncollectedSources = true
 
                                         local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
-                                        local collectibleByPlayer = hasItemData and canCollect or sourceInfo.playerCanCollect
+                                        if not hasItemData then
+                                            hasPendingSourceInfo = true
+                                        end
+                                        local collectibleByPlayer = hasItemData and canCollect or sourceInfo.playerCanCollect or sourceInfo.isValidSourceForPlayer
                                         local accountHasItemData, accountCanCollect
                                         if C_TransmogCollection.AccountCanCollectSource then
                                             accountHasItemData, accountCanCollect = C_TransmogCollection
@@ -541,7 +544,10 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                 -- Check if this uncollected source is valid for current player
                                 -- Call PlayerCanCollectSource directly to verify (more reliable than sourceInfo fields)
                                 local hasItemData, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
-                                local collectibleByPlayer = hasItemData and canCollect or sourceInfo.playerCanCollect
+                                if not hasItemData then
+                                    hasPendingSourceInfo = true
+                                end
+                                local collectibleByPlayer = hasItemData and canCollect or sourceInfo.playerCanCollect or sourceInfo.isValidSourceForPlayer
                                 local accountHasItemData, accountCanCollect
                                 if C_TransmogCollection.AccountCanCollectSource then
                                     accountHasItemData, accountCanCollect = C_TransmogCollection
@@ -666,7 +672,7 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                         end
 
                                         -- Track wearable items
-                                        if hasItemData and canCollect and canWearArmorType then
+                                        if collectibleByPlayer and canWearArmorType then
                                             if isSetPiece and isArmor then
                                                 -- Uncollected set armor piece that player can wear
                                                 hasWearableSetArmor = true
