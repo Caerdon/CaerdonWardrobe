@@ -367,6 +367,17 @@ function CaerdonRecipeMixin:GetRecipeInfo()
 
         result.firstCraft = self.recipe.firstCraft
         result.learned = self.recipe.learned or false
+
+        -- C_TradeSkillUI.GetRecipeInfo().learned can return false when the profession
+        -- window isn't open (e.g. browsing the AH). Fall back to the saved known
+        -- recipes data which was populated when the profession window was last open.
+        if not result.learned and PlayerRecipeData and PlayerRecipeData.knownRecipes then
+            local recipeName = self.recipe.name
+            if recipeName and PlayerRecipeData.knownRecipes[recipeName] then
+                result.learned = true
+            end
+        end
+
         result.createdItem = nil
         result.canLearn = not result.learned and C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
 

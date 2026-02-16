@@ -73,6 +73,7 @@ function AuctionMixin:OnScrollBoxScroll(scrollBox)
 	end
 
 	scrollBox:ForEachFrame(function(frame, elementData)
+		frame.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(frame)
 	end)
 
@@ -92,6 +93,7 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 	local browseResult = auctionFrame.tableBuilder:GetDataProviderData(elementData)
 	
 	if not browseResult.itemLink then
+		button.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(button)
 		return
 	end
@@ -99,16 +101,26 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 	local item = CaerdonItem:CreateFromItemLink(browseResult.itemLink)
 	local itemKey = browseResult.itemKey
 
-	CaerdonWardrobe:UpdateButton(button, item, self, {
-		locationKey = format("allAuctions%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
-		itemKey = itemKey
-	},  
-	{
-		overrideStatusPosition = "LEFT",
-		statusProminentSize = 13,
-		statusOffsetX = 7,
-		statusOffsetY = 0
-	})
+	button.caerdonDebugItemLink = browseResult.itemLink
+
+	local function doUpdate()
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = format("allAuctions%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
+			itemKey = itemKey
+		},
+		{
+			overrideStatusPosition = "LEFT",
+			statusProminentSize = 13,
+			statusOffsetX = 7,
+			statusOffsetY = 0
+		})
+	end
+
+	if item:IsItemDataCached() then
+		doUpdate()
+	else
+		item:ContinueOnItemLoad(doUpdate)
+	end
 end
 
 function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
@@ -123,12 +135,24 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		-- relativeFrame=cell.Icon
 	}
 
+	local locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0))
+
 	if itemKeyInfo and itemKeyInfo.battlePetLink then
 		item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
-		CaerdonWardrobe:UpdateButton(button, item, self, {
-			locationKey = format("pet-%s", itemKeyInfo.battlePetLink),
-			itemKey = itemKey
-		}, options)
+		button.caerdonDebugItemLink = itemKeyInfo.battlePetLink
+
+		local function doUpdate()
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				locationKey = format("pet-%s", itemKeyInfo.battlePetLink),
+				itemKey = itemKey
+			}, options)
+		end
+
+		if item:IsItemDataCached() then
+			doUpdate()
+		else
+			item:ContinueOnItemLoad(doUpdate)
+		end
 	elseif rowData.appearanceLink then
 		-- Using appearance link if it's available due to not getting full item link from AH in any other way right now.
 		-- This fixes Nimble Hexweave Cloak, for example, but doesn't fix Ceremonious Greaves (which doesn't have appearanceLink)
@@ -150,33 +174,66 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 			item.extraData = extraData
 		end
 
+		button.caerdonDebugItemLink = itemLink or item:GetItemLink()
+
 		CaerdonAPI:CompareCIMI(self, item)
 
-		CaerdonWardrobe:UpdateButton(button, item, self, {
-			locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
-			itemKey = itemKey
-		}, options)
+		local function doUpdate()
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				locationKey = locationKey,
+				itemKey = itemKey
+			}, options)
+		end
+
+		if item:IsItemDataCached() then
+			doUpdate()
+		else
+			item:ContinueOnItemLoad(doUpdate)
+		end
 	else
 		-- Pass itemKey.itemLevel directly as overrideItemLevel since item links from AH don't encode the actual listing's ilvl
 		local extraData = { overrideItemLevel = itemKey.itemLevel }
 
-		local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
-		local tooltipData = C_TooltipInfo and C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
+		-- C_TooltipInfo.GetItemKey().hyperlink is unstable for recipes: the first call
+		-- returns the recipe link, but after item data loads the tooltip resolves the
+		-- embedded created item and hyperlink flips to the crafted piece's link.
+		-- Use CreateFromItemID for recipes to avoid this; other items keep the full
+		-- hyperlink for scaling/ilvl data.
+		local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemKey.itemID)
+		local isRecipe = classID == Enum.ItemClass.Recipe
 
-		if tooltipData and tooltipData.hyperlink then
-			item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink, extraData)
-		else
-			-- Fall back to itemID if we can't get a proper link
+		if isRecipe then
 			item = CaerdonItem:CreateFromItemID(itemKey.itemID)
 			item.extraData = extraData
+		else
+			local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
+			local tooltipData = C_TooltipInfo and C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
+
+			if tooltipData and tooltipData.hyperlink then
+				item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink, extraData)
+			else
+				-- Fall back to itemID if we can't get a proper link
+				item = CaerdonItem:CreateFromItemID(itemKey.itemID)
+				item.extraData = extraData
+			end
 		end
+
+		button.caerdonDebugItemLink = item:GetItemLink()
 
 		CaerdonAPI:CompareCIMI(self, item)
 
-		CaerdonWardrobe:UpdateButton(button, item, self, {
-			locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
-			itemKey = itemKey
-		}, options)
+		local function doUpdate()
+			CaerdonWardrobe:UpdateButton(button, item, self, {
+				locationKey = locationKey,
+				itemKey = itemKey
+			}, options)
+		end
+
+		if item:IsItemDataCached() then
+			doUpdate()
+		else
+			item:ContinueOnItemLoad(doUpdate)
+		end
 	end
 end
 
@@ -190,6 +247,7 @@ function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
 		local processKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, itemKey.battlePetSpeciesID)
 		self.waitingForItemKeyInfo[itemKey.itemID] = self.waitingForItemKeyInfo[itemKey.itemID] or {}
 		self.waitingForItemKeyInfo[itemKey.itemID][processKey] = { itemKey = itemKey, frame = frame }
+		frame.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(frame)
 		return
 	end
@@ -245,26 +303,38 @@ function AuctionMixin:OnSetAuctionItemDisplay(frame, itemDisplayItem)
 	end
 
 	if not itemDisplayItem then
+		itemButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(itemButton)
 		return;
 	end
 
 	if itemDisplay.itemLink == nil then
+		itemButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(itemButton)
 		return;
 	end
 
 	local item = CaerdonItem:CreateFromItemLink(itemDisplay.itemLink)
 
-	CaerdonWardrobe:UpdateButton(itemButton, item, self, {
-		locationKey = "ItemAuctionItemDisplayButton",
-		itemKey = itemDisplay.itemKey
-	},  
-	{
-		statusProminentSize = 24,
-		statusOffsetX = 5,
-		statusOffsetY = 5
-	})
+	itemButton.caerdonDebugItemLink = itemDisplay.itemLink
+
+	local function doUpdate()
+		CaerdonWardrobe:UpdateButton(itemButton, item, self, {
+			locationKey = "ItemAuctionItemDisplayButton",
+			itemKey = itemDisplay.itemKey
+		},
+		{
+			statusProminentSize = 24,
+			statusOffsetX = 5,
+			statusOffsetY = 5
+		})
+	end
+
+	if item:IsItemDataCached() then
+		doUpdate()
+	else
+		item:ContinueOnItemLoad(doUpdate)
+	end
 end
 
 -- function AuctionMixin:OWNED_AUCTIONS_UPDATED()
@@ -366,15 +436,25 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 	end
 
 	local button = AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton
-	CaerdonWardrobe:UpdateButton(button, item, self, {
-		locationKey = "BrowseResultButton",
-		itemKey = itemKeyInfo
-	},  
-	{
-		statusProminentSize = 24,
-		statusOffsetX = 5,
-		statusOffsetY = 5
-	})
+	button.caerdonDebugItemLink = item:GetItemLink()
+
+	local function doUpdate()
+		CaerdonWardrobe:UpdateButton(button, item, self, {
+			locationKey = "BrowseResultButton",
+			itemKey = itemKeyInfo
+		},
+		{
+			statusProminentSize = 24,
+			statusOffsetX = 5,
+			statusOffsetY = 5
+		})
+	end
+
+	if item:IsItemDataCached() then
+		doUpdate()
+	else
+		item:ContinueOnItemLoad(doUpdate)
+	end
 end
 
 function AuctionMixin:OnSetPostItem(frame, itemLocation)
@@ -384,28 +464,54 @@ function AuctionMixin:OnSetPostItem(frame, itemLocation)
 	local itemSellButton = AuctionHouseFrame.ItemSellFrame.ItemDisplay.ItemButton
 	local commoditiesSellButton = AuctionHouseFrame.CommoditiesSellFrame.ItemDisplay.ItemButton
 	if displayMode == AuctionHouseFrameDisplayMode.ItemSell then
+		commoditiesSellButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(commoditiesSellButton)
-		CaerdonWardrobe:UpdateButton(itemSellButton, item, self, {
-			locationKey = "ItemSellFrameButton",
-			itemKey = AuctionHouseFrame.ItemSellFrame.listDisplayedItemKey
-		},  
-		{
-			statusProminentSize = 24,
-			statusOffsetX = 5,
-			statusOffsetY = 5
-		})
+
+		itemSellButton.caerdonDebugItemLink = item:GetItemLink()
+
+		local function doUpdate()
+			CaerdonWardrobe:UpdateButton(itemSellButton, item, self, {
+				locationKey = "ItemSellFrameButton",
+				itemKey = AuctionHouseFrame.ItemSellFrame.listDisplayedItemKey
+			},
+			{
+				statusProminentSize = 24,
+				statusOffsetX = 5,
+				statusOffsetY = 5
+			})
+		end
+
+		if item:IsItemDataCached() then
+			doUpdate()
+		else
+			item:ContinueOnItemLoad(doUpdate)
+		end
 	elseif displayMode == AuctionHouseFrameDisplayMode.CommoditiesSell then
+		itemSellButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(itemSellButton)
-		CaerdonWardrobe:UpdateButton(commoditiesSellButton, item, self, {
-			locationKey = "ItemCommoditiesSellFrameButton"
-		},  
-		{
-			statusProminentSize = 24,
-			statusOffsetX = 5,
-			statusOffsetY = 5
-		})
+
+		commoditiesSellButton.caerdonDebugItemLink = item:GetItemLink()
+
+		local function doUpdate()
+			CaerdonWardrobe:UpdateButton(commoditiesSellButton, item, self, {
+				locationKey = "ItemCommoditiesSellFrameButton"
+			},
+			{
+				statusProminentSize = 24,
+				statusOffsetX = 5,
+				statusOffsetY = 5
+			})
+		end
+
+		if item:IsItemDataCached() then
+			doUpdate()
+		else
+			item:ContinueOnItemLoad(doUpdate)
+		end
 	else
+		commoditiesSellButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(commoditiesSellButton)
+		itemSellButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(itemSellButton)
 	end
 end
@@ -414,7 +520,9 @@ function AuctionMixin:OnClearPostItem(frame)
 	local itemSellButton = AuctionHouseFrame.ItemSellFrame.ItemDisplay.ItemButton
 	local commoditiesSellButton = AuctionHouseFrame.CommoditiesSellFrame.ItemDisplay.ItemButton
 
+	commoditiesSellButton.caerdonDebugItemLink = nil
 	CaerdonWardrobe:ClearButton(commoditiesSellButton)
+	itemSellButton.caerdonDebugItemLink = nil
 	CaerdonWardrobe:ClearButton(itemSellButton)
 end
 
