@@ -368,7 +368,7 @@ function CaerdonRecipeMixin:GetRecipeInfo()
         result.firstCraft = self.recipe.firstCraft
         result.learned = self.recipe.learned or false
         result.createdItem = nil
-        result.canLearn = C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
+        result.canLearn = not result.learned and C_TradeSkillUI.IsRecipeProfessionLearned(self.recipe.recipeID)
 
         if result.schematic.outputItemID ~= nil then
             result.createdItem = CaerdonItem:CreateFromItemID(result.schematic.outputItemID)

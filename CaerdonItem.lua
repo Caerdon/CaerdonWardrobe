@@ -1070,7 +1070,7 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
     elseif caerdonType == CaerdonItemType.Recipe then
         local recipeInfo = itemData:GetRecipeInfo()
         -- DevTools_Dump(recipeInfo)
-        if recipeInfo and recipeInfo.learned then -- TODO: This still ends up flagging a few of the weird self-referential ones that aren't learned... look into later.
+        if (recipeInfo and recipeInfo.learned) or tooltipData.isKnownSpell then
             needsItem = false
         elseif tooltipData.canLearn or (recipeInfo and recipeInfo.canLearn) then
             -- tooltipData.canLearn is set by RestrictedSkill tooltip lines (modern recipes).
