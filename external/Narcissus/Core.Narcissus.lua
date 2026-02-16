@@ -4,83 +4,51 @@ local L = namespace.L
 local addonName = "Narcissus"
 local NarcissusMixin = {}
 
+local DEBUG = false
+local function dbg(...)
+    if DEBUG then print("|cff00ccff[CW-Narci]|r", ...) end
+end
+
 function NarcissusMixin:GetName()
     return addonName
 end
 
 function NarcissusMixin:Init()
+    dbg("Init called")
     self:TryHookNarcissus()
-end
+    self:TryHookNarcissusSlots()
 
--- local dressingRoomFeature = CaerdonWardrobe and CaerdonWardrobe.GetFeature and CaerdonWardrobe:GetFeature("DressingRoom")
--- if not dressingRoomFeature or dressingRoomFeature._narcissusSupportInitialized then
---     return
--- end
+    return {
+        "ADDON_LOADED",
+        "PLAYER_ENTERING_WORLD",
+        "TRANSMOG_COLLECTION_UPDATED",
+        "TRANSMOG_COLLECTION_SOURCE_REMOVED",
+        "TRANSMOG_SOURCE_COLLECTABILITY_UPDATE"
+    }
+end
 
 local cachedNarcissusSetFrame
 
 local function GetNarcissusSetFrame()
-    if cachedNarcissusSetFrame and cachedNarcissusSetFrame.itemButtons then
+    if cachedNarcissusSetFrame and type(cachedNarcissusSetFrame.SetItemSet) == "function" then
         return cachedNarcissusSetFrame
     end
 
-    local overlay = _G.NarciDressingRoomOverlay
-    if overlay and overlay.SetFrame then
-        cachedNarcissusSetFrame = overlay.SetFrame
-        return cachedNarcissusSetFrame
-    end
+    cachedNarcissusSetFrame = nil
 
-    local narci = _G.Narci
-    if narci and narci.DressingRoomSystem and narci.DressingRoomSystem.TransmogSetFrame then
-        cachedNarcissusSetFrame = narci.DressingRoomSystem.TransmogSetFrame
-        if cachedNarcissusSetFrame and overlay then
-            overlay.SetFrame = cachedNarcissusSetFrame
-        end
-        return cachedNarcissusSetFrame
-    end
-
-    local transmogSetFrame = _G.TransmogSetFrame
-    if transmogSetFrame and transmogSetFrame.itemButtons then
-        cachedNarcissusSetFrame = transmogSetFrame
-        if overlay then
-            overlay.SetFrame = cachedNarcissusSetFrame
-        end
-        return cachedNarcissusSetFrame
-    end
-
-    if overlay then
-        for _, child in ipairs({ overlay:GetChildren() }) do
-            if child and child.itemButtons and type(child.SetItemSet) == "function" then
-                cachedNarcissusSetFrame = child
-                overlay.SetFrame = cachedNarcissusSetFrame
-                return cachedNarcissusSetFrame
-            end
-        end
-    end
-
+    -- Narcissus stores TransmogSetFrame on its private addon namespace (not exposed
+    -- globally).  During PLAYER_ENTERING_WORLD it re-parents the frame to DressUpFrame,
+    -- so scanning DressUpFrame children is the only reliable discovery path.
+    -- NOTE: ScrollView is created lazily inside TransmogSetFrame:Init() (called on
+    -- first SetItemSet), so we cannot require it here.  SetItemSet + LoadItem are
+    -- defined at file scope and uniquely identify the Narcissus frame.
     if DressUpFrame and type(DressUpFrame.GetChildren) == "function" then
         for _, child in ipairs({ DressUpFrame:GetChildren() }) do
-            if child and child.itemButtons and type(child.SetItemSet) == "function" then
+            if child and type(child.SetItemSet) == "function" and type(child.LoadItem) == "function" then
+                dbg("GetNarcissusSetFrame: found via DressUpFrame child scan")
                 cachedNarcissusSetFrame = child
-                if overlay then
-                    overlay.SetFrame = cachedNarcissusSetFrame
-                end
                 return cachedNarcissusSetFrame
             end
-        end
-    end
-
-    if type(EnumerateFrames) == "function" then
-        local frame = EnumerateFrames()
-        while frame do
-            if frame ~= DressUpFrame and frame and frame.itemButtons and type(frame.SetItemSet) == "function" then
-                cachedNarcissusSetFrame = frame
-                if overlay then
-                    overlay.SetFrame = cachedNarcissusSetFrame
-                end
-                return cachedNarcissusSetFrame
-            end
-            frame = EnumerateFrames(frame)
         end
     end
 end
@@ -98,65 +66,74 @@ local function GetNarcissusSlotContainer()
 end
 
 function NarcissusMixin:TryHookNarcissus()
-    -- self:TryHookNarcissusSlots()
-
     if self.narcissusHooked then
+        dbg("TryHookNarcissus: already hooked")
         return
     end
 
     local setFrame = GetNarcissusSetFrame()
-    if not setFrame or type(setFrame) ~= "table" then
+    if not setFrame or type(setFrame.SetItemSet) ~= "function" then
+        local childCount = 0
+        if DressUpFrame and type(DressUpFrame.GetChildren) == "function" then
+            childCount = select("#", DressUpFrame:GetChildren())
+        end
+        dbg("TryHookNarcissus: setFrame not found.", "DressUpFrame=", DressUpFrame ~= nil, "children=", childCount)
         return
     end
 
-    if type(setFrame.SetItemSet) ~= "function" or not setFrame.itemButtons then
-        return
-    end
+    dbg("TryHookNarcissus: found setFrame, hooking.", "LoadItem=", type(setFrame.LoadItem), "ClearContent=", type(setFrame.ClearContent))
 
     self.narcissusSetFrame = setFrame
     local feature = self
 
-    -- hooksecurefunc(setFrame, "SetItemSet", function(frame)
-    --     frame.caerdonSetVersion = (frame.caerdonSetVersion or 0) + 1
-    --     feature:RefreshNarcissusSetButtons(frame)
-    -- end)
-
-    hooksecurefunc(setFrame, "ReleaseItemButtons", function(frame)
-        feature:ClearNarcissusSetButtons(frame)
+    -- Hook SetItemSet: when an ensemble is displayed, schedule a delayed refresh
+    -- to catch buttons that load quickly. The LoadItem hook below handles the
+    -- per-button processing as each item is assigned.
+    hooksecurefunc(setFrame, "SetItemSet", function(frame)
+        dbg("SetItemSet hook fired")
+        C_Timer.After(0.1, function()
+            feature:RefreshNarcissusSetButtons(frame)
+        end)
     end)
 
-    -- if type(setFrame.UpdateEquippedItems) == "function" then
-    --     hooksecurefunc(setFrame, "UpdateEquippedItems", function(frame)
-    --         feature:RefreshNarcissusSetButtons(frame)
-    --     end)
-    -- end
-
-    if type(setFrame.AcquireItemButton) == "function" then
-        hooksecurefunc(setFrame, "AcquireItemButton", function(frame)
-            if frame.itemButtons then
-                feature:PrepareNarcissusSetButton(frame.itemButtons[frame.numButtons])
+    -- Hook LoadItem: called for each button that receives an item assignment.
+    -- This fires from setupFunc -> SetItem -> LoadItem when buttons are created
+    -- or recycled by the ScrollView, and also when scrolling brings new items
+    -- into view.
+    if type(setFrame.LoadItem) == "function" then
+        hooksecurefunc(setFrame, "LoadItem", function(frame, itemID, itemButton)
+            dbg("LoadItem hook:", itemID, "button=", itemButton ~= nil)
+            if itemButton then
+                feature:ClearNarcissusSetButton(itemButton)
+                feature:PrepareNarcissusSetButton(itemButton)
             end
         end)
+    else
+        dbg("WARNING: setFrame.LoadItem is not a function!")
     end
 
-    -- if type(setFrame.HookScript) == "function" then
-    --     setFrame:HookScript("OnShow", function(frame)
-    --         frame.caerdonSetVersion = (frame.caerdonSetVersion or 0) + 1
-    --         feature:RefreshNarcissusSetButtons(frame)
-    --     end)
-
-    --     setFrame:HookScript("OnHide", function(frame)
-    --         feature:ClearNarcissusSetButtons(frame)
-    --     end)
-    -- end
+    -- Hook ClearContent: safety net for cleanup. In practice, the per-button
+    -- ClearItem hook (installed by PrepareNarcissusSetButton) handles cleanup
+    -- during ReleaseAll since ClearItem fires before activeObjects is emptied.
+    -- This hook fires after ClearContent returns, so activeObjects may already
+    -- be empty; it serves as a fallback for any buttons not yet prepared.
+    if type(setFrame.ClearContent) == "function" then
+        hooksecurefunc(setFrame, "ClearContent", function(frame)
+            CaerdonWardrobeFeatureMixin:Refresh(feature)
+        end)
+    end
 
     self.narcissusHooked = true
     self:TryHookNarcissusSlots()
 
-    -- if setFrame:IsShown() then
-    --     setFrame.caerdonSetVersion = (setFrame.caerdonSetVersion or 0) + 1
-    --     self:RefreshNarcissusSetButtons(setFrame)
-    -- end
+    -- Defer initial refresh: ContinueOnItemLoad can trigger synchronous
+    -- ITEM_DATA_LOAD_RESULT callbacks during addon init, and processing all
+    -- buttons in one go amplifies the issue.
+    if setFrame:IsShown() then
+        C_Timer.After(0.1, function()
+            self:RefreshNarcissusSetButtons(setFrame)
+        end)
+    end
 end
 
 function NarcissusMixin:TryHookNarcissusSlots()
@@ -170,49 +147,6 @@ function NarcissusMixin:TryHookNarcissusSlots()
 
     self.narcissusSlotButtons = self.narcissusSlotButtons or {}
     local feature = self
-
-    -- if true then return end
-
-    -- hooksecurefunc(NarciDressingRoomItemButtonMixin, "HideSlot", function(button, state)
-    --     feature:EnsureNarcissusSlotButton(button)
-    --     if state then
-    --         feature:ClearNarcissusOutfitButton(button)
-    --     else
-    --         feature:UpdateNarcissusOutfitButton(button)
-    --     end
-    -- end)
-
-    -- hooksecurefunc(NarciDressingRoomItemButtonMixin, "Desaturate", function(button, state)
-    --     if state and (not button.sourceID or button.sourceID == 0) then
-    --         feature:ClearNarcissusOutfitButton(button)
-    --     end
-    -- end)
-
-    -- if type(NarciDressingRoomItemButtonMixin.SetSecondarySource) == "function" then
-    --     hooksecurefunc(NarciDressingRoomItemButtonMixin, "SetSecondarySource", function(button)
-    --         feature:UpdateNarcissusOutfitButton(button)
-    --     end)
-    -- end
-
-    -- if NarciDressingRoomSlotFrameMixin then
-    --     if type(NarciDressingRoomSlotFrameMixin.ShowPlayerTransmog) == "function" then
-    --         hooksecurefunc(NarciDressingRoomSlotFrameMixin, "ShowPlayerTransmog", function()
-    --             feature:RefreshNarcissusOutfitButtons()
-    --         end)
-    --     end
-
-    --     if type(NarciDressingRoomSlotFrameMixin.FadeIn) == "function" then
-    --         hooksecurefunc(NarciDressingRoomSlotFrameMixin, "FadeIn", function()
-    --             feature:RefreshNarcissusOutfitButtons()
-    --         end)
-    --     end
-
-    --     if type(NarciDressingRoomSlotFrameMixin.FadeOut) == "function" then
-    --         hooksecurefunc(NarciDressingRoomSlotFrameMixin, "FadeOut", function()
-    --             feature:RefreshNarcissusOutfitButtons()
-    --         end)
-    --     end
-    -- end
 
     self.narcissusSlotsHooked = true
 
@@ -230,9 +164,6 @@ function NarcissusMixin:TryHookNarcissusSlots()
             end)
         end
     end
-
-    -- self:CollectNarcissusSlotButtons()
-    -- self:RefreshNarcissusOutfitButtons()
 end
 
 function NarcissusMixin:PrepareNarcissusSetButton(button)
@@ -243,17 +174,33 @@ function NarcissusMixin:PrepareNarcissusSetButton(button)
     button.caerdonNarcissusPrepared = true
     local feature = self
 
-    -- if type(button.HookScript) == "function" then
-    --     button:HookScript("OnHide", function(btn)
-    --         feature:ClearNarcissusSetButton(btn)
-    --     end)
-    -- end
+    -- Hook OnItemLoaded: fires after Narcissus sets the icon/name from
+    -- ITEM_DATA_LOAD_RESULT. Deferred to the next frame because
+    -- ContinueOnItemLoad -> LoadSources -> AddCallback can fire synchronous
+    -- ITEM_DATA_LOAD_RESULT events that re-enter OnItemLoaded on other
+    -- ensemble buttons, causing C stack overflow.
+    hooksecurefunc(button, "OnItemLoaded", function(btn, itemID)
+        -- Skip if we already processed this item on this button.
+        -- ContinueOnItemLoad -> LoadSources fires ITEM_DATA_LOAD_RESULT which
+        -- Narcissus interprets as a new OnItemLoaded, creating an infinite loop.
+        if btn.caerdonProcessedItemID == itemID then
+            return
+        end
+        C_Timer.After(0, function()
+            if btn.caerdonProcessedItemID == itemID then
+                return
+            end
+            if btn.itemID == itemID and btn:IsShown() then
+                feature:UpdateNarcissusSetButton(btn)
+            end
+        end)
+    end)
 
-    hooksecurefunc(button, "OnItemLoaded", function(button, itemID)
-        if button.caerdonItemLoaded then return end;
-        button.caerdonItemLoaded = true
-
-        self:UpdateNarcissusSetButton(button)
+    -- Hook ClearItem: fires when the ScrollView recycles a button (pool
+    -- onRemoved callback) or when ClearContent is called. Clean up the
+    -- Caerdon overlay so recycled buttons start fresh.
+    hooksecurefunc(button, "ClearItem", function(btn)
+        feature:ClearNarcissusSetButton(btn)
     end)
 end
 
@@ -262,9 +209,9 @@ function NarcissusMixin:ClearNarcissusSetButton(button)
         return
     end
 
+    button.caerdonProcessedItemID = nil
     self:ClearDebugContext(button)
     CaerdonWardrobe:ClearButton(button)
-    button.caerdonItemLoaded = false
 end
 
 function NarcissusMixin:EnsureNarcissusSlotButton(button)
@@ -316,22 +263,37 @@ end
 
 function NarcissusMixin:UpdateNarcissusSetButton(button)
     if not button then
+        dbg("UpdateSetButton: nil button")
         return
     end
 
     if not button:IsShown() or not button.itemID or button.itemID == 0 then
+        dbg("UpdateSetButton: skip - shown=", button:IsShown(), "itemID=", button.itemID)
         self:ClearNarcissusSetButton(button)
         return
     end
 
     local itemID = button.itemID
+    button.caerdonProcessedItemID = itemID
+
     local item = CaerdonItem:CreateFromItemID(itemID)
     if not item then
+        dbg("UpdateSetButton: CaerdonItem nil for", itemID)
         self:ClearNarcissusSetButton(button)
         return
     end
 
     local appearanceID = button.itemModifiedAppearanceID or itemID
+    dbg("UpdateSetButton:", itemID, "appearance=", appearanceID, "cached=", item:IsItemDataCached())
+
+    -- Pass the sourceID so the Equipment pipeline can identify the transmog
+    -- source without relying on C_TransmogCollection.GetItemInfo, which often
+    -- returns nil for items created from a bare itemID.
+    if button.itemModifiedAppearanceID then
+        item.extraData = {
+            appearanceSourceID = button.itemModifiedAppearanceID
+        }
+    end
 
     local locationInfo = {
         locationKey = format("narcissus-set-%s-%s", itemID, appearanceID)
@@ -345,34 +307,72 @@ function NarcissusMixin:UpdateNarcissusSetButton(button)
         statusOffsetY = 1
     }
 
-    CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
-    self:SetDebugContext(button, item, appearanceID)
+    local feature = self
+    local function doUpdate()
+        -- Guard: button may have been recycled while waiting for item data
+        if button.itemID == itemID then
+            dbg("doUpdate: calling UpdateButton for", itemID)
+            CaerdonWardrobe:UpdateButton(button, item, feature, locationInfo, options)
+            feature:SetDebugContext(button, item, appearanceID)
+        else
+            dbg("doUpdate: button recycled, skip. current=", button.itemID, "expected=", itemID)
+        end
+    end
+
+    -- Ensure item data (including Equipment source loading) is fully cached
+    -- before entering the coroutine pipeline. Without this, customDataLoaded
+    -- stays false and items are never processed by ProcessItem.
+    if item:IsItemDataCached() then
+        dbg("UpdateSetButton: item cached, calling doUpdate directly")
+        doUpdate()
+    else
+        dbg("UpdateSetButton: item not cached, deferring via ContinueOnItemLoad")
+        item:ContinueOnItemLoad(doUpdate)
+    end
 end
 
 function NarcissusMixin:RefreshNarcissusSetButtons(setFrame)
     setFrame = setFrame or self.narcissusSetFrame or GetNarcissusSetFrame()
-    if not setFrame or not setFrame.itemButtons then
+    if not setFrame or not setFrame.ScrollView then
+        dbg("RefreshSetButtons: no setFrame or ScrollView")
         return
     end
 
-    -- for _, button in ipairs(setFrame.itemButtons) do
-    --     self:PrepareNarcissusSetButton(button)
-    --     if button and button:IsShown() and button.itemID then
-    --         self:UpdateNarcissusSetButton(button)
-    --     else
-    --         self:ClearNarcissusSetButton(button)
-    --     end
-    -- end
+    if type(setFrame.IsShown) == "function" and not setFrame:IsShown() then
+        dbg("RefreshSetButtons: frame not shown")
+        return
+    end
+
+    if type(setFrame.ScrollView.ProcessActiveObjects) == "function" then
+        local feature = self
+        local count = 0
+        setFrame.ScrollView:ProcessActiveObjects("ItemButton", function(button)
+            count = count + 1
+            if button and button:IsShown() and button.itemID then
+                dbg("RefreshSetButtons: processing button", count, "itemID=", button.itemID)
+                feature:PrepareNarcissusSetButton(button)
+                feature:UpdateNarcissusSetButton(button)
+            else
+                dbg("RefreshSetButtons: skip button", count, "shown=", button and button:IsShown(), "itemID=", button and button.itemID)
+            end
+        end)
+        dbg("RefreshSetButtons: processed", count, "buttons")
+    else
+        dbg("RefreshSetButtons: ProcessActiveObjects not available")
+    end
 end
 
 function NarcissusMixin:ClearNarcissusSetButtons(setFrame)
     setFrame = setFrame or self.narcissusSetFrame or GetNarcissusSetFrame()
-    if not setFrame or not setFrame.itemButtons then
+    if not setFrame or not setFrame.ScrollView then
         return
     end
 
-    for _, button in ipairs(setFrame.itemButtons) do
-        self:ClearNarcissusSetButton(button)
+    if type(setFrame.ScrollView.ProcessActiveObjects) == "function" then
+        local feature = self
+        setFrame.ScrollView:ProcessActiveObjects("ItemButton", function(button)
+            feature:ClearNarcissusSetButton(button)
+        end)
     end
 end
 
@@ -442,8 +442,17 @@ function NarcissusMixin:UpdateNarcissusOutfitButton(button)
         statusOffsetY = 3
     }
 
-    CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
-    self:SetDebugContext(button, item, sourceID)
+    local feature = self
+    local function doUpdate()
+        CaerdonWardrobe:UpdateButton(button, item, feature, locationInfo, options)
+        feature:SetDebugContext(button, item, sourceID)
+    end
+
+    if item:IsItemDataCached() then
+        doUpdate()
+    else
+        item:ContinueOnItemLoad(doUpdate)
+    end
 end
 
 function NarcissusMixin:EnsureHoverHook(frame)
@@ -608,29 +617,70 @@ function NarcissusMixin:RefreshNarcissusOutfitButtons()
     end
 end
 
--- local originalInit = dressingRoomFeature.Init
--- function dressingRoomFeature:Init(...)
---     local events = originalInit(self, ...)
---     self:TryHookNarcissus()
---     return events
--- end
+function NarcissusMixin:ADDON_LOADED(name)
+    -- TransmogSetFrame discovery requires PLAYER_ENTERING_WORLD (when Narcissus
+    -- re-parents it to DressUpFrame), so we only retry slot hooks here.
+    if not self.narcissusSlotsHooked then
+        self:TryHookNarcissusSlots()
+    end
+end
 
--- local originalAddonLoaded = dressingRoomFeature.ADDON_LOADED
--- function dressingRoomFeature:ADDON_LOADED(name, ...)
---     if originalAddonLoaded then
---         originalAddonLoaded(self, name, ...)
---     end
+function NarcissusMixin:PLAYER_ENTERING_WORLD()
+    -- Narcissus re-parents TransmogSetFrame from UIParent to DressUpFrame during
+    -- its own PLAYER_ENTERING_WORLD handler.  Defer so our scan runs after Narcissus
+    -- has finished the re-parent.
+    if not self.narcissusHooked then
+        local feature = self
+        C_Timer.After(0, function()
+            dbg("PLAYER_ENTERING_WORLD deferred: retrying TryHookNarcissus")
+            feature:TryHookNarcissus()
+        end)
+    end
+end
 
---     if name == "Blizzard_UIPanels_Game" or name == "Blizzard_SharedXMLGame" or name == addonName then
---         self:TryHookNarcissus()
---     end
--- end
+function NarcissusMixin:TRANSMOG_COLLECTION_UPDATED()
+    self:Refresh()
+end
+
+function NarcissusMixin:TRANSMOG_COLLECTION_SOURCE_REMOVED()
+    self:Refresh()
+end
+
+function NarcissusMixin:TRANSMOG_SOURCE_COLLECTABILITY_UPDATE()
+    self:Refresh()
+end
 
 function NarcissusMixin:Refresh()
-    -- CaerdonWardrobeFeatureMixin:Refresh(self)
-    -- self:TryHookNarcissus()
-    -- self:CollectNarcissusSlotButtons()
-    -- self:RefreshNarcissusOutfitButtons()
+    CaerdonWardrobeFeatureMixin:Refresh(self)
+    self:RefreshNarcissusSetButtons()
+    self:RefreshNarcissusOutfitButtons()
+end
+
+function NarcissusMixin:GetTooltipData(item, locationInfo)
+    local itemLink = item and item:GetItemLink()
+    if itemLink then
+        return C_TooltipInfo.GetHyperlink(itemLink)
+    end
+end
+
+function NarcissusMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    return {
+        bindingStatus = {
+            shouldShow = false
+        },
+        ownIcon = {
+            shouldShow = true
+        },
+        otherIcon = {
+            shouldShow = true
+        },
+        oldExpansionIcon = {
+            shouldShow = true
+        },
+        sellableIcon = {
+            shouldShow = false
+        }
+    }
 end
 
 local Version = nil
@@ -643,18 +693,3 @@ if select(4, C_AddOns.GetAddOnInfo(addonName)) then
         isActive = true
     end
 end
-
--- dressingRoomFeature._narcissusSupportInitialized = true
-
--- if C_AddOns.IsAddOnLoaded(addonName) then
---     dressingRoomFeature:TryHookNarcissus()
--- else
---     local loader = CreateFrame("Frame")
---     loader:RegisterEvent("ADDON_LOADED")
---     loader:SetScript("OnEvent", function(self, event, name)
---         if name == addonName then
---             dressingRoomFeature:TryHookNarcissus()
---             self:UnregisterAllEvents()
---         end
---     end)
--- end

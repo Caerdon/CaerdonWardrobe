@@ -189,14 +189,14 @@ function DressingRoomMixin:TryHookDressUp()
     end
 
     -- Hook outfit detail slots (separate mixin, may load later)
-    if not self.hookedOutfitSlots and DressUpOutfitDetailsSlotMixin then
+    if not self.hookedOutfitSlots and DressUpCustomSetDetailsSlotMixin then
         self.hookedOutfitSlots = true
 
-        hooksecurefunc(DressUpOutfitDetailsSlotMixin, "SetAppearance", function(slotFrame, slotID, transmogID, isSecondary)
+        hooksecurefunc(DressUpCustomSetDetailsSlotMixin, "SetAppearance", function(slotFrame, slotID, transmogID, isSecondary)
             feature:UpdateOutfitSlot(slotFrame, transmogID)
         end)
 
-        hooksecurefunc(DressUpOutfitDetailsSlotMixin, "SetIllusion", function(slotFrame, slotID, transmogID)
+        hooksecurefunc(DressUpCustomSetDetailsSlotMixin, "SetIllusion", function(slotFrame, slotID, transmogID)
             feature:UpdateOutfitSlot(slotFrame, transmogID)
         end)
     end
@@ -393,7 +393,7 @@ end
 function DressingRoomMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         bindingStatus = {
-            shouldShow = true
+            shouldShow = false
         },
         ownIcon = {
             shouldShow = true
