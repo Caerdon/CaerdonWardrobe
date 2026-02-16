@@ -171,6 +171,21 @@ function DressingRoomMixin:TryHookDressUp()
 
         hooksecurefunc(DressUpFrameTransmogSetButtonMixin, "InitItem", updateSetSelectionButton)
         hooksecurefunc(DressUpFrameTransmogSetButtonMixin, "Refresh", updateSetSelectionButton)
+
+        -- Direct ScrollBox callback — fires reliably for every initialized button
+        -- regardless of whether mixin table hooks propagated via Mixin().
+        local panel = DressUpFrame.SetSelectionPanel
+        if panel and panel.ScrollBox then
+            panel.ScrollBox:RegisterCallback(
+                ScrollBoxListMixin.Event.OnInitializedFrame,
+                function(o, button, elementData)
+                    if button and elementData and elementData.itemID then
+                        feature:UpdateSetSelectionButton(button)
+                    end
+                end,
+                feature
+            )
+        end
     end
 
     -- Hook outfit detail slots (separate mixin, may load later)
