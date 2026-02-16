@@ -1072,7 +1072,10 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         -- DevTools_Dump(recipeInfo)
         if recipeInfo and recipeInfo.learned then -- TODO: This still ends up flagging a few of the weird self-referential ones that aren't learned... look into later.
             needsItem = false
-        elseif tooltipData.canLearn then
+        elseif tooltipData.canLearn or (recipeInfo and recipeInfo.canLearn) then
+            -- tooltipData.canLearn is set by RestrictedSkill tooltip lines (modern recipes).
+            -- recipeInfo.canLearn is from the RecipeMixin's name-based lookup and handles
+            -- old-world recipes that lack RestrictedSkill lines in their tooltip data.
             needsItem = true
         else
             needsItem = false

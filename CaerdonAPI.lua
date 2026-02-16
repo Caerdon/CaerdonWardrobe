@@ -366,6 +366,12 @@ local function GetTooltipFrames(focus)
     if not focus and type(GetMouseFocus) == "function" then
         focus = GetMouseFocus()
     end
+    if not focus and type(GetMouseFoci) == "function" then
+        local foci = GetMouseFoci()
+        if foci and #foci > 0 then
+            focus = foci[1]
+        end
+    end
 
     local tooltipCandidates = {
         ItemRefTooltip,
@@ -728,6 +734,12 @@ function CaerdonAPIMixin:GetHoveredItemContext()
     if type(GetMouseFocus) == "function" then
         focus = GetMouseFocus()
     end
+    if not focus and type(GetMouseFoci) == "function" then
+        local foci = GetMouseFoci()
+        if foci and #foci > 0 then
+            focus = foci[1]
+        end
+    end
 
     if self.manualHoverContext then
         local ctx = self.manualHoverContext
@@ -806,6 +818,19 @@ function CaerdonAPIMixin:GetHoveredItemContext()
                     }
                 end
             end
+        end
+    end
+
+    -- Check the tooltip owner frame for caerdonDebugItemLink. This handles cases
+    -- where GetMouseFocus/GetMouseFoci return nil but the tooltip owner (e.g. a
+    -- merchant button) has the correct item link tagged on it.
+    if GameTooltip and type(GameTooltip.GetOwner) == "function" then
+        local owner = GameTooltip:GetOwner()
+        if owner and IsItemLink(owner.caerdonDebugItemLink) then
+            return {
+                itemLink = owner.caerdonDebugItemLink,
+                fromTooltip = false
+            }
         end
     end
 
@@ -945,7 +970,10 @@ function CaerdonAPIMixin:OpenDebugForHoveredItem()
         local linkMatches = IsItemLink(context.itemLink) and IsItemLink(tooltipLink) and tooltipLink == context.itemLink
         local guidMatches = context.guid and tooltipGuid and tooltipGuid ~= "" and tooltipGuid == context.guid
 
-        if not linkMatches and IsItemLink(tooltipLink) and not IsItemLink(context.itemLink) then
+        -- Prefer GameTooltip:GetItem() when it differs from context.itemLink.
+        -- This handles recipe tooltips where the tooltip data hyperlink points to
+        -- the created item but GetItem() correctly returns the recipe itself.
+        if not linkMatches and IsItemLink(tooltipLink) then
             context.itemLink = tooltipLink
             linkMatches = true
         end

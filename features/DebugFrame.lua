@@ -1212,6 +1212,22 @@ function DebugFrameMixin:ClearDebugDisplay()
     -- Clear debug entries
     self:ClearDebugEntries()
 
+    -- Clear recipe created item container
+    if self.recipeCreatedItemContainer then
+        self.recipeCreatedItemContainer:Hide()
+        if self.recipeCreatedItemFrames then
+            for _, frame in ipairs(self.recipeCreatedItemFrames) do
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+    end
+
     -- Clear ensemble container
     if self.ensembleContainer then
         self.ensembleContainer:Hide()
@@ -1271,6 +1287,9 @@ function DebugFrameMixin:ClearDebugEntries()
     for _, entry in ipairs(self.debugEntries) do
         entry:Hide()
         entry:ClearAllPoints()
+        if entry.itemButton then
+            entry.itemButton:Hide()
+        end
     end
 
     -- Reset debug entries count
@@ -1283,6 +1302,10 @@ end
 
 function DebugFrameMixin:UpdateContentHeight()
     local totalHeight = self.infoFrame:GetHeight()
+
+    if self.recipeCreatedItemContainer and self.recipeCreatedItemContainer:IsShown() then
+        totalHeight = totalHeight + 10 + self.recipeCreatedItemContainer:GetHeight()
+    end
 
     if self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() then
         totalHeight = totalHeight + 10 + self.sharedAppearanceContainer:GetHeight()
@@ -2215,6 +2238,45 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Icon Texture", housingInfo.iconTexture)
             addKV(1, "Source Text", housingInfo.sourceText)
             addKV(1, "Is Pending", housingInfo.isPending)
+        end
+    end
+
+    if identifiedType == CaerdonItemType.Recipe then
+        addLine(0, "")
+        addLine(0, "[Recipe]")
+        local recipeSpellName, recipeSpellID = C_Item.GetItemSpell(item:GetItemLink())
+        addKV(1, "Recipe Spell ID", recipeSpellID)
+        addKV(1, "Recipe Spell Name", recipeSpellName)
+
+        if recipeSpellID then
+            local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeSpellID)
+            if tradeSkillRecipeInfo then
+                addKV(1, "TradeSkill Learned", tradeSkillRecipeInfo.learned)
+                addKV(1, "TradeSkill Recipe ID", tradeSkillRecipeInfo.recipeID)
+                addKV(1, "TradeSkill Recipe Name", tradeSkillRecipeInfo.name)
+            else
+                addKV(1, "TradeSkill Recipe Info", "nil")
+            end
+        end
+
+        if itemData and itemData.GetRecipeInfo then
+            local recipeInfo = itemData:GetRecipeInfo()
+            if recipeInfo then
+                addKV(1, "Mixin Learned", recipeInfo.learned)
+                addKV(1, "Can Learn", recipeInfo.canLearn)
+                addKV(1, "First Craft", recipeInfo.firstCraft)
+
+                if recipeInfo.createdItem then
+                    addKV(1, "Created Item", recipeInfo.createdItem:GetItemName() or recipeInfo.createdItem:GetItemLink())
+                    addKV(1, "Created Item ID", recipeInfo.createdItem:GetItemID())
+                end
+
+                if recipeInfo.schematic and recipeInfo.schematic.outputItemID then
+                    addKV(1, "Schematic Output Item ID", recipeInfo.schematic.outputItemID)
+                end
+            else
+                addKV(1, "Mixin Recipe Data", "nil (not in trade skill cache)")
+            end
         end
     end
 
@@ -3919,7 +3981,9 @@ function DebugFrameMixin:RefreshSharedAppearanceLayout()
     end
 
     self.sharedAppearanceContainer:ClearAllPoints()
-    self.sharedAppearanceContainer:SetPoint("TOPLEFT", self.infoFrame, "BOTTOMLEFT", 0, -10)
+    local sharedAnchor = self.recipeCreatedItemContainer and self.recipeCreatedItemContainer:IsShown()
+        and self.recipeCreatedItemContainer or self.infoFrame
+    self.sharedAppearanceContainer:SetPoint("TOPLEFT", sharedAnchor, "BOTTOMLEFT", 0, -10)
     self.sharedAppearanceContainer:SetWidth(self:GetDetailSectionWidth())
 
     local headerHeight = 25
@@ -3945,13 +4009,239 @@ function DebugFrameMixin:RefreshSharedAppearanceLayout()
     self:UpdateContentHeight()
 end
 
+function DebugFrameMixin:UpdateRecipeCreatedItemUI(recipeInfo)
+    if not self.recipeCreatedItemContainer then
+        self.recipeCreatedItemContainer = CreateFrame("Frame", "CaerdonDebugRecipeCreatedItemContainer", self.content)
+        self.recipeCreatedItemHeader = self.recipeCreatedItemContainer:CreateFontString(nil, "OVERLAY",
+            "GameFontNormalLarge")
+        self.recipeCreatedItemHeader:SetPoint("TOPLEFT", self.recipeCreatedItemContainer, "TOPLEFT", 0, 0)
+        self.recipeCreatedItemHeader:SetTextColor(0.5, 0.8, 1)
+        self.recipeCreatedItemFrames = {}
+    end
+
+    if not recipeInfo or not recipeInfo.createdItem then
+        self.recipeCreatedItemContainer:Hide()
+        if self.recipeCreatedItemFrames then
+            for _, frame in ipairs(self.recipeCreatedItemFrames) do
+                if frame.itemButton then
+                    CaerdonWardrobe:ClearButton(frame.itemButton)
+                end
+                frame:Hide()
+                if frame.detailsFrame then
+                    frame.detailsFrame:Hide()
+                end
+            end
+        end
+        self:UpdateContentHeight()
+        return
+    end
+
+    self.recipeCreatedItemContainer:Show()
+    self.recipeCreatedItemHeader:SetText("Created Item")
+
+    local frame = self:AcquireAppearanceItemFrame(self.recipeCreatedItemFrames, self.recipeCreatedItemContainer,
+        "CaerdonDebugRecipeCreatedItem", 1, function()
+            self:RefreshRecipeCreatedItemLayout()
+        end)
+
+    local createdItem = recipeInfo.createdItem
+    local createdLink = createdItem:GetItemLink()
+    local createdID = createdItem:GetItemID()
+    local itemName, resolvedLink, itemQuality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(createdLink or createdID)
+
+    local displayInfo = {
+        itemID = createdID,
+        itemLink = createdLink or resolvedLink,
+        icon = icon,
+        quality = itemQuality,
+        fallbackName = itemName
+    }
+
+    ApplyItemButtonState(frame.itemButton, displayInfo)
+    SetAppearanceName(frame, displayInfo, "", false)
+
+    -- Show recipe-specific status
+    local statusParts = {}
+    if recipeInfo.learned then
+        table.insert(statusParts, "|cff888888Learned|r")
+    else
+        table.insert(statusParts, "|cff00ff00Not Learned|r")
+    end
+    if recipeInfo.canLearn then
+        table.insert(statusParts, "|cff00ff00Can Learn|r")
+    end
+    if recipeInfo.firstCraft then
+        table.insert(statusParts, "|cffffff00First Craft|r")
+    end
+    frame.statusText:SetText(table.concat(statusParts, ", "))
+
+    -- Show item type info as descriptor
+    local caerdonCreatedItem
+    if createdLink then
+        caerdonCreatedItem = CaerdonItem:CreateFromItemLink(createdLink)
+    elseif createdID then
+        caerdonCreatedItem = CaerdonItem:CreateFromItemID(createdID)
+    end
+    local createdType = ""
+    if caerdonCreatedItem and not caerdonCreatedItem:IsItemEmpty() then
+        createdType = caerdonCreatedItem:GetCaerdonItemType() or ""
+    end
+    if recipeInfo.schematic and recipeInfo.schematic.outputItemID then
+        frame.descriptorText:SetText(createdType .. " (Output ID: " .. tostring(recipeInfo.schematic.outputItemID) .. ")")
+    else
+        frame.descriptorText:SetText(createdType)
+    end
+
+    -- Update Caerdon overlay on the card's item button
+    CaerdonWardrobe:ClearButton(frame.itemButton)
+    if caerdonCreatedItem and not caerdonCreatedItem:IsItemEmpty() then
+        CaerdonWardrobe:UpdateButton(frame.itemButton, caerdonCreatedItem, self, {
+            locationKey = "recipe-created-" .. tostring(createdID or "unknown"),
+            isDebugFrame = true
+        }, {
+            statusProminentSize = 20,
+            bindingScale = 1.0
+        })
+    end
+
+    -- Build expandable detail lines for the created item
+    self:ResetAppearanceFrameDetails(frame)
+    local addLine, addSpacer, getHeight = self:CreateAppearanceDetailBuilder(frame)
+
+    -- Basic item info
+    if createdID then
+        addLine("Item ID: " .. tostring(createdID), { 1, 0.82, 0 })
+    end
+
+    local createdItemName, _, createdItemQuality, createdItemLevel, createdMinLevel, createdItemType,
+        createdItemSubType, _, createdEquipLoc, _, createdSellPrice, createdClassID, createdSubClassID =
+        C_Item.GetItemInfo(createdLink or createdID)
+
+    if createdItemType then
+        local typeStr = createdItemType
+        if createdItemSubType and createdItemSubType ~= createdItemType then
+            typeStr = typeStr .. " - " .. createdItemSubType
+        end
+        addLine("Type: " .. typeStr, { 0.7, 0.7, 0.7 })
+    end
+
+    if createdItemLevel and createdItemLevel > 1 then
+        addLine("Item Level: " .. tostring(createdItemLevel), { 0.7, 0.7, 0.7 })
+    end
+
+    if createdEquipLoc and createdEquipLoc ~= "" then
+        local slotName = _G[createdEquipLoc] or createdEquipLoc
+        addLine("Equip Slot: " .. slotName, { 0.7, 0.7, 0.7 })
+    end
+
+    if createdMinLevel and createdMinLevel > 0 then
+        addLine("Required Level: " .. tostring(createdMinLevel), { 0.7, 0.7, 0.7 })
+    end
+
+    -- Caerdon status of the created item
+    if caerdonCreatedItem and not caerdonCreatedItem:IsItemEmpty() then
+        addSpacer()
+        local caerdonCreatedType = caerdonCreatedItem:GetCaerdonItemType()
+        addLine("Caerdon Type: " .. tostring(caerdonCreatedType), { 0.5, 0.8, 1 })
+
+        local createdLocationInfo = {
+            locationKey = "recipe-created-detail-" .. tostring(createdID or "unknown"),
+            isDebugFrame = true
+        }
+        local isReady, mogStatus, bindingStatus = caerdonCreatedItem:GetCaerdonStatus(self, createdLocationInfo)
+        if isReady then
+            if mogStatus and mogStatus ~= "" then
+                addLine("Mog Status: " .. mogStatus, { 0.7, 0.9, 0.7 })
+            end
+            if bindingStatus and bindingStatus ~= "" then
+                addLine("Binding: " .. tostring(bindingStatus), { 0.7, 0.7, 0.7 })
+            end
+        end
+
+        -- For equipment, show transmog source info
+        if caerdonCreatedType == "Equipment" then
+            local createdItemData = caerdonCreatedItem:GetItemData()
+            if createdItemData and createdItemData.GetTransmogInfo then
+                local transmogInfo = createdItemData:GetTransmogInfo()
+                if transmogInfo then
+                    if transmogInfo.appearanceID then
+                        addLine("Appearance ID: " .. tostring(transmogInfo.appearanceID), { 0.7, 0.7, 0.7 })
+                    end
+                    if transmogInfo.sourceID then
+                        addLine("Source ID: " .. tostring(transmogInfo.sourceID), { 0.7, 0.7, 0.7 })
+                    end
+                    if transmogInfo.isCollected ~= nil then
+                        local collectedColor = transmogInfo.isCollected and { 0.5, 0.5, 0.5 } or { 0.3, 1, 0.3 }
+                        addLine("Collected: " .. tostring(transmogInfo.isCollected), collectedColor)
+                    end
+                    if transmogInfo.canCollect ~= nil then
+                        addLine("Can Collect: " .. tostring(transmogInfo.canCollect), { 0.7, 0.7, 0.7 })
+                    end
+                end
+            end
+        end
+    end
+
+    frame.detailsFrame:SetHeight(getHeight() + 8)
+    frame:SetHeight(APPEARANCE_ITEM_COLLAPSED_HEIGHT)
+    frame.detailsFrame:Hide()
+    frame.isExpanded = false
+    frame:Show()
+
+    -- Hide any extra frames beyond index 1
+    for index = 2, #self.recipeCreatedItemFrames do
+        local extra = self.recipeCreatedItemFrames[index]
+        if extra then
+            if extra.itemButton then
+                CaerdonWardrobe:ClearButton(extra.itemButton)
+            end
+            extra:Hide()
+        end
+    end
+
+    self:RefreshRecipeCreatedItemLayout()
+end
+
+function DebugFrameMixin:RefreshRecipeCreatedItemLayout()
+    if not self.recipeCreatedItemContainer or not self.recipeCreatedItemContainer:IsShown() then
+        return
+    end
+
+    self.recipeCreatedItemContainer:ClearAllPoints()
+    self.recipeCreatedItemContainer:SetPoint("TOPLEFT", self.infoFrame, "BOTTOMLEFT", 0, -10)
+    self.recipeCreatedItemContainer:SetWidth(self:GetDetailSectionWidth())
+
+    local headerHeight = 25
+    local yOffset = headerHeight
+    if self.recipeCreatedItemFrames then
+        for _, frame in ipairs(self.recipeCreatedItemFrames) do
+            if frame:IsShown() then
+                frame:ClearAllPoints()
+                frame:SetPoint("TOPLEFT", self.recipeCreatedItemContainer, "TOPLEFT", 0, -yOffset)
+                frame:SetPoint("TOPRIGHT", self.recipeCreatedItemContainer, "TOPRIGHT", -15, -yOffset)
+                yOffset = yOffset + frame:GetHeight() + 5
+            end
+        end
+    end
+
+    self.recipeCreatedItemContainer:SetHeight(math.max(yOffset, headerHeight))
+    self:UpdateContentHeight()
+
+    -- Refresh downstream containers that anchor relative to us
+    if self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() then
+        self:RefreshSharedAppearanceLayout()
+    end
+end
+
 function DebugFrameMixin:RefreshAppearanceVariationLayout()
     if not self.appearanceVariationContainer or not self.appearanceVariationContainer:IsShown() then
         return
     end
 
     local anchor = self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() and
-        self.sharedAppearanceContainer or self.infoFrame
+        self.sharedAppearanceContainer
+        or (self.recipeCreatedItemContainer and self.recipeCreatedItemContainer:IsShown() and self.recipeCreatedItemContainer)
+        or self.infoFrame
     self.appearanceVariationContainer:ClearAllPoints()
     self.appearanceVariationContainer:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
     self.appearanceVariationContainer:SetWidth(self:GetDetailSectionWidth())
@@ -4426,6 +4716,7 @@ function DebugFrameMixin:AddEnsembleInfo(item)
     local ensembleAnchor = self.appearanceVariationContainer and self.appearanceVariationContainer:IsShown() and
         self.appearanceVariationContainer
         or (self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() and self.sharedAppearanceContainer)
+        or (self.recipeCreatedItemContainer and self.recipeCreatedItemContainer:IsShown() and self.recipeCreatedItemContainer)
         or self.infoFrame
     self.ensembleContainer:SetPoint("TOPLEFT", ensembleAnchor, "BOTTOMLEFT", 0, -10)
     self.ensembleContainer:SetPoint("TOPRIGHT", ensembleAnchor, "BOTTOMRIGHT", 0, -10)
@@ -5227,6 +5518,7 @@ function DebugFrameMixin:RefreshEnsembleLayout()
     local ensembleAnchor = (self.appearanceVariationContainer and self.appearanceVariationContainer:IsShown() and
         self.appearanceVariationContainer) or
         (self.sharedAppearanceContainer and self.sharedAppearanceContainer:IsShown() and self.sharedAppearanceContainer) or
+        (self.recipeCreatedItemContainer and self.recipeCreatedItemContainer:IsShown() and self.recipeCreatedItemContainer) or
         self.infoFrame
     self.ensembleContainer:SetPoint("TOPLEFT", ensembleAnchor, "BOTTOMLEFT", 0, -10)
     self.ensembleContainer:SetWidth(self:GetDetailSectionWidth())
@@ -5294,12 +5586,39 @@ function DebugFrameMixin:AddRecipeInfo(item)
     local recipeInfo = itemData:GetRecipeInfo()
     if recipeInfo then
         self:AddDebugEntry("Learned", tostring(recipeInfo.learned))
+        self:AddDebugEntry("Can Learn", tostring(recipeInfo.canLearn))
+        self:AddDebugEntry("First Craft", tostring(recipeInfo.firstCraft))
 
-        if recipeInfo.spellID then
-            self:AddDebugEntry("Recipe Spell ID", tostring(recipeInfo.spellID))
+        if not recipeInfo.createdItem then
+            self:AddDebugEntry("Creates Item", "none (self-referential or no output)")
         end
-        if recipeInfo.name then
-            self:AddDebugEntry("Recipe Name", recipeInfo.name)
+
+        if recipeInfo.schematic and recipeInfo.schematic.outputItemID then
+            self:AddDebugEntry("Schematic Output Item ID", tostring(recipeInfo.schematic.outputItemID))
+        end
+
+        -- Show created item as a card below the debug entries
+        self:UpdateRecipeCreatedItemUI(recipeInfo)
+    else
+        self:AddDebugEntry("Recipe Data", "nil (recipe not found in trade skill cache)")
+        self:UpdateRecipeCreatedItemUI(nil)
+    end
+
+    -- Show the recipe's own spell info
+    local itemSpellName, itemSpellID = C_Item.GetItemSpell(item:GetItemLink())
+    if itemSpellID then
+        self:AddDebugEntry("Recipe Spell ID", tostring(itemSpellID))
+        self:AddDebugEntry("Recipe Spell Name", tostring(itemSpellName))
+
+        local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(itemSpellID)
+        if tradeSkillRecipeInfo then
+            self:AddDebugEntry("TradeSkill Learned", tostring(tradeSkillRecipeInfo.learned))
+            self:AddDebugEntry("TradeSkill Recipe ID", tostring(tradeSkillRecipeInfo.recipeID))
+            if tradeSkillRecipeInfo.name then
+                self:AddDebugEntry("TradeSkill Recipe Name", tradeSkillRecipeInfo.name)
+            end
+        else
+            self:AddDebugEntry("TradeSkill Info", "nil (spell not in trade skill data)")
         end
     end
 end

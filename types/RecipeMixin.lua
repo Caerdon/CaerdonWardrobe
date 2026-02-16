@@ -293,6 +293,11 @@ end
 function CaerdonRecipeMixin:LoadCreatedItems(callbackFunction)
     local item = self.item
 
+    -- Lazy re-evaluation (same as GetRecipeInfo)
+    if not self.recipe and item then
+        self.recipe = GetRecipe(item)
+    end
+
     local continuableContainer = ContinuableContainer:Create();
     local cancelFunc = function() end;
 
@@ -324,7 +329,11 @@ function CaerdonRecipeMixin:ContinueOnItemDataLoad(callbackFunction)
         error("Usage: NonEmptyItem:ContinueOnLoad(callbackFunction)", 2);
     end
 
-    self:LoadCreatedItems(callbackFunction)
+    -- Call callback immediately. The recipe's own status (learned/canLearn)
+    -- doesn't require the created item to be loaded first. Waiting for it
+    -- via LoadCreatedItems delays UpdateButton, which prevents the icon from
+    -- appearing on merchant items before the display settles.
+    callbackFunction()
 end
 
 -- Allows for override of continue return if additional data needs to get loaded from a specific mixin (i.e. created items)
@@ -338,6 +347,13 @@ end
 
 function CaerdonRecipeMixin:GetRecipeInfo()
     local item = self.item
+
+    -- Lazy re-evaluation: if recipe was nil at creation time (e.g. merchant items
+    -- where GetItemName() wasn't available yet), retry now that data may be loaded.
+    if not self.recipe and item then
+        self.recipe = GetRecipe(item)
+    end
+
     local result = {
         schematic = nil,
         firstCraft = false,
