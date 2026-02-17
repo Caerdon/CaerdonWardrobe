@@ -103,6 +103,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
     self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
     self:RegisterEvent "VARIABLES_LOADED"
+    self:RegisterEvent "NEW_RECIPE_LEARNED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -1492,6 +1493,10 @@ end
 
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
     -- Can change while logged in!
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:NEW_RECIPE_LEARNED()
     self:RefreshItems()
 end
 
