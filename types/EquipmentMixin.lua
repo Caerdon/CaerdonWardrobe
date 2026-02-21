@@ -93,6 +93,15 @@ local function GetComparableItemLevel(itemLink, itemLocation)
 
     if not itemLevel or itemLevel <= 0 then
         itemLevel = select(1, GetDetailedItemLevelInfo(itemLink))
+        -- Guard against inflated item levels from old expansion items with
+        -- scaling bonus IDs: GetDetailedItemLevelInfo can return dramatically
+        -- wrong values for these. Cross-check against GetItemInfo.
+        if itemLevel then
+            local baseItemLevel = select(4, C_Item.GetItemInfo(itemLink))
+            if baseItemLevel and baseItemLevel > 0 and itemLevel > baseItemLevel * 2 then
+                itemLevel = baseItemLevel
+            end
+        end
     end
 
     return itemLevel

@@ -11,6 +11,16 @@ CaerdonBattlePetMixin = {}
     return itemType
 end
 
+-- Battle pet links (battlepet:...) don't populate WoW's ItemMixin backing data,
+-- so IsItemEmpty() is always true. Override to skip that check since battle pets
+-- work entirely from the link text.
+function CaerdonBattlePetMixin:ContinueOnItemDataLoad(callbackFunction)
+    if type(callbackFunction) ~= "function" then
+        error("Usage: ContinueOnItemDataLoad(callbackFunction)", 2)
+    end
+    callbackFunction()
+end
+
 function CaerdonBattlePetMixin:GetBattlePetInfo()
     local linkType, linkOptions, displayText = LinkUtil.ExtractLink(self.item:GetItemLink())
 
