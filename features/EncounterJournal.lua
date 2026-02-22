@@ -110,7 +110,10 @@ end
 function EncounterJournalMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
     if EncounterJournal and EncounterJournal:IsShown() then
-        EncounterJournal_LootUpdate()
+        -- Re-process visible buttons directly instead of calling EncounterJournal_LootUpdate()
+        -- which taints the ScrollBox DataProvider when called from addon code, causing
+        -- MoneyFrame arithmetic errors on tooltip hover.
+        self:OnLootContainerScrollBoxRangeChanged()
     end
 end
 
