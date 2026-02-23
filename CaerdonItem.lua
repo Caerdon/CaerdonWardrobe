@@ -243,7 +243,9 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
             local questID = tonumber(strsplit(":", linkOptions), 10)
             CaerdonQuestEventListener:AddCallback(questID, GenerateClosure(ProcessTheItem), FailTheItem)
         else
-            ProcessTheItem()
+            -- Item is empty and not cached - nothing to load, just call callback
+            self.customDataLoaded = true
+            callbackFunction()
         end
     else
         ProcessTheItem()
