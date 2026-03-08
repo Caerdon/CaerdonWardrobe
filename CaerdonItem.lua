@@ -821,75 +821,38 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.QuestTitle then
         elseif line.type == Enum.TooltipDataLineType.QuestPlayer then
         elseif line.type == Enum.TooltipDataLineType.NestedBlock then
-        elseif line.type == Enum.TooltipDataLineType.RestrictedRaceClass then
-        elseif line.type == Enum.TooltipDataLineType.RestrictedFaction then
-        elseif line.type == Enum.TooltipDataLineType.RestrictedSkill then
-            if isRecipe or isMiscellaneousStudy then
-                -- TODO: Some day - look into saving toon skill lines / ranks into a DB and showing
-                -- which toons could learn a recipe.
-                local replaceSkill = "%w"
+        elseif line.type == Enum.TooltipDataLineType.UsageRequirement then
+            -- UsageRequirement (type 43) consolidates the old Restricted* line types.
+            -- line.requirementType maps to Enum.TooltipDataUsageRequirementType.
+            -- line.usable is false when the requirement text is red (not met).
+            local reqType = line.requirementType
+            if reqType == Enum.TooltipDataUsageRequirementType.NotAlreadyKnown then
+                tooltipData.canLearn = false
+                tooltipData.isKnownSpell = true
+            elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
+                if isRecipe or isMiscellaneousStudy then
+                    -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+                    local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
+                    skillCheck = string.gsub(skillCheck, "2%$", "")
+                    skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+                    if GetLocale() == "zhCN" then
+                        skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+                    else
+                        skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+                    end
 
-                -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-                local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-                skillCheck = string.gsub(skillCheck, "2%$", "")
-                skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-                if GetLocale() == "zhCN" then
-                    skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-                else
-                    skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-                end
+                    if strmatch(lineText, skillCheck) then
+                        local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+                        local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self,
+                            requiredSkill, requiredRank)
+                        -- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
 
-                if strmatch(lineText, skillCheck) then
-                    local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
-                    local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self,
-                        requiredSkill, requiredRank)
-                    -- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
-
-                    tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
-                    tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
-                    tooltipData.canLearn = hasSkillLine
-
-                    -- if not hasSkillLine then -- or rank == maxRank then -- TODO: Not sure why I was checking maxRank here...
-                    -- 	-- tooltipData.canLearn = false -- TODO: Confirm if I need to do this - GetRecipeInfo appears to be returning nil for unknown recipes?
-                    -- 	local prof1, prof2, archaeology, fishing, cooking, firstAid = GetProfessions()
-
-                    -- 	local _, _, _, _, _, _, itemSubType = C_Item.GetItemInfo(self:GetItemLink())
-                    -- 	local professionName = itemSubType
-
-                    -- 	local prof
-                    -- 	-- Get information about each profession the player has
-                    -- 	local profList = {prof1, prof2, archaeology, fishing, cooking, firstAid}
-                    -- 	for _, prof in ipairs(profList) do
-                    -- 			if prof then
-                    -- 					local name, _, rank, _, _, _, skillLine = GetProfessionInfo(prof)
-                    -- 					if name == professionName then
-                    -- 						tooltipData.requiredTradeSkillMissingOrUnleveled = false
-                    -- 					end
-                    -- 			end
-                    -- 	end
-
-                    -- 	-- local spellName, spellID = C_Item.GetItemSpell(data.hyperlink)
-                    -- 	-- if spellID then
-                    -- 	-- 	-- local isUsable = C_Spell.IsSpellUsable(spellID)
-                    -- 	-- 	-- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
-                    -- 	-- 	local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
-                    -- 	-- 	if recipeInfo then
-                    -- 	-- 		tooltipData.requiredTradeSkillMissingOrUnleveled = false -- TODO: Verify - seemed to not retrieve if missing skill
-                    -- 	-- 	end
-                    -- 	-- 	-- DevTools_Dump(recipeInfo)
-                    -- 	-- end
-
-                    -- else
-                    -- 	tooltipData.canLearn = true
-                    -- end
+                        tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
+                        tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
+                        tooltipData.canLearn = hasSkillLine
+                    end
                 end
             end
-        elseif line.type == Enum.TooltipDataLineType.RestrictedPvPMedal then
-        elseif line.type == Enum.TooltipDataLineType.RestrictedReputation then
-        elseif line.type == Enum.TooltipDataLineType.RestrictedSpellKnown then
-            tooltipData.canLearn = false
-            tooltipData.isKnownSpell = true
-        elseif line.type == Enum.TooltipDataLineType.RestrictedLevel then
         elseif line.type == Enum.TooltipDataLineType.EquipSlot then
         elseif line.type == Enum.TooltipDataLineType.ItemName then
         elseif line.type == Enum.TooltipDataLineType.ItemLevel then
