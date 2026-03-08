@@ -188,6 +188,8 @@ function GetRecipe(item)
     recipeName = string.gsub(recipeName, "Design: ", "")
     recipeName = string.gsub(recipeName, "Plans: ", "")
     recipeName = string.gsub(recipeName, "Pattern: ", "")
+    recipeName = string.gsub(recipeName, "Technique: ", "")
+    recipeName = string.gsub(recipeName, "Formula: ", "")
 
     local recipeID = CaerdonRecipeData.globalRecipeNameToID[recipeName]
     if recipeID then
