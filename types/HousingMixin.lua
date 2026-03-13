@@ -87,6 +87,11 @@ function CaerdonHousingMixin:GetHousingInfo()
     local catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem and
         C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, true) or nil
 
+    -- Fallback: try without owned info to get at least static catalog data (firstAcquisitionBonus, etc.)
+    if not catalogEntryInfo and C_HousingCatalog.GetCatalogEntryInfoByItem then
+        catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, false)
+    end
+
     local ownedStored = 0
     local placedCount = 0
     local bagCount = 0
@@ -102,6 +107,8 @@ function CaerdonHousingMixin:GetHousingInfo()
     local entrySubtypeOwned = Enum and Enum.HousingCatalogEntrySubtype
     local isServiceItem = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.ServiceItem and
         subClassID == Enum.ItemHousingSubclass.ServiceItem
+    local isDye = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.Dye and
+        subClassID == Enum.ItemHousingSubclass.Dye
 
     local isOwnedSubtype = false
 
@@ -302,6 +309,11 @@ function CaerdonHousingMixin:GetHousingInfo()
         isPending = false
     end
 
+    -- Bag items without catalog data are genuinely unredeemed — don't retry, resolve immediately.
+    if isPending and bagCount > 0 and not catalogEntryInfo then
+        isPending = false
+    end
+
     if itemID and not isPending then
         pendingRetryCounts[itemID] = 0
     end
@@ -312,6 +324,8 @@ function CaerdonHousingMixin:GetHousingInfo()
         if (now - lastHousingWarmupRequest) >= 2 or now == 0 then
             if retries >= 6 then
                 -- Avoid spinning forever if the API never returns data.
+                -- Stop treating as pending so the item can resolve (e.g. vendor decor not yet redeemed).
+                isPending = false
                 pendingRetryCounts[itemID or 0] = retries
                 return {
                     entryInfo = catalogEntryInfo,
@@ -323,6 +337,7 @@ function CaerdonHousingMixin:GetHousingInfo()
                     bagCount = bagCount,
                     remainingRedeemable = remainingRedeemable,
                     isServiceItem = isServiceItem,
+                    isDye = isDye,
                     ownedStored = ownedStored,
                     placedCount = placedCount,
                     totalOwned = totalOwned,
@@ -366,6 +381,7 @@ function CaerdonHousingMixin:GetHousingInfo()
         bagCount = bagCount,
         remainingRedeemable = remainingRedeemable,
         isServiceItem = isServiceItem,
+        isDye = isDye,
         ownedStored = ownedStored,
         placedCount = placedCount,
         totalOwned = totalOwned,

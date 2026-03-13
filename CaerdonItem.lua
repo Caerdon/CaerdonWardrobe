@@ -1228,20 +1228,19 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             end
 
             local isServiceItem = housingInfo.isServiceItem
-            local treatAsUnowned = housingInfo.isUnowned
-            if treatAsUnowned then
-                if housingInfo.firstAcquisitionBonus and housingInfo.firstAcquisitionBonus > 0 then
-                    mogStatus = "own"
-                elseif isServiceItem then
+            local isDye = housingInfo.isDye
+
+            -- Dyes are one-time-use consumables, not collectible — skip icon entirely.
+            if not isDye then
+                local treatAsUnowned = housingInfo.isUnowned
+                if treatAsUnowned then
                     mogStatus = "own"
                 else
-                    mogStatus = "own"
-                end
-            else
-                local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and
-                    housingInfo.totalOwned >= housingInfo.maxStack
-                if not atCap or housingInfo.totalOwned == 0 then
-                    mogStatus = "housingOwned"
+                    local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and
+                        housingInfo.totalOwned >= housingInfo.maxStack
+                    if not atCap or housingInfo.totalOwned == 0 then
+                        mogStatus = "housingOwned"
+                    end
                 end
             end
         end

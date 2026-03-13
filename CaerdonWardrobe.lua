@@ -104,6 +104,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
     self:RegisterEvent "VARIABLES_LOADED"
     self:RegisterEvent "NEW_RECIPE_LEARNED"
+    self:RegisterEvent "SKILL_LINES_CHANGED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -821,6 +822,23 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         ShowUpgradeDeltaText()
     end
 
+    -- Show house XP bonus as a delta indicator for unowned housing items
+    if not upgradeDeltaShown and upgradeDeltaText and housingInfo and
+        housingInfo.firstAcquisitionBonus and housingInfo.firstAcquisitionBonus > 0 and
+        (status == "own") then
+        local baseYOffset = 2
+        if caerdonButton then
+            caerdonButton.upgradeDeltaBaseYOffset = baseYOffset
+            caerdonButton.upgradeDeltaAnchor = deltaAnchorFrame
+        end
+        upgradeDeltaText:SetFormattedText("+%d", housingInfo.firstAcquisitionBonus)
+        upgradeDeltaText:SetTextColor(1, 0.82, 0) -- Gold for house XP
+        upgradeDeltaText:SetAlpha(1.0)
+        upgradeDeltaText:Show()
+        self:UpdateUpgradeDeltaPosition(originalButton)
+        upgradeDeltaShown = true
+    end
+
     local iconSize = ICON_PROMINENT_SIZE
     if options.statusProminentSize then
         iconSize = options.statusProminentSize
@@ -1497,6 +1515,10 @@ function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 end
 
 function CaerdonWardrobeMixin:NEW_RECIPE_LEARNED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:SKILL_LINES_CHANGED()
     self:RefreshItems()
 end
 
