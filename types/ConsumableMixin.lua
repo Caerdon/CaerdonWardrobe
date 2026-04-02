@@ -817,6 +817,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
     -- end
 
     local itemName = C_Item.GetItemInfo(self.item:GetItemLink())
+    if not itemName then
+        return nil, true
+    end
     local factionName, changed = string.gsub(itemName, L["Contract: "], "")
     if changed > 0 then
         local expansionIndex = 0

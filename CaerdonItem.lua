@@ -692,7 +692,7 @@ function CaerdonItemMixin:GetTooltipData(data)
     local lines = data.lines or {}
 
     for lineIndex, line in ipairs(data.lines) do
-        local lineText = line.leftText
+        local lineText = line.leftText and tostring(line.leftText) or nil
         if line.type == Enum.TooltipDataLineType.None or
             line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent or
             line.type == Enum.TooltipDataLineType.ItemBinding then
@@ -1535,19 +1535,15 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 -- TODO: Better to figure out a way to identify spells that create currency if possible
                 mogStatus = "own"
             elseif isCombineDescription or isArrangeDescription then -- and mogStatus == "" then
-                if CheckUsable(spellID) then
-                    local maxStackCount = C_Item.GetItemMaxStackSize(itemLocation)
-                    local currentStackCount = C_Item.GetStackCount(itemLocation)
-
-                    local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0))
-                    if combineCount > 1 then
-                        mogStatus = "canCombine"
-                        if combineCount <= currentStackCount then
-                            mogStatus = "readyToCombine"
-                        end
-                    else
+                local currentStackCount = C_Item.GetStackCount(itemLocation)
+                local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0))
+                if combineCount > 1 then
+                    mogStatus = "canCombine"
+                    if combineCount <= currentStackCount then
                         mogStatus = "readyToCombine"
                     end
+                elseif CheckUsable(spellID) then
+                    mogStatus = "readyToCombine"
                 else
                     mogStatus = "canCombine"
                 end
@@ -1555,7 +1551,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
-    if statusCacheKey then
+    if statusCacheKey and mogStatus ~= "canCombine" and mogStatus ~= "readyToCombine" then
         statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult}
     end
 

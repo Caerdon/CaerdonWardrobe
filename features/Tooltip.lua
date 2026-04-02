@@ -130,7 +130,7 @@ function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality,
         return
     end
 
-    local ownedText = tooltip.Owned:GetText() or ""
+    local ownedText = tostring(tooltip.Owned:GetText() or "")
     local origHeight = tooltip.Owned:GetHeight()
 
     tooltip.Owned:SetWordWrap(true)
@@ -481,7 +481,7 @@ function TooltipMixin:OnTooltipSetItem(tooltip)
                         -- Hide "Already known" line for ensembles with uncollected items
                         for i = 1, tooltip:NumLines() do
                             local line = _G[tooltip:GetName() .. "TextLeft" .. i]
-                            if line and line:GetText() == ITEM_SPELL_KNOWN then
+                            if line and tostring(line:GetText()) == ITEM_SPELL_KNOWN then
                                 line:SetText("")
                                 line:Hide()
                                 break

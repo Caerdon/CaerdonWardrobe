@@ -95,13 +95,19 @@ function BagsMixin:OnUpdateItems(frame)
                 CaerdonWardrobe:ClearButtonState(button)
             elseif itemID == cachedID and itemID ~= nil then
                 local locationKey = format("Bags-bag%d-slot%d", bag, slot)
-                if CaerdonWardrobe:GetButtonLocationKey(button) == locationKey then
+                local stackCount = C_Item.GetStackCount(ItemLocation:CreateFromBagAndSlot(bag, slot))
+                if CaerdonWardrobe:GetButtonLocationKey(button) == locationKey
+                    and CaerdonWardrobe:GetButtonStackCount(button) == stackCount then
                     shouldUpdate = false
                 end
             end
         end
 
         if shouldUpdate then
+            local itemLocation = ItemLocation:CreateFromBagAndSlot(bag, slot)
+            if C_Item.DoesItemExist(itemLocation) then
+                CaerdonWardrobe:SetButtonStackCount(button, C_Item.GetStackCount(itemLocation))
+            end
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
             CaerdonWardrobe:UpdateButton(button, item, self, {
                 bag = bag,

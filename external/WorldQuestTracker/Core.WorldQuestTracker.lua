@@ -10,7 +10,7 @@ function WorldQuestTrackerMixin:GetName()
 end
 
 function WorldQuestTrackerMixin:Init()
-    hooksecurefunc(WorldQuestTracker, "UpdateWorldWidget", function(...) self:OnUpdateWorldWidget(...) end)
+    hooksecurefunc(WorldQuestTracker, "UpdateSquareWidget", function(...) self:OnUpdateWorldWidget(...) end)
     hooksecurefunc(WorldQuestTracker, "SetupWorldQuestButton", function(...) self:OnSetupWorldQuestButton(...) end)
 end
 

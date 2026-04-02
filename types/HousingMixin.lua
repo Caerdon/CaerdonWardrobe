@@ -39,7 +39,7 @@ local function ParseTooltipCounts(itemLink)
     end
 
     for _, line in ipairs(tooltipData.lines) do
-        local text = line.leftText
+        local text = line.leftText and tostring(line.leftText) or nil
         if text and text:find("Owned") then -- coarse gate to avoid extra work
             local owned = ToNumber(text:match("Owned:%s*([%d,]+)"))
             local placed = ToNumber(text:match("Placed:%s*([%d,]+)"))

@@ -75,11 +75,24 @@ function CaerdonWardrobeMixin:GetButtonItemID(originalButton)
     return state and state.itemID
 end
 
+function CaerdonWardrobeMixin:SetButtonStackCount(originalButton, stackCount)
+    local state = GetButtonState(originalButton, stackCount ~= nil)
+    if state then
+        state.stackCount = stackCount
+    end
+end
+
+function CaerdonWardrobeMixin:GetButtonStackCount(originalButton)
+    local state = GetButtonState(originalButton)
+    return state and state.stackCount
+end
+
 function CaerdonWardrobeMixin:ClearButtonState(originalButton)
     local state = GetButtonState(originalButton)
     if state then
         state.locationKey = nil
         state.itemID = nil
+        state.stackCount = nil
     end
 end
 
@@ -105,6 +118,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "VARIABLES_LOADED"
     self:RegisterEvent "NEW_RECIPE_LEARNED"
     self:RegisterEvent "SKILL_LINES_CHANGED"
+    self:RegisterEvent "PLAYER_EQUIPMENT_CHANGED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -1506,6 +1520,10 @@ function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:PLAYER_EQUIPMENT_CHANGED()
     self:RefreshItems()
 end
 
