@@ -1999,6 +1999,41 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Raw tooltip line dump for troubleshooting and feature development
+    local tooltipData
+    if itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsBagAndSlot() then
+        local bag, slot = itemLocation:GetBagAndSlot()
+        tooltipData = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
+    elseif itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsEquipmentSlot() then
+        tooltipData = C_TooltipInfo and C_TooltipInfo.GetInventoryItem("player", itemLocation:GetEquipmentSlot())
+    elseif itemLink then
+        tooltipData = C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
+    end
+
+    if tooltipData and tooltipData.lines then
+        addLine(0, "")
+        addLine(0, "[Tooltip Lines (Raw)]")
+        for i, line in ipairs(tooltipData.lines) do
+            local lineType = line.type or "?"
+            local leftText = line.leftText or ""
+            local rightText = line.rightText or ""
+            local prefix = format("  [%d] type=%s", i, tostring(lineType))
+            if rightText ~= "" then
+                addLine(0, format("%s  L: %s  |  R: %s", prefix, leftText, rightText))
+            else
+                addLine(0, format("%s  L: %s", prefix, leftText))
+            end
+            -- Dump all numeric/boolean fields on lines near item level for discovery
+            if lineType == 31 or lineType == 32 or leftText:find("[Ii]tem [Ll]evel") or leftText:find("PvP") then
+                for k, v in pairs(line) do
+                    if k ~= "type" and k ~= "leftText" and k ~= "rightText" and k ~= "leftColor" and k ~= "rightColor" then
+                        addKV(2, "field: " .. tostring(k), v)
+                    end
+                end
+            end
+        end
+    end
+
     addLine(0, "")
     addLine(0, "[Caerdon]")
     local identifiedType = item:GetCaerdonItemType()
@@ -2700,6 +2735,8 @@ function DebugFrameMixin:CollectTransmogDebugData(item, overrideTransmogInfo)
         end
     end
 
+    local itemLocation = item:GetItemLocation()
+
     if itemID and activeSpecID and C_Item.GetSetBonusesForSpecializationByItemID then
         local setBonuses = C_Item.GetSetBonusesForSpecializationByItemID(activeSpecID, itemID)
         if setBonuses then
@@ -2710,7 +2747,6 @@ function DebugFrameMixin:CollectTransmogDebugData(item, overrideTransmogInfo)
         end
     end
 
-    local itemLocation = item:GetItemLocation()
     if itemLocation and itemLocation:HasAnyLocation() and C_Item.CanItemTransmogAppearance then
         local canTransmog, failureReason, failureArg = C_Item.CanItemTransmogAppearance(itemLocation)
         data.api.canItemTransmog = {

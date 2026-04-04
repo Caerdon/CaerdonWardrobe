@@ -60,6 +60,99 @@ local twoHandedInventoryTypeNames = {
 
 local GetEquippedGearSnapshot -- forward declaration; defined after NormalizeItemLevel/DetermineUniqueness
 
+-- PVP item level floor extraction via tooltip text parsing.
+-- PVP_ITEM_LEVEL_TOOLTIP is a Blizzard global format string for the
+-- "Increases item level to a minimum of %d ..." tooltip line.
+-- We build a locale-safe Lua pattern once at load time.
+local pvpFloorPattern
+if PVP_ITEM_LEVEL_TOOLTIP then
+    local sample = PVP_ITEM_LEVEL_TOOLTIP:format(12345)
+    sample = sample:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+    pvpFloorPattern = sample:gsub("12345", "(%%d+)")
+end
+
+local function ExtractPvpFloorFromTooltip(tooltipData)
+    if not pvpFloorPattern or not tooltipData or not tooltipData.lines then
+        return nil
+    end
+    for _, line in ipairs(tooltipData.lines) do
+        if line.leftText then
+            local floor = line.leftText:match(pvpFloorPattern)
+            if floor then
+                return tonumber(floor)
+            end
+        end
+    end
+    return nil
+end
+
+local function GetPvpFloorForEquippedSlot(slotID)
+    if not pvpFloorPattern or not C_TooltipInfo then
+        return nil
+    end
+    local tooltipData = C_TooltipInfo.GetInventoryItem("player", slotID)
+    return ExtractPvpFloorFromTooltip(tooltipData)
+end
+
+local function GetPvpFloorForItem(item)
+    if not pvpFloorPattern or not C_TooltipInfo then
+        return nil
+    end
+    local itemLocation = item:GetItemLocation()
+    local tooltipData
+    if itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsValid() then
+        if itemLocation:IsBagAndSlot() then
+            local bag, slot = itemLocation:GetBagAndSlot()
+            tooltipData = C_TooltipInfo.GetBagItem(bag, slot)
+        elseif itemLocation:IsEquipmentSlot() then
+            tooltipData = C_TooltipInfo.GetInventoryItem("player", itemLocation:GetEquipmentSlot())
+        end
+    end
+    if not tooltipData then
+        local itemLink = item:GetItemLink()
+        if itemLink then
+            tooltipData = C_TooltipInfo.GetHyperlink(itemLink)
+        end
+    end
+    return ExtractPvpFloorFromTooltip(tooltipData)
+end
+
+-- PVP context detection (cached per invalidation cycle)
+local cachedPvpContext = nil
+
+local function IsInPvpContext()
+    if cachedPvpContext ~= nil then
+        return cachedPvpContext
+    end
+    local _, instanceType = GetInstanceInfo()
+    if instanceType == "pvp" or instanceType == "arena" then
+        cachedPvpContext = true
+        return true
+    end
+    if C_PvP and C_PvP.IsWarModeDesired and C_PvP.IsWarModeDesired() then
+        cachedPvpContext = true
+        return true
+    end
+    cachedPvpContext = false
+    return false
+end
+
+-- Returns effective item levels for a candidate-vs-equipped comparison,
+-- applying PVP scaling rules. When both pvpFloor args are nil, returns
+-- base levels unchanged (backward compatible).
+local function GetEffectiveLevels(candidateBase, candidatePvpFloor, equippedBase, equippedPvpFloor)
+    if candidatePvpFloor and equippedPvpFloor then
+        return math.max(candidateBase or 0, candidatePvpFloor),
+               math.max(equippedBase or 0, equippedPvpFloor)
+    elseif IsInPvpContext() then
+        local effCandidate = candidatePvpFloor and math.max(candidateBase or 0, candidatePvpFloor) or candidateBase
+        local effEquipped = equippedPvpFloor and math.max(equippedBase or 0, equippedPvpFloor) or equippedBase
+        return effCandidate, effEquipped
+    else
+        return candidateBase, equippedBase
+    end
+end
+
 local function GetInventorySlotsForType(inventoryType)
     if not inventoryType then
         return nil
@@ -117,6 +210,13 @@ local function GetCandidateItemLevel(item)
     return GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
 end
 
+local function GetCandidatePvpFloor(item)
+    if item.extraData and item.extraData.overrideItemLevel then
+        return nil
+    end
+    return GetPvpFloorForItem(item)
+end
+
 local function IsTwoHandedMainHandEquipped()
     local snapshot = GetEquippedGearSnapshot()
     local mainHand = snapshot[INVSLOT_MAINHAND]
@@ -157,34 +257,46 @@ end
 
 local function GetBlockedOffhandComparisonLevel()
     if not IsTwoHandedMainHandEquipped() then
-        return nil
+        return nil, nil
     end
 
     local snapshot = GetEquippedGearSnapshot()
     local mainHand = snapshot[INVSLOT_MAINHAND]
     if not mainHand then
-        return nil
+        return nil, nil
     end
 
-    return mainHand.level
+    return mainHand.level, mainHand.pvpFloor
 end
 
 local function IsOffhandSlotBlocked(inventoryTypeName)
     return ShouldIgnoreEmptySlot(INVSLOT_OFFHAND, inventoryTypeName)
 end
 
-local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel)
+local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel, candidatePvpFloor)
     local snapshot = GetEquippedGearSnapshot()
     local equipped = snapshot[slotID]
     if equipped then
         if equipped.level then
-            return candidateLevel - equipped.level
+            local effCandidate, effEquipped = GetEffectiveLevels(
+                candidateLevel, candidatePvpFloor,
+                equipped.level, equipped.pvpFloor
+            )
+            if effCandidate and effEquipped then
+                return effCandidate - effEquipped
+            end
         end
     else
         if ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
-            local comparisonLevel = GetBlockedOffhandComparisonLevel()
-            if comparisonLevel then
-                return candidateLevel - comparisonLevel
+            local compLevel, compPvpFloor = GetBlockedOffhandComparisonLevel()
+            if compLevel then
+                local effCandidate, effEquipped = GetEffectiveLevels(
+                    candidateLevel, candidatePvpFloor,
+                    compLevel, compPvpFloor
+                )
+                if effCandidate and effEquipped then
+                    return effCandidate - effEquipped
+                end
             else
                 return candidateLevel
             end
@@ -251,6 +363,7 @@ local function GetUniqueUpgradeInfo(item)
 
     limitCategoryCount = tonumber(limitCategoryCount) or 1
     local candidateLevel = GetCandidateItemLevel(item)
+    local candidatePvpFloor = GetCandidatePvpFloor(item)
     local inventoryTypeName = item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
     local snapshot = GetEquippedGearSnapshot()
@@ -276,7 +389,11 @@ local function GetUniqueUpgradeInfo(item)
             equippedMatches = equippedMatches + 1
 
             if equipped.level and candidateLevel then
-                if equipped.level >= candidateLevel then
+                local effCandidate, effEquipped = GetEffectiveLevels(
+                    candidateLevel, candidatePvpFloor,
+                    equipped.level, equipped.pvpFloor
+                )
+                if effEquipped >= effCandidate then
                     equippedBetterOrEqual = equippedBetterOrEqual + 1
                 else
                     betterThanEquipped = true
@@ -327,11 +444,13 @@ GetEquippedGearSnapshot = function()
             local id = C_Item.GetItemID(location)
             local level = GetComparableItemLevel(link, location)
             local categoryKey, limitCount = DetermineUniqueness(link or id, id)
+            local pvpFloor = GetPvpFloorForEquippedSlot(slot)
             equippedGearSnapshot[slot] = {
                 link = link,
                 id = id,
                 level = level,
                 normalizedLevel = NormalizeItemLevel(level),
+                pvpFloor = pvpFloor,
                 categoryKey = categoryKey,
                 limitCount = limitCount,
                 inventoryType = C_Item.GetItemInventoryType(location),
@@ -345,6 +464,7 @@ end
 function CaerdonEquipment:InvalidateCaches()
     wipe(sourceInfoCache)
     wipe(appearanceSourcesCache)
+    cachedPvpContext = nil
     equippedGearSnapshot = nil
 end
 
@@ -360,15 +480,21 @@ local function HasBetterOrEqualEquippedItem(item)
         return false
     end
 
+    local candidatePvpFloor = GetCandidatePvpFloor(item)
     local snapshot = GetEquippedGearSnapshot()
-    local normalizedCandidateLevel = NormalizeItemLevel(candidateLevel)
     local filledSlots = 0
     local strictlyBetterCount = 0
     for _, slotID in ipairs(inventorySlots) do
         local equipped = snapshot[slotID]
         if equipped then
             filledSlots = filledSlots + 1
-            if equipped.normalizedLevel and equipped.normalizedLevel > normalizedCandidateLevel then
+            local effCandidate, effEquipped = GetEffectiveLevels(
+                candidateLevel, candidatePvpFloor,
+                equipped.level, equipped.pvpFloor
+            )
+            local normCandidate = NormalizeItemLevel(effCandidate)
+            local normEquipped = NormalizeItemLevel(effEquipped)
+            if normEquipped and normCandidate and normEquipped > normCandidate then
                 strictlyBetterCount = strictlyBetterCount + 1
             end
         end
@@ -395,22 +521,29 @@ local function HasEqualEquippedItemLevel(item)
         return false
     end
 
+    local candidatePvpFloor = GetCandidatePvpFloor(item)
     local snapshot = GetEquippedGearSnapshot()
     local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
     local uniqueLimitedToOne = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
-    local normalizedCandidateLevel = NormalizeItemLevel(candidateLevel)
     local betterUniqueEquipped = false
     local hasEqualMatch = false
     for _, slotID in ipairs(inventorySlots) do
         local equipped = snapshot[slotID]
-        if equipped and equipped.normalizedLevel then
-            if equipped.normalizedLevel == normalizedCandidateLevel then
+        if equipped and equipped.level then
+            local effCandidate, effEquipped = GetEffectiveLevels(
+                candidateLevel, candidatePvpFloor,
+                equipped.level, equipped.pvpFloor
+            )
+            local normCandidate = NormalizeItemLevel(effCandidate)
+            local normEquipped = NormalizeItemLevel(effEquipped)
+
+            if normEquipped and normCandidate and normEquipped == normCandidate then
                 hasEqualMatch = true
             end
 
             if uniqueLimitedToOne and not betterUniqueEquipped then
                 if equipped.categoryKey and equipped.categoryKey == uniqueCategoryKey and
-                    equipped.normalizedLevel > normalizedCandidateLevel then
+                    normEquipped and normCandidate and normEquipped > normCandidate then
                     betterUniqueEquipped = true
                 end
             end
@@ -436,6 +569,7 @@ local function GetUpgradeItemLevelDelta(item)
         return nil
     end
 
+    local candidatePvpFloor = GetCandidatePvpFloor(item)
     local snapshot = GetEquippedGearSnapshot()
     local itemLink = item:GetItemLink()
     local itemID = item:GetItemID()
@@ -460,7 +594,7 @@ local function GetUpgradeItemLevelDelta(item)
     local maxPositiveDiff = nil
     for _, slotID in ipairs(inventorySlots) do
         if not restrictToMatchingUnique or (matchingUniqueSlots and matchingUniqueSlots[slotID]) then
-            local diff = GetSlotUpgradeDiff(slotID, inventoryType, candidateLevel)
+            local diff = GetSlotUpgradeDiff(slotID, inventoryType, candidateLevel, candidatePvpFloor)
             if diff and diff > 0 then
                 if not maxPositiveDiff or diff > maxPositiveDiff then
                     maxPositiveDiff = diff
@@ -979,6 +1113,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             end
         elseif uniqueUpgradeCandidate and not uniqueUpgradeBlocked then
             pawnUpgrade = true
+        end
+
+        -- Suppress Pawn upgrades when our PVP-aware comparison shows the
+        -- equipped item is actually better. Pawn compares against base ilvl
+        -- and doesn't know about PVP scaling, so it over-identifies upgrades
+        -- when PVP gear is equipped.
+        if pawnUpgrade and betterItemEquipped then
+            pawnUpgrade = false
         end
 
         if pawnUpgrade and pawnRecommended then

@@ -138,6 +138,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "SKILL_LINES_CHANGED"
     self:RegisterEvent "PLAYER_EQUIPMENT_CHANGED"
     self:RegisterEvent "EQUIPMENT_SWAP_FINISHED"
+    self:RegisterEvent "PLAYER_FLAGS_CHANGED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -1549,6 +1550,10 @@ function CaerdonWardrobeMixin:PLAYER_EQUIPMENT_CHANGED()
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SWAP_FINISHED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:PLAYER_FLAGS_CHANGED()
     self:RefreshItems()
 end
 
