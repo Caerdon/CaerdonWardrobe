@@ -83,9 +83,9 @@ function BagsMixin:OnUpdateItems(frame)
         local shouldUpdate = true
 
         -- Skip slots whose item hasn't changed since last processing,
-        -- unless a full refresh was requested (e.g. transmog collection update).
-        -- When the item ID and location key both match, the slot is either
-        -- already fully processed or already queued — either way, skip it.
+        -- unless a full refresh was requested (e.g. transmog collection update)
+        -- or caches were invalidated since this button was last processed
+        -- (e.g. equipped gear changed via gear set swap).
         if not self.forceFullUpdate then
             local itemID = C_Container.GetContainerItemID(bag, slot)
             local cachedID = CaerdonWardrobe:GetButtonItemID(button)
@@ -97,7 +97,8 @@ function BagsMixin:OnUpdateItems(frame)
                 local locationKey = format("Bags-bag%d-slot%d", bag, slot)
                 local stackCount = C_Item.GetStackCount(ItemLocation:CreateFromBagAndSlot(bag, slot))
                 if CaerdonWardrobe:GetButtonLocationKey(button) == locationKey
-                    and CaerdonWardrobe:GetButtonStackCount(button) == stackCount then
+                    and CaerdonWardrobe:GetButtonStackCount(button) == stackCount
+                    and CaerdonWardrobe:GetButtonRefreshGeneration(button) == CaerdonWardrobe:GetRefreshGeneration() then
                     shouldUpdate = false
                 end
             end

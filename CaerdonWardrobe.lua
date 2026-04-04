@@ -93,7 +93,24 @@ function CaerdonWardrobeMixin:ClearButtonState(originalButton)
         state.locationKey = nil
         state.itemID = nil
         state.stackCount = nil
+        state.refreshGeneration = nil
     end
+end
+
+function CaerdonWardrobeMixin:SetButtonRefreshGeneration(originalButton, generation)
+    local state = GetButtonState(originalButton, generation ~= nil)
+    if state then
+        state.refreshGeneration = generation
+    end
+end
+
+function CaerdonWardrobeMixin:GetButtonRefreshGeneration(originalButton)
+    local state = GetButtonState(originalButton)
+    return state and state.refreshGeneration
+end
+
+function CaerdonWardrobeMixin:GetRefreshGeneration()
+    return self.refreshGeneration
 end
 
 function CaerdonWardrobeMixin:OnLoad()
@@ -108,6 +125,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self.waitingToProcess = {}
     self.featureProcessContinuables = {}
     self.featureProcessItems = {}
+    self.refreshGeneration = 0
 
     self:RegisterEvent "ADDON_LOADED"
     self:RegisterEvent "PLAYER_LOGOUT"
@@ -119,6 +137,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "NEW_RECIPE_LEARNED"
     self:RegisterEvent "SKILL_LINES_CHANGED"
     self:RegisterEvent "PLAYER_EQUIPMENT_CHANGED"
+    self:RegisterEvent "EQUIPMENT_SWAP_FINISHED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -1182,6 +1201,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         self:SetItemButtonStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus, transmogInfo)
         self:SetItemButtonMogStatusFilter(button, options.isFiltered)
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+        self:SetButtonRefreshGeneration(button, self.refreshGeneration)
     end
 end
 
@@ -1499,6 +1519,7 @@ function CaerdonWardrobeMixin:RefreshItems()
     -- Invalidate cached status results since game state has changed
     CaerdonItem:InvalidateStatusCache()
     CaerdonEquipment:InvalidateCaches()
+    self.refreshGeneration = self.refreshGeneration + 1
 
     self.refreshTimer = C_Timer.NewTimer(0.1, function()
         local name, instance
@@ -1524,6 +1545,10 @@ function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
 end
 
 function CaerdonWardrobeMixin:PLAYER_EQUIPMENT_CHANGED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:EQUIPMENT_SWAP_FINISHED()
     self:RefreshItems()
 end
 
