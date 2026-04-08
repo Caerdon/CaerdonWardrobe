@@ -139,6 +139,9 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "PLAYER_EQUIPMENT_CHANGED"
     self:RegisterEvent "EQUIPMENT_SWAP_FINISHED"
     self:RegisterEvent "PLAYER_FLAGS_CHANGED"
+    self:RegisterEvent "NEW_MOUNT_ADDED"
+    self:RegisterEvent "NEW_TOY_ADDED"
+    self:RegisterEvent "NEW_PET_ADDED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -1567,6 +1570,18 @@ function CaerdonWardrobeMixin:NEW_RECIPE_LEARNED()
 end
 
 function CaerdonWardrobeMixin:SKILL_LINES_CHANGED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:NEW_MOUNT_ADDED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:NEW_TOY_ADDED()
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:NEW_PET_ADDED()
     self:RefreshItems()
 end
 

@@ -612,7 +612,22 @@ function CaerdonItemMixin:GetCaerdonItemType()
             elseif typeID == Enum.ItemClass.Battlepet then
                 caerdonType = CaerdonItemType.BattlePet
             elseif typeID == Enum.ItemClass.Consumable then
-                caerdonType = CaerdonItemType.Consumable
+                -- Some recipes (e.g. Engineering schematics) have itemClassID=0
+                -- (Consumable) instead of 9 (Recipe). Detect them by name prefix.
+                local itemName = self:GetItemName()
+                if itemName and (
+                    strmatch(itemName, "^Recipe: ") or
+                    strmatch(itemName, "^Schematic: ") or
+                    strmatch(itemName, "^Design: ") or
+                    strmatch(itemName, "^Plans: ") or
+                    strmatch(itemName, "^Pattern: ") or
+                    strmatch(itemName, "^Technique: ") or
+                    strmatch(itemName, "^Formula: ")
+                ) then
+                    caerdonType = CaerdonItemType.Recipe
+                else
+                    caerdonType = CaerdonItemType.Consumable
+                end
             elseif typeID == Enum.ItemClass.Miscellaneous then
                 if subTypeID == Enum.ItemMiscellaneousSubclass.CompanionPet then
                     local name, icon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID, speciesID =
