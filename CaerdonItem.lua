@@ -259,6 +259,29 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
     end
 
     if not self:IsItemEmpty() then
+        -- If WoW item data is already cached, process directly instead of going
+        -- through the event listener. AddCancelableCallback calls
+        -- RequestLoadItemDataByID which can fire ITEM_DATA_LOAD_RESULT
+        -- synchronously for cached items, tainting Blizzard's event handlers.
+        if self:IsItemCached() then
+            local itemDataCancel
+            local itemData = self:GetItemData()
+            if itemData then
+                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(function()
+                    self.customDataLoaded = true
+                    callbackFunction()
+                end)
+            else
+                self.customDataLoaded = true
+                callbackFunction()
+            end
+            return function()
+                if type(itemDataCancel) == "function" then
+                    itemDataCancel()
+                end
+            end
+        end
+
         local itemDataCancel
         local itemCancel = CaerdonItemEventListener:AddCancelableCallback(self:GetItemID(), function()
             -- TODO: Update things and delay callback if needed for tooltip data

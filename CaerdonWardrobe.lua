@@ -142,6 +142,7 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "NEW_MOUNT_ADDED"
     self:RegisterEvent "NEW_TOY_ADDED"
     self:RegisterEvent "NEW_PET_ADDED"
+    self:RegisterEvent "PLAYER_REGEN_ENABLED"
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -1449,6 +1450,12 @@ end
 local next = next -- faster lookup as a local apparently (haven't measured)
 
 function CaerdonWardrobeMixin:OnUpdate(elapsed)
+    -- Pause processing during combat to avoid tainting Blizzard's secure
+    -- frame operations (GetWidth, etc.) which cause errors in 12.0.1+.
+    if InCombatLockdown() then
+        return
+    end
+
     self.timeSinceLastUpdate = (self.timeSinceLastUpdate or 0) + elapsed
     if (self.timeSinceLastUpdate > 0.05) then
         if self.processItemCoroutine then
@@ -1525,6 +1532,14 @@ function CaerdonWardrobeMixin:RefreshItems()
     CaerdonEquipment:InvalidateCaches()
     self.refreshGeneration = self.refreshGeneration + 1
 
+    -- Defer the actual feature refresh during combat to avoid tainting
+    -- Blizzard's secure frame operations. The cache invalidation above
+    -- still happens immediately so stale data is cleared.
+    if InCombatLockdown() then
+        self.refreshPendingAfterCombat = true
+        return
+    end
+
     self.refreshTimer = C_Timer.NewTimer(0.1, function()
         local name, instance
         for name, instance in pairs(registeredFeatures) do
@@ -1571,6 +1586,14 @@ end
 
 function CaerdonWardrobeMixin:SKILL_LINES_CHANGED()
     self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:PLAYER_REGEN_ENABLED()
+    -- Combat ended — process any deferred refresh and resume coroutine
+    if self.refreshPendingAfterCombat then
+        self.refreshPendingAfterCombat = nil
+        self:RefreshItems()
+    end
 end
 
 function CaerdonWardrobeMixin:NEW_MOUNT_ADDED()
