@@ -3,6 +3,13 @@ local L = namespace.L
 
 local addonName = "Baganator"
 local BaganatorMixin = {}
+for k, v in pairs(CaerdonWardrobeFeatureMixin) do
+    BaganatorMixin[k] = v
+end
+
+function BaganatorMixin:GetName()
+    return addonName
+end
 
 local baganatorButtonMixins = {
     "BaganatorRetailCachedItemButtonMixin",
@@ -25,25 +32,33 @@ local function ShouldClearBaganatorButton(details)
     return true
 end
 
-local function HookBaganatorButtonMixins()
-    for _, mixinName in ipairs(baganatorButtonMixins) do
-        local mixin = _G[mixinName]
-        if mixin and not mixin.CaerdonWardrobeClearsOnEmpty then
-            mixin.CaerdonWardrobeClearsOnEmpty = true
+local hookedButtons = {}
 
-            hooksecurefunc(mixin, "SetItemDetails", function(button, details)
-                if not ShouldClearBaganatorButton(details) then
-                    return
-                end
-
-                CaerdonWardrobe:ClearButton(button)
-            end)
-        end
+local function HookButton(button)
+    if not button or hookedButtons[button] then
+        return
     end
+
+    hookedButtons[button] = true
+
+    hooksecurefunc(button, "SetItemDetails", function(self, details)
+        if ShouldClearBaganatorButton(details) then
+            CaerdonWardrobe:ClearButton(self)
+        end
+    end)
 end
 
-function BaganatorMixin:GetName()
-    return addonName
+local function HookBaganatorButtonMixins()
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+
+    f:SetScript("OnEvent", function()
+        for _, frame in ipairs({ UIParent:GetChildren() }) do
+            if frame.SetItemDetails then
+                HookButton(frame)
+            end
+        end
+    end)
 end
 
 function BaganatorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
