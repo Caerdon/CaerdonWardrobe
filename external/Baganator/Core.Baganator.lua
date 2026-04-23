@@ -4,15 +4,6 @@ local L = namespace.L
 local addonName = "Baganator"
 local BaganatorMixin = {}
 
-local baganatorButtonMixins = {
-    "BaganatorRetailCachedItemButtonMixin",
-    "BaganatorRetailLiveContainerItemButtonMixin",
-    "BaganatorRetailLiveGuildItemButtonMixin",
-    "BaganatorClassicCachedItemButtonMixin",
-    "BaganatorClassicLiveContainerItemButtonMixin",
-    "BaganatorClassicLiveGuildItemButtonMixin",
-}
-
 local function ShouldClearBaganatorButton(details)
     if type(details) ~= "table" then
         return true
@@ -25,21 +16,22 @@ local function ShouldClearBaganatorButton(details)
     return true
 end
 
-local function HookBaganatorButtonMixins()
-    for _, mixinName in ipairs(baganatorButtonMixins) do
-        local mixin = _G[mixinName]
-        if mixin and not mixin.CaerdonWardrobeClearsOnEmpty then
-            mixin.CaerdonWardrobeClearsOnEmpty = true
-
-            hooksecurefunc(mixin, "SetItemDetails", function(button, details)
-                if not ShouldClearBaganatorButton(details) then
-                    return
-                end
-
-                CaerdonWardrobe:ClearButton(button)
-            end)
-        end
+-- Baganator freezes its ItemButton mixin tables, so we hook SetItemDetails on
+-- each button instance rather than on the shared mixin.
+local function HookBaganatorButton(itemButton)
+    if not itemButton or itemButton.caerdonSetItemDetailsHooked then
+        return
     end
+    if type(itemButton.SetItemDetails) ~= "function" then
+        return
+    end
+    itemButton.caerdonSetItemDetailsHooked = true
+    hooksecurefunc(itemButton, "SetItemDetails", function(button, details)
+        if not ShouldClearBaganatorButton(details) then
+            return
+        end
+        CaerdonWardrobe:ClearButton(button)
+    end)
 end
 
 function BaganatorMixin:GetName()
@@ -79,8 +71,6 @@ local options = {
 }
 
 function BaganatorMixin:Init()
-    HookBaganatorButtonMixins()
-
     Baganator.API.RegisterCornerWidget("Caerdon Status", "caerdon_wardrobe_status", function(caerdonButton, details)
         local shouldShow = false
 
@@ -105,6 +95,7 @@ function BaganatorMixin:Init()
         -- This keeps the widget hidden on empty slots so the background can clear cleanly.
         return shouldShow
     end, function(itemButton)
+        HookBaganatorButton(itemButton)
         -- Create Caerdon Button with nil item to create caerdonButton ahead of time for all slots
         CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
         local caerdonButton = CaerdonWardrobe:GetCaerdonButton(itemButton)
@@ -134,6 +125,7 @@ function BaganatorMixin:Init()
         -- This keeps the widget hidden on empty slots so the background clears correctly.
         return shouldShow
     end, function(itemButton)
+        HookBaganatorButton(itemButton)
         CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
         local caerdonButton = CaerdonWardrobe:GetCaerdonButton(itemButton)
         return caerdonButton and caerdonButton.bindsOnText
