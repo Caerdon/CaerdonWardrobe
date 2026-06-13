@@ -818,7 +818,9 @@ function CaerdonConsumableMixin:GetConsumableInfo()
 
     local itemName = C_Item.GetItemInfo(self.item:GetItemLink())
     if not itemName then
-        return nil, true
+        -- Item name not cached yet; signal not-ready the same way as the main
+        -- return path so callers can uniformly check consumableInfo.isNotReady.
+        return { isNotReady = true }
     end
     local factionName, changed = string.gsub(itemName, L["Contract: "], "")
     if changed > 0 then

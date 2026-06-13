@@ -1057,7 +1057,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- No source ID for some reason - last resort effort but assume another toon needs it.
         local itemLocation = item:GetItemLocation()
         needItem = false
-        otherNeedsItem = not C_TransmogCollection.PlayerHasTransmogByItemInfo(C_Item.GetItemInfo(item:GetItemLink()))
+        local itemInfoName = C_Item.GetItemInfo(item:GetItemLink())
+        if itemInfoName then
+            otherNeedsItem = not C_TransmogCollection.PlayerHasTransmogByItemInfo(itemInfoName)
+        else
+            -- Item not cached yet; defer so we don't pass nil into the API and so
+            -- the retry mechanism re-evaluates once the item data is available.
+            isNotReady = true
+        end
         canCollect = true
         playerCanCollectSource = true
         playerCollectInfoReady = true

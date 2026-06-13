@@ -14,6 +14,10 @@ end
 function CaerdonCurrencyMixin:GetCurrencyInfo()
   local currencyInfo = C_CurrencyInfo.GetCurrencyInfoFromLink(self.item:GetItemLink())
   -- DevTools_Dump(currencyInfo)
+  if not currencyInfo then
+    -- Currency data not cached yet; defer rather than indexing a nil value.
+    return { isNotReady = true, needsItem = false, otherNeedsItem = false }
+  end
   local hasMaxRenown = false
   local isAccountWideRenown = false
 
