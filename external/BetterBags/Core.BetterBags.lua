@@ -8,22 +8,42 @@ function BetterBagsMixin:GetName()
     return addonName
 end
 
-function BetterBagsMixin:Init()
-	local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
-  local events = BetterBags:GetModule("Events")
-  events:RegisterMessage('item/Updated', function (_, bagItem)
-    local button = bagItem.button
-    local bag = bagItem.data.bagid
-    local slot = bagItem.data.slotid
-		local options = {
-      statusProminentSize = 16,
-      statusOffsetX = 7,
-      statusOffsetY = 7
-		}
+-- BetterBags v0.5.6 renamed bagItem.data to currentData and leaves it nil for
+-- free slots. slotkey ("bagID_slotID") is set for every physical slot, so use
+-- it first and fall back to the data table for older versions.
+local function GetBagAndSlot(bagItem)
+    if type(bagItem.slotkey) == "string" then
+        local bag, slot = bagItem.slotkey:match("^(%-?%d+)_(%d+)$")
+        if bag then
+            return tonumber(bag), tonumber(slot)
+        end
+    end
 
-		local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
-		CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
-  end)
+    local data = bagItem.currentData or bagItem.data
+    if data and data.bagid and data.slotid then
+        return data.bagid, data.slotid
+    end
+end
+
+function BetterBagsMixin:Init()
+    local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
+    local events = BetterBags:GetModule("Events")
+    events:RegisterMessage('item/Updated', function (_, bagItem)
+        local button = bagItem.button
+        local bag, slot = GetBagAndSlot(bagItem)
+        if not button or not bag then
+            return
+        end
+
+        local options = {
+            statusProminentSize = 16,
+            statusOffsetX = 7,
+            statusOffsetY = 7
+        }
+
+        local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+        CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
+    end)
 
   -- self.mod = BetterBags:NewModule("CaerdonWardrobeBetterBagsUpdate", "ABEvent-1.0")
 	-- self.mod.uiName = L["Caerdon Wardrobe"]
