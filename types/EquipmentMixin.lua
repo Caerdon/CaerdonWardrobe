@@ -426,6 +426,12 @@ local appearanceSourcesCache = {}
 CaerdonEquipment.sourceInfoCache = sourceInfoCache
 CaerdonEquipment.appearanceSourcesCache = appearanceSourcesCache
 
+-- Source item IDs whose ITEM_DATA_LOAD_RESULT came back as a failure this session
+-- (e.g. unreleased variants sharing an appearance). Kept for the whole session and
+-- deliberately not cleared by InvalidateCaches: the server won't start serving them.
+local failedSourceItemLoads = {}
+CaerdonEquipment.failedSourceItemLoads = failedSourceItemLoads
+
 -- Lazy-built snapshot of equipped gear data, shared by all upgrade helper functions.
 -- Built once per invalidation cycle (equipment/transmog change), avoids repeated
 -- ItemLocation creation and API calls across all bag items.
@@ -649,9 +655,28 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         end
     end
 
+    local function IsDebugEnabled()
+        return CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled
+    end
+
     function FailTheItem(itemID)
+        local failedSourceID = waitingForItems[itemID]
         waitingForItems[itemID] = nil
-        if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("Failed to load item " .. itemID) end
+        -- Remember the failure for the session so later refreshes don't re-request
+        -- an item the server already refused, and only report it the first time.
+        local alreadyReported = failedSourceItemLoads[itemID]
+        failedSourceItemLoads[itemID] = true
+        if not alreadyReported and IsDebugEnabled() then
+            print(format(
+                "CaerdonWardrobe: ITEM_DATA_LOAD_RESULT failed for source item %s (%s, exists=%s), source %s of appearance %s, while loading sources for %s (item %s)",
+                tostring(itemID),
+                tostring(C_Item.GetItemNameByID(itemID) or "unknown name"),
+                tostring(C_Item.DoesItemExistByID(itemID)),
+                tostring(failedSourceID),
+                tostring(appearanceID),
+                tostring(self.item:GetItemLink()),
+                tostring(self.item:GetItemID())))
+        end
         if not next(waitingForItems) then
             callbackFunction()
         end
@@ -663,9 +688,18 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         local appearanceSourceIDs = C_TransmogCollection.GetAllAppearanceSources(appearanceID)
         for appearanceSourceIndex, appearanceSourceID in pairs(appearanceSourceIDs) do
             local itemID = C_TransmogCollection.GetSourceItemID(appearanceSourceID);
+            if not itemID or itemID == 0 then
+                if IsDebugEnabled() then
+                    print(format(
+                        "CaerdonWardrobe: source %s of appearance %s has no item ID (got %s); skipping it while loading sources for %s",
+                        tostring(appearanceSourceID), tostring(appearanceID), tostring(itemID), tostring(self.item:GetItemLink())))
+                end
+            elseif failedSourceItemLoads[itemID] then
+                -- Server already refused this item this session; don't ask again
             -- Using CaerdonItemEventListener instead of CaerdonItem here to avoid recursively diving
-            if not waitingForItems[itemID] then
-                waitingForItems[itemID] = true
+            elseif not waitingForItems[itemID] then
+                -- Remember which source produced this item ID so load failures can report it
+                waitingForItems[itemID] = appearanceSourceID
                 CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID),
                     GenerateClosure(FailTheItem, itemID))
             end

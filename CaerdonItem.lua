@@ -925,6 +925,9 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.ItemName then
         elseif line.type == Enum.TooltipDataLineType.ItemLevel then
         elseif line.type == Enum.TooltipDataLineType.ItemUpgradeLevel then
+        elseif line.type == Enum.TooltipDataLineType.FlavorText then
+        elseif line.type == Enum.TooltipDataLineType.ErrorLine then
+        elseif line.type == Enum.TooltipDataLineType.DisabledLine then
         else
             if CaerdonWardrobeConfig.Debug.Enabled then
                 print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
