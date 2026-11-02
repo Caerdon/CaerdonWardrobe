@@ -151,7 +151,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
         onQuestDataLoaded()
     else
         CaerdonQuestEventListener:AddCallback(questID, onQuestDataLoaded, function()
-            print('Failed to load quest data for ' .. questID)
+            if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print('Failed to load quest data for ' .. questID) end
         end)
     end
 end

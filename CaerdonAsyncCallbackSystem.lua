@@ -139,7 +139,9 @@ function CaerdonAsyncCallbackSystemMixin:GetOrCreateFailureCallbacks(id)
 end
 
 local function CreateListener(apiType)
-	local listener = Mixin(CreateFrame("Frame"), AsyncCallbackSystemMixin);
+	-- Must use the Caerdon mixin: Blizzard's AsyncCallbackSystemMixin only accepts a
+	-- single callback, so the failure callbacks every caller passes would be dropped.
+	local listener = Mixin(CreateFrame("Frame"), CaerdonAsyncCallbackSystemMixin);
 	listener:Init(apiType);
 	return listener;
 end
