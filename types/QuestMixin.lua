@@ -32,8 +32,19 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
     end
 
     function FailTheItem(itemID)
+        local rewardInfo = waitingForItems[itemID]
         waitingForItems[itemID] = nil
-        if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("Failed to load item " .. itemID) end
+        if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then
+            print(format(
+                "CaerdonWardrobe: ITEM_DATA_LOAD_RESULT failed for quest %s reward item %s (%s, exists=%s), %s #%s, questLog=%s",
+                tostring(questID),
+                tostring(itemID),
+                tostring(C_Item.GetItemNameByID(itemID) or (rewardInfo and rewardInfo.name) or "unknown name"),
+                tostring(C_Item.DoesItemExistByID(itemID)),
+                tostring(rewardInfo and rewardInfo.kind),
+                tostring(rewardInfo and rewardInfo.index),
+                tostring(QuestInfoFrame and QuestInfoFrame.questLog or false)))
+        end
         if not next(waitingForItems) then
             callbackFunction()
         end
@@ -66,8 +77,8 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
             end
 
             -- Using CaerdonItemEventListener instead of CaerdonItem here to avoid recursively diving
-            if not waitingForItems[itemID] then
-                waitingForItems[itemID] = true
+            if itemID and itemID > 0 and not waitingForItems[itemID] then
+                waitingForItems[itemID] = { kind = "reward", index = i, name = name }
                 CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID), GenerateClosure(FailTheItem, itemID))
             end
         end
@@ -80,8 +91,8 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
                 name, texture, numItems, quality, isUsable, itemID = GetQuestItemInfo("choice", i)
             end
 
-            if not waitingForItems[itemID] then
-                waitingForItems[itemID] = true
+            if itemID and itemID > 0 and not waitingForItems[itemID] then
+                waitingForItems[itemID] = { kind = "choice", index = i, name = name }
                 CaerdonItemEventListener:AddCallback(itemID, GenerateClosure(ProcessTheItem, itemID), GenerateClosure(FailTheItem, itemID))
             end
         end
