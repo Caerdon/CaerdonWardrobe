@@ -241,7 +241,15 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
         elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
             local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
             local questID = tonumber(strsplit(":", linkOptions), 10)
-            CaerdonQuestEventListener:AddCallback(questID, GenerateClosure(ProcessTheItem), FailTheItem)
+            -- If quest data is already cached, process directly. AddCallback calls
+            -- RequestLoadQuestByID which fires QUEST_DATA_LOAD_RESULT synchronously
+            -- for cached quests, running Blizzard's own QuestEventListener callbacks
+            -- under addon taint.
+            if HaveQuestData and HaveQuestData(questID) then
+                ProcessTheItem()
+            else
+                CaerdonQuestEventListener:AddCallback(questID, GenerateClosure(ProcessTheItem), FailTheItem)
+            end
         else
             -- Item is empty and not cached - nothing to load, just call callback
             self.customDataLoaded = true
@@ -312,6 +320,28 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
     elseif self:GetCaerdonItemType() == CaerdonItemType.Quest then
         local linkType, linkOptions, name = LinkUtil.ExtractLink(self:GetItemLink());
         local questID = tonumber(strsplit(":", linkOptions), 10);
+
+        -- Same as the item path above: skip the listener when quest data is already
+        -- cached so RequestLoadQuestByID doesn't fire QUEST_DATA_LOAD_RESULT
+        -- synchronously under addon taint.
+        if HaveQuestData and HaveQuestData(questID) then
+            local itemDataCancel
+            local itemData = self:GetItemData()
+            if itemData then
+                itemDataCancel = itemData:ContinueWithCancelOnItemDataLoad(function()
+                    self.customDataLoaded = true
+                    callbackFunction()
+                end)
+            else
+                self.customDataLoaded = true
+                callbackFunction()
+            end
+            return function()
+                if type(itemDataCancel) == "function" then
+                    itemDataCancel()
+                end
+            end
+        end
 
         local itemDataCancel
         local itemCancel = CaerdonQuestEventListener:AddCancelableCallback(questID, function()

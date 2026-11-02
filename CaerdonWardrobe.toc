@@ -27,6 +27,7 @@ LibConfig.lua
 
 Localization.lua
 localization\deDE.lua
+localization\ruRU.lua
 
 CaerdonWardrobe.xml
 config\Config.xml
