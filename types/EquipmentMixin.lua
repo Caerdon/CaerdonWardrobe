@@ -185,9 +185,9 @@ local function GetComparableItemLevel(itemLink, itemLocation)
     end
 
     if not itemLevel or itemLevel <= 0 then
-        itemLevel = select(1, GetDetailedItemLevelInfo(itemLink))
+        itemLevel = select(1, C_Item.GetDetailedItemLevelInfo(itemLink))
         -- Guard against inflated item levels from old expansion items with
-        -- scaling bonus IDs: GetDetailedItemLevelInfo can return dramatically
+        -- scaling bonus IDs: C_Item.GetDetailedItemLevelInfo can return dramatically
         -- wrong values for these. Cross-check against GetItemInfo.
         if itemLevel then
             local baseItemLevel = select(4, C_Item.GetItemInfo(itemLink))
@@ -229,7 +229,7 @@ local function IsTwoHandedMainHandEquipped()
     end
 
     if not mainHand.inventoryType and mainHand.link then
-        local equipLoc = select(9, GetItemInfo(mainHand.link))
+        local equipLoc = select(9, C_Item.GetItemInfo(mainHand.link))
         if equipLoc and twoHandedInventoryTypeNames[equipLoc] then
             return true
         end

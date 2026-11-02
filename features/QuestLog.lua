@@ -126,7 +126,7 @@ function QuestLogMixin:OnQuestInfoShowRewards()
 
     if questID == 0 then return end -- quest abandoned
 
-    CaerdonQuestEventListener:AddCallback(questID, function()
+    local function onQuestDataLoaded()
         local questLink = GetQuestLink(questID)
         if not questLink then
             local questName = C_QuestLog.GetTitleForQuestID(questID)
@@ -142,9 +142,18 @@ function QuestLogMixin:OnQuestInfoShowRewards()
                 self:ProcessItem(item, questID)
             end)
         end
-    end, function()
-        print('Failed to load quest data for ' .. questID)
-    end)
+    end
+
+    -- Skip the listener when quest data is already cached: AddCallback calls
+    -- RequestLoadQuestByID, which fires QUEST_DATA_LOAD_RESULT synchronously for
+    -- cached quests and runs Blizzard's QuestEventListener callbacks under addon taint.
+    if HaveQuestData and HaveQuestData(questID) then
+        onQuestDataLoaded()
+    else
+        CaerdonQuestEventListener:AddCallback(questID, onQuestDataLoaded, function()
+            print('Failed to load quest data for ' .. questID)
+        end)
+    end
 end
 
 function QuestLogMixin:ProcessItem(item, questID)

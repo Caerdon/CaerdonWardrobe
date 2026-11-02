@@ -207,8 +207,7 @@ local function GetDetailedLevelFromLink(itemLink, itemID, sourceInfo, encounterJ
             return nil
         end
 
-        local detailedLevel = (GetDetailedItemLevelInfo and GetDetailedItemLevelInfo(link)) or
-            (C_Item and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link))
+        local detailedLevel = C_Item.GetDetailedItemLevelInfo(link)
 
         if detailedLevel then
             return detailedLevel, GetLinkQuality(link), label or "Linked Item"
@@ -338,8 +337,8 @@ end
 
 local function EnsureEncounterJournalLoaded()
     if not (C_EncounterJournal and EJ_GetNumTiers) then
-        if not IsAddOnLoaded("Blizzard_EncounterJournal") then
-            LoadAddOn("Blizzard_EncounterJournal")
+        if not C_AddOns.IsAddOnLoaded("Blizzard_EncounterJournal") then
+            C_AddOns.LoadAddOn("Blizzard_EncounterJournal")
         end
     end
 end
@@ -833,7 +832,7 @@ function DebugFrameMixin:Init()
                 -- Assume it's an item ID
                 local itemID = tonumber(inputText)
                 if itemID then
-                    itemLink = select(2, GetItemInfo(itemID))
+                    itemLink = select(2, C_Item.GetItemInfo(itemID))
                     if not itemLink then
                         -- Try to create a basic item link and let the item loading handle it
                         itemLink = format("|cff9d9d9d|Hitem:%d:::::::::::::::::|h[Item:%d]|h|r", itemID, itemID)
@@ -3818,7 +3817,7 @@ local function ApplyItemButtonState(button, displayInfo)
 
     if button.IconBorder then
         if displayInfo.quality then
-            local r, g, b = GetItemQualityColor(displayInfo.quality)
+            local r, g, b = C_Item.GetItemQualityColor(displayInfo.quality)
             button.IconBorder:SetVertexColor(r, g, b)
             button.IconBorder:Show()
         else
@@ -5124,7 +5123,7 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
 
     -- Set quality border if available
     if itemInfo.itemQuality and frame.itemButton.IconBorder then
-        local r, g, b = GetItemQualityColor(itemInfo.itemQuality)
+        local r, g, b = C_Item.GetItemQualityColor(itemInfo.itemQuality)
         frame.itemButton.IconBorder:SetVertexColor(r, g, b)
         frame.itemButton.IconBorder:Show()
     end
