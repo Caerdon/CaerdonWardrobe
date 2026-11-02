@@ -231,7 +231,7 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
     function FailTheItem()
         self.customDataLoaded = false
         -- TODO: Should I provide an errorCallback in this case?
-        print("ITEM LOAD FAILED: " .. self:GetItemID())
+        if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("ITEM LOAD FAILED: " .. self:GetItemID()) end
         callbackFunction()
     end
 
@@ -306,7 +306,7 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
         end, function()
             self.customDataLoaded = false
             -- TODO: Should I provide an errorCallback in this case?
-            print("ITEM LOAD FAILED: " .. self:GetItemID())
+            if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("ITEM LOAD FAILED: " .. self:GetItemID()) end
             callbackFunction()
         end);
 
@@ -359,7 +359,7 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
         end, function()
             self.customDataLoaded = false
             -- TODO: Should I provide an errorCallback in this case?
-            print("QUEST ITEM LOAD FAILED: " .. self:GetItemID())
+            if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("QUEST ITEM LOAD FAILED: " .. self:GetItemID()) end
             callbackFunction()
         end);
 

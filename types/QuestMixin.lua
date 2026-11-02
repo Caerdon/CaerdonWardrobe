@@ -33,7 +33,7 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
 
     function FailTheItem(itemID)
         waitingForItems[itemID] = nil
-        print("Failed to load item " .. itemID)
+        if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("Failed to load item " .. itemID) end
         if not next(waitingForItems) then
             callbackFunction()
         end
