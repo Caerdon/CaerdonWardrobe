@@ -761,11 +761,22 @@ function CaerdonItemMixin:GetTooltipData(data)
 
     for lineIndex, line in ipairs(data.lines) do
         local lineText = line.leftText and tostring(line.leftText) or nil
+        -- Since 12.0 the "Use:" / "Equip:" / "Use: Teaches you" lines carry their own
+        -- types instead of None, so they must be included here or the text checks
+        -- below (equip effects, re-learn, reputation, customization unlocks) never run.
+        -- The ItemSpellTrigger* enum entries are nil on 11.x clients, which is harmless.
         if line.type == Enum.TooltipDataLineType.None or
             line.type == Enum.TooltipDataLineType.ItemEnchantmentPermanent or
-            line.type == Enum.TooltipDataLineType.ItemBinding then
+            line.type == Enum.TooltipDataLineType.ItemBinding or
+            line.type == Enum.TooltipDataLineType.ItemSpellTriggerLearn or
+            line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnUse or
+            line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnEquip then
+            if line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnEquip then
+                tooltipData.hasEquipEffect = true
+            end
+
             if lineText then
-                -- TODO: Find a way to identify Equip Effects without tooltip scanning
+                -- Text fallback for clients that don't type the equip line
                 if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
                     tooltipData.hasEquipEffect = true
                 end
