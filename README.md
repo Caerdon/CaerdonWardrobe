@@ -1,5 +1,5 @@
 <h2 id="w-caerdon-wardrobe">Caerdon Wardrobe</h2>
-<p>Let Caerdon Wardrobe help you get your transmog closet overflowing with style ...<em> you fabulous thing, you</em>! You'll gain the following:</p>
+<p>Let Caerdon Wardrobe help you get your transmog closet overflowing with style ...<em> you fabulous thing, you</em>! Supports World of Warcraft (Retail) and World of Warcraft: Forever. You'll gain the following:</p>
 <ul>
 <li>Show BOE / BOA on bank / bag / merchant items</li>
 <li>Show assigned gear set on bank / bag items</li>

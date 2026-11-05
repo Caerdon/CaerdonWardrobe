@@ -307,14 +307,16 @@ local function GetSlotUpgradeDiff(slotID, inventoryTypeName, candidateLevel, can
 end
 
 local function GetPlayerLootSpecID()
-    local playerSpec = GetSpecialization();
+    -- Routed through CaerdonAPI: WoW Forever has no GetSpecialization global and no
+    -- specializations, so this returns nil there and spec matching is skipped.
+    local playerSpec = CaerdonAPI:GetPlayerSpecializationIndex()
     if not playerSpec then
         return nil
     end
 
-    local playerSpecID = GetSpecializationInfo(playerSpec, nil, nil, nil, UnitSex("player"));
-    local lootSpecID = GetLootSpecialization()
-    if lootSpecID == 0 then
+    local playerSpecID = CaerdonAPI:GetSpecializationInfo(playerSpec, nil, nil, nil, UnitSex("player"))
+    local lootSpecID = CaerdonAPI:GetLootSpecializationID()
+    if lootSpecID == 0 or lootSpecID == nil then
         lootSpecID = playerSpecID
     end
 

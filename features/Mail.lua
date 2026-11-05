@@ -5,9 +5,26 @@ function MailMixin:GetName()
 end
 
 function MailMixin:Init()
-    hooksecurefunc("OpenMailFrame_UpdateButtonPositions", function(...) self:OnMailFrameUpdateButtonPositions(...) end)
-    hooksecurefunc("SendMailFrame_Update", function(...) self:OnSendMailFrameUpdate(...) end)
-    hooksecurefunc("InboxFrame_Update", function(...) self:OnInboxFrameUpdate(...) end)
+    -- Retail exposes the mail update routines as globals. WoW Forever (Camelot)
+    -- moved them onto InboxMixin / OpenMailMixin as part of the gamepad refactor,
+    -- so hook the frame methods whenever the globals are absent.
+    if type(OpenMailFrame_UpdateButtonPositions) == "function" then
+        hooksecurefunc("OpenMailFrame_UpdateButtonPositions", function(...) self:OnMailFrameUpdateButtonPositions(...) end)
+    elseif OpenMailFrame and type(OpenMailFrame.UpdateButtonPositions) == "function" then
+        hooksecurefunc(OpenMailFrame, "UpdateButtonPositions", function(_, ...) self:OnMailFrameUpdateButtonPositions(...) end)
+    end
+
+    if type(SendMailFrame_Update) == "function" then
+        hooksecurefunc("SendMailFrame_Update", function(...) self:OnSendMailFrameUpdate(...) end)
+    elseif SendMailFrame and type(SendMailFrame.Update) == "function" then
+        hooksecurefunc(SendMailFrame, "Update", function() self:OnSendMailFrameUpdate() end)
+    end
+
+    if type(InboxFrame_Update) == "function" then
+        hooksecurefunc("InboxFrame_Update", function(...) self:OnInboxFrameUpdate(...) end)
+    elseif InboxFrame and type(InboxFrame.Update) == "function" then
+        hooksecurefunc(InboxFrame, "Update", function() self:OnInboxFrameUpdate() end)
+    end
 end
 
 function MailMixin:GetTooltipData(item, locationInfo)

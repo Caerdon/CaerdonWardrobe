@@ -440,6 +440,104 @@ local function HasContextData(context)
     return false
 end
 
+-- WoW Forever ships as the "Camelot" game type: a mainline-family client (12.x UI
+-- architecture, secrets, modern Collections/Auction/Professions frames) running
+-- classic-era content. It reports WOW_PROJECT_ID 18 and interface 16001.
+local WOW_PROJECT_FOREVER_ID = WOW_PROJECT_CAMELOT or 18
+
+function CaerdonAPIMixin:IsForeverClient()
+    if WOW_PROJECT_ID == WOW_PROJECT_FOREVER_ID then
+        return true
+    end
+
+    -- Pre-70170 Forever builds reported WOW_PROJECT_MAINLINE; fall back to the
+    -- interface version range Blizzard reserves for Forever.
+    local tocVersion = select(4, GetBuildInfo())
+    return type(tocVersion) == "number" and tocVersion >= 16000 and tocVersion < 20000
+end
+
+function CaerdonAPIMixin:GetClientFlavor()
+    if self:IsForeverClient() then
+        return "Forever", WOW_PROJECT_ID
+    elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+        return "Retail", WOW_PROJECT_ID
+    end
+
+    return "Other", WOW_PROJECT_ID
+end
+
+-- Specialization lookups. Retail still exposes the legacy globals, but WoW Forever
+-- only provides the C_SpecializationInfo namespace (and has no specializations at
+-- all, so the index is nil there). Always go through these helpers.
+local function ResolveSpecFunction(name)
+    if C_SpecializationInfo and type(C_SpecializationInfo[name]) == "function" then
+        return C_SpecializationInfo[name]
+    end
+
+    local globalFunc = _G[name]
+    if type(globalFunc) == "function" then
+        return globalFunc
+    end
+end
+
+-- Returns the player's active specialization index, or nil when the client has no
+-- specialization system (WoW Forever) or none is selected.
+function CaerdonAPIMixin:GetPlayerSpecializationIndex()
+    local getSpecialization = ResolveSpecFunction("GetSpecialization")
+    if not getSpecialization then
+        return nil
+    end
+
+    local specIndex = getSpecialization()
+    if type(specIndex) ~= "number" then
+        return nil
+    end
+
+    return specIndex
+end
+
+-- Mirrors GetSpecializationInfo(specIndex, isInspect, isPet, inspectTarget, sex);
+-- returns nothing when the index is nil or the API is unavailable.
+function CaerdonAPIMixin:GetSpecializationInfo(specIndex, ...)
+    if type(specIndex) ~= "number" then
+        return nil
+    end
+
+    local getSpecializationInfo = ResolveSpecFunction("GetSpecializationInfo")
+    if not getSpecializationInfo then
+        return nil
+    end
+
+    return getSpecializationInfo(specIndex, ...)
+end
+
+-- Returns id, name, description, icon, role, primaryStat for a spec ID, or nil.
+function CaerdonAPIMixin:GetSpecializationInfoByID(specID)
+    if type(specID) ~= "number" then
+        return nil
+    end
+
+    -- Prefer the legacy global (retail) so callers keep its return shape; Forever
+    -- only documents GetSpecializationInfoForSpecID.
+    local getInfoForSpecID = ResolveSpecFunction("GetSpecializationInfoByID")
+        or ResolveSpecFunction("GetSpecializationInfoForSpecID")
+    if not getInfoForSpecID then
+        return nil
+    end
+
+    return getInfoForSpecID(specID)
+end
+
+-- Returns the loot specialization ID (0 = current spec), or nil when unavailable.
+function CaerdonAPIMixin:GetLootSpecializationID()
+    local getLootSpecialization = ResolveSpecFunction("GetLootSpecialization")
+    if not getLootSpecialization then
+        return nil
+    end
+
+    return getLootSpecialization()
+end
+
 function CaerdonAPIMixin:SetManualHoverContext(frame, context)
     if not frame then
         return
