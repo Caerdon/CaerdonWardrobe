@@ -60,8 +60,10 @@ local function GatherRecipes()
         return
     end
 
-    -- Get all known recipe IDs
-    local recipeIDs = C_TradeSkillUI.GetAllRecipeIDs()
+    -- Get all known recipe IDs. GetAllRecipeIDs is undocumented, so fall back to
+    -- the documented filtered list on clients (e.g. WoW Forever) that lack it.
+    local getRecipeIDs = C_TradeSkillUI.GetAllRecipeIDs or C_TradeSkillUI.GetFilteredRecipeIDs
+    local recipeIDs = getRecipeIDs and getRecipeIDs() or {}
 
     -- Store recipe info
     for _, recipeID in ipairs(recipeIDs) do

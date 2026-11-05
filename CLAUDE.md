@@ -9,6 +9,23 @@ This file contains important context and design decisions for the CaerdonWardrob
   - Transmog API Docs: `../../../BlizzardInterfaceCode/Interface/AddOns/Blizzard_APIDocumentationGenerated/Transmog*.lua`
   - Collections Utilities: `../../../BlizzardInterfaceCode/Interface/AddOns/Blizzard_FrameXMLUtil/CollectionsUtil.lua`
   - Wardrobe Sets: `../../../BlizzardInterfaceCode/Interface/AddOns/Blizzard_Collections/Shared/Blizzard_Wardrobe_Sets.lua`
+- **WoW Forever Blizzard Source:** GitHub `Ketho/wow-ui-source-forever`, branch `forever` (shallow clone it when needed; retail mirror is `Gethe/wow-ui-source`, branch `live`)
+
+## WoW Forever (Camelot) Support
+
+WoW Forever is a *mainline-family* client: retail 12.x UI architecture (secrets, modern Collections / Auction House / Professions / Bank frames) running classic-era content. The addon supports it from the same code base and the same TOC.
+
+- **Identity:** game type `camelot` (alias `forever`), `WOW_PROJECT_ID == WOW_PROJECT_CAMELOT` (18), `## Interface: 16001`. `CaerdonAPI:IsForeverClient()` / `GetClientFlavor()` exist for reporting (Debug Frame export), but code paths should rely on **feature detection**, not flavor checks.
+- **Version gates:** `select(4, GetBuildInfo())` returns `16001` on Forever, so any `tocversion >= 110000`-style check evaluates false there. Only use such gates for features Forever genuinely lacks (housing is correctly gated off this way; Blizzard_Housing* is `AllowLoadGameType: standard`). Never use them to pick "modern vs. legacy" API paths.
+- **Blizzard TOC gating:** Blizzard addons declare `## AllowLoadGameType` / per-file `[AllowLoadGameType camelot]`. `mainline` includes camelot; `standard` is retail only. Forever-specific overrides live in `Camelot/` subfolders.
+- **Not loaded on Forever:** Blizzard_EncounterJournal (standard/classic only), Blizzard_GarrisonUI (camelot excluded), Blizzard_Housing*, Blizzard_ExpansionTrial. The EncounterJournal and Mission features wait for `ADDON_LOADED`, so they stay dormant without changes.
+- **Mail frame:** Forever's `Blizzard_MailFrame` is mixin-based: `InboxFrame:Update()` and `OpenMailFrame:UpdateButtonPositions()` replace the retail globals `InboxFrame_Update` / `OpenMailFrame_UpdateButtonPositions` (`SendMailFrame_Update` is still global). `features/Mail.lua` hooks whichever exists.
+- **Bank:** `CamelotBankPanelItemButtonMixin:Refresh()` calls through `BankPanelItemButtonMixin.Refresh(self)`, so the existing table hook still fires.
+- **Events:** `UPDATE_EXPANSION_LEVEL` is undocumented and only used by retail-only Blizzard code; it is registered via `pcall` so an unknown-event error cannot abort `OnLoad`. All other registered events exist in Forever's event documentation.
+- **Specializations:** Forever has none, and the legacy globals `GetSpecialization`, `GetSpecializationInfo` and `GetSpecializationInfoByID` do not exist at all (only `C_SpecializationInfo.*`, `GetLootSpecialization` and `GetSpecializationInfoForSpecID` do). Never call those globals directly; use `CaerdonAPI:GetPlayerSpecializationIndex()`, `GetSpecializationInfo(index, ...)`, `GetSpecializationInfoByID(specID)` and `GetLootSpecializationID()`, which resolve the namespace or global and return nil when no spec system exists.
+- **Legacy globals in general:** many undocumented retail globals (merchant, loot, mail, quest and guild bank link getters, `PlayerHasToy`, EJ_* ) still exist on Forever, but confirm each one by finding a call in Blizzard's camelot-loaded Lua before relying on it; the generated API docs only list `C_*` namespaces and a subset of bare globals.
+- **API coverage (verified against Forever 1.60.1 docs):** every documented API the addon uses exists; `TransmogUseErrorType` values match retail (Class=7, Race=8, Faction=9, ItemProficiency=10). Undocumented calls that Blizzard's own camelot-loaded code also uses (toy, heirloom, pet journal, black market, merchant/loot/quest link getters) are safe. `C_TradeSkillUI.GetAllRecipeIDs` and `GetRecipeFixedReagentItemLink` are not referenced anywhere in Forever's UI code, so they are guarded.
+- **Collections behaviour:** Forever's wardrobe UI hides uncollected appearances (`Camelot/Blizzard_Wardrobe.lua` forces `SetUncollectedShown(false)`) and transmog is restricted to same-type items, but the `C_TransmogCollection` source/appearance APIs are unchanged, so the classification logic above applies as-is. In-game verification of `isValidSourceForPlayer` / `useErrorType` behaviour on Forever is still pending.
 
 ## Debugging and Data Capture
 
@@ -230,6 +247,7 @@ All of these indicate the item will teach you something if used, so they should 
 - Lua's `#` operator returns 0 for non-sequential keys, so `#waitingForItems == 0` always evaluates true immediately after the loop
 - This is **intentionally left as-is**: the immediate `callbackFunction()` is harmless because `ProcessTheItem`/`FailTheItem` handle real completion using `not next(waitingForItems)`
 - Changing to `not next(waitingForItems)` causes `LoadSources` to actually wait for all source items to load, which blocks the entire `ContinuableContainer` including Consumable/ensemble items from the same batch — this caused a regression where all ensembles showed as unlearnable
+- **Consequence:** `LoadSources` reports completion twice (immediately, then again when the last source item loads). `CaerdonItemMixin:ContinueWithCancelOnItemLoad` therefore wraps its callback so it fires at most once. Blizzard's `ContinuableContainer` decrements `numOutstanding` on every callback and clears its state after firing, so a late duplicate crashed with `ContinuableContainer.lua: bad argument #1 to 'ipairs' (table expected, got nil)`. It surfaced immediately on a fresh WoW Forever install (empty item cache, every source loads asynchronously) but is a latent retail issue too. Do not remove the once-guard; `ContinueOnItemLoad` (the non-cancel variant) is intentionally left unguarded because features rely on the re-run to refresh with complete source data.
 
 ## Important Context
 

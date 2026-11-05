@@ -138,11 +138,15 @@ function TooltipMixin:OnBattlePetTooltipShow(tooltip, speciesID, level, quality,
     tooltip:AddLine("|nCaerdon Wardrobe", 0, 0.8, 0.8, true)
 
     local englishFaction = UnitFactionGroup("player")
-    local specIndex = GetSpecialization()
-    local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat = GetSpecializationInfo(
-        specIndex)
+    -- Classic-era clients such as WoW Forever have no specializations (and no
+    -- GetSpecialization global), so these resolve to nil there.
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
+    local specID
+    if specIndex then
+        specID = CaerdonAPI:GetSpecializationInfo(specIndex)
+    end
 
-    tooltip:AddLine(format("|nSpec: %s", SpecMap[specID] or specID), 0, 0.8, 0.8, true)
+    tooltip:AddLine(format("|nSpec: %s", SpecMap[specID] or specID or "None"), 0, 0.8, 0.8, true)
     tooltip:AddLine(format("Level: %s", UnitLevel("player")), 0, 0.8, 0.8, true)
     tooltip:AddLine(format("Faction: %s", englishFaction), 0, 0.8, 0.8, true)
 
@@ -324,9 +328,12 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         end
     elseif tooltipInfo.getterName == "GetRecipeReagentItem" then
         local recipeSpellID, dataSlotIndex = unpack(tooltipInfo.getterArgs)
-        local itemLink = C_TradeSkillUI.GetRecipeFixedReagentItemLink(recipeSpellID, dataSlotIndex)
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
-        Tooltip:ProcessTooltip(tooltip, item)
+        local itemLink = C_TradeSkillUI.GetRecipeFixedReagentItemLink and
+            C_TradeSkillUI.GetRecipeFixedReagentItemLink(recipeSpellID, dataSlotIndex)
+        if itemLink then
+            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            Tooltip:ProcessTooltip(tooltip, item)
+        end
     elseif tooltipInfo.getterName == "GetRecipeResultItem" then
         local recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID = unpack(tooltipInfo
             .getterArgs)
@@ -627,10 +634,12 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         end
 
         if not isEmbedded and identifiedType ~= CaerdonItemType.Currency then
-            local specIndex = GetSpecialization()
-            local specID, specName, specDescription, specIcon, specBackground, specRole, specPrimaryStat =
-                GetSpecializationInfo(specIndex)
-            self:AddTooltipData(tooltip, item, "Spec", SpecMap[specID] or specID)
+            local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
+            local specID
+            if specIndex then
+                specID = CaerdonAPI:GetSpecializationInfo(specIndex)
+            end
+            self:AddTooltipData(tooltip, item, "Spec", SpecMap[specID] or specID or "None")
             self:AddTooltipData(tooltip, item, "Level", UnitLevel("player"))
 
             local englishFaction = UnitFactionGroup("player")

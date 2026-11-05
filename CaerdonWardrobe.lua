@@ -132,7 +132,10 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "PLAYER_ENTERING_WORLD"
     self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
     self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
-    self:RegisterEvent "UPDATE_EXPANSION_LEVEL"
+    -- UPDATE_EXPANSION_LEVEL is undocumented and only used by retail-only Blizzard
+    -- code; WoW Forever (Camelot) may not know it, and registering an unknown
+    -- event raises an error that would abort OnLoad.
+    pcall(self.RegisterEvent, self, "UPDATE_EXPANSION_LEVEL")
     self:RegisterEvent "VARIABLES_LOADED"
     self:RegisterEvent "NEW_RECIPE_LEARNED"
     self:RegisterEvent "SKILL_LINES_CHANGED"

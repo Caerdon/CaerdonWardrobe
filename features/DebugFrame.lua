@@ -68,7 +68,7 @@ local function FormatSpecIDText(specID)
         return tostring(specID)
     end
 
-    local id, name, _, _, _, role, classFile, className = GetSpecializationInfoByID(specID)
+    local id, name, _, _, _, role, classFile, className = CaerdonAPI:GetSpecializationInfoByID(specID)
     if not id then
         return tostring(specID)
     end
@@ -1478,11 +1478,11 @@ end
 function DebugFrameMixin:ShowBasicItemInfo(item)
     -- Update player info display
     local level = UnitLevel("player")
-    local specIndex = GetSpecialization()
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
     local specInfo = ""
 
     if specIndex then
-        local specID, specName = GetSpecializationInfo(specIndex)
+        local specID, specName = CaerdonAPI:GetSpecializationInfo(specIndex)
         if specName then
             specInfo = specName .. " "
         end
@@ -1815,6 +1815,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     if tocVersion then
         addKV(0, "Client TOC", tocVersion)
     end
+    if CaerdonAPI and CaerdonAPI.GetClientFlavor then
+        local flavorName, projectID = CaerdonAPI:GetClientFlavor()
+        addKV(0, "Client Flavor", flavorName .. " (WOW_PROJECT_ID " .. tostring(projectID) .. ")")
+    end
 
     if C_AddOns then
         local numAddOns = C_AddOns.GetNumAddOns and C_AddOns.GetNumAddOns() or 0
@@ -1934,10 +1938,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     addKV(1, "Class",
         string.format("%s (%s, ID %s)", className or "Unknown", classFile or "?", tostring(classID or "nil")))
 
-    local specIndex = GetSpecialization()
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
     local specName
     if specIndex then
-        _, specName = GetSpecializationInfo(specIndex)
+        _, specName = CaerdonAPI:GetSpecializationInfo(specIndex)
     end
     addKV(1, "Specialization", specName or "None")
 
@@ -2675,11 +2679,11 @@ function DebugFrameMixin:CollectTransmogDebugData(item, overrideTransmogInfo)
         descriptions = BuildSpecDescriptions(itemSpecIDs)
     }
 
-    local lootSpecID = GetLootSpecialization()
+    local lootSpecID = CaerdonAPI:GetLootSpecializationID()
     local activeSpecID
-    local specIndex = GetSpecialization()
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
     if specIndex then
-        activeSpecID = select(1, GetSpecializationInfo(specIndex))
+        activeSpecID = select(1, CaerdonAPI:GetSpecializationInfo(specIndex))
     end
 
     data.api.playerSpecs = {

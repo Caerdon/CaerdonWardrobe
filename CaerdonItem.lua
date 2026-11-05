@@ -266,6 +266,23 @@ function CaerdonItemMixin:ContinueWithCancelOnItemLoad(callbackFunction)
         error("Usage: ContinueWithCancelOnItemLoad(callbackFunction)", 2);
     end
 
+    -- Callers (Blizzard's ContinuableContainer in particular) expect exactly one
+    -- completion per registration. CaerdonEquipmentMixin:LoadSources deliberately
+    -- reports completion immediately and then again once its source items arrive
+    -- (see the `#waitingForItems` note in CLAUDE.md). Collapse that into a single
+    -- call: a late duplicate decrements a container that has already fired and
+    -- cleared its state, which crashes in ContinuableContainer:CheckIfSatisfied.
+    -- This shows up readily on a fresh client cache such as a new WoW Forever install.
+    local originalCallback = callbackFunction
+    local completed = false
+    callbackFunction = function(...)
+        if completed then
+            return
+        end
+        completed = true
+        return originalCallback(...)
+    end
+
     if not self:IsItemEmpty() then
         -- If WoW item data is already cached, process directly instead of going
         -- through the event listener. AddCancelableCallback calls

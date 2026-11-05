@@ -96,9 +96,9 @@ function EncounterJournalMixin:GetTooltipData(item, locationInfo)
     local classID, specID = EJ_GetLootFilter();
 
     if (specID == 0) then
-        local spec = GetSpecialization();
+        local spec = CaerdonAPI:GetPlayerSpecializationIndex();
         if (spec and classID == select(3, UnitClass("player"))) then
-            specID = GetSpecializationInfo(spec, nil, nil, nil, UnitSex("player"));
+            specID = CaerdonAPI:GetSpecializationInfo(spec, nil, nil, nil, UnitSex("player"));
         else
             specID = -1;
         end
