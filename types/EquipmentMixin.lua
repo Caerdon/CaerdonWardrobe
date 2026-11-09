@@ -492,10 +492,16 @@ local function HasBetterOrEqualEquippedItem(item)
     local snapshot = GetEquippedGearSnapshot()
     local filledSlots = 0
     local strictlyBetterCount = 0
+    -- Second return value: whether PVP scaling took part in the comparison. Only then may the
+    -- item-level verdict override Pawn, which does not know about PVP floors.
+    local pvpScalingInvolved = candidatePvpFloor ~= nil
     for _, slotID in ipairs(inventorySlots) do
         local equipped = snapshot[slotID]
         if equipped then
             filledSlots = filledSlots + 1
+            if equipped.pvpFloor then
+                pvpScalingInvolved = true
+            end
             local effCandidate, effEquipped = GetEffectiveLevels(
                 candidateLevel, candidatePvpFloor,
                 equipped.level, equipped.pvpFloor
@@ -509,10 +515,10 @@ local function HasBetterOrEqualEquippedItem(item)
     end
 
     if filledSlots < #inventorySlots then
-        return false
+        return false, pvpScalingInvolved
     end
 
-    return filledSlots > 0 and strictlyBetterCount == filledSlots
+    return filledSlots > 0 and strictlyBetterCount == filledSlots, pvpScalingInvolved
 end
 
 local function HasEqualEquippedItemLevel(item)
@@ -614,6 +620,72 @@ local function GetUpgradeItemLevelDelta(item)
     if maxPositiveDiff then
         return math.floor(maxPositiveDiff + 0.5)
     end
+end
+
+-- Debug-only: what the upgrade helpers compared the candidate against, per equip slot.
+local function BuildEquippedComparisonDebug(item)
+    local inventoryTypeName = item:GetInventoryTypeName()
+    local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
+    if not inventorySlots then
+        return nil
+    end
+
+    local snapshot = GetEquippedGearSnapshot()
+    local result = {}
+    for _, slotID in ipairs(inventorySlots) do
+        local equipped = snapshot[slotID]
+        if equipped then
+            result["slot" .. slotID] = format("%s (ilvl %s)", tostring(equipped.link), tostring(equipped.level))
+        elseif ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
+            result["slot" .. slotID] = "empty (ignored: two-hander equipped)"
+        else
+            result["slot" .. slotID] = "empty"
+        end
+    end
+    return result
+end
+
+-- True when the candidate is a lower armor class (cloth < leather < mail < plate) than the piece
+-- equipped in the slot it would replace. A lower armor class is never an upgrade on item level
+-- alone; classic-era itemization in particular hands higher-ilvl cloth to leather and mail wearers.
+local armorClassRank = {
+    [Enum.ItemArmorSubclass.Cloth] = 1,
+    [Enum.ItemArmorSubclass.Leather] = 2,
+    [Enum.ItemArmorSubclass.Mail] = 3,
+    [Enum.ItemArmorSubclass.Plate] = 4,
+}
+
+local function GetArmorClassRank(itemLink)
+    if not itemLink then
+        return nil
+    end
+    local classID, subclassID = select(12, C_Item.GetItemInfo(itemLink))
+    if classID ~= Enum.ItemClass.Armor then
+        return nil
+    end
+    return armorClassRank[subclassID]
+end
+
+local function IsLowerArmorClassThanEquipped(item)
+    local candidateRank = GetArmorClassRank(item:GetItemLink())
+    if not candidateRank then
+        return false
+    end
+
+    local inventorySlots = GetInventorySlotsForType(item:GetInventoryTypeName())
+    if not inventorySlots then
+        return false
+    end
+
+    local snapshot = GetEquippedGearSnapshot()
+    for _, slotID in ipairs(inventorySlots) do
+        local equipped = snapshot[slotID]
+        local equippedRank = equipped and GetArmorClassRank(equipped.link)
+        if equippedRank and equippedRank > candidateRank then
+            return true
+        end
+    end
+    return false
 end
 
 --[[static]]
@@ -821,9 +893,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local sourceUseError
     local validSourceInfoForPlayer
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
-    local betterItemEquipped = HasBetterOrEqualEquippedItem(item)
+    local betterItemEquipped, betterItemEquippedViaPvp = HasBetterOrEqualEquippedItem(item)
     local equalItemLevelEquipped = HasEqualEquippedItemLevel(item)
     local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(item)
+    local lowerArmorClassThanEquipped = IsLowerArmorClassThanEquipped(item)
     local isArtifactItem = false
     local blockedOffhandSlot = IsOffhandSlotBlocked(inventoryTypeName)
     local isRecraftable = item:IsRecraftable()
@@ -1140,8 +1213,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
     local shouldShowUpgrade = false
     local pawnIdentifiedUpgrade = false
+    local pawnAvailable = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted ~= nil
+    local pawnRecommended -- raw Pawn verdict: true / false / nil (nil = Pawn has no data yet)
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
-        local pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
+        pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
         local pawnUpgrade = pawnRecommended
         if pawnUpgrade then
             if blockedOffhandSlot then
@@ -1161,8 +1236,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- Suppress Pawn upgrades when our PVP-aware comparison shows the
         -- equipped item is actually better. Pawn compares against base ilvl
         -- and doesn't know about PVP scaling, so it over-identifies upgrades
-        -- when PVP gear is equipped.
-        if pawnUpgrade and betterItemEquipped then
+        -- when PVP gear is equipped. Only PVP scaling justifies overriding
+        -- Pawn: on a plain item-level comparison Pawn's stat weights win
+        -- (a lower-ilvl dagger can be a real upgrade over a higher-ilvl axe).
+        if pawnUpgrade and betterItemEquipped and betterItemEquippedViaPvp then
             pawnUpgrade = false
         end
 
@@ -1175,8 +1252,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         shouldShowUpgrade = true
     end
 
+    -- Item-level fallback: never fires for a lower armor class than what is equipped
+    -- (Pawn may still flag such an item above if its stat weights say so).
     if not shouldShowUpgrade and upgradeItemLevelDelta and upgradeItemLevelDelta > 0 and not uniqueUpgradeBlocked and
-        not isTabard then
+        not isTabard and not lowerArmorClassThanEquipped then
         shouldShowUpgrade = true
     end
 
@@ -1253,6 +1332,18 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             matchesLootSpecRaw = matchesLootSpec,
             playerLootSpecID = playerLootSpecID,
             shouldShowUpgrade = shouldShowUpgrade,
+            pawnAvailable = pawnAvailable,
+            pawnRecommended = tostring(pawnRecommended),
+            betterItemEquippedViaPvp = betterItemEquippedViaPvp,
+            lowerArmorClassThanEquipped = lowerArmorClassThanEquipped,
+            C_PlayerInfo_CanUseItem = C_PlayerInfo and C_PlayerInfo.CanUseItem and item:GetItemID() and
+                select(2, pcall(function() return tostring(C_PlayerInfo.CanUseItem(item:GetItemID())) end)),
+            C_Item_IsUsableItem = C_Item.IsUsableItem and item:GetItemID() and
+                select(2, pcall(function() return tostring((C_Item.IsUsableItem(item:GetItemID()))) end)),
+            candidateItemLevel = GetCandidateItemLevel(item),
+            equippedComparison = BuildEquippedComparisonDebug(item),
+            playerLevel = UnitLevel("player"),
+            itemMinLevel = item:GetMinLevel(),
             blockedOffhandSlot = blockedOffhandSlot,
             isTabard = isTabard,
             isShirt = isShirt,

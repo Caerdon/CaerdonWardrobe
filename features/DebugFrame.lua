@@ -2021,6 +2021,19 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             local leftText = line.leftText or ""
             local rightText = line.rightText or ""
             local prefix = format("  [%d] type=%s", i, tostring(lineType))
+            -- Include both text colors so red (unmet requirement) lines are identifiable in the export;
+            -- armor/weapon proficiency red sits in the RIGHT column of the EquipSlot line.
+            if line.leftColor and line.leftColor.GenerateHexColor then
+                prefix = prefix .. " color=" .. line.leftColor:GenerateHexColor()
+            end
+            if rightText ~= "" and line.rightColor and line.rightColor.GenerateHexColor then
+                prefix = prefix .. " rcolor=" .. line.rightColor:GenerateHexColor()
+            end
+            -- UsageRequirement lines: which requirement (Enum.TooltipDataUsageRequirementType; 2 = Skill,
+            -- 5 = Level, 14 = NotAlreadyKnown) the client says this is.
+            if line.requirementType ~= nil then
+                prefix = prefix .. " req=" .. tostring(line.requirementType)
+            end
             if rightText ~= "" then
                 addLine(0, format("%s  L: %s  |  R: %s", prefix, leftText, rightText))
             else
@@ -2046,10 +2059,14 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         locationKey = "debugframe-copy-" .. tostring(item:GetItemID() or "unknown"),
         isDebugFrame = true
     }
-    local isReady, mogStatus, bindingStatus = item:GetCaerdonStatus(self, locationInfo)
+    local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(self, locationInfo)
     addKV(1, "Status Ready", isReady)
     addKV(1, "Mog Status", mogStatus)
     addKV(1, "Binding Status", bindingStatus)
+    if bindingResult then
+        -- unusableItem / skillTooLow come from the red-text tooltip scan and drive canEquipForPlayer
+        addTable(1, "Binding Result", bindingResult)
+    end
 
     local forDebugUse = item:GetForDebugUse()
     if forDebugUse then
@@ -2285,6 +2302,16 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         local recipeSpellName, recipeSpellID = C_Item.GetItemSpell(item:GetItemLink())
         addKV(1, "Recipe Spell ID", recipeSpellID)
         addKV(1, "Recipe Spell Name", recipeSpellName)
+
+        -- What Caerdon believes about the toon's rank in the recipe's profession (cached skill lines,
+        -- then the live profession slots). Compare against the "Requires <skill> (<rank>)" tooltip line.
+        local professionName = item:GetItemSubType()
+        if professionName and CaerdonRecipe and CaerdonRecipe.GetPlayerSkillInfo then
+            local hasSkillLine, _, knownRank = CaerdonRecipe:GetPlayerSkillInfo(item, professionName, 0)
+            addKV(1, "Profession", professionName)
+            addKV(1, "Has Skill Line", hasSkillLine)
+            addKV(1, "Cached Skill Rank", knownRank)
+        end
 
         if recipeSpellID then
             local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeSpellID)

@@ -778,6 +778,18 @@ function CaerdonItemMixin:GetTooltipData(data)
 
     for lineIndex, line in ipairs(data.lines) do
         local lineText = line.leftText and tostring(line.leftText) or nil
+
+        -- Red text (RED_FONT_COLOR, "ffff2020") on any line marks a requirement this toon does not
+        -- meet right now: level (UsageRequirement), armor/weapon proficiency (the RIGHT column of the
+        -- EquipSlot line, e.g. "Wrist | Mail" on a hunter below 40 on WoW Forever), class, skill,
+        -- reputation, "Already known". Those lines are not type None, so scan every line and both
+        -- columns here rather than inside the type-filtered branch below.
+        -- TODO: Provide option to show stars on BoE recipes that aren't for current toon
+        local leftHex = line.leftColor and line.leftColor.GenerateHexColor and line.leftColor:GenerateHexColor()
+        local rightHex = line.rightColor and line.rightColor.GenerateHexColor and line.rightColor:GenerateHexColor()
+        if leftHex == "ffff2020" or rightHex == "ffff2020" then
+            tooltipData.foundRedRequirements = true
+        end
         -- Since 12.0 the "Use:" / "Equip:" / "Use: Teaches you" lines carry their own
         -- types instead of None, so they must be included here or the text checks
         -- below (equip effects, re-learn, reputation, customization unlocks) never run.
@@ -889,15 +901,6 @@ function CaerdonItemMixin:GetTooltipData(data)
                     tooltipData.supercedingSpellNotKnown = true
                 end
             end
-
-            local hex = line.leftColor:GenerateHexColor()
-            -- TODO: Generated hex color includes alpha value so need to check for full red.
-            -- TODO: Provide option to show stars on BoE recipes that aren't for current toon
-            -- TODO: Surely there's a better way than checking hard-coded color values for red-like things
-            -- if hex == "fe1f1f" then -- TODO: this was old value... check to see if still needed for anything
-            if hex == "ffff2020" then
-                tooltipData.foundRedRequirements = true
-            end
         elseif line.type == Enum.TooltipDataLineType.Blank then
         elseif line.type == Enum.TooltipDataLineType.UnitName then
         elseif line.type == Enum.TooltipDataLineType.GemSocket then
@@ -942,6 +945,16 @@ function CaerdonItemMixin:GetTooltipData(data)
                         local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self,
                             requiredSkill, requiredRank)
                         -- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
+
+                        -- The client only colors this line red while the requirement is unmet, so a
+                        -- non-red line is its own verdict that the toon has the skill at the required
+                        -- rank. Trust it over the cached profession data, which is only refreshed
+                        -- while trade skill data is ready and can lag behind skill-ups. A red line
+                        -- still goes through the cache to tell "rank too low" from "no profession".
+                        if leftHex and leftHex ~= "ffff2020" then
+                            hasSkillLine = true
+                            meetsMinRank = true
+                        end
 
                         tooltipData.requiredTradeSkillMissingOrUnleveled = not hasSkillLine
                         tooltipData.requiredTradeSkillTooLow = hasSkillLine and not meetsMinRank
@@ -1354,6 +1367,17 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             if transmogInfo.canEquipForPlayer == nil then
                 transmogInfo.canEquipForPlayer = playerCanEquipItem
             end
+            -- The red-text tooltip scan is authoritative for "can this toon equip it right now".
+            -- The transmog source APIs report mail as usable for a low-level hunter (the class can
+            -- eventually collect the appearance), so without this an unequippable piece gets an
+            -- upgrade arrow. Level-only shortfalls keep the upgradeLowSkill path via hasMetRequirements.
+            local isUpgrade = transmogInfo.isUpgrade
+            if bindingResult.unusableItem then
+                transmogInfo.canEquipForPlayer = false
+                if transmogInfo.hasMetRequirements then
+                    isUpgrade = nil
+                end
+            end
             if transmogInfo.isArtifactItem then
                 isArtifactItem = true
             end
@@ -1388,7 +1412,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                         -- Can't equip but other characters need it (e.g., cross-class ensemble)
                         mogStatus = "other"
                     end
-                elseif transmogInfo.isUpgrade then
+                elseif isUpgrade then
                     if transmogInfo.hasMetRequirements then
                         mogStatus = "upgrade"
                     else
@@ -1402,7 +1426,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     -- 	mogStatus = "lowSkill"
                     -- end
                 end
-            elseif transmogInfo.isUpgrade then
+            elseif isUpgrade then
                 if transmogInfo.hasMetRequirements then
                     mogStatus = "upgrade"
                 else

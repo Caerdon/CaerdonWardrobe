@@ -219,15 +219,22 @@ function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
     -- end
 
     -- if not professionInfo or professionInfo.skillLevel == 0 then
-    professionInfo = PlayerProfessionData[requiredSkill]
-    if not professionInfo then
-        for professionIndex, professionData in pairs(PlayerProfessionData) do
-            if professionData.childSkillLines then
-                professionInfo = professionData.childSkillLines[requiredSkill]
-                if professionInfo then
-                    break
-                end
-            end
+    -- A parent profession and its child skill line can share a name. On WoW Forever every
+    -- profession has a single child line named exactly like its parent ("Cooking" > "Cooking"),
+    -- and the secondary professions have no parent skill level at all, so the top-level entry
+    -- is a bare { childSkillLines = ... } container. Stopping at that entry hid the real rank,
+    -- so look at the top-level entry and every same-named child and keep the highest level.
+    local function ConsiderSkillLine(candidate)
+        local skillLevel = candidate and candidate.skillLevel
+        if skillLevel and (not professionInfo or skillLevel > (professionInfo.skillLevel or 0)) then
+            professionInfo = candidate
+        end
+    end
+
+    ConsiderSkillLine(PlayerProfessionData[requiredSkill])
+    for professionIndex, professionData in pairs(PlayerProfessionData) do
+        if professionData.childSkillLines then
+            ConsiderSkillLine(professionData.childSkillLines[requiredSkill])
         end
     end
     -- end
@@ -245,8 +252,10 @@ function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
     end
 
     if not hasSkillLine then
-        local prof1, prof2, arch, fishing, cooking = GetProfessions()
-        local professionIDs = {prof1, prof2, arch, fishing, cooking}
+        -- GetProfessions() lays its slots out differently per client (retail: two primaries,
+        -- archaeology, fishing, cooking; WoW Forever: two primaries, first aid, fishing, cooking,
+        -- with room for more), so walk every return value rather than naming five of them.
+        local professionIDs = { GetProfessions() }
         for _, professionID in pairs(professionIDs) do
             if professionID then
                 local name, _, skillLevel, maxSkillLevel = GetProfessionInfo(professionID)
