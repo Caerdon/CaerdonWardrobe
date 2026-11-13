@@ -7,6 +7,13 @@ function CaerdonWardrobeFeatureMixin:GetName()
     error("Caerdon Wardrobe: Must provide a feature name")
 end
 
+-- Which feature's status rules ProcessItem applies (the Merchant / EncounterJournal / CustomerOrders
+-- exceptions). A feature that draws another feature's content in its own frames, such as an addon's
+-- replacement vendor window, returns that feature's name.
+function CaerdonWardrobeFeatureMixin:GetStatusRuleName()
+    return self:GetName()
+end
+
 function CaerdonWardrobeFeatureMixin:Init()
     -- init and return array of frame events you'd like to receive
     error(format("Caerdon Wardrobe: Must provide Init implementation for %s", self:GetName()))
@@ -66,6 +73,10 @@ function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, featur
         },
         sellableIcon = {
             shouldShow = showSellableIcon
+        },
+        -- Only what is in the bags or bank can be listed, so the icon stays there.
+        auctionIcon = {
+            shouldShow = item:HasItemLocationBankOrBags() and CaerdonWardrobeConfig.Icon.ShowAuctionValue == true
         }
     }
 

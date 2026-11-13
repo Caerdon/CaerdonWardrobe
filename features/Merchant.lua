@@ -236,7 +236,7 @@ function MerchantMixin:IsItemCollected(item)
     -- Handle different item types differently
     if caerdonType == "Equipment" then
         -- Equipment: gray out if collected or sellable
-        if mogStatus == "collected" or mogStatus == "sellable" then
+        if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "auction" then
             return true
         end
     elseif caerdonType == "Mount" or caerdonType == "BattlePet" then
@@ -259,7 +259,7 @@ function MerchantMixin:IsItemCollected(item)
     elseif caerdonType == "Toy" then
         -- Toys: gray out if sellable (already owned) or collected
         -- Don't gray out if showing "own" (learnable)
-        if mogStatus == "sellable" or mogStatus == "collected" then
+        if mogStatus == "sellable" or mogStatus == "auction" or mogStatus == "collected" then
             return true
         end
         return false

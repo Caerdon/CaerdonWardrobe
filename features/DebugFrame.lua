@@ -1945,6 +1945,22 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     end
     addKV(1, "Specialization", specName or "None")
 
+    -- Clients without specializations (WoW Forever): points per talent tree, and the tree the
+    -- Pawn scale filter treats as the toon's spec.
+    local talentTrees, talentTreeReason = CaerdonAPI:GetTalentTrees()
+    if talentTrees then
+        local treeParts = {}
+        for _, tree in ipairs(talentTrees) do
+            treeParts[#treeParts + 1] = string.format("%d %s (%d)", tree.index, tostring(tree.name), tree.spent)
+        end
+        addKV(1, "Talent Trees", table.concat(treeParts, ", "))
+        local primaryIndex, primaryName = CaerdonAPI:GetPrimaryTalentTree()
+        addKV(1, "Primary Talent Tree", primaryIndex and string.format("%d %s", primaryIndex, tostring(primaryName)) or
+            "none (no points spent, or a tie)")
+    else
+        addKV(1, "Talent Trees", "unavailable (" .. tostring(talentTreeReason) .. ")")
+    end
+
     addKV(1, "Race", UnitRace("player"))
     addKV(1, "Faction", UnitFactionGroup("player"))
     local genderID = UnitSex("player")
@@ -2047,6 +2063,26 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                     end
                 end
             end
+        end
+    end
+
+    -- Which transmog collection events arrived this session and whether a refresh followed.
+    -- Answers "the appearance was learned but the icon did not update" without /etrace.
+    if CaerdonWardrobe and CaerdonWardrobe.GetTransmogEventLog then
+        local eventLog, lastRefreshTime = CaerdonWardrobe:GetTransmogEventLog()
+        local now = GetTime()
+        addLine(0, "")
+        addLine(0, "[Transmog Collection Events]")
+        addKV(1, "Refresh Generation", CaerdonWardrobe:GetRefreshGeneration())
+        addKV(1, "Last Refresh",
+            lastRefreshTime and string.format("%.1fs ago", now - lastRefreshTime) or "none this session")
+        if eventLog and #eventLog > 0 then
+            addLine(1, "Events (oldest first):")
+            for _, entry in ipairs(eventLog) do
+                addLine(2, string.format("- %.1fs ago %s(%s)", now - entry.time, entry.event, entry.args))
+            end
+        else
+            addLine(1, "Events: none this session")
         end
     end
 
@@ -2259,11 +2295,21 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "equalItemLevelEquipped", transmogInfo.equalItemLevelEquipped)
         addKV(1, "upgradeItemLevelDelta", transmogInfo.upgradeItemLevelDelta)
         addKV(1, "pawnIdentifiedUpgrade", transmogInfo.pawnIdentifiedUpgrade)
+        addKV(1, "pawnPrefersEquipped", transmogInfo.pawnPrefersEquipped)
+        addKV(1, "pawnOffTreeUpgrade", transmogInfo.pawnOffTreeUpgrade)
+        addKV(1, "pawnUpgradeScales", transmogInfo.pawnUpgradeScales)
+        addKV(1, "pawnComparison", transmogInfo.pawnComparison)
+        addKV(1, "pawnScaleFilter", CaerdonEquipment.GetPawnScaleFilterDescription and
+            CaerdonEquipment:GetPawnScaleFilterDescription() or "none (every visible Pawn scale counts)")
         addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
         addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
         addKV(1, "sourceID", transmogInfo.sourceID)
         addKV(1, "appearanceID", transmogInfo.appearanceID)
         addKV(1, "isRecraftable", transmogInfo.isRecraftable)
+        addKV(1, "validSourceNotCollectable", transmogInfo.validSourceNotCollectable)
+        addKV(1, "validSourceNotCollectableKnownLook", transmogInfo.validSourceNotCollectableKnownLook)
+        addKV(1, "proficiencySourceNotCollectable", transmogInfo.proficiencySourceNotCollectable)
+        addKV(1, "proficiencySourceNotCollectableKnownLook", transmogInfo.proficiencySourceNotCollectableKnownLook)
     end
 
     if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then
@@ -2359,6 +2405,155 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "validForCharacter", consumableInfo.validForCharacter)
             addKV(1, "canEquip", consumableInfo.canEquip)
             addKV(1, "isEnsemble", consumableInfo.isEnsemble)
+        end
+    end
+
+    -- Why an item does (or does not) carry the quest icon without being a Quest-class item:
+    -- the data sources' state plus every candidate quest and the reason it was kept or dropped.
+    if CaerdonQuestItems and item.GetQuestItemInfo then
+        local questState = CaerdonQuestItems:GetDebugState()
+        local questItemInfo = item:GetQuestItemInfo()
+        local now = GetTime()
+
+        addLine(0, "")
+        addLine(0, "[Quest Value]")
+        addKV(1, "Has Quest Value", questItemInfo ~= nil and questItemInfo.hasQuestValue or false)
+        addKV(1, "Active Quest", questItemInfo ~= nil and questItemInfo.isActive or false)
+        addKV(1, "Upcoming Quest", questItemInfo ~= nil and questItemInfo.isUpcoming or false)
+        addKV(1, "Show Quest Items", CaerdonWardrobeConfig.Icon.ShowQuestItems)
+        addKV(1, "Show Upcoming Quest Items", CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems)
+        addKV(1, "Upcoming Level Window", questState.upcomingLevelWindow)
+        addKV(1, "Trivial Range", questState.trivialRange)
+        addKV(1, "Profession Skill Lines", questState.professions or "not recognised (check skipped)")
+
+        local logState = questState.questLog
+        addKV(1, "Quest Log", string.format("%d quests, %d item objectives, %s%s%s",
+            logState.questCount or 0,
+            logState.objectiveCount or 0,
+            logState.lastScan and string.format("scanned %.1fs ago", now - logState.lastScan) or "not scanned",
+            logState.incomplete and ", objective names still loading" or "",
+            logState.awaitingData and ", waiting for QUEST_LOG_UPDATE" or ""))
+        if logState.error then
+            addKV(1, "Quest Log Error", logState.error)
+        end
+
+        local providerState = questState.provider
+        local providerText = "QuestieDB " .. tostring(providerState.state)
+        if providerState.contractVersion then
+            providerText = providerText .. string.format(" (contract %s, %s)",
+                tostring(providerState.contractVersion), tostring(providerState.readMode))
+        end
+        if providerState.state == "ready" then
+            providerText = providerText .. string.format(", %d items across %d quests indexed in %.0fms",
+                providerState.itemCount or 0, providerState.questCount or 0, providerState.buildMs or 0)
+        end
+        addKV(1, "Quest Database", providerText)
+        if providerState.error then
+            addKV(1, "Quest Database Error", providerState.error)
+        end
+        addKV(1, "Questie Policy", questState.questie.loaded and
+            ("loaded, ready=" .. tostring(questState.questie.isReady)) or "not loaded")
+
+        if questItemInfo and #questItemInfo.quests > 0 then
+            addLine(1, "Quests:")
+            for _, quest in ipairs(questItemInfo.quests) do
+                local levelText = ""
+                if quest.questLevel or quest.requiredLevel then
+                    levelText = string.format(" [level %s, requires %s]",
+                        tostring(quest.questLevel or "?"), tostring(quest.requiredLevel or "?"))
+                end
+                addLine(2, string.format("- %d %s%s (%s): %s%s",
+                    quest.questID,
+                    tostring(quest.name or "unknown"),
+                    levelText,
+                    tostring(quest.role),
+                    quest.eligible and "" or "skipped, ",
+                    tostring(quest.reason)))
+            end
+        else
+            addLine(1, "Quests: none")
+        end
+    end
+
+    -- Food and drink: how the item was read and whether a better one is carried.
+    if CaerdonFoodDrink and item.GetFoodDrinkInfo then
+        local foodDrinkInfo = item:GetFoodDrinkInfo()
+        if foodDrinkInfo then
+            addLine(0, "")
+            addLine(0, "[Food and Drink]")
+            addKV(1, "Show Outdated Food", CaerdonWardrobeConfig.Icon.ShowOutdatedFood)
+            addKV(1, "Kind", foodDrinkInfo.kind)
+            addKV(1, "Buff Food", foodDrinkInfo.isBuff)
+            addKV(1, "Restore Amount", foodDrinkInfo.amount)
+            addKV(1, "Restore Line", foodDrinkInfo.text)
+            addKV(1, "Required Level", foodDrinkInfo.requiredLevel)
+            addKV(1, "Item Level", foodDrinkInfo.itemLevel)
+            addKV(1, "Outdated", foodDrinkInfo.isOutdated)
+            addKV(1, "Reason", foodDrinkInfo.reason)
+            if foodDrinkInfo.betterItem then
+                addKV(1, "Better Item Carried", string.format("%s (item %d, requires %d, restores %d)",
+                    tostring(foodDrinkInfo.betterItem.name), foodDrinkInfo.betterItem.itemID,
+                    foodDrinkInfo.betterItem.requiredLevel, foodDrinkInfo.betterItem.amount))
+            end
+        end
+    end
+
+    -- Why a sellable item does (or does not) carry the auction icon: every number in the verdict.
+    if CaerdonAuctionValue and item.GetAuctionValueInfo then
+        local auctionState = CaerdonAuctionValue:GetDebugState()
+        local auctionInfo = item:GetAuctionValueInfo()
+        local function money(copper)
+            if type(copper) ~= "number" then
+                return "nil"
+            end
+            local sign = copper < 0 and "-" or ""
+            copper = math.abs(copper)
+            return string.format("%s%dg %ds %dc", sign, math.floor(copper / 10000),
+                math.floor(copper / 100) % 100, copper % 100)
+        end
+
+        addLine(0, "")
+        addLine(0, "[Auction Value]")
+        addKV(1, "Show Auction Value", CaerdonWardrobeConfig.Icon.ShowAuctionValue)
+        addKV(1, "Minimum Profit Setting", CaerdonWardrobeConfig.Icon.AuctionMinProfit)
+        addKV(1, "Price Source", auctionState.available and
+            ("Auctionator, scan updates " .. (auctionState.registered and "registered" or "not registered") ..
+                string.format(", %d this session", auctionState.updateCount or 0)) or "none (Auctionator not loaded)")
+        if auctionState.error then
+            addKV(1, "Price Source Error", auctionState.error)
+        end
+        addKV(1, "Deposit Model", auctionState.depositRate and
+            string.format("measured: %.1f%% of vendor price, minimum %s",
+                auctionState.depositRate * 100, money(auctionState.minDeposit)) or
+            string.format("default: %.0f%% of vendor price, minimum %s (place an item in the auction sell slot to measure it)",
+                auctionState.defaultDepositRate * 100, money(auctionState.minDeposit or auctionState.defaultMinDeposit)))
+        if auctionState.lastSample then
+            addKV(1, "Last Deposit Sample", string.format("item %s, vendor %s, deposit %s",
+                tostring(auctionState.lastSample.itemID), money(auctionState.lastSample.vendorPrice),
+                money(auctionState.lastSample.deposit)))
+        end
+        if auctionInfo then
+            addKV(1, "Should Auction", auctionInfo.shouldAuction)
+            addKV(1, "Reason", auctionInfo.reason)
+            addKV(1, "Rule", string.format("%s (margin %d%% of vendor value)", tostring(auctionInfo.rule),
+                (auctionInfo.margin or 0) * 100))
+            addKV(1, "Quantity Owned", auctionInfo.quantity)
+            addKV(1, "Vendor Price", money(auctionInfo.vendorPrice))
+            addKV(1, "Vendor Value", money(auctionInfo.vendorValue))
+            addKV(1, "Last Seen Price", money(auctionInfo.lastPrice))
+            addKV(1, "Price Age (days)", auctionInfo.ageDays)
+            addKV(1, "Median Daily Low", auctionInfo.medianLow and money(auctionInfo.medianLow) or "not enough history")
+            addKV(1, "Days Seen", auctionInfo.daysSeen)
+            addKV(1, "Most Listed In A Day", auctionInfo.maxAvailable)
+            addKV(1, "Price Key", auctionInfo.dbKey)
+            addKV(1, "Random Suffix In Link", auctionInfo.randomSuffix)
+            addKV(1, "Price Used", money(auctionInfo.price))
+            addKV(1, "After Cut", money(auctionInfo.net))
+            addKV(1, "Deposit", string.format("%s x%d (%s)", money(auctionInfo.deposit),
+                auctionInfo.depositRiskMultiplier or 1, tostring(auctionInfo.depositSource)))
+            addKV(1, "Profit", money(auctionInfo.profit))
+            addKV(1, "Required", string.format("%s (floor %s, %s)", money(auctionInfo.required),
+                money(auctionInfo.floor), tostring(auctionInfo.floorSource)))
         end
     end
 
@@ -3054,6 +3249,7 @@ function DebugFrameMixin:AddTransmogInfo(item)
         self:AddDebugEntry("Processed upgradeItemLevelDelta", tostring(transmogInfo.upgradeItemLevelDelta))
         self:AddDebugEntry("Processed upgradeMatchesSpec", tostring(transmogInfo.upgradeMatchesSpec))
         self:AddDebugEntry("Processed pawnIdentifiedUpgrade", tostring(transmogInfo.pawnIdentifiedUpgrade))
+        self:AddDebugEntry("Processed pawnPrefersEquipped", tostring(transmogInfo.pawnPrefersEquipped))
         self:AddDebugEntry("Processed needsItem", tostring(transmogInfo.needsItem))
         self:AddDebugEntry("Processed otherNeedsItem", tostring(transmogInfo.otherNeedsItem))
         self:AddDebugEntry("Processed isCompletionistItem", tostring(transmogInfo.isCompletionistItem))

@@ -131,6 +131,12 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "PLAYER_LOGOUT"
     self:RegisterEvent "PLAYER_ENTERING_WORLD"
     self:RegisterEvent "TRANSMOG_COLLECTION_UPDATED"
+    -- The per-source events are the direct "this source was just learned / lost" signal,
+    -- so refresh on them too rather than depending on TRANSMOG_COLLECTION_UPDATED always
+    -- accompanying them (on WoW Forever an appearance is also learned by selling the item).
+    self:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_ADDED"
+    self:RegisterEvent "TRANSMOG_COLLECTION_SOURCE_REMOVED"
+    self:RegisterEvent "TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED"
     self:RegisterEvent "EQUIPMENT_SETS_CHANGED"
     -- UPDATE_EXPANSION_LEVEL is undocumented and only used by retail-only Blizzard
     -- code; WoW Forever (Camelot) may not know it, and registering an unknown
@@ -146,6 +152,14 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "NEW_TOY_ADDED"
     self:RegisterEvent "NEW_PET_ADDED"
     self:RegisterEvent "PLAYER_REGEN_ENABLED"
+    -- Talent points decide which Pawn scale counts as the toon's own on clients without
+    -- specializations (see OnTalentsChanged). pcall: not every client knows every event.
+    for _, talentEvent in ipairs({ "TRAIT_CONFIG_UPDATED", "TRAIT_CONFIG_LIST_UPDATED", "ACTIVE_COMBAT_CONFIG_CHANGED",
+        "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE" }) do
+        if pcall(self.RegisterEvent, self, talentEvent) then
+            self[talentEvent] = self.OnTalentsChanged
+        end
+    end
     if isHousingSupported then
         self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
         self:RegisterEvent "HOUSING_STORAGE_UPDATED"
@@ -496,7 +510,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     end
 
     local function ApplyUpgradeArrowColor(defaultR, defaultG, defaultB)
-        if transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
+        if transmogInfo and transmogInfo.pawnOffTreeUpgrade then
+            -- Pawn only rates it higher for another talent tree's scale: same "usable but
+            -- off-spec" red as a loot spec mismatch. Hiding that scale in Pawn removes the arrow.
+            mogStatus:SetVertexColor(1, 0.35, 0.35)
+        elseif transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
             mogStatus:SetVertexColor(1, 0.35, 0.35)
         elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
             mogStatus:SetVertexColor(1, 1, 0)
@@ -844,7 +862,16 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
             mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
         end
-    elseif status == "sellable" then
+    elseif (status == "auction" or status == "auctionGoods") and displayInfo and displayInfo.auctionIcon and displayInfo.auctionIcon.shouldShow then
+        -- The auction house pays enough more than a vendor to list it instead.
+        alpha = 0.9
+        if mogStatus.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("Auctioneer") then
+            mogStatus:SetAtlas("Auctioneer", false)
+        else
+            mogStatus:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+        end
+    elseif status == "sellable" or status == "auction" then
+        -- "auction" lands here where its own icon is off (anything but bags and bank).
         if displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
             alpha = 0.9
             mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
@@ -1158,7 +1185,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
             if transmogInfo.isTransmog then
                 -- TODO: Exceptions need to be broken out
                 -- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
-                local featureName = feature and feature:GetName()
+                local featureName = feature and feature:GetStatusRuleName()
                 if featureName == "EncounterJournal" or featureName == "Merchant" or featureName == "CustomerOrders" then
                     if transmogInfo.needsItem and featureName ~= "Merchant" then
                         if not transmogInfo.matchesLootSpec then
@@ -1533,7 +1560,10 @@ function CaerdonWardrobeMixin:RefreshItems()
     -- Invalidate cached status results since game state has changed
     CaerdonItem:InvalidateStatusCache()
     CaerdonEquipment:InvalidateCaches()
+    CaerdonQuestItems:InvalidateCaches()
+    CaerdonFoodDrink:InvalidateCaches()
     self.refreshGeneration = self.refreshGeneration + 1
+    self.lastRefreshTime = GetTime()
 
     -- Defer the actual feature refresh during combat to avoid tainting
     -- Blizzard's secure frame operations. The cache invalidation above
@@ -1551,6 +1581,25 @@ function CaerdonWardrobeMixin:RefreshItems()
     end, 1)
 end
 
+-- Talent points were spent, reset or swapped. Only a change of the leading talent tree matters
+-- (it picks which Pawn scales count as the toon's own), so the icons are refreshed only then.
+-- Retail has no talent tree groups: the lookup is nil before and after and nothing happens.
+function CaerdonWardrobeMixin:OnTalentsChanged()
+    if self.talentChangeTimer then
+        return
+    end
+
+    self.talentChangeTimer = C_Timer.NewTimer(0.5, function()
+        self.talentChangeTimer = nil
+        local before = CaerdonAPI:GetPrimaryTalentTree()
+        CaerdonAPI:InvalidateTalentTrees()
+        local after = CaerdonAPI:GetPrimaryTalentTree()
+        if before ~= after then
+            self:RefreshItems()
+        end
+    end)
+end
+
 function CaerdonWardrobeMixin:OnEquipPendingItem()
     -- TODO: Bit of a hack... wait a bit and then update...
     --       Need to figure out a better way.  Otherwise,
@@ -1558,7 +1607,51 @@ function CaerdonWardrobeMixin:OnEquipPendingItem()
     C_Timer.After(1, function() self:RefreshItems() end)
 end
 
-function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED()
+-- Session log of the transmog collection events this frame received (oldest first).
+-- Surfaced by the Debug Frame "Copy Details" export so "which events fired when that
+-- appearance was learned, and did we refresh afterwards" can be answered from a paste.
+local TRANSMOG_EVENT_LOG_MAX = 25
+local transmogEventLog = {}
+
+local function LogTransmogEvent(event, ...)
+    local argCount = select("#", ...)
+    local args = {}
+    for index = 1, argCount do
+        args[index] = tostring((select(index, ...)))
+    end
+
+    transmogEventLog[#transmogEventLog + 1] = {
+        time = GetTime(),
+        event = event,
+        args = table.concat(args, ", "),
+    }
+    if #transmogEventLog > TRANSMOG_EVENT_LOG_MAX then
+        table.remove(transmogEventLog, 1)
+    end
+end
+
+-- Returns the event log (entries: time, event, args) and the GetTime() of the last RefreshItems.
+function CaerdonWardrobeMixin:GetTransmogEventLog()
+    return transmogEventLog, self.lastRefreshTime
+end
+
+function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED(...)
+    LogTransmogEvent("TRANSMOG_COLLECTION_UPDATED", ...)
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_SOURCE_ADDED(...)
+    LogTransmogEvent("TRANSMOG_COLLECTION_SOURCE_ADDED", ...)
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_SOURCE_REMOVED(...)
+    LogTransmogEvent("TRANSMOG_COLLECTION_SOURCE_REMOVED", ...)
+    self:RefreshItems()
+end
+
+function CaerdonWardrobeMixin:TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED(...)
+    LogTransmogEvent("TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED", ...)
     self:RefreshItems()
 end
 

@@ -461,6 +461,12 @@ function AuctionMixin:OnSetPostItem(frame, itemLocation)
 	local displayMode = AuctionHouseFrame:GetDisplayMode()
 	local item = CaerdonItem:CreateFromItemLocation(itemLocation)
 
+	-- The sell slot is the only place the client reports a real deposit; the auction value
+	-- verdicts use it in place of their built-in guess.
+	if displayMode == AuctionHouseFrameDisplayMode.ItemSell then
+		CaerdonAuctionValue:RecordDepositSample(itemLocation)
+	end
+
 	local itemSellButton = AuctionHouseFrame.ItemSellFrame.ItemDisplay.ItemButton
 	local commoditiesSellButton = AuctionHouseFrame.CommoditiesSellFrame.ItemDisplay.ItemButton
 	if displayMode == AuctionHouseFrameDisplayMode.ItemSell then

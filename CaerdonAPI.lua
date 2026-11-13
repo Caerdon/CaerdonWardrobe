@@ -538,6 +538,119 @@ function CaerdonAPIMixin:GetLootSpecializationID()
     return getLootSpecialization()
 end
 
+-- Talent trees. WoW Forever has no specializations: each class has one trait tree split
+-- into three groups (hunter: Beast Mastery / Marksmanship / Survival), which Blizzard's
+-- talent pane draws left to right with the points spent in each (Camelot
+-- ClassTalentsFrameMixin:RefreshTreeHeaders). The tree holding the most points is the
+-- closest thing the toon has to a spec. Retail has neither C_Traits.GetGroupDisplayInfoByTreeID
+-- nor GetGroupCurrencyInfo, so everything here returns nil there.
+local TALENT_TREE_RETRY_SECONDS = 5
+local talentTreeCache        -- { trees = {...} or nil, reason = string or nil, time = number }
+
+local function ReadTalentTrees()
+    if not (C_Traits and C_Traits.GetGroupDisplayInfoByTreeID and C_Traits.GetGroupCurrencyInfo and
+        C_Traits.GetConfigInfo) then
+        return nil, "client has no talent tree groups"
+    end
+
+    local configID
+    if C_SpecializationInfo and C_SpecializationInfo.GetActiveSpecGroup and
+        C_SpecializationInfo.GetCombatConfigIDForSpecGroup then
+        local specGroup = C_SpecializationInfo.GetActiveSpecGroup()
+        if specGroup then
+            configID = C_SpecializationInfo.GetCombatConfigIDForSpecGroup(specGroup)
+        end
+    end
+    if not configID and C_ClassTalents and C_ClassTalents.GetActiveConfigID then
+        configID = C_ClassTalents.GetActiveConfigID()
+    end
+    if not configID then
+        return nil, "no active talent config"
+    end
+
+    local configInfo = C_Traits.GetConfigInfo(configID)
+    local treeID = configInfo and configInfo.treeIDs and configInfo.treeIDs[1]
+    if not treeID then
+        return nil, "talent config has no tree"
+    end
+
+    local displayInfos = C_Traits.GetGroupDisplayInfoByTreeID(treeID)
+    if type(displayInfos) ~= "table" or #displayInfos < 2 then
+        return nil, "talent tree has no groups"
+    end
+
+    local groupIDs = {}
+    for index, displayInfo in ipairs(displayInfos) do
+        groupIDs[index] = displayInfo.groupID
+    end
+
+    local spentByGroup = {}
+    local groupInfos = C_Traits.GetGroupCurrencyInfo(configID, groupIDs)
+    if type(groupInfos) == "table" then
+        for _, groupInfo in ipairs(groupInfos) do
+            local currencyInfo = groupInfo.currencyInfos and groupInfo.currencyInfos[1]
+            spentByGroup[groupInfo.traitNodeGroupID] = currencyInfo and currencyInfo.spent or 0
+        end
+    end
+
+    -- Same order as the talent pane's headers (array order), which is what the player sees.
+    local trees = {}
+    for index, displayInfo in ipairs(displayInfos) do
+        trees[index] = {
+            index = index,
+            name = displayInfo.displayName,
+            groupID = displayInfo.groupID,
+            spent = spentByGroup[displayInfo.groupID] or 0,
+        }
+    end
+    return trees
+end
+
+-- Returns the class's talent trees in talent pane order, each { index, name, groupID, spent },
+-- or nil plus the reason when the client has none (retail) or they are not loaded yet.
+function CaerdonAPIMixin:GetTalentTrees()
+    local now = GetTime()
+    local cache = talentTreeCache
+    if cache and (cache.trees or now - cache.time < TALENT_TREE_RETRY_SECONDS) then
+        return cache.trees, cache.reason
+    end
+
+    local ok, trees, reason = pcall(ReadTalentTrees)
+    if not ok then
+        trees, reason = nil, "error: " .. tostring(trees)
+    end
+    talentTreeCache = { trees = trees, reason = reason, time = now }
+    return trees, reason
+end
+
+-- Returns index, name, pointsSpent, treeCount for the talent tree holding the most points.
+-- Nil when there are no trees, no points are spent, or two trees tie for the lead.
+function CaerdonAPIMixin:GetPrimaryTalentTree()
+    local trees = self:GetTalentTrees()
+    if not trees then
+        return nil
+    end
+
+    local best, tied
+    for _, tree in ipairs(trees) do
+        if not best or tree.spent > best.spent then
+            best, tied = tree, false
+        elseif tree.spent == best.spent then
+            tied = true
+        end
+    end
+    if not best or best.spent <= 0 or tied then
+        return nil
+    end
+
+    return best.index, best.name, best.spent, #trees
+end
+
+-- Talent points moved; the next lookup reads the client again.
+function CaerdonAPIMixin:InvalidateTalentTrees()
+    talentTreeCache = nil
+end
+
 function CaerdonAPIMixin:SetManualHoverContext(frame, context)
     if not frame then
         return
@@ -1245,7 +1358,7 @@ function CaerdonAPIMixin:CompareCIMI(feature, item, bag, slot)
             local modifiedText, compareText = CanIMogIt:GetTooltipText(item:GetItemLink(), bag, slot)
             if compareText == CanIMogIt.KNOWN or compareText == CanIMogIt.KNOWN_BOE or compareText == CanIMogIt.KNOWN_BY_ANOTHER_CHARACTER or compareText == CanIMogIt.KNOWN_BY_ANOTHER_CHARACTER_BOE or
             compareText == CanIMogIt.KNOWN_BUT_TOO_LOW_LEVEL or compareText == CanIMogIt.KNOWN_BUT_TOO_LOW_LEVEL_BOE then
-                if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "upgrade" or mogStatus == "" then
+                if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "auction" or mogStatus == "upgrade" or mogStatus == "" then
                     mismatch = false
                 end
             elseif compareText == CanIMogIt.KNOWN_FROM_ANOTHER_ITEM_BUT_TOO_LOW_LEVEL or compareText == CanIMogIt.KNOWN_FROM_ANOTHER_ITEM_BUT_TOO_LOW_LEVEL_BOE then
@@ -1253,12 +1366,12 @@ function CaerdonAPIMixin:CompareCIMI(feature, item, bag, slot)
                     mismatch = false
                 end
             elseif compareText == CanIMogIt.NOT_TRANSMOGABLE or compareText == CanIMogIt.NOT_TRANSMOGABLE_BOE then
-                if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "upgrade" then
+                if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "auction" or mogStatus == "upgrade" then
                     mismatch = false
                 end
             elseif compareText == CanIMogIt.UNKNOWABLE_SOULBOUND then
                 if not transmogInfo.needsItem and transmogInfo.otherNeedsItem then
-                    if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "upgrade" then
+                    if mogStatus == "collected" or mogStatus == "sellable" or mogStatus == "auction" or mogStatus == "upgrade" then
                         mismatch = false
                     end
                 end

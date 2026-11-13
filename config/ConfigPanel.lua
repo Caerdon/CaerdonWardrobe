@@ -125,6 +125,10 @@ function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValu
 
     local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, frame, "UIDropDownMenuTemplate")
     dropdown.key = info.key
+    -- The template's default width fits short titles only; longer ones spill out to the left.
+    if info.width and UIDropDownMenu_SetWidth then
+        UIDropDownMenu_SetWidth(dropdown, info.width)
+    end
 
     local label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("TOPLEFT", 5, 12)

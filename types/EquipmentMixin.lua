@@ -37,6 +37,23 @@ local dualSlotInventoryTypes = {
     INVTYPE_TRINKET = { INVSLOT_TRINKET1, INVSLOT_TRINKET2 }
 }
 
+-- Item types that go in the separate ranged slot on clients that have one (WoW Forever, classic
+-- rules). Retail has no ranged slot: bows and guns are main-hand weapons there (slotTable).
+local rangedSlotInventoryTypes = {
+    INVTYPE_RANGED = true,
+    INVTYPE_RANGEDRIGHT = true,
+    INVTYPE_THROWN = true,
+    INVTYPE_RELIC = true
+}
+local RANGED_SLOT = { INVSLOT_RANGED or 18 }
+
+-- Asked on every lookup rather than once at load: the answer comes from the client's paper doll
+-- state, which is not guaranteed to be ready while this file loads.
+local function HasRangedSlot()
+    return C_PaperDollInfo ~= nil and C_PaperDollInfo.IsRangedSlotShown ~= nil and
+        C_PaperDollInfo.IsRangedSlotShown() == true
+end
+
 local singleSlotCache = {}
 local offhandInventoryTypes = {
     INVTYPE_SHIELD = true,
@@ -161,6 +178,10 @@ local function GetInventorySlotsForType(inventoryType)
     local dualSlots = dualSlotInventoryTypes[inventoryType]
     if dualSlots then
         return dualSlots
+    end
+
+    if rangedSlotInventoryTypes[inventoryType] and HasRangedSlot() then
+        return RANGED_SLOT
     end
 
     local slotID = slotTable[inventoryType]
@@ -688,6 +709,211 @@ local function IsLowerArmorClassThanEquipped(item)
     return false
 end
 
+-- Pawn only counts a score at least 0.5% higher as an upgrade (PawnIsItemAnUpgrade).
+local PAWN_UPGRADE_THRESHOLD = 1.005
+
+-- True when Pawn has scored the candidate and every equipped piece it would replace, and no
+-- visible scale rates the candidate higher. PawnShouldItemLinkHaveUpgradeArrow returns false both
+-- for "scored, not better" and for "cannot judge" (trinkets, no scales, data not loaded), so the
+-- scores are compared here the way Pawn does (unenchanted values, the weaker of two slots).
+-- Anything short of a clear "not better" returns false, which leaves the item-level fallback on.
+-- ignoredScales (optional, scale name -> true) are left out: see GetPawnOffTreeScales.
+-- Second return value: the per-scale numbers, for the Debug Frame export.
+local function PawnPrefersEquipped(item, ignoredScales)
+    if not (PawnGetItemData and PawnGetSingleValueFromItem and PawnIsScaleVisible and
+        PawnGetItemDataForInventorySlot and PawnCommon and PawnCommon.Scales) then
+        return false, "Pawn comparison API missing"
+    end
+
+    -- Pawn's "Show item level upgrades" option is the player's answer to "is a higher item level
+    -- an upgrade on its own?" (on by default on retail, where item level gates content and event
+    -- power; off on classic-era clients). While it is on, item level keeps the final say.
+    if PawnCommon.ShowItemLevelUpgrades then
+        return false, "Pawn counts item level upgrades (ShowItemLevelUpgrades on)"
+    end
+
+    local inventoryTypeName = item:GetInventoryTypeName()
+    if inventoryTypeName == "INVTYPE_TRINKET" then
+        return false, "trinket (Pawn does not score trinkets)"
+    end
+
+    local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
+    if not inventorySlots then
+        return false, "no equipment slot"
+    end
+
+    local ok, verdict, detail = pcall(function()
+        local candidate = PawnGetItemData(item:GetItemLink())
+        if not candidate or not candidate.Link then
+            return false, "Pawn has no data for the item"
+        end
+
+        local equippedItems = {}
+        for _, slotID in ipairs(inventorySlots) do
+            local equipped, slotHadItem = PawnGetItemDataForInventorySlot(slotID, true)
+            if equipped and equipped.Link then
+                equippedItems[#equippedItems + 1] = equipped
+            elseif slotHadItem then
+                return false, "Pawn has no data for slot " .. slotID
+            elseif not ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
+                return false, "slot " .. slotID .. " is empty"
+            end
+        end
+        if #equippedItems == 0 then
+            return false, "nothing equipped to compare"
+        end
+
+        local scalesCompared = 0
+        local parts = {}
+        for scaleName in pairs(PawnCommon.Scales) do
+            if PawnIsScaleVisible(scaleName) and not (ignoredScales and ignoredScales[scaleName]) then
+                local _, candidateValue = PawnGetSingleValueFromItem(candidate, scaleName)
+                if not candidateValue then
+                    return false, "no candidate value for " .. scaleName
+                end
+
+                local lowestEquipped
+                for _, equipped in ipairs(equippedItems) do
+                    local _, equippedValue = PawnGetSingleValueFromItem(equipped, scaleName)
+                    if not equippedValue then
+                        return false, "no equipped value for " .. scaleName
+                    end
+                    if not lowestEquipped or equippedValue < lowestEquipped then
+                        lowestEquipped = equippedValue
+                    end
+                end
+
+                parts[#parts + 1] = format("%s: %.2f vs %.2f equipped", scaleName, candidateValue, lowestEquipped)
+                if candidateValue > lowestEquipped * PAWN_UPGRADE_THRESHOLD then
+                    return false, table.concat(parts, "; ")
+                end
+                -- A scale that values neither item says nothing about which is better.
+                if lowestEquipped > 0 then
+                    scalesCompared = scalesCompared + 1
+                end
+            end
+        end
+
+        if scalesCompared == 0 then
+            return false, "no visible scale values the equipped item"
+        end
+        return true, table.concat(parts, "; ")
+    end)
+
+    if not ok then
+        return false, "error: " .. tostring(verdict)
+    end
+    return verdict == true, detail
+end
+
+-- Pawn numbers the scales it ships for clients without specializations by talent tree
+-- ("Classic":HUNTER1 = Beast Mastery, 2 = Marksmanship, 3 = Survival). Druids are the exception:
+-- 1 Balance, 2 Feral (Damage), 3 Feral (Tank), 4 Restoration over three trees.
+local function PawnSpecIDsForTalentTree(classFile, treeIndex, treeCount)
+    if classFile == "DRUID" and treeCount == 3 then
+        if treeIndex == 2 then
+            return { [2] = true, [3] = true }
+        elseif treeIndex == 3 then
+            return { [4] = true }
+        end
+    end
+    return { [treeIndex] = true }
+end
+
+-- The visible Pawn scales written for a talent tree other than the one holding most of the toon's
+-- points. Without specializations Pawn has no automatic mode: it shows a scale for every tree of
+-- the class and its arrow API answers "an upgrade for any of them", so a Beast Mastery hunter gets
+-- an arrow on gloves that only Survival's strength weight likes, and the pair the hunter is wearing
+-- gets one right back once they are swapped. Returns nil (nothing to ignore) when the client has
+-- no talent trees (retail), no tree leads, or ignoring would leave no visible scale. Only scales
+-- for the player's class that name a spec are ever ignored; custom scales always count.
+-- Second return value: the names of the scales ignored and kept, for the Debug Frame export.
+local function GetPawnOffTreeScales()
+    if not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) then
+        return nil
+    end
+
+    local treeIndex, _, _, treeCount = CaerdonAPI:GetPrimaryTalentTree()
+    if not treeIndex then
+        return nil
+    end
+
+    local ok, offTree, detail = pcall(function()
+        local _, classFile, classID = UnitClass("player")
+        local specIDs = PawnSpecIDsForTalentTree(classFile, treeIndex, treeCount)
+        local ignored, ignoredNames, keptNames = {}, {}, {}
+        for scaleName, scale in pairs(PawnCommon.Scales) do
+            if PawnIsScaleVisible(scaleName) then
+                local label = scale.LocalizedName or scaleName
+                if scale.ClassID == classID and type(scale.SpecID) == "number" and not specIDs[scale.SpecID] then
+                    ignored[scaleName] = true
+                    ignoredNames[#ignoredNames + 1] = label
+                else
+                    keptNames[#keptNames + 1] = label
+                end
+            end
+        end
+        if #ignoredNames == 0 or #keptNames == 0 then
+            return nil
+        end
+        table.sort(ignoredNames)
+        table.sort(keptNames)
+        return ignored, format("ignored: %s; kept: %s", table.concat(ignoredNames, ", "), table.concat(keptNames, ", "))
+    end)
+
+    if not ok then
+        return nil
+    end
+    return offTree, detail
+end
+
+-- True when Pawn calls the item an upgrade only for scales in offTreeScales, i.e. for a talent
+-- tree the toon is not using. PawnIsItemAnUpgrade is what Pawn's arrow API and tooltip both use,
+-- and it names the scales. Anything unclear returns false, which keeps Pawn's verdict.
+-- Second return value: what Pawn said, for the Debug Frame export.
+local function IsPawnUpgradeOffTreeOnly(item, offTreeScales)
+    if not (PawnGetItemData and PawnIsItemAnUpgrade and PawnCommon) then
+        return false, "Pawn upgrade API missing"
+    end
+
+    local ok, verdict, detail = pcall(function()
+        local candidate = PawnGetItemData(item:GetItemLink())
+        if not candidate or not candidate.Link then
+            return false, "Pawn has no data for the item"
+        end
+
+        local upgradeInfo, itemLevelIncrease = PawnIsItemAnUpgrade(candidate)
+        if PawnCommon.ShowItemLevelUpgrades and itemLevelIncrease ~= nil then
+            return false, "item level upgrade (ShowItemLevelUpgrades on)"
+        end
+        if type(upgradeInfo) ~= "table" or #upgradeInfo == 0 then
+            return false, "Pawn named no scale"
+        end
+
+        local names = {}
+        local offTreeOnly = true
+        for _, upgrade in ipairs(upgradeInfo) do
+            names[#names + 1] = upgrade.LocalizedScaleName or tostring(upgrade.ScaleName)
+            if not offTreeScales[upgrade.ScaleName] then
+                offTreeOnly = false
+            end
+        end
+        return offTreeOnly, table.concat(names, ", ")
+    end)
+
+    if not ok then
+        return false, "error: " .. tostring(verdict)
+    end
+    return verdict == true, detail
+end
+
+-- For the Debug Frame export: which visible Pawn scales are being ignored for this toon, or nil.
+--[[static]]
+function CaerdonEquipment:GetPawnScaleFilterDescription()
+    local _, detail = GetPawnOffTreeScales()
+    return detail
+end
+
 --[[static]]
 function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
     if type(caerdonItem) ~= "table" or not caerdonItem.GetCaerdonItemType then
@@ -861,6 +1087,8 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
     return equipmentSets
 end
 
+local ITEM_PROFICIENCY_USE_ERROR = Enum.TransmogUseErrorType and Enum.TransmogUseErrorType.ItemProficiency or 10
+
 -- Wowhead Transmog Guide - https://www.wowhead.com/transmogrification-overview-frequently-asked-questions
 function CaerdonEquipmentMixin:GetTransmogInfo()
     local item = self.item
@@ -876,6 +1104,14 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
     local isBindOnPickup = item:GetBinding() == CaerdonItemBind.BindOnPickup
     local isCompletionistItem = false
+    -- Uncollected source that is valid for this class with no class / race / faction error, yet
+    -- neither this toon nor the account can collect it right now (see the return struct).
+    local validSourceNotCollectable = false
+    local validSourceNotCollectableKnownLook = false
+    -- Uncollected source the class has no proficiency for (useErrorType ItemProficiency), and
+    -- neither this toon nor the account can collect it (see the return struct).
+    local proficiencySourceNotCollectable = false
+    local proficiencySourceNotCollectableKnownLook = false
     local hasMetRequirements = true
     local needsItem = false
     local otherNeedsItem = false
@@ -1047,6 +1283,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 canCollect = sourceInfo.playerCanCollect
             end
             currentSourceFound = sourceInfo.isCollected
+            -- Both collect verdicts are final (not "false because the data is still loading").
+            local collectInfoReady = playerCollectInfoReady and hasItemData
 
             local isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer
             if appearanceID then
@@ -1151,6 +1389,13 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     elseif accountCanCollect then
                         otherNeedsItem = true
                         isCompletionistItem = otherSourceFound
+                    elseif collectInfoReady and isValidSourceForPlayer and not sourceInfo.useErrorType then
+                        validSourceNotCollectable = true
+                        validSourceNotCollectableKnownLook = otherSourceFoundForPlayer or otherSourceFound
+                    elseif collectInfoReady and not isValidSourceForPlayer and
+                        sourceInfo.useErrorType == ITEM_PROFICIENCY_USE_ERROR then
+                        proficiencySourceNotCollectable = true
+                        proficiencySourceNotCollectableKnownLook = otherSourceFoundForPlayer or otherSourceFound
                     end
                 end
             else
@@ -1159,6 +1404,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     needsItem = true
                 elseif accountCanCollect then
                     otherNeedsItem = true
+                elseif collectInfoReady and isValidSourceForPlayer and not sourceInfo.useErrorType then
+                    validSourceNotCollectable = true
+                elseif collectInfoReady and not isValidSourceForPlayer and
+                    sourceInfo.useErrorType == ITEM_PROFICIENCY_USE_ERROR then
+                    proficiencySourceNotCollectable = true
                 end
             end
         end
@@ -1215,8 +1465,19 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local pawnIdentifiedUpgrade = false
     local pawnAvailable = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted ~= nil
     local pawnRecommended -- raw Pawn verdict: true / false / nil (nil = Pawn has no data yet)
+    -- Pawn's verdict covers every visible scale. On a client without specializations that is one
+    -- scale per talent tree, so an upgrade that only another tree's scale sees keeps its arrow
+    -- but is flagged (pawnOffTreeUpgrade) and drawn as an off-spec upgrade.
+    local pawnOffTreeScales = nil
+    local pawnOffTreeOnly = false
+    local pawnOffTreeUpgrade = false
+    local pawnUpgradeScales = nil
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
         pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
+        pawnOffTreeScales = GetPawnOffTreeScales()
+        if pawnRecommended and pawnOffTreeScales then
+            pawnOffTreeOnly, pawnUpgradeScales = IsPawnUpgradeOffTreeOnly(item, pawnOffTreeScales)
+        end
         local pawnUpgrade = pawnRecommended
         if pawnUpgrade then
             if blockedOffhandSlot then
@@ -1244,7 +1505,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         end
 
         if pawnUpgrade and pawnRecommended then
-            pawnIdentifiedUpgrade = true
+            if pawnOffTreeOnly then
+                pawnOffTreeUpgrade = true
+            else
+                pawnIdentifiedUpgrade = true
+            end
         end
 
         shouldShowUpgrade = pawnUpgrade
@@ -1253,10 +1518,21 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     end
 
     -- Item-level fallback: never fires for a lower armor class than what is equipped
-    -- (Pawn may still flag such an item above if its stat weights say so).
+    -- (Pawn may still flag such an item above if its stat weights say so). It also stands down
+    -- when Pawn scored both items and rates the equipped one at least as high: after equipping a
+    -- lower-ilvl piece Pawn recommended, the higher-ilvl piece just taken off is not an upgrade.
+    -- When a Pawn upgrade for another talent tree only was blocked above, it counts as "not
+    -- recommended" here and the scores are compared on the toon's own scales alone.
+    local pawnPrefersEquipped = false
+    local pawnComparison = nil
     if not shouldShowUpgrade and upgradeItemLevelDelta and upgradeItemLevelDelta > 0 and not uniqueUpgradeBlocked and
         not isTabard and not lowerArmorClassThanEquipped then
-        shouldShowUpgrade = true
+        if pawnRecommended == false or pawnOffTreeOnly then
+            pawnPrefersEquipped, pawnComparison = PawnPrefersEquipped(item, pawnOffTreeScales)
+        end
+        if not pawnPrefersEquipped then
+            shouldShowUpgrade = true
+        end
     end
 
     if shouldShowUpgrade and not playerCanUseSource then
@@ -1278,6 +1554,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
     if shouldShowUpgrade then
         isUpgrade = true
+    else
+        pawnOffTreeUpgrade = false
     end
 
     return {
@@ -1292,6 +1570,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         equalItemLevelEquipped = equalItemLevelEquipped,
         upgradeItemLevelDelta = shouldShowUpgrade and upgradeItemLevelDelta or nil,
         pawnIdentifiedUpgrade = pawnIdentifiedUpgrade,
+        -- Higher item level than the equipped piece, but Pawn scores the equipped piece at least
+        -- as high on every visible scale, so the item-level upgrade arrow was withheld.
+        pawnPrefersEquipped = pawnPrefersEquipped,
+        -- The upgrade arrow comes from Pawn, but only for scales of a talent tree the toon has not
+        -- specialised in (WoW Forever: every tree's scale is visible by default). isUpgrade stays
+        -- true and pawnIdentifiedUpgrade false; the arrow is drawn in the off-spec colour.
+        pawnOffTreeUpgrade = pawnOffTreeUpgrade,
+        -- Debug Frame export text: the scales Pawn named for the upgrade (only looked up while
+        -- off-tree scales are being ignored) and the per-scale scores behind pawnPrefersEquipped.
+        pawnUpgradeScales = pawnUpgradeScales,
+        pawnComparison = pawnComparison,
         upgradeMatchesSpec = upgradeMatchesSpec,
         isArtifactItem = isArtifactItem,
         uniqueCategoryKey = uniqueCategoryKey,
@@ -1302,6 +1591,19 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         otherNeedsItem = otherNeedsItem,
         playerCanCollectSource = playerCollectInfoReady and playerCanCollectSource or canCollect,
         isCompletionistItem = isCompletionistItem,
+        -- The class can use this uncollected source, yet both collect APIs say no (verdicts
+        -- ready). Seen on WoW Forever for armor below the class's own type (cloth on a hunter)
+        -- and armor the toon gains proficiency for later (mail on a hunter under 40); selling
+        -- the item to a vendor teaches the appearance there, so CaerdonItem shows it as "own"
+        -- instead of "collected". KnownLook: another source of the appearance is collected.
+        validSourceNotCollectable = validSourceNotCollectable,
+        validSourceNotCollectableKnownLook = validSourceNotCollectableKnownLook,
+        -- The class has no proficiency for this uncollected source (useErrorType ItemProficiency,
+        -- e.g. a wand on a hunter) and both collect APIs say no. Retail answers "can collect" for
+        -- such a source, so this only shows up on WoW Forever, where selling the item to a vendor
+        -- teaches the appearance anyway. CaerdonItem shows it as "other" instead of sellable.
+        proficiencySourceNotCollectable = proficiencySourceNotCollectable,
+        proficiencySourceNotCollectableKnownLook = proficiencySourceNotCollectableKnownLook,
         isNotReady = isNotReady,
         matchesLootSpec = matchesLootSpec,
         isRecraftable = isRecraftable,
@@ -1334,6 +1636,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             shouldShowUpgrade = shouldShowUpgrade,
             pawnAvailable = pawnAvailable,
             pawnRecommended = tostring(pawnRecommended),
+            pawnPrefersEquipped = pawnPrefersEquipped,
+            pawnComparison = pawnComparison,
             betterItemEquippedViaPvp = betterItemEquippedViaPvp,
             lowerArmorClassThanEquipped = lowerArmorClassThanEquipped,
             C_PlayerInfo_CanUseItem = C_PlayerInfo and C_PlayerInfo.CanUseItem and item:GetItemID() and

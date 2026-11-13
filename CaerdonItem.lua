@@ -73,6 +73,7 @@ local function ResetTooltipData(embeddedLink)
     t.foundRedRequirements = false
     t.requiredTradeSkillMissingOrUnleveled = false
     t.requiredTradeSkillTooLow = false
+    t.raceClassRestricted = false
     t.embeddedLink = embeddedLink
     return t
 end
@@ -928,6 +929,12 @@ function CaerdonItemMixin:GetTooltipData(data)
             if reqType == Enum.TooltipDataUsageRequirementType.NotAlreadyKnown then
                 tooltipData.canLearn = false
                 tooltipData.isKnownSpell = true
+            elseif reqType == Enum.TooltipDataUsageRequirementType.RaceClass then
+                -- "Classes: Mage" / "Races: ..." in red: unlike a level or skill shortfall this
+                -- never changes for the toon, so the item is permanently unusable here.
+                if leftHex == "ffff2020" then
+                    tooltipData.raceClassRestricted = true
+                end
             elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
                 if isRecipe or isMiscellaneousStudy then
                     -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
@@ -1017,6 +1024,116 @@ function CaerdonItemMixin:IsSellable()
     return isSellable
 end
 
+-- Quests that take this item even though it is not a Quest-class item: the ones in the quest log
+-- and, when QuestieDB is loaded, the ones this toon has not accepted yet. nil when there are none.
+-- See CaerdonQuestItems:GetItemQuestInfo for the fields.
+function CaerdonItemMixin:GetQuestItemInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonQuestItems:GetItemQuestInfo(itemID, self:GetItemName())
+end
+
+-- Food and drink: what kind it is and whether a better one is carried. nil for anything else.
+-- See CaerdonFoodDrink:GetItemInfo for the fields.
+function CaerdonItemMixin:GetFoodDrinkInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonFoodDrink:GetItemInfo(itemID, self:GetItemLink())
+end
+
+-- Miscellaneous / Junk items that go in an equipment slot but do nothing there: no stats shown
+-- as an equip effect, no use, no appearance to learn. The trophy fish are the classic case
+-- (15 Pound Mud Snapper 6295, "Held In Off-hand", vendors for 15s). Not Equipment as far as the
+-- type detection goes, so the collected / sellable logic never sees them. Deliberately narrow:
+-- plenty of Miscellaneous / Junk items that are not equippable are worth keeping.
+function CaerdonItemMixin:IsEquippableJunk(bindingResult)
+    local itemLink = self:GetItemLink()
+    if not itemLink or self:GetCaerdonItemType() ~= CaerdonItemType.Unhandled then
+        return false
+    end
+
+    local _, _, _, _, _, _, _, _, equipLoc, _, sellPrice, classID, subClassID = C_Item.GetItemInfo(itemLink)
+    if classID ~= Enum.ItemClass.Miscellaneous or subClassID ~= Enum.ItemMiscellaneousSubclass.Junk then
+        return false
+    end
+    if not equipLoc or equipLoc == "" or equipLoc == "INVTYPE_NON_EQUIP_IGNORE" then
+        return false
+    end
+    if not sellPrice or sellPrice <= 0 then
+        return false
+    end
+    if self:GetHasUse() or (bindingResult and bindingResult.hasEquipEffect) then
+        return false
+    end
+    -- Something with an appearance may still be worth learning; leave it unmarked.
+    local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(itemLink)
+    if appearanceID or sourceID then
+        return false
+    end
+    return self:IsSellable()
+end
+
+-- Consumables whose tooltip carries a red race / class requirement ("Classes: Mage" on a hunter).
+-- A level or skill shortfall can be fixed; this cannot, so the item is only worth selling. Kept
+-- to Consumables: class-restricted equipment has its own appearance logic, and recipes have
+-- theirs. Account-bound items are left alone because another toon on the account may use them.
+function CaerdonItemMixin:IsOtherClassConsumable(bindingResult)
+    if not (bindingResult and bindingResult.raceClassRestricted) then
+        return false
+    end
+    if self:GetCaerdonItemType() ~= CaerdonItemType.Consumable then
+        return false
+    end
+    local binding = self:GetBinding()
+    if binding == CaerdonItemBind.BindOnAccount or binding == CaerdonItemBind.WarboundUntilEquip then
+        return false
+    end
+    local itemLink = self:GetItemLink()
+    local sellPrice = itemLink and select(11, C_Item.GetItemInfo(itemLink))
+    if not sellPrice or sellPrice <= 0 then
+        return false
+    end
+    return self:IsSellable()
+end
+
+-- Whether listing this item on the auction house beats vendoring it. Always returns the full
+-- breakdown (see CaerdonAuctionValue:GetItemAuctionInfo); `shouldAuction` is the verdict.
+function CaerdonItemMixin:GetAuctionValueInfo()
+    local itemLink = self:GetItemLink()
+    if not itemLink then
+        return nil
+    end
+
+    local blockedReason
+    local binding = self:GetBinding()
+    if self:IsSoulbound() then
+        blockedReason = "soulbound"
+    elseif binding == CaerdonItemBind.BindOnPickup then
+        blockedReason = "binds on pickup"
+    elseif binding == CaerdonItemBind.BindOnAccount then
+        blockedReason = "account bound"
+    elseif binding == CaerdonItemBind.QuestItem then
+        blockedReason = "quest item"
+    end
+
+    local _, _, _, _, _, _, _, maxStack, _, _, vendorPrice = C_Item.GetItemInfo(itemLink)
+    local options
+    if maxStack and maxStack > 1 then
+        -- Stackable goods are judged on everything owned: that is what one trip would list.
+        local itemID = self:GetItemID()
+        options = {
+            stackable = true,
+            itemID = itemID,
+            quantity = CaerdonAuctionValue:GetOwnedQuantity(itemID)
+        }
+    end
+    return CaerdonAuctionValue:GetItemAuctionInfo(itemLink, vendorPrice, blockedReason, options)
+end
+
 function CaerdonItemMixin:IsCollectible()
     local caerdonType = self:GetCaerdonItemType()
     return caerdonType == CaerdonItemType.BattlePet or
@@ -1044,6 +1161,7 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
     local foundRedRequirements = false
     local isLocked = false
     local isOpenable = false
+    local raceClassRestricted = false
 
     local isCollectionItem = self:IsCollectible()
 
@@ -1103,6 +1221,7 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
 
         isLocked = tooltipData.isLocked
         isOpenable = tooltipData.isOpenable
+        raceClassRestricted = tooltipData.raceClassRestricted
 
         if tooltipData.supercedingSpellNotKnown then
             unusableItem = true
@@ -1173,7 +1292,9 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         isBindOnPickup = isBindOnPickup,
         unusableItem = unusableItem,
         isLocked = isLocked,
-        skillTooLow = skillTooLow
+        skillTooLow = skillTooLow,
+        -- Red race / class requirement line: this toon can never use the item.
+        raceClassRestricted = raceClassRestricted
     }
 end
 
@@ -1190,6 +1311,13 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     if not isPetCage then
         local isBound = self:IsSoulbound()
         statusCacheKey = isBound and (itemLink .. "|B") or itemLink
+        -- A stackable item's auction verdict depends on how many are owned.
+        if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
+            local maxStack = select(8, C_Item.GetItemInfo(itemLink))
+            if maxStack and maxStack > 1 then
+                statusCacheKey = statusCacheKey .. "|n" .. CaerdonAuctionValue:GetOwnedQuantity(self:GetItemID())
+            end
+        end
         local cached = statusCache[statusCacheKey]
         if cached then
             return cached[1], cached[2], cached[3], cached[4]
@@ -1252,8 +1380,16 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     end
 
     local isQuestItem = itemClassID == Enum.ItemClass.Questitem
-    if isQuestItem and CaerdonWardrobeConfig.Icon.ShowQuestItems then
-        mogStatus = "quest"
+    -- Items of any other class that an unfinished quest takes (a vendor drink, cloth, a crafted
+    -- weapon). Applied after the type-specific status below, which would otherwise overwrite it.
+    local hasQuestValue = false
+    if CaerdonWardrobeConfig.Icon.ShowQuestItems then
+        if isQuestItem then
+            mogStatus = "quest"
+        else
+            local questItemInfo = self:GetQuestItemInfo()
+            hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue
+        end
     end
 
     if caerdonType == CaerdonItemType.CompanionPet or caerdonType == CaerdonItemType.BattlePet then
@@ -1381,6 +1517,32 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             if transmogInfo.isArtifactItem then
                 isArtifactItem = true
             end
+            -- An uncollected appearance the class can use while the collect APIs say "nobody can
+            -- collect this": on WoW Forever, cloth on a hunter (Spellbinder Vest 2969, wearable,
+            -- nothing red in the tooltip) and mail on a hunter under 40 (red armor type). That
+            -- used to read as "collected" and then "sellable". Selling the piece to a vendor
+            -- teaches the appearance straight away (confirmed in game on WoW Forever), so it is
+            -- learnable now, whether or not the toon can wear it yet.
+            --
+            -- A piece the class has no proficiency for at all (a wand on a hunter, Blazing Wand
+            -- 5212) is also learned by selling it: the source reports ItemProficiency and both
+            -- collect APIs say no. The API names the reason itself, so no red text is required.
+            -- It is "other", not "own": "own" is strictly for appearances this toon can transmog
+            -- into, and a hunter never can use a wand's.
+            local learnableLaterStatus
+            if transmogInfo.validSourceNotCollectable then
+                if not transmogInfo.validSourceNotCollectableKnownLook then
+                    learnableLaterStatus = "own"
+                elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                    learnableLaterStatus = "ownPlus"
+                end
+            elseif transmogInfo.proficiencySourceNotCollectable then
+                if not transmogInfo.proficiencySourceNotCollectableKnownLook then
+                    learnableLaterStatus = "other"
+                elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                    learnableLaterStatus = "otherPlus"
+                end
+            end
             if transmogInfo.isTransmog then
                 if transmogInfo.needsItem then
                     if not transmogInfo.isCompletionistItem then
@@ -1412,6 +1574,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                         -- Can't equip but other characters need it (e.g., cross-class ensemble)
                         mogStatus = "other"
                     end
+                elseif learnableLaterStatus then
+                    mogStatus = learnableLaterStatus
                 elseif isUpgrade then
                     if transmogInfo.hasMetRequirements then
                         mogStatus = "upgrade"
@@ -1472,6 +1636,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 local isCosmeticArmor = itemClassID == Enum.ItemClass.Armor and
                     itemSubClassID == Enum.ItemArmorSubclass.Cosmetic
                 local preserveCosmeticEquipEffect = isCosmeticArmor and bindingResult.hasEquipEffect
+                -- A fishing pole is a tool: it loses every item level comparison against a real
+                -- weapon and has no use or equip effect line, yet fishing needs it.
+                local isFishingPole = itemClassID == Enum.ItemClass.Weapon and
+                    itemSubClassID == Enum.ItemWeaponSubclass.Fishingpole
                 local protectRecraftPotential = transmogInfo and transmogInfo.isRecraftable
                 if protectRecraftPotential then
                     redundantForPlayer = false
@@ -1480,6 +1648,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 if mogStatus == "collected" and
                     self:IsSellable() and
                     not isArtifactItem and
+                    not isFishingPole and
                     not preserveLegendary and
                     not preserveUtility and
                     not preserveCosmeticEquipEffect and
@@ -1579,6 +1748,51 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             mogStatus = "lowSkill"
         else
             mogStatus = "own"
+        end
+    end
+
+    if (mogStatus == nil or mogStatus == "") and self:IsEquippableJunk(bindingResult) then
+        mogStatus = "sellable"
+    end
+
+    -- Consumables this toon's class or race can never use (Scroll: STHENIC LUNATE 211855,
+    -- "Classes: Mage" on a hunter): nothing to do with them here but sell, and the auction step
+    -- below decides between the vendor and the auction house.
+    if (mogStatus == nil or mogStatus == "" or mogStatus == "collected") and
+        self:IsOtherClassConsumable(bindingResult) then
+        mogStatus = "sellable"
+    end
+
+    -- Food and drink the toon has outgrown: a better one of the same kind is in the bags.
+    if caerdonType == CaerdonItemType.Consumable and CaerdonWardrobeConfig.Icon.ShowOutdatedFood and
+        (mogStatus == nil or mogStatus == "" or mogStatus == "collected") then
+        local foodDrinkInfo = self:GetFoodDrinkInfo()
+        if foodDrinkInfo and foodDrinkInfo.isOutdated then
+            mogStatus = "sellable"
+        end
+    end
+
+    -- Quest value only replaces the "nothing left to do with this" results, so a learnable
+    -- appearance or an upgrade keeps its own icon while a sellable one stops looking like trash.
+    if hasQuestValue and (not mogStatus or mogStatus == "" or mogStatus == "collected" or
+            mogStatus == "sellable" or mogStatus == "oldexpansion") then
+        mogStatus = "quest"
+    end
+
+    -- Auction value replaces "sellable" (the item is still one to get rid of, the icon just says
+    -- the auction house pays enough more than a vendor to list it) and marks trade goods that
+    -- have no status of their own. Anything with another status keeps it.
+    if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
+        local isSellable = mogStatus == "sellable"
+        local isPlainTradeGood = (mogStatus == nil or mogStatus == "") and
+            (itemClassID == Enum.ItemClass.Tradegoods or isCraftingReagent)
+        if isSellable or isPlainTradeGood then
+            local auctionInfo = self:GetAuctionValueInfo()
+            if auctionInfo and auctionInfo.shouldAuction then
+                -- "auction" still draws as sellable where the auction icon is off;
+                -- "auctionGoods" draws nothing there.
+                mogStatus = isSellable and "auction" or "auctionGoods"
+            end
         end
     end
 

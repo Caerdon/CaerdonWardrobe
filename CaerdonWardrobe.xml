@@ -18,6 +18,9 @@
     </Frame>
 
 	<Script file="CaerdonItem.lua" />
+	<Script file="CaerdonQuestItems.lua" />
+	<Script file="CaerdonAuctionValue.lua" />
+	<Script file="CaerdonFoodDrink.lua" />
 	<Script file="CaerdonAPI.lua" />
 
 	<Script file="features\Auction.lua" />

@@ -65,6 +65,18 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if not CaerdonWardrobeConfig.Icon.SameLevelBehavior then
             CaerdonWardrobeConfig.Icon.SameLevelBehavior = NS:GetDefaultConfig().Icon.SameLevelBehavior
         end
+        if CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems == nil then
+            CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems = NS:GetDefaultConfig().Icon.ShowUpcomingQuestItems
+        end
+        if CaerdonWardrobeConfig.Icon.ShowAuctionValue == nil then
+            CaerdonWardrobeConfig.Icon.ShowAuctionValue = NS:GetDefaultConfig().Icon.ShowAuctionValue
+        end
+        if CaerdonWardrobeConfig.Icon.ShowOutdatedFood == nil then
+            CaerdonWardrobeConfig.Icon.ShowOutdatedFood = NS:GetDefaultConfig().Icon.ShowOutdatedFood
+        end
+        if CaerdonWardrobeConfig.Icon.AuctionMinProfit == nil then
+            CaerdonWardrobeConfig.Icon.AuctionMinProfit = NS:GetDefaultConfig().Icon.AuctionMinProfit
+        end
         if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
         end
@@ -144,6 +156,10 @@ function NS:GetDefaultConfig()
             },
 
             ShowQuestItems = true,
+            ShowUpcomingQuestItems = true,
+            ShowAuctionValue = true,
+            ShowOutdatedFood = true,
+            AuctionMinProfit = "auto",
             ShowUpgradeLevelDelta = false,
             SameLevelBehavior = "none",
             ShowUpgradeIcon = true,

@@ -27,6 +27,8 @@ function CaerdonWardrobeConfigGeneral:Register()
         showOldExpansionOther = { key = "showOldExpansionOther", text = "Other Items", tooltip = "Add an icon to any other items from older expansions", configSection = "Icon", configSubsection = "ShowOldExpansion", configValue = "Other", dependsOn = "OldExpansionSection" },
         showOldExpansionUnknown = { key = "showOldExpansionUnknown", text = "Unknown Expansion", tooltip = "Add an icon to items that didn't indicate what expansion they were from.  This happens more often than I'd like to see, and it's probably not a super useful option (other than maybe for WoW devs that need to fix this.)", configSection = "Icon", configSubsection = "ShowOldExpansion", configValue = "Unknown", dependsOn = "OldExpansionSection" },
         showQuestItems = { key = "showQuestItems", text = "Show Quest Items", tooltip = "Adds an icon to any items that are tied to a quest", configSection = "Icon", configValue = "ShowQuestItems" },
+        showUpcomingQuestItems = { key = "showUpcomingQuestItems", text = "Include items for quests not accepted yet (needs QuestieDB)", tooltip = "Also marks items that a quest you have not picked up yet will ask for, as long as you can take the quest within a few levels and it is not trivial for you. Uses the QuestieDB addon's data; without it only the quests in your log are checked.", configSection = "Icon", configValue = "ShowUpcomingQuestItems", dependsOn = "showQuestItems" },
+        showOutdatedFood = { key = "showOutdatedFood", text = "Mark outgrown food and drink as sellable", tooltip = "Shows the sellable icon on food or drink when you carry a better one of the same kind that you can use. Your best food and best drink are never marked. Hunters keep food their pet still eats.", configSection = "Icon", configValue = "ShowOutdatedFood" },
         showGearSetsAsIcon = { key = "showGearSetsAsIcon", text = "Show Gear Set Icon", tooltip = "Show an icon on items associated with a gear set", configSection = "Binding", configValue = "ShowGearSetsAsIcon" },
         showBoA = { key = "showBoA", text = "Show Bind on Account", tooltip = "Shows BoA on items that are bind on account", configSection = "Binding", configValue = "ShowBoA" },
         showBoARepItems = { key = "showBoARepItems", text = "Show Bind on Account Reputation Items", tooltip = "Shows BoA on items that are bind on account reputation items", configSection = "Binding", configValue = "ShowBoARepItems" },
@@ -63,6 +65,8 @@ function CaerdonWardrobeConfigGeneral:Register()
     self:ConfigureCheckboxNew(self.options["showOldExpansionOther"])
     self:ConfigureCheckboxNew(self.options["showOldExpansionUnknown"])
     self:ConfigureCheckboxNew(self.options["showQuestItems"])
+    self:ConfigureCheckboxNew(self.options["showUpcomingQuestItems"])
+    self:ConfigureCheckboxNew(self.options["showOutdatedFood"])
     self:ConfigureCheckboxNew(self.options["showGearSetsAsIcon"])
     self:ConfigureCheckboxNew(self.options["showBoA"])
     self:ConfigureCheckboxNew(self.options["showBoARepItems"])
