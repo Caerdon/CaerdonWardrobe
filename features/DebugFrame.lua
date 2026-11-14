@@ -809,7 +809,7 @@ function DebugFrameMixin:Init()
     border:SetPoint("TOPLEFT", -3, 3)
     border:SetPoint("BOTTOMRIGHT", 3, -3)
     border:SetBackdrop({
-        edgeFile = "Interface\Tooltips\UI-Tooltip-Border",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         edgeSize = 12,
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
