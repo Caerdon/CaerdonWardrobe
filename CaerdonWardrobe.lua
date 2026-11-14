@@ -1237,6 +1237,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         self:SetItemButtonMogStatusFilter(button, options.isFiltered)
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
         self:SetButtonRefreshGeneration(button, self.refreshGeneration)
+
+        -- Debug only: remember what was drawn where, for the export's [Button Geometry] section.
+        if CaerdonWardrobeConfig.Debug.Enabled and CaerdonButtonGeometry then
+            CaerdonButtonGeometry:Note(feature, button, options, mogStatus, bindingStatus)
+        end
     end
 end
 

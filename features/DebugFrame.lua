@@ -2086,6 +2086,21 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- What the last decorated button in each window measured (recorded while debug is enabled).
+    -- Session-wide, not about this item: it is here to compare the windows' hard-coded sizes.
+    if CaerdonButtonGeometry and CaerdonButtonGeometry.GetReportLines then
+        addLine(0, "")
+        addLine(0, "[Button Geometry]")
+        local ok, geometryLines = pcall(CaerdonButtonGeometry.GetReportLines, CaerdonButtonGeometry)
+        if ok then
+            for _, geometryLine in ipairs(geometryLines) do
+                addLine(geometryLine.indent, geometryLine.text)
+            end
+        else
+            addKV(1, "Report failed", tostring(geometryLines))
+        end
+    end
+
     addLine(0, "")
     addLine(0, "[Caerdon]")
     local identifiedType = item:GetCaerdonItemType()
