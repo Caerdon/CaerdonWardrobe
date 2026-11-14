@@ -128,6 +128,108 @@ local function FindKeyFor(button, region)
     return nil
 end
 
+-- Sizes and positions cannot tell a round or framed button from a plain square slot; the art can.
+-- A mask is how the client cuts an icon to a shape, and the atlas names of the button's own
+-- textures usually say what frames it. A mask alone does not mean round: rounded corners are a
+-- mask too (BetterBags' slots), so the mask's own art is named as well.
+local MAX_SHAPE_REGIONS = 40
+local MAX_SHAPE_ATLASES = 6
+local MAX_MASK_NAMES = 3
+
+-- The two masks Blizzard's item button template uses (Blizzard_ItemButton/ItemButtonTemplate.xml).
+-- In game a mask set from a file reports only its file ID, so these are resolved to IDs once and
+-- matched, to say what the mask is instead of printing a number.
+local KNOWN_MASKS = {
+    { path = "Interface\\CharacterFrame\\TempPortraitAlphaMask", label = "circle (TempPortraitAlphaMask)" },
+    { path = "Interface\\Common\\common-iconmask", label = "standard item slot (common-iconmask)" },
+}
+local knownMaskLabels
+
+local function LabelMask(name)
+    if not knownMaskLabels then
+        knownMaskLabels = {}
+        for _, known in ipairs(KNOWN_MASKS) do
+            knownMaskLabels[known.path:lower()] = known.label
+            if GetFileIDFromPath then
+                local ok, fileID = pcall(GetFileIDFromPath, known.path)
+                if ok and fileID then
+                    knownMaskLabels[tostring(fileID)] = known.label
+                end
+            end
+        end
+    end
+
+    name = tostring(name)
+    local fileID = name:match("^file (%d+)$") or name:match("^(%d+)$")
+    if fileID then
+        return knownMaskLabels[fileID] or ("file " .. fileID .. " (not a known mask)")
+    end
+    return knownMaskLabels[(name:lower():gsub("/", "\\"))] or name
+end
+
+-- The art of each mask on a region: its atlas, else its file path, else its file ID.
+local function DescribeMasks(region)
+    local count = 0
+    if type(region) == "table" and region.GetNumMaskTextures then
+        count = region:GetNumMaskTextures() or 0
+    end
+    if count == 0 or not region.GetMaskTexture then
+        return nil
+    end
+    local names = {}
+    for index = 1, math.min(count, MAX_MASK_NAMES) do
+        local ok, mask = pcall(region.GetMaskTexture, region, index)
+        local name
+        if ok and type(mask) == "table" then
+            local okName, found = pcall(function()
+                local atlas = mask.GetAtlas and mask:GetAtlas()
+                if atlas and atlas ~= "" then
+                    return atlas
+                end
+                local path = mask.GetTextureFilePath and mask:GetTextureFilePath()
+                if path and path ~= "" then
+                    return tostring(path)
+                end
+                local fileID = mask.GetTextureFileID and mask:GetTextureFileID()
+                return fileID and ("file " .. tostring(fileID)) or nil
+            end)
+            name = okName and found or nil
+        end
+        names[#names + 1] = name and LabelMask(name) or "unnamed mask"
+    end
+    return table.concat(names, ", ")
+end
+
+local function MaskCount(region)
+    if type(region) == "table" and region.GetNumMaskTextures then
+        return region:GetNumMaskTextures() or 0
+    end
+    return 0
+end
+
+local function GetShapeHints(button)
+    local hints = { masked = 0, atlases = {} }
+    if not button.GetRegions then
+        return hints
+    end
+    local regions = { button:GetRegions() }
+    local seen = {}
+    for index = 1, math.min(#regions, MAX_SHAPE_REGIONS) do
+        local region = regions[index]
+        if region.GetObjectType and region:GetObjectType() == "Texture" and region:IsShown() then
+            if MaskCount(region) > 0 then
+                hints.masked = hints.masked + 1
+            end
+            local atlas = region.GetAtlas and region:GetAtlas()
+            if atlas and atlas ~= "" and not seen[atlas] and #hints.atlases < MAX_SHAPE_ATLASES then
+                seen[atlas] = true
+                hints.atlases[#hints.atlases + 1] = atlas
+            end
+        end
+    end
+    return hints
+end
+
 local function StripColors(text)
     return (tostring(text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
@@ -177,6 +279,7 @@ local function Measure(entry)
             height = buttonRect.height / scale,
             scale = scale
         },
+        shape = GetShapeHints(button),
         overlay = {
             isButton = overlayOn == button,
             key = overlayOn ~= button and FindKeyFor(button, overlayOn) or nil,
@@ -184,6 +287,7 @@ local function Measure(entry)
             type = overlayOn.GetObjectType and overlayOn:GetObjectType() or "?",
             width = overlayRect.width / scale,
             height = overlayRect.height / scale,
+            masks = DescribeMasks(overlayOn),
             -- from the button's top left corner, positive right / down
             x = (overlayRect.left - buttonRect.left) / scale,
             y = (buttonRect.top - overlayRect.top) / scale
@@ -198,6 +302,7 @@ local function Measure(entry)
             if rect then
                 sample.ownIcon = {
                     key = key,
+                    masks = DescribeMasks(region),
                     width = rect.width / scale,
                     height = rect.height / scale,
                     x = (rect.left - buttonRect.left) / scale,
@@ -458,15 +563,22 @@ function CaerdonButtonGeometry:GetReportLines()
                 if sample.overlay.isButton then
                     add(3, "Overlay on: the button itself")
                 else
-                    add(3, string.format("Overlay on: %s (%s) %s x %s, at %s / %s from the button's top left",
+                    add(3, string.format("Overlay on: %s (%s) %s x %s, at %s / %s from the button's top left%s",
                         sample.overlay.key and ("button." .. sample.overlay.key) or sample.overlay.name,
                         sample.overlay.type, Num(sample.overlay.width), Num(sample.overlay.height),
-                        Num(sample.overlay.x), Num(sample.overlay.y)))
+                        Num(sample.overlay.x), Num(sample.overlay.y),
+                        sample.overlay.masks and (", masked by: " .. sample.overlay.masks) or ""))
                 end
                 if sample.ownIcon then
-                    add(3, string.format("Button's own icon: button.%s %s x %s, at %s / %s from the button's top left",
+                    add(3, string.format("Button's own icon: button.%s %s x %s, at %s / %s from the button's top left%s",
                         sample.ownIcon.key, Num(sample.ownIcon.width), Num(sample.ownIcon.height),
-                        Num(sample.ownIcon.x), Num(sample.ownIcon.y)))
+                        Num(sample.ownIcon.x), Num(sample.ownIcon.y),
+                        sample.ownIcon.masks and (", masked by: " .. sample.ownIcon.masks) or ""))
+                end
+                if sample.shape then
+                    local atlases = #sample.shape.atlases > 0 and table.concat(sample.shape.atlases, ", ") or "none"
+                    add(3, string.format("Shape hints: %d masked texture%s among the button's own regions; atlases shown: %s",
+                        sample.shape.masked, sample.shape.masked == 1 and "" or "s", atlases))
                 end
                 if sample.icon then
                     add(3, string.format("Icon (%s%s): %s x %s, %.2f of the overlay's short side, anchored %s",

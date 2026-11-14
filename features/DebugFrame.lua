@@ -1023,7 +1023,12 @@ function DebugFrameMixin:Init()
     -- Register slash command
     SLASH_CAERDONDEBUG1 = "/cdebug"
     SlashCmdList["CAERDONDEBUG"] = function(msg)
-        self:ToggleDebugFrame()
+        local command = (msg or ""):lower():match("^%s*(.-)%s*$")
+        if command == "geometry" then
+            self:ShowGeometryExport()
+        else
+            self:ToggleDebugFrame()
+        end
     end
 
     -- Hook for current item detection from tooltip
@@ -1678,6 +1683,37 @@ function DebugFrameMixin:CopyCurrentItemDetails()
         performCopy()
         self.copyCancelFunc = nil
     end)
+end
+
+-- "/cdebug geometry": the [Button Geometry] section on its own, for when that is all that is being
+-- collected. Needs no selected item.
+function DebugFrameMixin:ShowGeometryExport()
+    local version, build, _, tocVersion = GetBuildInfo()
+    local lines = {
+        "=== CaerdonWardrobe Button Geometry ===",
+        "Generated: " .. date("%Y-%m-%d %H:%M:%S"),
+        string.format("Game Build: %s (%s), TOC %s", tostring(version), tostring(build), tostring(tocVersion)),
+        "",
+        "[Button Geometry]"
+    }
+    if CaerdonButtonGeometry and CaerdonButtonGeometry.GetReportLines then
+        local ok, geometryLines = pcall(CaerdonButtonGeometry.GetReportLines, CaerdonButtonGeometry)
+        if ok then
+            for _, geometryLine in ipairs(geometryLines) do
+                lines[#lines + 1] = string.rep("  ", geometryLine.indent or 0) .. geometryLine.text
+            end
+        else
+            lines[#lines + 1] = "  Report failed: " .. tostring(geometryLines)
+        end
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "=== End CaerdonWardrobe Button Geometry ==="
+
+    -- The copy dialog is a child of the Debug Frame, so it is only visible while that is open.
+    if self.frame and not self.frame:IsShown() then
+        self.frame:Show()
+    end
+    self:ShowCopyOutput(table.concat(lines, "\n"))
 end
 
 function DebugFrameMixin:BuildClipboardPayload(item)
@@ -2833,7 +2869,8 @@ function DebugFrameMixin:EnsureCopyOutputFrame()
     if frame.editBox.SetMaxLetters then
         frame.editBox:SetMaxLetters(0)
     end
-    frame.editBox:SetSpacing(4)
+    -- No extra line spacing here: with it, the selection highlight drifted away from the text it
+    -- covers, so only "select all" was usable.
     frame.editBox:SetScript("OnEscapePressed", function(editBox)
         editBox:ClearFocus()
         frame:Hide()
