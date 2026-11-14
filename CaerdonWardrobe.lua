@@ -453,12 +453,12 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
         xOffset = xOffset * -1
     end
 
-    local xBackgroundOffset = 0
+    local xBackgroundOffset = icon.caerdonBackgroundNudge or 0
     if options.statusBackgroundOffsetX ~= nil then
         xBackgroundOffset = options.statusBackgroundOffsetX
     end
 
-    local yBackgroundOffset = 0
+    local yBackgroundOffset = icon.caerdonBackgroundNudge or 0
     if options.statusBackgroundOffsetY ~= nil then
         yBackgroundOffset = options.statusBackgroundOffsetY
     end
@@ -858,6 +858,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus:SetVertexColor(1, 1, 1)
     mogStatus:SetTexCoord(0, 1, 0, 1)
     mogStatus:SetTexture("")
+    -- Set again below by the one status that needs it.
+    mogStatus.caerdonBackgroundNudge = nil
 
     local isProminent = false
     local caerdonType = item and item.GetCaerdonItemType and item:GetCaerdonItemType()
@@ -1042,8 +1044,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "otherNoLoot" or status == "otherPlusNoLoot" then
         if displayInfo and displayInfo.otherIcon.shouldShow then
             iconBackgroundAdjustment = 0
-            options.statusBackgroundOffsetX = -0.5
-            options.statusBackgroundOffsetY = -0.5
+            -- Kept on the icon, not written into options: callers reuse one options table for a
+            -- whole window, and the nudge used to leak onto every button drawn after this one.
+            mogStatus.caerdonBackgroundNudge = -0.5
             mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
             mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
             mogStatus:SetVertexColor(1, 1, 0)
