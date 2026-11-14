@@ -28,7 +28,8 @@ local MAX_PARENT_DEPTH = 40
 local OPTION_KEYS = {
     "statusProminentSize", "statusOffsetX", "statusOffsetY", "statusScale",
     "statusBackgroundOffsetX", "statusBackgroundOffsetY", "overrideStatusPosition", "fixedStatusPosition",
-    "bindingScale", "bindingOffsetX", "bindingOffsetY", "overrideBindingPosition", "itemCountOffset"
+    "bindingScale", "bindingOffsetX", "bindingOffsetY", "overrideBindingPosition", "itemCountOffset",
+    "keepInsideWhenClipped"
 }
 -- Where a button usually keeps its own item icon, to see whether the overlay could sit on it.
 local ICON_KEYS = { "icon", "Icon", "IconTexture", "ItemIcon", "Item", "NormalTexture", "TagTexture", "rewardicon" }

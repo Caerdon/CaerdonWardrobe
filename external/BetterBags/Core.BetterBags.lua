@@ -31,6 +31,26 @@ end
 -- not redraw unchanged buttons either. Weak keys: BetterBags owns the button objects.
 local trackedBagItems = setmetatable({}, { __mode = "k" })
 
+-- The look of a default Blizzard bag slot (a 20 px icon on a 37 px slot, hanging over the corner),
+-- scaled to the slot: BetterBags' slots follow its theme and icon scale. With no offsets passed,
+-- the core keeps the inset in proportion to the icon. The Next panels leave more room around the
+-- grid than the overhang needs; the classic bags leave none at the left and top, so there the
+-- core moves the icon inside the slot (keepInsideWhenClipped).
+local BLIZZARD_SLOT_SIZE = 37
+local BLIZZARD_ICON_SIZE = 20
+
+local function GetSlotOptions(button)
+    local width, height = button:GetSize()
+    local side = math.min(width or 0, height or 0)
+    if side < 1 then
+        side = BLIZZARD_SLOT_SIZE
+    end
+    return {
+        statusProminentSize = BLIZZARD_ICON_SIZE * side / BLIZZARD_SLOT_SIZE,
+        keepInsideWhenClipped = true
+    }
+end
+
 function BetterBagsMixin:UpdateBagItem(bagItem)
     local button = bagItem.button
     local bag, slot = GetBagAndSlot(bagItem)
@@ -38,11 +58,7 @@ function BetterBagsMixin:UpdateBagItem(bagItem)
         return
     end
 
-    local options = {
-        statusProminentSize = 16,
-        statusOffsetX = 7,
-        statusOffsetY = 7
-    }
+    local options = GetSlotOptions(button)
 
     local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
     CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
@@ -140,11 +156,7 @@ function BetterBagsVendorMixin:UpdateVendorButton(vendorButton)
     -- The tooltip is owned by this button, which is where the debug keybind looks.
     button.caerdonDebugItemLink = itemLink
 
-    local options = {
-        statusProminentSize = 16,
-        statusOffsetX = 7,
-        statusOffsetY = 7
-    }
+    local options = GetSlotOptions(button)
     local locationInfo = {
         locationKey = vendorButton.key or format("%s-%d", mode, entry.index),
         slot = entry.index,

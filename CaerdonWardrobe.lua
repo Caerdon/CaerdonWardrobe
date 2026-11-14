@@ -179,6 +179,186 @@ end
 local ICON_PROMINENT_SIZE = 20
 local ICON_SIZE_DIFFERENTIAL = 0.8
 
+-- Clip-aware placement, for callers that pass options.keepInsideWhenClipped.
+--
+-- The default placement hangs the status icon over the slot's corner. In a scrolling grid with
+-- no padding (the classic BetterBags bags) the first column's icons get that part cut off by the
+-- scroll frame. Whether that happens cannot be known while the button is drawn: frames often have
+-- no layout yet, and the answer has to be the same for every slot of the grid. So the button is
+-- drawn as usual, a pass shortly after measures how much room its grid leaves to the left and
+-- right, and when that is less than the overhang every icon in that grid is placed inside its
+-- slot instead. Inside, the icon would cover more of the item than it does hanging over the
+-- corner, so it is also drawn smaller (CLIP_INSIDE_SCALE).
+--
+-- Only horizontal room is used: in a list that scrolls vertically it does not change with the
+-- scroll position, while a row passing the top edge has no room above it in any list.
+local CLIP_PASS_DELAY = 0.1
+local CLIP_MAX_PARENT_DEPTH = 40
+local CLIP_INSIDE_MARGIN = 0.5
+-- Size of an icon that had to move inside, as a fraction of its usual size. Covering exactly what
+-- the overhanging icon covers would be 0.7 with the default inset (14 px for a 20 px icon), which
+-- read as too small in game; 0.8 gives the 16 px that the BetterBags integration used for years.
+local CLIP_INSIDE_SCALE = 0.8
+-- [clipping frame] = { left = least room seen, right = least room seen, buttons = weak set of overlay frames }
+local clipRoom = setmetatable({}, { __mode = "k" })
+local clipPending = {}
+local clipPassScheduled = false
+
+-- The closest frame, starting with the button itself, that cuts off what is drawn outside it.
+local function FindClippingParent(frame)
+    local depth = 0
+    while frame and depth < CLIP_MAX_PARENT_DEPTH do
+        if (frame.DoesClipChildren and frame:DoesClipChildren()) or
+            (frame.GetObjectType and frame:GetObjectType() == "ScrollFrame") then
+            return frame
+        end
+        frame = frame.GetParent and frame:GetParent()
+        depth = depth + 1
+    end
+    return nil
+end
+
+local function GetScreenEdges(region)
+    local left, bottom, width, height = region:GetScaledRect()
+    if not (left and bottom and width and height) or width <= 0 or height <= 0 then
+        return nil
+    end
+    return left, left + width
+end
+
+-- Measures the room around one drawn button and files it under its clipping frame. Marks the
+-- frame in "changed" when its least room went down.
+local function MeasureClipRoom(caerdonButton, button, changed)
+    caerdonButton.caerdonClipMeasured = true
+    local clipper = FindClippingParent(button)
+    caerdonButton.caerdonClipper = clipper
+    if not clipper then
+        return
+    end
+
+    local scale = caerdonButton:GetEffectiveScale()
+    local overlayLeft, overlayRight = GetScreenEdges(caerdonButton)
+    local clipLeft, clipRight = GetScreenEdges(clipper)
+    if not (overlayLeft and clipLeft and scale and scale > 0) then
+        caerdonButton.caerdonClipMeasured = nil -- no layout yet: measure on a later draw
+        return
+    end
+
+    local info = clipRoom[clipper]
+    if not info then
+        info = { buttons = setmetatable({}, { __mode = "k" }) }
+        clipRoom[clipper] = info
+    end
+    info.buttons[caerdonButton] = true
+
+    local left = (overlayLeft - clipLeft) / scale
+    local right = (clipRight - overlayRight) / scale
+    if info.left == nil or left < info.left - 0.25 then
+        info.left = left
+        changed[clipper] = true
+    end
+    if info.right == nil or right < info.right - 0.25 then
+        info.right = right
+        changed[clipper] = true
+    end
+end
+
+local function RepositionForClip(caerdonButton)
+    local args = caerdonButton.caerdonPositionArgs
+    if args and args.icon then
+        CaerdonWardrobe:SetStatusIconPosition(args.icon, args.button, args.item, args.feature, args.locationInfo,
+            args.options, args.mogStatus, args.bindingStatus)
+    end
+end
+
+local function RunClipPass()
+    clipPassScheduled = false
+    local batch = clipPending
+    clipPending = {}
+
+    local changed, reposition = {}, {}
+    for caerdonButton in pairs(batch) do
+        local args = caerdonButton.caerdonPositionArgs
+        local button = args and args.button
+        -- A hidden button can sit anywhere (pooled frames); it is measured when it is drawn visible.
+        if button and button.IsVisible and button:IsVisible() then
+            local ok, err = pcall(MeasureClipRoom, caerdonButton, button, changed)
+            if not ok then
+                caerdonButton.caerdonClipMeasured = nil
+                geterrorhandler()(err)
+            elseif caerdonButton.caerdonClipper then
+                reposition[caerdonButton] = true
+            end
+        end
+    end
+
+    -- Less room than before changes the answer for every icon already placed in that grid.
+    for clipper in pairs(changed) do
+        for caerdonButton in pairs(clipRoom[clipper].buttons) do
+            if caerdonButton.caerdonClipper == clipper then
+                reposition[caerdonButton] = true
+            end
+        end
+    end
+    for caerdonButton in pairs(reposition) do
+        local ok, err = pcall(RepositionForClip, caerdonButton)
+        if not ok then
+            geterrorhandler()(err)
+        end
+    end
+end
+
+-- Keeps what is needed to place this icon again, and has the button measured unless it already
+-- was under this clipping frame. The frame is looked up on every draw: buttons are pooled, and a
+-- bag addon can move a whole grid's worth of them under another frame without touching the
+-- button's own parent.
+local function QueueClipPass(caerdonButton, clipper, icon, button, item, feature, locationInfo, options, mogStatus,
+                             bindingStatus)
+    local args = caerdonButton.caerdonPositionArgs
+    if not args then
+        args = {}
+        caerdonButton.caerdonPositionArgs = args
+    end
+    args.icon, args.button, args.item, args.feature = icon, button, item, feature
+    args.locationInfo, args.options, args.mogStatus, args.bindingStatus = locationInfo, options, mogStatus, bindingStatus
+
+    if caerdonButton.caerdonClipMeasured and caerdonButton.caerdonClipper == clipper then
+        return
+    end
+
+    clipPending[caerdonButton] = true
+    if not clipPassScheduled then
+        clipPassScheduled = true
+        C_Timer.After(CLIP_PASS_DELAY, RunClipPass)
+    end
+end
+
+-- nil while this icon can hang over its corner (the grid leaves room, has not been measured, or
+-- the icon does not overhang). Otherwise the icon goes inside the slot, and this is the fraction
+-- of its size to draw it at.
+local function GetClipInsideScale(clipper, statusPosition, extent, xOffset)
+    local info = clipper and clipRoom[clipper]
+    if not info then
+        return nil
+    end
+
+    local room
+    if string.find(statusPosition, "LEFT") then
+        room = info.left
+    elseif string.find(statusPosition, "RIGHT") then
+        room = info.right
+    end
+    if not room then
+        return nil
+    end
+
+    local overhang = extent / 2 - xOffset
+    if overhang > 0.5 and room < overhang - 0.5 then
+        return CLIP_INSIDE_SCALE
+    end
+    return nil
+end
+
 function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
     if not item then return end
@@ -188,13 +368,37 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
         return
     end
 
+    local statusScale = options.statusScale or 1
+    local statusPosition = options.overrideStatusPosition or CaerdonWardrobeConfig.Icon.Position
+
+    -- Clip-aware callers: decide from the icon's full size whether it has to go inside the slot,
+    -- and size it for that before anything below reads its size. The full size is kept on the
+    -- icon so placing it again (the pass after drawing) never shrinks it twice.
+    local clipInsideScale
+    if options.keepInsideWhenClipped and not options.fixedStatusPosition then
+        local clipBackground = icon.mogStatusBackground
+        local baseSize = icon.caerdonBaseSize or icon:GetSize()
+        local baseBackgroundSize = icon.caerdonBaseBackgroundSize or (clipBackground and clipBackground:GetSize()) or baseSize
+        icon.caerdonBaseSize, icon.caerdonBaseBackgroundSize = baseSize, baseBackgroundSize
+
+        local clipper = FindClippingParent(button)
+        local baseXOffset = options.statusOffsetX or (4 * baseSize / ICON_PROMINENT_SIZE)
+        clipInsideScale = GetClipInsideScale(clipper, statusPosition, math.max(baseSize, baseBackgroundSize), baseXOffset)
+
+        local sizeScale = clipInsideScale or 1
+        icon:SetSize(baseSize * sizeScale, baseSize * sizeScale)
+        if clipBackground then
+            clipBackground:SetSize(baseBackgroundSize * sizeScale, baseBackgroundSize * sizeScale)
+        end
+
+        QueueClipPass(caerdonButton, clipper, icon, button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    end
+
     -- Scaling values if the icon is different than prominent-sized
     local iconWidth, iconHeight = icon:GetSize()
     local xAdjust = iconWidth / ICON_PROMINENT_SIZE
     local yAdjust = iconHeight / ICON_PROMINENT_SIZE
 
-    local statusScale = options.statusScale or 1
-    local statusPosition = options.overrideStatusPosition or CaerdonWardrobeConfig.Icon.Position
     local xOffset = 4 * xAdjust
     if statusPosition == "TOP" or statusPosition == "BOTTOM" then
         xOffset = 0
@@ -211,6 +415,21 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 
     if options.statusOffsetY ~= nil then
         yOffset = options.statusOffsetY
+    end
+
+    if clipInsideScale then
+        -- Fully inside: the (now smaller) icon and its background end just short of the slot's edges.
+        local insideWidth, insideHeight = iconWidth, iconHeight
+        local clipBackground = icon.mogStatusBackground
+        if clipBackground then
+            local backgroundWidth, backgroundHeight = clipBackground:GetSize()
+            insideWidth = math.max(insideWidth, backgroundWidth or 0)
+            insideHeight = math.max(insideHeight, backgroundHeight or 0)
+        end
+        xOffset = insideWidth / 2 + CLIP_INSIDE_MARGIN
+        if string.find(statusPosition, "TOP") or string.find(statusPosition, "BOTTOM") then
+            yOffset = insideHeight / 2 + CLIP_INSIDE_MARGIN
+        end
     end
 
     if string.find(statusPosition, "TOP") then
@@ -920,6 +1139,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatusBackground:SetSize(iconSize, iconSize)
         mogStatus:SetSize(iconSize - iconBackgroundAdjustment, iconSize - iconBackgroundAdjustment)
     end
+
+    -- The full size, for the clip-aware placement to shrink from and return to.
+    mogStatus.caerdonBaseSize = iconSize - iconBackgroundAdjustment
+    mogStatus.caerdonBaseBackgroundSize = iconSize
 
     self:SetStatusIconPosition(mogStatus, originalButton, item, feature, locationInfo, options, status, bindingStatus)
 
