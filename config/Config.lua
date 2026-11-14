@@ -140,6 +140,15 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowOutdatedFood == nil then
             CaerdonWardrobeConfig.Icon.ShowOutdatedFood = NS:GetDefaultConfig().Icon.ShowOutdatedFood
         end
+        if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == nil then
+            CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons = NS:GetDefaultConfig().Icon.ShowRecipesForOtherToons
+        end
+        if not CaerdonWardrobeConfig.Tooltip then
+            CaerdonWardrobeConfig.Tooltip = {}
+        end
+        if CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == nil then
+            CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners = NS:GetDefaultConfig().Tooltip.ShowRecipeLearners
+        end
         if CaerdonWardrobeConfig.Icon.AuctionMinProfit == nil then
             CaerdonWardrobeConfig.Icon.AuctionMinProfit = NS:GetDefaultConfig().Icon.AuctionMinProfit
         end
@@ -225,6 +234,7 @@ function NS:GetDefaultConfig()
             ShowUpcomingQuestItems = true,
             ShowAuctionValue = true,
             ShowOutdatedFood = true,
+            ShowRecipesForOtherToons = true,
             AuctionMinProfit = "auto",
             ShowUpgradeLevelDelta = false,
             SameLevelBehavior = "none",
@@ -252,6 +262,10 @@ function NS:GetDefaultConfig()
                 HideCollected = false,
                 SuppressLegionRemixHelperWarning = false
             }
+        },
+
+        Tooltip = {
+            ShowRecipeLearners = true
         }
     }
 end

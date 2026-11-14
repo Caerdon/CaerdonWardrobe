@@ -1100,6 +1100,75 @@ function CaerdonItemMixin:IsOtherClassConsumable(bindingResult)
     return self:IsSellable()
 end
 
+-- The player's other toons on this realm that have this recipe item's profession and whether
+-- they know the recipe (see CaerdonRecipe:GetOtherToonRecipeInfo for the fields). nil for
+-- anything that is not a recipe, for a recipe that cannot be handed over (soulbound or bind on
+-- pickup), and when no other toon has the profession. The icon and the tooltip both use this.
+function CaerdonItemMixin:GetRecipeOtherToonInfo()
+    if self:GetCaerdonItemType() ~= CaerdonItemType.Recipe then
+        return nil
+    end
+    if self:IsSoulbound() or self:GetBinding() == CaerdonItemBind.BindOnPickup then
+        return nil
+    end
+    local itemData = self:GetItemData()
+    if not (itemData and itemData.GetOtherToonRecipeInfo) then
+        return nil
+    end
+    return itemData:GetOtherToonRecipeInfo()
+end
+
+-- A recipe item this toon has no use for: it already knows the recipe (Pattern: Woolen Reagent
+-- Bag 253668 on a tailor who knows it) or cannot learn it. Returns the status that replaces
+-- "collected", or nil to leave it:
+--   "other":     it can still be handed over and another toon on the realm has the profession
+--                without the recipe in its recorded list (CaerdonRecipe:GetOtherToonRecipeInfo),
+--                and no toon knows the recipe yet.
+--   "otherPlus": the same, but this toon or another one already knows it. Known somewhere,
+--                learnable elsewhere, which is what otherPlus means for appearances too.
+--   "sellable":  this toon knows it and nobody else wants it; needs a vendor price.
+-- For "sellable" only the client's own tooltip verdict counts as known; the name-based recipe
+-- lookup cannot tell recipe ranks that share a name apart, which is fine for hiding a star or
+-- picking the icon colour but not for saying "sell this". Account-bound recipes are never
+-- called sellable: another toon on the account may learn them, and the saved data only covers
+-- this realm.
+function CaerdonItemMixin:GetUnneededRecipeStatus(bindingResult)
+    if self:GetCaerdonItemType() ~= CaerdonItemType.Recipe then
+        return nil
+    end
+    local alreadyKnown = (bindingResult and bindingResult.alreadyKnown) or false
+    if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons ~= false then
+        local otherToons = self:GetRecipeOtherToonInfo()
+        if otherToons then
+            if #otherToons.missing > 0 then
+                local knownBySomeone = alreadyKnown or otherToons.knownByPlayer
+                for _, toon in ipairs(otherToons.toons) do
+                    knownBySomeone = knownBySomeone or toon.knowsRecipe
+                end
+                return knownBySomeone and "otherPlus" or "other"
+            end
+            if alreadyKnown and #otherToons.unknown > 0 then
+                -- A toon with the profession whose recipes were never recorded: it may need
+                -- this one, so do not call it sellable, but there is nothing to claim either.
+                return nil
+            end
+        end
+    end
+    if not alreadyKnown then
+        return nil
+    end
+    local binding = self:GetBinding()
+    if binding == CaerdonItemBind.BindOnAccount or binding == CaerdonItemBind.WarboundUntilEquip then
+        return nil
+    end
+    local itemLink = self:GetItemLink()
+    local sellPrice = itemLink and select(11, C_Item.GetItemInfo(itemLink))
+    if not sellPrice or sellPrice <= 0 then
+        return nil
+    end
+    return self:IsSellable() and "sellable" or nil
+end
+
 -- Whether listing this item on the auction house beats vendoring it. Always returns the full
 -- breakdown (see CaerdonAuctionValue:GetItemAuctionInfo); `shouldAuction` is the verdict.
 function CaerdonItemMixin:GetAuctionValueInfo()
@@ -1294,7 +1363,9 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         isLocked = isLocked,
         skillTooLow = skillTooLow,
         -- Red race / class requirement line: this toon can never use the item.
-        raceClassRestricted = raceClassRestricted
+        raceClassRestricted = raceClassRestricted,
+        -- The tooltip carries the client's "Already known" line.
+        alreadyKnown = (tooltipData and tooltipData.isKnownSpell) or false
     }
 end
 
@@ -1761,6 +1832,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     if (mogStatus == nil or mogStatus == "" or mogStatus == "collected") and
         self:IsOtherClassConsumable(bindingResult) then
         mogStatus = "sellable"
+    end
+
+    -- Recipes this toon has no use for: one another toon can still learn gets the "other"
+    -- icon (green when some toon already knows it), a known one nobody wants is sold or listed.
+    if mogStatus == "collected" then
+        mogStatus = self:GetUnneededRecipeStatus(bindingResult) or mogStatus
     end
 
     -- Food and drink the toon has outgrown: a better one of the same kind is in the bags.

@@ -48,11 +48,54 @@ local function EnsureVariables()
         CaerdonRecipeData[realmName][playerName].knownRecipes = {}
     end
 
+    -- Professions whose full recipe list has been read into knownRecipes at least once, keyed by
+    -- profession name. Without an entry, "not in knownRecipes" only means "never looked".
+    if not CaerdonRecipeData[realmName][playerName].scannedProfessions then
+        CaerdonRecipeData[realmName][playerName].scannedProfessions = {}
+    end
+
     PlayerRecipeData = CaerdonRecipeData[realmName][playerName]
 end
 
 local eventFrame = CreateFrame("Frame")
 local knownRecipes = {}
+
+-- Calls a C_TradeSkillUI function that may not exist on every client; nil when it does not.
+local function TradeSkillCall(name, ...)
+    local func = C_TradeSkillUI[name]
+    if type(func) ~= "function" then
+        return nil
+    end
+    return func(...)
+end
+
+-- The profession window can show someone else's recipes (a linked profession, the guild's, a
+-- guild member's) or an NPC's; "learned" then says nothing about this toon.
+local function IsOwnTradeSkill()
+    return not (TradeSkillCall("IsTradeSkillLinked") or TradeSkillCall("IsTradeSkillGuild") or
+        TradeSkillCall("IsTradeSkillGuildMember") or TradeSkillCall("IsNPCCrafting"))
+end
+
+-- GetFilteredRecipeIDs returns what the recipe list currently shows, so a search text or a
+-- "have materials" style filter makes it a partial list. Only an unfiltered list that includes
+-- the learned recipes says anything about a recipe that is absent from it.
+local function IsRecipeListUnfiltered()
+    if TradeSkillCall("GetOnlyShowMakeableRecipes") or TradeSkillCall("GetOnlyShowSkillUpRecipes") or
+        TradeSkillCall("GetOnlyShowFirstCraftRecipes") then
+        return false
+    end
+    if TradeSkillCall("GetShowLearned") == false then
+        return false
+    end
+    if TradeSkillCall("AreAnyInventorySlotsFiltered") or TradeSkillCall("AnyRecipeCategoriesFiltered") then
+        return false
+    end
+    local nameFilter = TradeSkillCall("GetRecipeItemNameFilter")
+    if nameFilter and nameFilter ~= "" then
+        return false
+    end
+    return true
+end
 
 -- Function to gather known recipes when the player opens the profession window
 local function GatherRecipes()
@@ -62,8 +105,10 @@ local function GatherRecipes()
 
     -- Get all known recipe IDs. GetAllRecipeIDs is undocumented, so fall back to
     -- the documented filtered list on clients (e.g. WoW Forever) that lack it.
+    local hasFullList = C_TradeSkillUI.GetAllRecipeIDs ~= nil
     local getRecipeIDs = C_TradeSkillUI.GetAllRecipeIDs or C_TradeSkillUI.GetFilteredRecipeIDs
     local recipeIDs = getRecipeIDs and getRecipeIDs() or {}
+    local isOwn = IsOwnTradeSkill()
 
     -- Store recipe info
     for _, recipeID in ipairs(recipeIDs) do
@@ -71,9 +116,19 @@ local function GatherRecipes()
         if recipeInfo then
             CaerdonRecipeData.globalRecipeNameToID[recipeInfo.name] = recipeID
 
-            if recipeInfo.learned then
+            if recipeInfo.learned and isOwn then
                 PlayerRecipeData.knownRecipes[recipeInfo.name] = recipeID
             end
+        end
+    end
+
+    -- Remember that this profession's list is now complete, so other toons can tell "does not
+    -- know the recipe" from "never looked" (CaerdonRecipe:GetOtherToonRecipeInfo).
+    if isOwn and #recipeIDs > 0 and (hasFullList or IsRecipeListUnfiltered()) then
+        local baseInfo = TradeSkillCall("GetBaseProfessionInfo")
+        local professionName = baseInfo and (baseInfo.parentProfessionName or baseInfo.professionName)
+        if professionName and professionName ~= "" then
+            PlayerRecipeData.scannedProfessions[professionName] = true
         end
     end
 end
@@ -154,6 +209,9 @@ eventFrame:RegisterEvent("VARIABLES_LOADED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("SKILL_LINES_CHANGED")
 eventFrame:RegisterEvent("SKILL_LINE_SPECS_UNLOCKED")
+-- Keeps the saved known-recipe list current when a recipe is learned from an item; without it
+-- the list only caught up the next time the profession window was opened.
+eventFrame:RegisterEvent("NEW_RECIPE_LEARNED")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "VARIABLES_LOADED" then
         -- DevTools_Dump(CaerdonRecipeData.globalRecipeNameToID)
@@ -170,8 +228,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         GatherRecipes()
     elseif event == "NEW_RECIPE_LEARNED" then
         local recipeID = ...
-        local recipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeID)
-        if recipeInfo then
+        EnsureVariables()
+        local recipeInfo = recipeID and C_TradeSkillUI.GetRecipeInfo(recipeID)
+        if recipeInfo and recipeInfo.name then
             CaerdonRecipeData.globalRecipeNameToID[recipeInfo.name] = recipeID
             PlayerRecipeData.knownRecipes[recipeInfo.name] = recipeID
         end
@@ -181,9 +240,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- Function to check if a recipe is known based on previously gathered data
-function GetRecipe(item)
-    -- print(item:GetItemLink())
+-- The recipe name a recipe item teaches: the item name without its "Pattern: " style prefix.
+-- This is the key of globalRecipeNameToID and of every toon's knownRecipes.
+local function GetRecipeNameFromItem(item)
     local checkName = item:GetItemName()
     local recipeName = string.gsub(checkName or "", "Recipe: ", "")
     recipeName = string.gsub(recipeName, "Schematic: ", "")
@@ -192,6 +251,41 @@ function GetRecipe(item)
     recipeName = string.gsub(recipeName, "Pattern: ", "")
     recipeName = string.gsub(recipeName, "Technique: ", "")
     recipeName = string.gsub(recipeName, "Formula: ", "")
+    return recipeName
+end
+
+-- The saved skill line a toon has for a profession name. A parent profession and its child skill
+-- line can share a name. On WoW Forever every profession has a single child line named exactly
+-- like its parent ("Cooking" > "Cooking"), and the secondary professions have no parent skill
+-- level at all, so the top-level entry is a bare { childSkillLines = ... } container. Stopping at
+-- that entry hid the real rank, so look at the top-level entry and every same-named child and
+-- keep the highest level.
+local function FindSkillLine(toonProfessions, skillName)
+    local found
+    local function ConsiderSkillLine(candidate)
+        local skillLevel = type(candidate) == "table" and candidate.skillLevel
+        if skillLevel and (not found or skillLevel > (found.skillLevel or 0)) then
+            found = candidate
+        end
+    end
+
+    if type(toonProfessions) ~= "table" or not skillName then
+        return nil
+    end
+
+    ConsiderSkillLine(toonProfessions[skillName])
+    for _, professionData in pairs(toonProfessions) do
+        if type(professionData) == "table" and professionData.childSkillLines then
+            ConsiderSkillLine(professionData.childSkillLines[skillName])
+        end
+    end
+    return found
+end
+
+-- Function to check if a recipe is known based on previously gathered data
+function GetRecipe(item)
+    -- print(item:GetItemLink())
+    local recipeName = GetRecipeNameFromItem(item)
 
     local recipeID = CaerdonRecipeData.globalRecipeNameToID[recipeName]
     if recipeID then
@@ -219,24 +313,7 @@ function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
     -- end
 
     -- if not professionInfo or professionInfo.skillLevel == 0 then
-    -- A parent profession and its child skill line can share a name. On WoW Forever every
-    -- profession has a single child line named exactly like its parent ("Cooking" > "Cooking"),
-    -- and the secondary professions have no parent skill level at all, so the top-level entry
-    -- is a bare { childSkillLines = ... } container. Stopping at that entry hid the real rank,
-    -- so look at the top-level entry and every same-named child and keep the highest level.
-    local function ConsiderSkillLine(candidate)
-        local skillLevel = candidate and candidate.skillLevel
-        if skillLevel and (not professionInfo or skillLevel > (professionInfo.skillLevel or 0)) then
-            professionInfo = candidate
-        end
-    end
-
-    ConsiderSkillLine(PlayerProfessionData[requiredSkill])
-    for professionIndex, professionData in pairs(PlayerProfessionData) do
-        if professionData.childSkillLines then
-            ConsiderSkillLine(professionData.childSkillLines[requiredSkill])
-        end
-    end
+    professionInfo = FindSkillLine(PlayerProfessionData, requiredSkill)
     -- end
 
     if professionInfo then
@@ -268,6 +345,75 @@ function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
     end
 
     return hasSkillLine, meetsMinRank, rank
+end
+
+-- The player's other toons on this realm that have the recipe item's profession, from the saved
+-- per-toon data, and whether each one's saved recipe list holds this recipe. Returns nil when no
+-- other toon has the profession, otherwise
+--   { professionName, recipeName,
+--     knownByPlayer = this toon's own saved list has the recipe,
+--     toons = { { name, rank, knowsRecipe, recipesRecorded } ... },
+--     missing = { toons whose recorded list lacks the recipe: they can learn it },
+--     unknown = { toons whose list for this profession was never recorded } }
+-- (missing / unknown hold the same entries as toons, sorted by name.)
+-- A toon's list is only as fresh as its last session: it is filled when that toon opens the
+-- profession window or learns a recipe, and recipesRecorded is set once the window has shown
+-- the full list (see GatherRecipes). Nobody can say whether an "unknown" toon needs the recipe.
+function CaerdonRecipe:GetOtherToonRecipeInfo(item)
+    local professionName = item:GetItemSubType()
+    local recipeName = GetRecipeNameFromItem(item)
+    if not professionName or professionName == "" or recipeName == "" then
+        return nil
+    end
+
+    local realmName = GetRealmName()
+    local playerName = UnitName("player")
+    local realmProfessions = CaerdonProfessionData and CaerdonProfessionData[realmName]
+    if type(realmProfessions) ~= "table" then
+        return nil
+    end
+    local realmRecipes = CaerdonRecipeData and CaerdonRecipeData[realmName]
+
+    local toons = {}
+    for toonName, toonProfessions in pairs(realmProfessions) do
+        if toonName ~= playerName then
+            local skillLine = FindSkillLine(toonProfessions, professionName)
+            local rank = skillLine and skillLine.skillLevel
+            if rank and rank > 0 then
+                local toonRecipes = type(realmRecipes) == "table" and realmRecipes[toonName]
+                local knownRecipes = type(toonRecipes) == "table" and toonRecipes.knownRecipes
+                local scanned = type(toonRecipes) == "table" and toonRecipes.scannedProfessions
+                table.insert(toons, {
+                    name = toonName,
+                    rank = rank,
+                    knowsRecipe = (type(knownRecipes) == "table" and knownRecipes[recipeName] ~= nil) or false,
+                    recipesRecorded = (type(scanned) == "table" and scanned[professionName] == true) or false
+                })
+            end
+        end
+    end
+
+    if #toons == 0 then
+        return nil
+    end
+
+    table.sort(toons, function(a, b) return a.name < b.name end)
+    local missing, unknown = {}, {}
+    for _, toon in ipairs(toons) do
+        if not toon.knowsRecipe then
+            table.insert(toon.recipesRecorded and missing or unknown, toon)
+        end
+    end
+    local playerRecipes = type(realmRecipes) == "table" and realmRecipes[playerName]
+    local playerKnown = type(playerRecipes) == "table" and playerRecipes.knownRecipes
+    return {
+        professionName = professionName,
+        recipeName = recipeName,
+        knownByPlayer = (type(playerKnown) == "table" and playerKnown[recipeName] ~= nil) or false,
+        toons = toons,
+        missing = missing,
+        unknown = unknown
+    }
 end
 
 --[[static]] function CaerdonRecipe:CreateFromCaerdonItem(caerdonItem)
@@ -356,6 +502,12 @@ function CaerdonRecipeMixin:ContinueWithCancelOnItemDataLoad(callbackFunction)
     end
 
     return self:LoadCreatedItems(callbackFunction)
+end
+
+-- Other toons on this realm with this recipe's profession and whether they know it; nil when
+-- none has the profession. See CaerdonRecipe:GetOtherToonRecipeInfo for the fields.
+function CaerdonRecipeMixin:GetOtherToonRecipeInfo()
+    return CaerdonRecipe:GetOtherToonRecipeInfo(self.item)
 end
 
 function CaerdonRecipeMixin:GetRecipeInfo()

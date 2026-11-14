@@ -2389,6 +2389,31 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 addKV(1, "Mixin Recipe Data", "nil (not in trade skill cache)")
             end
         end
+
+        -- Why a known recipe is (or is not) kept for another toon: every other toon on the realm
+        -- with the profession, from the saved per-toon data, and whether its list has the recipe.
+        if itemData and itemData.GetOtherToonRecipeInfo then
+            local otherToons = itemData:GetOtherToonRecipeInfo()
+            if otherToons then
+                addKV(1, "Saved Recipe Name", otherToons.recipeName)
+                addKV(1, "In This Toon's Saved List", otherToons.knownByPlayer)
+                addLine(1, "Other Toons With " .. tostring(otherToons.professionName) .. ":")
+                for _, toon in ipairs(otherToons.toons) do
+                    addLine(2, string.format("%s (rank %s): %s", tostring(toon.name), tostring(toon.rank),
+                        toon.knowsRecipe and "knows it" or
+                        (toon.recipesRecorded and "can learn it (not in its recorded recipe list)" or
+                            "unknown (its recipes for this profession were never recorded)")))
+                end
+                addKV(1, "Toons That Can Learn It", #otherToons.missing)
+                addKV(1, "Toons Not Recorded", #otherToons.unknown)
+            else
+                addKV(1, "Other Toons With Profession", "none")
+            end
+            addKV(1, "Can Be Handed Over", not item:IsSoulbound() and item:GetBinding() ~= CaerdonItemBind.BindOnPickup)
+            addKV(1, "Show Recipes For Other Toons", CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons ~= false)
+            addKV(1, "Show Recipe Learners In Tooltip",
+                not (CaerdonWardrobeConfig.Tooltip and CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == false))
+        end
     end
 
     if itemData and itemData.GetConsumableInfo then

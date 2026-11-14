@@ -1,3 +1,6 @@
+local ADDON_NAME, NS = ...
+local L = NS.L
+
 local TooltipMixin, Tooltip = {}
 -- local frame = CreateFrame("frame")
 -- frame:RegisterEvent "ADDON_LOADED"
@@ -501,16 +504,76 @@ function TooltipMixin:OnTooltipSetItem(tooltip)
             -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
             -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
             local tooltipData = tooltip:GetPrimaryTooltipData()
+            local shownItem = tooltipItem
             if tooltipData.id ~= tooltipItem:GetItemID() then
-                local parentItem = CaerdonItem:CreateFromItemID(tooltipData.id)
-                Tooltip:ProcessTooltip(tooltip, parentItem, false)
+                shownItem = CaerdonItem:CreateFromItemID(tooltipData.id)
                 -- Tooltip:ProcessTooltip(tooltip, tooltipItem, true)
-            else
-                Tooltip:ProcessTooltip(tooltip, tooltipItem, false)
             end
+
+            -- Reported rather than raised: an error here would leave caerdonProcessing set
+            -- and silence every later tooltip.
+            xpcall(function() Tooltip:AddRecipeLearners(tooltip, shownItem) end, geterrorhandler())
+
+            Tooltip:ProcessTooltip(tooltip, shownItem, false)
         end
 
         tooltip.caerdonProcessing = false
+    end
+end
+
+-- Whether the tooltip carries the client's "Already known" line.
+local function TooltipSaysAlreadyKnown(tooltip)
+    local data = tooltip.GetPrimaryTooltipData and tooltip:GetPrimaryTooltipData()
+    local requirementTypes = Enum.TooltipDataUsageRequirementType
+    for _, line in ipairs(data and data.lines or {}) do
+        if line.type == Enum.TooltipDataLineType.UsageRequirement and requirementTypes and
+            line.requirementType == requirementTypes.NotAlreadyKnown then
+            return true
+        end
+        if line.leftText == ITEM_SPELL_KNOWN then
+            return true
+        end
+    end
+    return false
+end
+
+-- Recipe items that can still be handed over: which of the player's other toons on this realm
+-- could learn the recipe, from the saved per-toon profession data. Two possible lines:
+--   green: toons that have the profession and whose recorded recipe list lacks this recipe
+--   gray:  toons that have the profession but whose recipes were never recorded. Only on a
+--          recipe this toon already knows, where it explains why there is no sellable icon;
+--          anywhere else it would nag on every recipe of that profession.
+-- The number is the toon's rank in the profession, to hold against the "Requires" line.
+-- The only tooltip text the addon adds outside debug mode; Tooltip.ShowRecipeLearners turns it off.
+function TooltipMixin:AddRecipeLearners(tooltip, item)
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    if tooltipConfig and tooltipConfig.ShowRecipeLearners == false then
+        return
+    end
+    if not item or item:IsItemEmpty() or item:GetCaerdonItemType() ~= CaerdonItemType.Recipe then
+        return
+    end
+
+    local otherToons = item:GetRecipeOtherToonInfo()
+    if not otherToons then
+        return
+    end
+
+    local function ListToons(toons)
+        local parts = {}
+        for _, toon in ipairs(toons) do
+            table.insert(parts, format("%s (%s %d)", toon.name, otherToons.professionName, toon.rank))
+        end
+        return table.concat(parts, ", ")
+    end
+
+    local wrap = true
+    if #otherToons.missing > 0 then
+        tooltip:AddLine(format(L["Could be learned by: %s"], ListToons(otherToons.missing)), 0.4, 1, 0, wrap)
+    end
+    if #otherToons.unknown > 0 and TooltipSaysAlreadyKnown(tooltip) then
+        tooltip:AddLine(format(L["Recipes not recorded yet (open the profession on that toon): %s"],
+            ListToons(otherToons.unknown)), 0.6, 0.6, 0.6, wrap)
     end
 end
 
