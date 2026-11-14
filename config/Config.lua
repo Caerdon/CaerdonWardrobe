@@ -59,7 +59,7 @@ function CaerdonWardrobeConfigMixin:CreateSupportSection()
     body:SetJustifyV("TOP")
     body:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
     body:SetPoint("RIGHT", self, "RIGHT", -32, 0)
-    body:SetText(L["Caerdon Wardrobe is free, and every feature always will be. If you enjoy it and would like to buy me a coffee, this is where to do it:"])
+    body:SetText(L["If Caerdon Wardrobe has been useful to you and you'd like to buy me a drink, this is where to do it:"])
 
     -- The game cannot open a browser, so the link sits in a read-only box to copy from.
     local editBox = CreateFrame("EditBox", "CaerdonWardrobeConfigSupportLink", self, "InputBoxTemplate")
