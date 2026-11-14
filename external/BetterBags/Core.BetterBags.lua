@@ -37,8 +37,10 @@ local trackedBagItems = setmetatable({}, { __mode = "k" })
 -- grid than the overhang needs; the classic bags leave none at the left and top, so there the
 -- core moves the icon inside the slot (keepInsideWhenClipped).
 local function GetSlotOptions(button)
+    local width, height = button:GetSize()
     return {
-        statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(button:GetSize()),
+        -- No upper limit: the slot is as big as the player made it in BetterBags.
+        statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(width, height, true),
         keepInsideWhenClipped = true
     }
 end

@@ -20,9 +20,11 @@ function AuctionatorMixin:Refresh()
 end
 
 function AuctionatorMixin:OnSetItemInfo(button)
+  -- The default slot look, sized to the button (42 px in the bag list, 60 px for the item being
+  -- sold). The bag list scrolls, so the icon moves inside if the list ever leaves it no room.
   local options = {
-    statusOffsetX = 7,
-    statusOffsetY = 7
+    statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(button:GetSize()),
+    keepInsideWhenClipped = true
   }
 
   local itemInfo = button.itemInfo

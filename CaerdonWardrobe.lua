@@ -182,16 +182,29 @@ local ICON_PROMINENT_SIZE = 20
 local ICON_SIZE_DIFFERENTIAL = 0.8
 -- The slot the default sizes were made for: a Blizzard bag slot.
 local REFERENCE_SLOT_SIZE = 37
+-- Below the first the icon stops being readable (the 20 px rows of the auction and profession
+-- lists), above the second it only gets in the way (the 54 px auction sell slot). Both are the
+-- sizes that had been picked by eye for those windows.
+local SLOT_STATUS_MIN_SIZE = 13
+local SLOT_STATUS_MAX_SIZE = 24
 
 -- The statusProminentSize that gives a square frame of this size the look of a default Blizzard
--- bag slot (a 20 px icon on 37 px), or nil when the frame has no size yet, which leaves the
--- default in place. For windows whose slots are not 37 px; pass the frame the overlay sits on.
-function CaerdonWardrobeMixin:GetSlotStatusSize(width, height)
+-- bag slot (a 20 px icon on 37 px), kept between the smallest readable and the largest useful
+-- size. nil when the frame has no size yet, which leaves the default in place. For windows whose
+-- slots are not 37 px; pass the size of the frame the overlay sits on.
+--
+-- noMaximum is for bag slots whose size the player sets in the bag addon: someone who asks for
+-- big slots gets an icon to match, however big.
+function CaerdonWardrobeMixin:GetSlotStatusSize(width, height, noMaximum)
     local side = math.min(width or 0, height or 0)
     if side < 1 then
         return nil
     end
-    return ICON_PROMINENT_SIZE * side / REFERENCE_SLOT_SIZE
+    local size = ICON_PROMINENT_SIZE * side / REFERENCE_SLOT_SIZE
+    if not noMaximum then
+        size = math.min(SLOT_STATUS_MAX_SIZE, size)
+    end
+    return math.max(SLOT_STATUS_MIN_SIZE, size)
 end
 
 -- Clip-aware placement, for callers that pass options.keepInsideWhenClipped.

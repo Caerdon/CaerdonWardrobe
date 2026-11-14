@@ -338,12 +338,11 @@ function DressingRoomMixin:UpdateOutfitSlot(slotFrame, transmogIDOverride)
         locationKey = format("dressup-outfit-%s-%s", slotFrame.slotID or 0, transmogID or 0)
     }
 
+    -- The default slot look on the row's 20 px icon, which comes out at the smallest size.
     local options = {
         relativeFrame = slotFrame.Icon,
         bindingScale = 0.7,
-        statusProminentSize = 14,
-        statusOffsetX = 3,
-        statusOffsetY = 3
+        statusProminentSize = slotFrame.Icon and CaerdonWardrobe:GetSlotStatusSize(slotFrame.Icon:GetSize()) or 14
     }
 
     local function doUpdate()
