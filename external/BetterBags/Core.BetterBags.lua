@@ -36,17 +36,9 @@ local trackedBagItems = setmetatable({}, { __mode = "k" })
 -- the core keeps the inset in proportion to the icon. The Next panels leave more room around the
 -- grid than the overhang needs; the classic bags leave none at the left and top, so there the
 -- core moves the icon inside the slot (keepInsideWhenClipped).
-local BLIZZARD_SLOT_SIZE = 37
-local BLIZZARD_ICON_SIZE = 20
-
 local function GetSlotOptions(button)
-    local width, height = button:GetSize()
-    local side = math.min(width or 0, height or 0)
-    if side < 1 then
-        side = BLIZZARD_SLOT_SIZE
-    end
     return {
-        statusProminentSize = BLIZZARD_ICON_SIZE * side / BLIZZARD_SLOT_SIZE,
+        statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(button:GetSize()),
         keepInsideWhenClipped = true
     }
 end

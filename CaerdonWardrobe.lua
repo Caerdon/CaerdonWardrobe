@@ -178,6 +178,19 @@ end
 
 local ICON_PROMINENT_SIZE = 20
 local ICON_SIZE_DIFFERENTIAL = 0.8
+-- The slot the default sizes were made for: a Blizzard bag slot.
+local REFERENCE_SLOT_SIZE = 37
+
+-- The statusProminentSize that gives a square frame of this size the look of a default Blizzard
+-- bag slot (a 20 px icon on 37 px), or nil when the frame has no size yet, which leaves the
+-- default in place. For windows whose slots are not 37 px; pass the frame the overlay sits on.
+function CaerdonWardrobeMixin:GetSlotStatusSize(width, height)
+    local side = math.min(width or 0, height or 0)
+    if side < 1 then
+        return nil
+    end
+    return ICON_PROMINENT_SIZE * side / REFERENCE_SLOT_SIZE
+end
 
 -- Clip-aware placement, for callers that pass options.keepInsideWhenClipped.
 --

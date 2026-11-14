@@ -50,6 +50,17 @@ function QuestLogMixin:Refresh()
     end
 end
 
+-- The overlay sits on the reward's icon, sized like a default Blizzard bag slot's: the icon is
+-- 30 px in the map's quest details and 39 px in the quest frame, and a fixed 20 px star covered
+-- two thirds of the smaller one.
+local function GetRewardOptions(questItem)
+    local icon = questItem.Icon
+    return {
+        relativeFrame = icon,
+        statusProminentSize = icon and CaerdonWardrobe:GetSlotStatusSize(icon:GetSize()) or nil
+    }
+end
+
 function QuestLogMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         bindingStatus = {
@@ -173,9 +184,7 @@ function QuestLogMixin:ProcessItem(item, questID)
         local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
         if questItem then
-            local options = {
-                relativeFrame = questItem.Icon
-            }
+            local options = GetRewardOptions(questItem)
 
             local rewardItem
             if reward.itemLink then
@@ -201,9 +210,7 @@ function QuestLogMixin:ProcessItem(item, questID)
         local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
         if questItem then
-            local options = {
-                relativeFrame = questItem.Icon
-            }
+            local options = GetRewardOptions(questItem)
 
             local rewardItem
             if reward.itemLink then
@@ -229,9 +236,7 @@ function QuestLogMixin:ProcessItem(item, questID)
         local questItem = QuestInfo_GetRewardButton(rewardsFrame, questLogIndex);
 
         if questItem then
-            local options = {
-                relativeFrame = questItem.Icon
-            }
+            local options = GetRewardOptions(questItem)
 
             local rewardItem
             if reward.itemLink then
