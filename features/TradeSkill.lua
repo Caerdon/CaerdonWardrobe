@@ -94,7 +94,7 @@ function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, opt
 			shouldShow = true
 		},
 		otherIcon = {
-			shouldShow = true
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.TradeSkill ~= false
 		},
 		questIcon = {
 			shouldShow = false

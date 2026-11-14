@@ -90,10 +90,10 @@ function ItemConversionMixin:GetDisplayInfo(button, item, feature, locationInfo,
 			shouldShow = false
 		},
 		ownIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Auction
+			shouldShow = true
 		},
 		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction
+			shouldShow = true
 		},
 		questIcon = {
 			shouldShow = false

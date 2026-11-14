@@ -126,10 +126,10 @@ function EncounterJournalMixin:GetDisplayInfo(button, item, feature, locationInf
             shouldShow = true
         },
         otherIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.EncounterJournal ~= false
         },
         questIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
         },
         oldExpansionIcon = {
             shouldShow = true

@@ -32,13 +32,13 @@ function WeeklyRewardsMixin_Feature:GetDisplayInfo(button, item, feature, locati
 			shouldShow = true
 		},
 		ownIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Auction
+			shouldShow = true
 		},
 		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction
+			shouldShow = true
 		},
 		questIcon = {
-			shouldShow = true
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
 		},
 		oldExpansionIcon = {
 			shouldShow = false

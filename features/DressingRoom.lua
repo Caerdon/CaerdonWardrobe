@@ -399,7 +399,7 @@ function DressingRoomMixin:GetDisplayInfo(button, item, feature, locationInfo, o
             shouldShow = true
         },
         otherIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.DressingRoom ~= false
         },
         oldExpansionIcon = {
             shouldShow = true

@@ -18,6 +18,14 @@ end
 function GroupLootMixin:Refresh()
 end
 
+function GroupLootMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    return {
+        otherIcon = {
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GroupLoot ~= false
+        }
+    }
+end
+
 function GroupLootMixin:OnGroupLootFrameShow(frame)
     local itemLink = GetLootRollItemLink(frame.rollID)
     if itemLink then

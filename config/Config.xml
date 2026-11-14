@@ -37,10 +37,6 @@
     </Frame>
 
     <Include file="ConfigPanel.lua" />
-	<Include file="General.lua" />
-	<Include file="BankAndBags.lua" />
-	<Include file="GuildBank.lua" />
-	<Include file="Merchant.lua" />
-	<Include file="Auction.lua" />
-	<Include file="EncounterJournal.lua" />
+	<Include file="Icons.lua" />
+	<Include file="Display.lua" />
 </Ui>

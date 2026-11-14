@@ -152,6 +152,17 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.AuctionMinProfit == nil then
             CaerdonWardrobeConfig.Icon.AuctionMinProfit = NS:GetDefaultConfig().Icon.AuctionMinProfit
         end
+        -- Windows that gained their own "learning for another toon" toggle. The Black Market used
+        -- to follow the auction house setting, so it starts from that; the rest were always on.
+        local byOther = CaerdonWardrobeConfig.Icon.ShowLearnableByOther
+        if byOther.BlackMarket == nil then
+            byOther.BlackMarket = byOther.Auction
+        end
+        for key, value in pairs(NS:GetDefaultConfig().Icon.ShowLearnableByOther) do
+            if byOther[key] == nil then
+                byOther[key] = value
+            end
+        end
         if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
         end
@@ -214,6 +225,14 @@ function NS:GetDefaultConfig()
                 GuildBank = true,
                 Merchant = true,
                 Auction = true,
+                BlackMarket = true,
+                CustomerOrders = true,
+                Loot = true,
+                GroupLoot = true,
+                QuestLog = true,
+                Mail = true,
+                TradeSkill = true,
+                DressingRoom = true,
                 EncounterJournal = true
             },
 

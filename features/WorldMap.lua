@@ -64,7 +64,7 @@ function WorldMapMixin:GetDisplayInfo(button, item, feature, locationInfo, optio
 			shouldShow = true
 		},
 		questIcon = {
-			shouldShow = true
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
 		},
 		oldExpansionIcon = {
 			shouldShow = false

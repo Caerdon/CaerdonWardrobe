@@ -59,10 +59,10 @@ function QuestLogMixin:GetDisplayInfo(button, item, feature, locationInfo, optio
             shouldShow = true
         },
         otherIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.QuestLog ~= false
         },
         questIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
         },
         oldExpansionIcon = {
             shouldShow = true

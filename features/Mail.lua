@@ -51,10 +51,10 @@ function MailMixin:GetDisplayInfo(button, item, feature, locationInfo, options, 
             shouldShow = true
         },
         otherIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Mail ~= false
         },
         questIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
         },
         oldExpansionIcon = {
             shouldShow = false

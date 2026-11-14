@@ -61,7 +61,7 @@ function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo,
 			shouldShow = true
 		},
 		otherIcon = {
-			shouldShow = true
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.CustomerOrders ~= false
 		},
 		questIcon = {
 			shouldShow = false

@@ -27,13 +27,13 @@ function BlackMarketMixin:GetDisplayInfo(button, item, feature, locationInfo, op
 			shouldShow = true
 		},
 		ownIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Auction
+			shouldShow = true
 		},
 		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BlackMarket ~= false
 		},
 		questIcon = {
-			shouldShow = true
+			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
 		},
 		oldExpansionIcon = {
 			shouldShow = false

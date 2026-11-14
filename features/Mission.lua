@@ -36,7 +36,7 @@ function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, option
             shouldShow = true
         },
         questIcon = {
-            shouldShow = true
+            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
         },
         oldExpansionIcon = {
             shouldShow = false

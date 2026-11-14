@@ -3,8 +3,89 @@ CaerdonWardrobeConfigPanelMixin = {}
 local ADDON_NAME, NS = ...
 local L = NS.L
 
-local DEPENDS_ADJUSTMENT = 16
-local LINE_HEIGHT = 36
+-- Layout, in pixels. The settings canvas is about 640 wide at the default panel size and the
+-- pages are built before it has a size, so the widths are fixed.
+local LEFT_MARGIN = 16
+local ICON_SIZE = 24
+local ICON_BODY_X = LEFT_MARGIN + ICON_SIZE + 10 -- where an icon block's text and options start
+local SECTION_BODY_X = LEFT_MARGIN + 4
+local CONTENT_RIGHT = 610
+local INDENT_STEP = 20
+local ROW_HEIGHT = 26
+local DROPDOWN_ROW_HEIGHT = 34
+local BLOCK_GAP = 16
+local GRID_COLUMN_WIDTH = 185
+local CHECKBOX_INSET = 4 -- the template's box art starts a few pixels inside its frame
+
+local defaultConfig
+
+-- The saved table can be replaced wholesale (old settings version) and can lack newer sections,
+-- so every read and write resolves it again instead of holding on to a sub-table.
+local function GetSection(root, info, create)
+    if not (root and info.configSection) then
+        return nil
+    end
+    local section = root[info.configSection]
+    if section == nil and create then
+        section = {}
+        root[info.configSection] = section
+    end
+    if section and info.configSubsection then
+        local subsection = section[info.configSubsection]
+        if subsection == nil and create then
+            subsection = {}
+            section[info.configSubsection] = subsection
+        end
+        section = subsection
+    end
+    return section
+end
+
+local function GetValue(info)
+    local section = GetSection(CaerdonWardrobeConfig, info)
+    local value = section and section[info.configValue]
+    if value == nil then
+        defaultConfig = defaultConfig or NS:GetDefaultConfig()
+        local defaults = GetSection(defaultConfig, info)
+        value = defaults and defaults[info.configValue]
+    end
+    return value
+end
+
+local function SetValue(info, value)
+    CaerdonWardrobeConfig = CaerdonWardrobeConfig or {}
+    GetSection(CaerdonWardrobeConfig, info, true)[info.configValue] = value
+end
+
+local function ApplyTexture(texture, spec)
+    if spec.atlas and texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(spec.atlas) then
+        texture:SetAtlas(spec.atlas, false)
+    else
+        texture:SetTexture(spec.texture)
+        if spec.coords then
+            texture:SetTexCoord(unpack(spec.coords))
+        end
+    end
+    if spec.color then
+        texture:SetVertexColor(unpack(spec.color))
+    end
+end
+
+local function ShowOptionTooltip(owner, title, text)
+    if not text then
+        return
+    end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetText(title, 1, 1, 1)
+    GameTooltip:AddLine(text, nil, nil, nil, true)
+    GameTooltip:Show()
+end
+
+local function HideOptionTooltip(owner)
+    if GameTooltip:GetOwner() == owner then
+        GameTooltip:Hide()
+    end
+end
 
 function CaerdonWardrobeConfigPanelMixin:GetTitle()
     error("GetTitle not implemented")
@@ -13,8 +94,9 @@ end
 function CaerdonWardrobeConfigPanelMixin:Init()
     self.nextPoint = -16
     self.parent = "Caerdon Wardrobe"
-
-    -- TODO: Review using VerticalLayoutFrame: https://discord.com/channels/168296152670797824/218957301111848962/1021406980029550642
+    self.controls = {}
+    self.hasBlock = false
+    self.bodyX = SECTION_BODY_X
 
     local frame = CreateFrame("Frame")
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -31,6 +113,12 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     end)
     scrollChild:SetWidth(scrollFrame:GetWidth())
 
+    -- The controls are built once; what they show is read again every time the page opens.
+    frame:SetScript("OnShow", function()
+        self:RefreshControls()
+    end)
+
+    self.frame = frame
     self.scrollChild = scrollChild
     self.scrollFrame = scrollFrame
 
@@ -38,308 +126,336 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(category, frame, self:GetTitle());
 end
 
-function CaerdonWardrobeConfigPanelMixin:ConfigureSection(title, key)
-    local frame = self.scrollChild
-
-    local sectionFrame = CreateFrame("Frame", "CaerdonWardrobe" .. key, frame)
-    sectionFrame.key = key
-    local titleString = sectionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    titleString:SetText(title)
-    sectionFrame:SetPoint("LEFT", 16)
-    sectionFrame:SetPoint("TOP", 0, self.nextPoint)
-    titleString:SetPoint("LEFT", 16)
-    titleString:SetPoint("TOP", 0, 0)
-    self.nextPoint = self.nextPoint - LINE_HEIGHT
+-- Call after the last control: gives the scroll child its real height and loads the values.
+function CaerdonWardrobeConfigPanelMixin:FinishLayout()
+    self.scrollChild:SetHeight(-self.nextPoint + 24)
+    self:RefreshControls()
 end
 
-function CaerdonWardrobeConfigPanelMixin:ConfigureCheckboxNew(info)
-    local frame = self.scrollChild
+function CaerdonWardrobeConfigPanelMixin:RefreshControls()
+    for _, control in ipairs(self.controls) do
+        control.caerdonRefresh()
+    end
+    self:UpdateDependents()
+end
 
-    local section = info.configSection and info.configSubsection and
-    CaerdonWardrobeConfig[info.configSection][info.configSubsection] or
-    info.configSection and CaerdonWardrobeConfig[info.configSection]
-    local defaultSection = info.configSection and info.configSubsection and
-    NS:GetDefaultConfig()[info.configSection][info.configSubsection] or
-    info.configSection and NS:GetDefaultConfig()[info.configSection]
+-- A control with dependsOn is only usable while that checkbox is checked and usable itself.
+-- Controls are kept in creation order, so a parent is always settled before its children.
+function CaerdonWardrobeConfigPanelMixin:UpdateDependents()
+    for _, control in ipairs(self.controls) do
+        if control.caerdonDependsOn then
+            control.caerdonSetEnabled(control.caerdonDependsOn.caerdonIsOn())
+        end
+    end
+end
 
-    local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, frame,
+function CaerdonWardrobeConfigPanelMixin:RegisterControl(control)
+    table.insert(self.controls, control)
+    control.caerdonRefresh()
+end
+
+function CaerdonWardrobeConfigPanelMixin:CreateText(font, text, x, y, width)
+    local parent = self.scrollChild
+    local fontString = parent:CreateFontString(nil, "OVERLAY", font)
+    fontString:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    fontString:SetJustifyH("LEFT")
+    fontString:SetJustifyV("TOP")
+    if width then
+        fontString:SetWidth(width)
+        fontString:SetWordWrap(true)
+    end
+    fontString:SetText(text)
+    return fontString
+end
+
+local function TextHeight(fontString, minimum)
+    local height = fontString:GetStringHeight()
+    if not height or height < minimum then
+        height = minimum
+    end
+    return height
+end
+
+-- Page title with a line of explanation under it.
+function CaerdonWardrobeConfigPanelMixin:AddTitle(title, intro)
+    self:CreateText("GameFontNormalLarge", title, LEFT_MARGIN, self.nextPoint)
+    self.nextPoint = self.nextPoint - 22
+    if intro then
+        local introText = self:CreateText("GameFontHighlightSmall", intro, LEFT_MARGIN, self.nextPoint,
+            CONTENT_RIGHT - LEFT_MARGIN)
+        self.nextPoint = self.nextPoint - TextHeight(introText, 10) - 6
+    end
+end
+
+function CaerdonWardrobeConfigPanelMixin:StartBlock()
+    local parent = self.scrollChild
+    if self.hasBlock then
+        self.nextPoint = self.nextPoint - BLOCK_GAP / 2
+        local line = parent:CreateTexture(nil, "BACKGROUND")
+        line:SetColorTexture(1, 1, 1, 0.12)
+        line:SetPoint("TOPLEFT", parent, "TOPLEFT", LEFT_MARGIN, self.nextPoint)
+        line:SetSize(CONTENT_RIGHT - LEFT_MARGIN, 1)
+        self.nextPoint = self.nextPoint - BLOCK_GAP / 2
+    else
+        self.nextPoint = self.nextPoint - 6
+    end
+    self.hasBlock = true
+end
+
+-- Starts a block for one icon: the icon as the addon draws it, its name, and what it means.
+--   spec = { title, description, texture | atlas (texture is the fallback), coords, color,
+--            inset (pixels the icon is smaller than its background), background = { same fields },
+--            label (text in the icon's place, for things that are drawn as text) }
+function CaerdonWardrobeConfigPanelMixin:AddIconHeader(spec)
+    local parent = self.scrollChild
+    self:StartBlock()
+
+    local top = self.nextPoint
+    local centerX, centerY = LEFT_MARGIN + ICON_SIZE / 2, top - ICON_SIZE / 2
+
+    if spec.label then
+        local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetPoint("CENTER", parent, "TOPLEFT", centerX, centerY)
+        label:SetText(spec.label)
+        if spec.color then
+            label:SetTextColor(unpack(spec.color))
+        end
+    else
+        if spec.background then
+            local background = parent:CreateTexture(nil, "ARTWORK", nil, 1)
+            background:SetSize(ICON_SIZE, ICON_SIZE)
+            background:SetPoint("CENTER", parent, "TOPLEFT", centerX, centerY)
+            ApplyTexture(background, spec.background)
+        end
+        local icon = parent:CreateTexture(nil, "ARTWORK", nil, 2)
+        local size = ICON_SIZE - (spec.inset or 0)
+        icon:SetSize(size, size)
+        icon:SetPoint("CENTER", parent, "TOPLEFT", centerX, centerY)
+        ApplyTexture(icon, spec)
+    end
+
+    self:CreateText("GameFontNormal", spec.title, ICON_BODY_X, top - 1)
+    local height = 16
+    if spec.description then
+        local description = self:CreateText("GameFontHighlightSmall", spec.description, ICON_BODY_X, top - 17,
+            CONTENT_RIGHT - ICON_BODY_X)
+        height = 17 + TextHeight(description, 10)
+    end
+
+    self.nextPoint = top - math.max(ICON_SIZE, height) - 6
+    self.bodyX = ICON_BODY_X
+end
+
+-- Starts a block with a plain heading, for pages that are not about one icon.
+function CaerdonWardrobeConfigPanelMixin:AddSection(title)
+    self:StartBlock()
+    self:CreateText("GameFontNormal", title, LEFT_MARGIN, self.nextPoint)
+    self.nextPoint = self.nextPoint - 20
+    self.bodyX = SECTION_BODY_X
+end
+
+-- A small line such as "Show in:", white like the descriptions: the gray "disabled" font was too
+-- faint on the see-through settings panel. Returns the y it was placed at, for AddAllNoneButtons.
+function CaerdonWardrobeConfigPanelMixin:AddLabel(text, opts)
+    opts = opts or {}
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
+    local y = self.nextPoint - 3
+    local label = self:CreateText("GameFontHighlightSmall", text, x, y, CONTENT_RIGHT - x)
+    self.nextPoint = y - TextHeight(label, 10) - 3
+    return y
+end
+
+function CaerdonWardrobeConfigPanelMixin:CreateCheckbox(info, x, y, opts)
+    opts = opts or {}
+    local parent = self.scrollChild
+
+    local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, parent,
         "InterfaceOptionsCheckButtonTemplate")
     checkbox.key = info.key
+    checkbox.caerdonInfo = info
+    checkbox:SetPoint("TOPLEFT", parent, "TOPLEFT", x - CHECKBOX_INSET, y)
 
-    local dependsOn = nil
-    if info.dependsOn then
-        dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
-    end
-
-    local rightOf = nil
-    if info.rightOf then
-        rightOf = _G["CaerdonWardrobe" .. info.rightOf].label
-    end
-
-    if dependsOn then
-        checkbox:SetPoint("LEFT", dependsOn, "LEFT", 16, 0)
-        self.nextPoint = self.nextPoint + DEPENDS_ADJUSTMENT
-        checkbox:SetPoint("TOP", 0, self.nextPoint)
-        self.nextPoint = self.nextPoint - LINE_HEIGHT
-    elseif rightOf then
-        checkbox:SetPoint("LEFT", rightOf, "RIGHT", rightOf:GetStringWidth(), 0)
-        self.nextPoint = self.nextPoint + LINE_HEIGHT
-        checkbox:SetPoint("TOP", 0, self.nextPoint)
-        self.nextPoint = self.nextPoint - LINE_HEIGHT
-    else
-        checkbox:SetPoint("LEFT", 16)
-        checkbox:SetPoint("TOP", 0, self.nextPoint)
-        self.nextPoint = self.nextPoint - LINE_HEIGHT
-    end
-
-    checkbox:SetScript("OnClick", function(checkbox)
-        local checked = checkbox:GetChecked()
-        section[info.configValue] = checked
-
-        if checked then
-            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-        else
-            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
-        end
-    end)
-    checkbox.label = _G[checkbox:GetName() .. "Text"]
+    checkbox.label = checkbox.Text or _G[checkbox:GetName() .. "Text"]
     checkbox.label:SetText(info.text)
-
-    local isChecked = section[info.configValue]
-    if isChecked == nil then
-        isChecked = defaultSection[info.configValue]
+    local labelR, labelG, labelB = checkbox.label:GetTextColor()
+    -- Let a click on the label count too, without reaching into the next grid column.
+    local labelWidth = checkbox.label:GetStringWidth()
+    if labelWidth and labelWidth > 0 then
+        checkbox:SetHitRectInsets(0, -math.min(labelWidth, opts.maxLabelWidth or labelWidth), 0, 0)
     end
 
-    checkbox:SetChecked(isChecked)
-end
+    checkbox:SetScript("OnClick", function(button)
+        local checked = button:GetChecked() and true or false
+        SetValue(info, checked)
+        PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+        self:UpdateDependents()
+    end)
+    checkbox:SetScript("OnEnter", function(button)
+        ShowOptionTooltip(button, info.text, info.tooltip)
+    end)
+    checkbox:SetScript("OnLeave", HideOptionTooltip)
 
-function CaerdonWardrobeConfigPanelMixin:ConfigureDropdownNew(info, dropdownValues)
-    local frame = self.scrollChild
-
-    local section = info.configSection and info.configSubsection and
-    CaerdonWardrobeConfig[info.configSection][info.configSubsection] or
-    info.configSection and CaerdonWardrobeConfig[info.configSection]
-    local defaultSection = info.configSection and info.configSubsection and
-    NS:GetDefaultConfig()[info.configSection][info.configSubsection] or
-    info.configSection and NS:GetDefaultConfig()[info.configSection]
-
-    local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, frame, "UIDropDownMenuTemplate")
-    dropdown.key = info.key
-    -- The template's default width fits short titles only; longer ones spill out to the left.
-    if info.width and UIDropDownMenu_SetWidth then
-        UIDropDownMenu_SetWidth(dropdown, info.width)
+    checkbox.caerdonDependsOn = opts.dependsOn
+    checkbox.caerdonRefresh = function()
+        checkbox:SetChecked(GetValue(info) and true or false)
     end
-
-    local label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", 5, 12)
-    label:SetJustifyH("LEFT")
-    label:SetText(info.text)
-
-    local dependsOn = nil
-    if info.dependsOn then
-        dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
-    end
-
-    if dependsOn then
-        dropdown:SetPoint("LEFT", dependsOn, "LEFT", 16, 0)
-        self.nextPoint = self.nextPoint - 16 + DEPENDS_ADJUSTMENT
-        checkbox:SetPoint("TOP", 0, self.nextPoint)
-        self.nextPoint = self.nextPoint - LINE_HEIGHT
-    else
-        dropdown:SetPoint("LEFT", 16)
-        self.nextPoint = self.nextPoint - 16
-        dropdown:SetPoint("TOP", 0, self.nextPoint)
-        self.nextPoint = self.nextPoint - LINE_HEIGHT
-    end
-
-    local selectedTitle = nil
-    local text = _G[dropdown:GetName() .. "Text"]
-    text:SetText(info.text)
-
-    for _, dropdownValue in ipairs(dropdownValues) do
-        if dropdownValue.value == section[info.configValue] then
-            text:SetText(dropdownValue.title)
+    checkbox.caerdonSetEnabled = function(enabled)
+        checkbox:SetEnabled(enabled)
+        if enabled then
+            checkbox.label:SetTextColor(labelR or 1, labelG or 1, labelB or 1)
+        else
+            checkbox.label:SetTextColor(0.5, 0.5, 0.5)
         end
     end
+    checkbox.caerdonIsOn = function()
+        return (checkbox:GetChecked() and checkbox:IsEnabled()) and true or false
+    end
 
-    dropdown.initialize = function(dropdown)
-        local dropdownInfo = {}
-        for _, dropdownValue in ipairs(dropdownValues) do
-            dropdownInfo.text = dropdownValue.title
-            dropdownInfo.value = dropdownValue.value
-            dropdownInfo.checked = function() return dropdownValue.value == section[info.configValue] end
+    self:RegisterControl(checkbox)
+    return checkbox
+end
 
-            dropdownInfo.func = function(dropdown)
-                section[info.configValue] = dropdown.value
-                text:SetText(dropdown:GetText())
+-- One checkbox on its own row. opts = { indent = levels, dependsOn = checkbox }
+function CaerdonWardrobeConfigPanelMixin:AddCheckbox(info, opts)
+    opts = opts or {}
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
+    local checkbox = self:CreateCheckbox(info, x, self.nextPoint, opts)
+    self.nextPoint = self.nextPoint - ROW_HEIGHT
+    return checkbox
+end
+
+-- Several short checkboxes in columns. opts = { indent = levels, columns = count, dependsOn = checkbox }
+function CaerdonWardrobeConfigPanelMixin:AddCheckboxGrid(infos, opts)
+    opts = opts or {}
+    local columns = opts.columns or 3
+    local baseX = self.bodyX + (opts.indent or 0) * INDENT_STEP
+    local checkboxes = {}
+    for index, info in ipairs(infos) do
+        local column = (index - 1) % columns
+        local row = math.floor((index - 1) / columns)
+        checkboxes[index] = self:CreateCheckbox(info, baseX + column * GRID_COLUMN_WIDTH,
+            self.nextPoint - row * ROW_HEIGHT, {
+                dependsOn = opts.dependsOn,
+                maxLabelWidth = GRID_COLUMN_WIDTH - 32
+            })
+    end
+    self.nextPoint = self.nextPoint - math.ceil(#infos / columns) * ROW_HEIGHT
+    return checkboxes
+end
+
+-- "All" and "None" at the right end of a label row, for a grid that is one decision per window.
+function CaerdonWardrobeConfigPanelMixin:AddAllNoneButtons(y, checkboxes)
+    local parent = self.scrollChild
+
+    local function createButton(text, value, right)
+        local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        button:SetSize(54, 20)
+        button:SetPoint("TOPRIGHT", parent, "TOPLEFT", right, y + 5)
+        button:SetText(text)
+        button:SetScript("OnClick", function()
+            for _, checkbox in ipairs(checkboxes) do
+                SetValue(checkbox.caerdonInfo, value)
+                checkbox:SetChecked(value)
             end
-            UIDropDownMenu_AddButton(dropdownInfo)
-        end
+            PlaySound(value and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+            self:UpdateDependents()
+        end)
+        return button
     end
+
+    createButton("None", false, CONTENT_RIGHT)
+    createButton("All", true, CONTENT_RIGHT - 58)
 end
 
-function CaerdonWardrobeConfigPanelMixin:ConfigureCheckbox(checkbox, label, configSection, configSubsection, configValue)
-    checkbox.type = CONTROLTYPE_CHECKBOX;
+-- A label with a dropdown to its right. values = { { title, value, tooltip } ... }
+-- opts = { indent = levels, dependsOn = checkbox }; info.width sets the dropdown's width.
+function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
+    opts = opts or {}
+    local parent = self.scrollChild
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
 
-    checkbox.label = _G[checkbox:GetName() .. "Text"]
-    if checkbox.label then
-        checkbox.label:SetText(label)
-    end
-    -- checkbox.Text:SetText(label)
-    -- checkbox.Text:SetWidth(230)
+    local label = self:CreateText("GameFontHighlight", info.text, x, self.nextPoint - 9)
 
-    -- check.tooltipText = label
-    -- check.tooltipRequirement = description
-
-    local dependsOn, dependsOnControl
-    if checkbox.dependentOn then
-        dependsOn = checkbox.dependentOn:gsub("$parent", checkbox:GetParent():GetName())
-        dependsOnControl = _G[dependsOn]
+    local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, parent, "UIDropDownMenuTemplate")
+    dropdown.key = info.key
+    dropdown:SetPoint("LEFT", label, "RIGHT", -8, -2)
+    if UIDropDownMenu_SetWidth then
+        UIDropDownMenu_SetWidth(dropdown, info.width or 150)
     end
 
-    checkbox.GetValue = function(self)
-        local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or
-        configSection and CaerdonWardrobeConfig[configSection]
-        return self.value or section[configValue] and "1" or "0";
-    end
-    checkbox.setFunc = function(value)
-        local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or
-        configSection and CaerdonWardrobeConfig[configSection]
-        section[configValue] = value == "1"
+    local text = dropdown.Text or _G[dropdown:GetName() .. "Text"]
+
+    dropdown.initialize = function()
+        local current = GetValue(info)
+        for _, entry in ipairs(values) do
+            local menuInfo = UIDropDownMenu_CreateInfo and UIDropDownMenu_CreateInfo() or {}
+            menuInfo.text = entry.title
+            menuInfo.value = entry.value
+            menuInfo.checked = entry.value == current
+            if entry.tooltip then
+                menuInfo.tooltipTitle = entry.title
+                menuInfo.tooltipText = entry.tooltip
+                menuInfo.tooltipOnButton = true
+            end
+            menuInfo.func = function()
+                SetValue(info, entry.value)
+                text:SetText(entry.title)
+            end
+            UIDropDownMenu_AddButton(menuInfo)
+        end
     end
 
-    -- BlizzardOptionsPanel_RegisterControl(checkbox, self);
-    if dependsOnControl then
-        -- BlizzardOptionsPanel_SetupDependentControl(dependsOnControl, checkbox)
+    dropdown.caerdonDependsOn = opts.dependsOn
+    dropdown.caerdonRefresh = function()
+        local current = GetValue(info)
+        local title = ""
+        for _, entry in ipairs(values) do
+            if entry.value == current then
+                title = entry.title
+            end
+        end
+        text:SetText(title)
     end
+    dropdown.caerdonSetEnabled = function(enabled)
+        if enabled then
+            if UIDropDownMenu_EnableDropDown then
+                UIDropDownMenu_EnableDropDown(dropdown)
+            end
+            label:SetTextColor(1, 1, 1)
+        else
+            if UIDropDownMenu_DisableDropDown then
+                UIDropDownMenu_DisableDropDown(dropdown)
+            end
+            label:SetTextColor(0.5, 0.5, 0.5)
+        end
+    end
+    dropdown.caerdonIsOn = function()
+        return true
+    end
+
+    self:RegisterControl(dropdown)
+    self.nextPoint = self.nextPoint - DROPDOWN_ROW_HEIGHT
+    return dropdown
 end
 
-function CaerdonWardrobeConfigPanelMixin:ConfigureButtonNew(info, buttonText, tooltip)
-    local frame = self.scrollChild
+-- A button on its own row. opts = { indent = levels, width = pixels, tooltip = text }
+function CaerdonWardrobeConfigPanelMixin:AddButton(text, onClick, opts)
+    opts = opts or {}
+    local parent = self.scrollChild
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
 
-    local button = CreateFrame("Button", "CaerdonWardrobe" .. info.key, frame, "UIPanelButtonTemplate")
-    button.key = info.key
-
-    local dependsOn = nil
-    if info.dependsOn then
-        dependsOn = _G["CaerdonWardrobe" .. info.dependsOn]
-        if dependsOn then
-            local xOffset = dependsOn.rightOf and 150 or DEPENDS_ADJUSTMENT
-            button:SetPoint("TOPLEFT", dependsOn, "TOPLEFT", xOffset, 0)
-        end
-    else
-        local leftOffset = info.rightOf and 150 or 16
-        button:SetPoint("TOPLEFT", leftOffset, self.nextPoint)
-        self.nextPoint = self.nextPoint - LINE_HEIGHT
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetSize(opts.width or 140, 22)
+    button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, self.nextPoint - 2)
+    button:SetText(text)
+    button:SetScript("OnClick", onClick)
+    if opts.tooltip then
+        button:SetScript("OnEnter", function(owner)
+            ShowOptionTooltip(owner, text, opts.tooltip)
+        end)
+        button:SetScript("OnLeave", HideOptionTooltip)
     end
 
-    button:SetSize(120, 24)
-    button:SetText(buttonText)
-    button:SetScript("OnClick", info.func)
-
-    if tooltip then
-        button.tooltipText = tooltip
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT")
-            GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-    end
-
+    self.nextPoint = self.nextPoint - ROW_HEIGHT - 2
     return button
-end
-
-function CaerdonWardrobeConfigPanelMixin:ConfigureDropdown(dropdown, label, configSection, configSubsection, configValue,
-                                                           items)
-    dropdown:SetScript("OnEvent", function(self, event, ...)
-        if (event == "FIRST_FRAME_RENDERED") then
-            self:GetParent():InitializeDropdown(dropdown, label, configSection, configSubsection, configValue, items)
-            self:UnregisterEvent(event)
-        end
-    end)
-
-    dropdown:SetScript("OnEnter", function(self)
-        if (not self.isDisabled) then
-            GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
-            GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
-        end
-    end)
-
-    dropdown:SetScript("OnLeave", function(self)
-        if (GameTooltip:GetOwner() == self) then
-            GameTooltip:Hide();
-        end
-    end)
-
-    dropdown:RegisterEvent("FIRST_FRAME_RENDERED");
-end
-
-function CaerdonWardrobeConfigPanelMixin:InitializeDropdown(dropdown, label, configSection, configSubsection, configValue,
-                                                            items)
-    dropdown.type = CONTROLTYPE_DROPDOWN;
-    dropdown.label = label
-    dropdown.items = items
-
-    dropdown.defaultValue = self.options[label].default
-    local section = configSection and configSubsection and CaerdonWardrobeConfig[configSection][configSubsection] or
-    configSection and CaerdonWardrobeConfig[configSection]
-    dropdown.value = section[configValue] or dropdown.defaultValue;
-
-    dropdown.SetValue =
-        function(self, value)
-            self.value = value
-            section[configValue] = value
-        end
-
-    dropdown.GetValue =
-        function(self)
-            return self.newValue or self.value;
-        end
-
-    dropdown.RefreshValue =
-        function(self)
-            UIDropDownMenu_SetSelectedValue(self, self.value);
-            UIDropDownMenu_Initialize(self, function()
-                for itemIndex = 1, #self.items do
-                    local item = self.items[itemIndex]
-                    self:GetParent():AddDropDownItem(self, item.title, item.value, item.tooltip)
-                end
-            end);
-        end
-
-    -- BlizzardOptionsPanel_RegisterControl(dropdown, self);
-
-    UIDropDownMenu_SetWidth(dropdown, 136);
-    dropdown:RefreshValue()
-end
-
-function CaerdonWardrobeConfigPanelMixin:AddDropDownItem(dropdown, name, value, tooltip)
-    local selectedValue = UIDropDownMenu_GetSelectedValue(dropdown);
-
-    local info = UIDropDownMenu_CreateInfo()
-    info.text = name
-    info.value = value
-    info.func = self.OnClickDropDownItem
-    info.arg1 = dropdown;
-    info.tooltipText = tooltip;
-    if (info.value == selectedValue) then
-        info.checked = 1;
-    else
-        info.checked = nil;
-    end
-
-    UIDropDownMenu_AddButton(info)
-
-    if info.checked then
-        dropdown.tooltipText = info.tooltipText
-        UIDropDownMenu_SetSelectedValue(dropdown, info.value)
-    end
-end
-
-function CaerdonWardrobeConfigPanelMixin:OnClickDropDownItem(dropdown)
-    UIDropDownMenu_SetSelectedValue(dropdown, self.value);
-    dropdown.newValue = self.value
 end
