@@ -160,8 +160,12 @@ local function LabelMask(name)
     end
 
     name = tostring(name)
-    local fileID = name:match("^file (%d+)$") or name:match("^(%d+)$")
+    local fileID = name:match("^file (%-?%d+)$") or name:match("^(%-?%d+)$")
     if fileID then
+        if fileID:sub(1, 1) == "-" then
+            -- The client numbers files that ship with an addon from -1 downwards, per session.
+            return "an addon's own mask (file " .. fileID .. ")"
+        end
         return knownMaskLabels[fileID] or ("file " .. fileID .. " (not a known mask)")
     end
     return knownMaskLabels[(name:lower():gsub("/", "\\"))] or name
