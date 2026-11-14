@@ -38,6 +38,72 @@ function CaerdonWardrobeConfigMixin:OnLoad()
     -- and BOTTOMRIGHT (0,0).
     -- layout:AddAnchorPoint("TOPLEFT", 10, -10);
     -- layout:AddAnchorPoint("BOTTOMRIGHT", -10, 10);
+
+    self:CreateSupportSection()
+end
+
+local SUPPORT_URL = "https://buymeacoffee.com/caerdon"
+
+-- Support link at the bottom of the main settings page.
+function CaerdonWardrobeConfigMixin:CreateSupportSection()
+    local subText = _G[self:GetName() .. "SubText"]
+    if not subText then return end
+
+    local header = self:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    header:SetJustifyH("LEFT")
+    header:SetPoint("TOPLEFT", subText, "BOTTOMLEFT", 0, -8)
+    header:SetText(L["Support Caerdon Wardrobe"])
+
+    local body = self:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    body:SetJustifyH("LEFT")
+    body:SetJustifyV("TOP")
+    body:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
+    body:SetPoint("RIGHT", self, "RIGHT", -32, 0)
+    body:SetText(L["Caerdon Wardrobe is free, and every feature always will be. If you enjoy it and would like to buy me a coffee, this is where to do it:"])
+
+    -- The game cannot open a browser, so the link sits in a read-only box to copy from.
+    local editBox = CreateFrame("EditBox", "CaerdonWardrobeConfigSupportLink", self, "InputBoxTemplate")
+    editBox:SetAutoFocus(false)
+    editBox:SetSize(250, 22)
+    editBox:SetPoint("TOPLEFT", body, "BOTTOMLEFT", 6, -8)
+    editBox:SetText(SUPPORT_URL)
+    editBox:SetCursorPosition(0)
+
+    local copyKey = (IsMacClient and IsMacClient()) and "Cmd+C" or "Ctrl+C"
+    local hintText = string.format(L["Click the link, then press %s to copy it."], copyKey)
+    local hint = self:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    hint:SetJustifyH("LEFT")
+    hint:SetPoint("LEFT", editBox, "RIGHT", 10, 0)
+    hint:SetText(hintText)
+
+    editBox:SetScript("OnTextChanged", function(box, userInput)
+        if userInput then
+            box:SetText(SUPPORT_URL)
+            box:HighlightText()
+        end
+    end)
+    editBox:SetScript("OnEditFocusGained", function(box)
+        box:HighlightText()
+    end)
+    editBox:SetScript("OnMouseUp", function(box)
+        -- A click inside a focused box places the cursor and drops the selection.
+        box:HighlightText()
+    end)
+    editBox:SetScript("OnEditFocusLost", function(box)
+        box:HighlightText(0, 0)
+        box:SetCursorPosition(0)
+        hint:SetText(hintText)
+    end)
+    editBox:SetScript("OnKeyDown", function(box, key)
+        if key == "C" and (IsControlKeyDown() or (IsMetaKeyDown and IsMetaKeyDown())) then
+            hint:SetText(L["Copied. Paste it into your browser. Thank you!"])
+        end
+    end)
+    editBox:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
+    editBox:SetScript("OnEnterPressed", function(box) box:ClearFocus() end)
+    editBox:SetScript("OnHide", function(box) box:ClearFocus() end)
+
+    self.supportLink = editBox
 end
 
 function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
