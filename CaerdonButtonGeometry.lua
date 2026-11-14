@@ -54,11 +54,17 @@ local function FormatOption(value)
     return tostring(value)
 end
 
-local function DescribeOptions(options, includeCount)
+-- forSignature rounds numbers to whole units: a size worked out from a pixel-snapped slot differs
+-- in the second decimal from draw to draw, and that must not count as another shape.
+local function DescribeOptions(options, includeCount, forSignature)
     local parts = {}
     for _, key in ipairs(OPTION_KEYS) do
-        if options[key] ~= nil then
-            parts[#parts + 1] = key .. "=" .. FormatOption(options[key])
+        local value = options[key]
+        if value ~= nil then
+            if forSignature and type(value) == "number" then
+                value = math.floor(value + 0.5)
+            end
+            parts[#parts + 1] = key .. "=" .. FormatOption(value)
         end
     end
     if includeCount and options.hasCount ~= nil then
@@ -464,7 +470,7 @@ function CaerdonButtonGeometry:Note(feature, button, options, mogStatus, binding
         return -- not laid out yet; it is drawn again once it is
     end
     -- No "|" in here: the export is read in an edit box, where "|r" and friends are escapes.
-    local signature = string.format("%s ; overlay on %s ; %dx%d", DescribeOptions(options, false),
+    local signature = string.format("%s ; overlay on %s ; %dx%d", DescribeOptions(options, false, true),
         options.relativeFrame and "relativeFrame" or "button", math.floor(width + 0.5), math.floor(height + 0.5))
 
     local window = windows[windowName]

@@ -281,6 +281,12 @@ local function MeasureClipRoom(caerdonButton, button, changed)
 
     local left = (overlayLeft - clipLeft) / scale
     local right = (clipRight - overlayRight) / scale
+    if left < -0.5 or right < -0.5 then
+        -- Partly outside the grid: caught mid-move or mid-resize, and cut off itself. The least
+        -- room is remembered for the session, so a position like this must not set it.
+        caerdonButton.caerdonClipMeasured = nil
+        return
+    end
     if info.left == nil or left < info.left - 0.25 then
         info.left = left
         changed[clipper] = true
