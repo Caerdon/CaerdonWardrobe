@@ -1367,6 +1367,22 @@ end
 -- How often one request is tried again while its tooltip still says "Retrieving item information".
 local NOT_READY_MAX_RETRIES = 10
 
+-- The key a button is filed under while a request for it is being worked on: the feature's name
+-- plus the bag slot, or the key the feature passed. nil when the feature passed none. UpdateButton
+-- stores it on the button and the retry compares against it, so both must build it here.
+local function GetRequestKey(item, feature, locationInfo)
+    local locationKey = locationInfo.locationKey
+    if item:HasItemLocationBankOrBags() then
+        local itemLocation = item:GetItemLocation()
+        local bag, slot = itemLocation:GetBagAndSlot()
+        locationKey = format("bag%d-slot%d", bag, slot)
+    end
+    if not locationKey then
+        return nil
+    end
+    return format("%s-%s", feature:GetName(), locationKey)
+end
+
 function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options)
     local mogStatus = nil
     local bindingStatus = nil
@@ -1384,12 +1400,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         -- Tooltip data shows "Retrieving item information". Instead of
         -- polling through the coroutine, stash the item and let a single
         -- deferred timer batch-retry all pending items once.
-        local locationKey = locationInfo.locationKey
-        if item:HasItemLocationBankOrBags() then
-            local itemLocation = item:GetItemLocation()
-            local b, s = itemLocation:GetBagAndSlot()
-            locationKey = format("%s-bag%d-slot%d", feature:GetName(), b, s)
-        end
+        local locationKey = GetRequestKey(item, feature, locationInfo)
 
         -- Counted per button. It used to be kept in the caller's options table, which a window
         -- shares between its buttons (and some integrations keep for the whole session), so the
@@ -1399,7 +1410,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         if state then
             state.notReadyRetries = retries
         end
-        if state and retries <= NOT_READY_MAX_RETRIES then
+        if state and locationKey and retries <= NOT_READY_MAX_RETRIES then
             self.pendingTooltipRetries = self.pendingTooltipRetries or {}
             self.pendingTooltipRetries[locationKey] = {
                 button = button,
@@ -1416,7 +1427,12 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                     self.pendingTooltipRetries = nil
                     if pending then
                         for key, info in pairs(pending) do
-                            if self:GetButtonLocationKey(info.button) == info.expectedKey then
+                            -- Only while the button still shows this item: the same key can stand for
+                            -- another item by now (the next vendor page), and running the old request
+                            -- again would clear that item's icon.
+                            local itemID = not info.item:IsItemEmpty() and info.item:GetItemID() or nil
+                            if self:GetButtonLocationKey(info.button) == info.expectedKey and
+                                (itemID == nil or self:GetButtonItemID(info.button) == itemID) then
                                 -- Tells UpdateButton this is the same request again, not a new one.
                                 local retryState = GetButtonState(info.button)
                                 if retryState then
@@ -1598,16 +1614,9 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
         self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil, nil)
     end
 
-    local locationKey = locationInfo.locationKey
-
-    if item:HasItemLocationBankOrBags() then
-        local itemLocation = item:GetItemLocation()
-        local bag, slot = itemLocation:GetBagAndSlot()
-        locationKey = format("bag%d-slot%d", bag, slot)
-    end
+    local locationKey = GetRequestKey(item, feature, locationInfo)
 
     if locationKey then -- opt-in to coroutine-based update
-        locationKey = format("%s-%s", feature:GetName(), locationKey)
         self:SetButtonLocationKey(button, locationKey)
 
         if not item:IsItemEmpty() then
