@@ -94,6 +94,8 @@ function CaerdonWardrobeMixin:ClearButtonState(originalButton)
         state.itemID = nil
         state.stackCount = nil
         state.refreshGeneration = nil
+        state.notReadyRetries = nil
+        state.retryingNotReady = nil
     end
 end
 
@@ -1362,6 +1364,9 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     end
 end
 
+-- How often one request is tried again while its tooltip still says "Retrieving item information".
+local NOT_READY_MAX_RETRIES = 10
+
 function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, options)
     local mogStatus = nil
     local bindingStatus = nil
@@ -1386,9 +1391,15 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
             locationKey = format("%s-bag%d-slot%d", feature:GetName(), b, s)
         end
 
-        if not options then options = {} end
-        options.retriesNotReady = (options.retriesNotReady or 0) + 1
-        if options.retriesNotReady <= 10 then
+        -- Counted per button. It used to be kept in the caller's options table, which a window
+        -- shares between its buttons (and some integrations keep for the whole session), so the
+        -- limit was used up by other items.
+        local state = GetButtonState(button, true)
+        local retries = ((state and state.notReadyRetries) or 0) + 1
+        if state then
+            state.notReadyRetries = retries
+        end
+        if state and retries <= NOT_READY_MAX_RETRIES then
             self.pendingTooltipRetries = self.pendingTooltipRetries or {}
             self.pendingTooltipRetries[locationKey] = {
                 button = button,
@@ -1406,6 +1417,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                     if pending then
                         for key, info in pairs(pending) do
                             if self:GetButtonLocationKey(info.button) == info.expectedKey then
+                                -- Tells UpdateButton this is the same request again, not a new one.
+                                local retryState = GetButtonState(info.button)
+                                if retryState then
+                                    retryState.retryingNotReady = true
+                                end
                                 self:UpdateButton(info.button, info.item, info.feature, info.locationInfo, info.options)
                             end
                         end
@@ -1559,6 +1575,16 @@ end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
     local _, createdNew = self:SetupCaerdonButton(button, item, feature, locationInfo, options)
+
+    -- A new request gets its own set of "not ready yet" retries; a retry keeps counting.
+    local retryState = GetButtonState(button)
+    if retryState then
+        if retryState.retryingNotReady then
+            retryState.retryingNotReady = nil
+        else
+            retryState.notReadyRetries = nil
+        end
+    end
 
     if item == nil then
         self:ClearButton(button)

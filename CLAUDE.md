@@ -356,6 +356,12 @@ Two sub-pages under "Caerdon Wardrobe": **Icons** (`config/Icons.lua`) and **Dis
 - `IsItemDataCached()` requires BOTH `IsItemCached()` (WoW cache) AND `customDataLoaded` (CaerdonItem flag)
 - Features MUST call `ContinueOnItemLoad` before `UpdateButton` so `customDataLoaded=true`; without this, items go to the ContinuableContainer path and may never process directly
 
+### Not-Ready Retries
+- When an item's tooltip still reads "Retrieving item information", `ProcessItem` stashes the request in `pendingTooltipRetries` and one 1 s timer runs all of them through `UpdateButton` again.
+- The limit (`NOT_READY_MAX_RETRIES`, 10) is counted per button, in `buttonState` (`notReadyRetries`). A new `UpdateButton` request starts the count again; the timer marks its own call (`retryingNotReady`) so a retry keeps counting. Until 2026-11-14 the count lived in the caller's `options` table, which a window shares between its buttons and some integrations keep for the whole session (Baganator), so other items used the limit up.
+- **Never write into `options`.** It belongs to the caller and is usually shared; per-button state goes in `buttonState` or on the overlay's own regions.
+- **Known gap, not fixed:** the timer only retries when the button's location key equals the stashed `expectedKey`. `UpdateButton` stores keys as `<feature>-<key>`, and `ProcessItem` builds that form only for bag and bank items; for everything else `expectedKey` is the bare `locationInfo.locationKey`, so the comparison fails and windows outside bags and bank never get a retry.
+
 ### ContinuableContainer Callback Routing
 - ContinuableContainer callbacks route items back through `waitingToProcess` (not `processQueue`) and re-register `OnUpdate` if needed
 - This ensures items are picked up even if the callback fires after the current coroutine has exited
