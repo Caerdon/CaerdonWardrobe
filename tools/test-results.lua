@@ -168,8 +168,16 @@ local function printContracts(db, withDetail)
             local result = results[id]
             local listed = sections.contracts or sections.detail or not singleContracts or sections["contract:" .. id]
             if listed then
+            -- A reload writes this file before it can prove itself: the file then holds the
+            -- request, and the result only arrives with the next reload or logout.
+            local pending = db.pending and db.pending.reload
+            local message = result.message and plainText(result.message) or ""
+            if pending and id == "reload." .. tostring(pending.how) then
+                message = ("asked for at %s, and this file was written by that reload; the result comes with the next save")
+                    :format(when(pending.at))
+            end
             print(("    %-7s %-34s %s%s"):format(tostring(result.status), id,
-                result.message and plainText(result.message) or "", result.toon and ("  [" .. result.toon .. "]") or ""))
+                message, result.toon and ("  [" .. result.toon .. "]") or ""))
             if result.failures and #result.failures > 1 then
                 for index = 2, #result.failures do print("            also: " .. plainText(result.failures[index])) end
             end
