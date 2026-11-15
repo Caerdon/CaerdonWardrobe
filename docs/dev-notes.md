@@ -236,7 +236,15 @@ Two sub-pages under "Caerdon Wardrobe": **Icons** (`config/Icons.lua`) and **Dis
 - **Quest icon:** `Icon.ShowQuestItems` is one switch for every window.
 - **Helpers:** `AddTitle`, `AddIconHeader`, `AddSection`, `AddLabel`, `AddCheckbox`, `AddCheckboxGrid`, `AddAllNoneButtons`, `AddDropdown`, `AddButton`, `FinishLayout`. Widths are fixed pixels (the canvas is about 640 wide). An option is `{ key, text, tooltip, configSection, configSubsection, configValue }`; `key` becomes the global `CaerdonWardrobe<key>` and must be unique across both pages. `dependsOn` grays a control out.
 - **Values** are resolved from `CaerdonWardrobeConfig` on every read and write: the table is replaced on a version bump, a missing section is created on write, nil reads as the default. Pages set `frame.OnRefresh`, which the settings window calls on every display; a page's first display is not an `OnShow`.
-- **In game:** the pages were built against mocked frames; real text widths and wrapping are unverified.
+- **Main page** (`config/Config.lua`, `Config.xml`): a short description and the support box, no options. The box sizes itself from its text (`FitCard`), because the sentence wraps with the page's width.
+- **`/caerdon`** (`NS:OpenSettings`) opens the main page, as does the dialog's button (author decision). It does nothing in combat.
+- **Category ID:** the main category keeps the numeric ID it was created with and is kept in `NS.SettingsCategory`, which the sub-pages register under. Do not set `category.ID` to the addon's name (the old way to make `Settings.GetCategory(name)` work): `Settings.OpenToCategory` hands the ID to `C_SettingsUtil.OpenSettingsPanel`, which raises an error for anything but a number (seen on Forever).
+- **Dialog text:** a slash command at the end of a line is wrapped after the slash (seen on Forever), so the footer starts with it.
+- **One-time message dialog** (`MESSAGES` in `config/Config.lua`): a `StaticPopup` with **Open Settings** (`NS:OpenSettings`) and **Close**. `CaerdonWardrobeConfig.MessageSeen` is the number of the last entry shown.
+  - Settings saved before the field existed read as 0 and get the latest entry. A fresh install starts at the latest number and gets the welcome text; settings reset by a `Version` bump get the reset text.
+  - Only the latest entry is shown, once per account. It comes up a few seconds after login, waits for the end of combat (the button cannot open the settings during it), and counts as seen once it is on screen. Add an entry at the end and never renumber.
+  - A dialog interrupts, so add an entry only when players will see different icons or need to revisit their settings (author decision): a sentence or two, not release notes.
+- **In game:** the pages were built against mocked frames; real text widths and wrapping are unverified. The main page's box and the dialog (its look, its timing after login) are offline only.
 
 ### Layout settings
 

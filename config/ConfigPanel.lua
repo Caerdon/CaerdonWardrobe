@@ -93,7 +93,6 @@ end
 
 function CaerdonWardrobeConfigPanelMixin:Init()
     self.nextPoint = -16
-    self.parent = "Caerdon Wardrobe"
     self.controls = {}
     self.hasBlock = false
     self.bodyX = SECTION_BODY_X
@@ -127,7 +126,8 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     self.scrollChild = scrollChild
     self.scrollFrame = scrollFrame
 
-    local category = Settings.GetCategory(self.parent);
+    -- The main page's category, registered by CaerdonWardrobeConfigMixin:OnLoad before any page.
+    local category = NS.SettingsCategory
     local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(category, frame, self:GetTitle());
 end
 

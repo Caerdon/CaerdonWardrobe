@@ -6,21 +6,39 @@ local components, pendingConfig
 
 CAERDON_CONFIG_LABEL = L["Caerdon Wardrobe... and more!"]
 CAERDON_CONFIG_SUBTEXT = L[ [[
-This addon started as a simple way for me to track unlearned transmog appearances.  Over the years, it has grown into so much more!
+Caerdon Wardrobe marks the items worth a second look: appearances, recipes, pets, mounts and toys you haven't learned, gear upgrades, quest items, things worth auctioning, and what's safe to sell.  You'll see its icons in your bags, bank, merchants, the auction house, loot windows and most popular bag addons.
 
-Caerdon Wardrobe now provides tracking of unlearned recipes, pets, mounts, toys, and transmog appearances.  It shows locked and openable containers.  It tracks BoE and BoA bindings, equipment sets, and can highlight gear to sell that is not tradeable, not part of a set, and has no other potentially interesting use.
+It runs on both |cffffd100Retail|r and |cffffd100WoW Forever|r.
 
-New for Shadowlands, it also tracks unlearned conduits, and I've even added an old expansion indicator that can help you clean out your bags for your new journey!
+Choose what is shown on the Icons page and how it looks on the Display page.  If the addon ever slows your game down, please let me know!]] ]
 
-Caerdon Wardrobe leverages a set of icons and text where appropriate to call out all of the above items in the following locations: Bank & Bags, Guild Banks, Auction House, Merchants, Dungeon and Raid Journal, Loot Pickup, Group Loot Roll, and the World Map.
+local MESSAGE_PREFIX = "|cffffd100Caerdon Wardrobe:|r "
+local SETTINGS_COMMAND = "|cffffd100/caerdon|r"
 
-It also provides integration for your favorite bag add-ons: AdiBags, ArkInventory, Bagnon, Bagnonium, Baud Bag, cargBags_Nivaya, ElvUI, Inventorian, and LiteBag.  Additionally it supports a few other World Quest addons: World Quest Tab and Zygor World Quest Planner.
-
-I don't like slow addons and try my best to keep this addon from impacting your fun.  If Caerdon Wardrobe is causing a performance impact on your game, please let me know!
-]] ]
+-- One-time messages, shown as a dialog with a button that opens the settings.
+-- CaerdonWardrobeConfig.MessageSeen is the number of the last one this account was shown.
+-- Settings saved before the field existed read as 0 and get the latest entry; a fresh install
+-- starts at the latest number (GetDefaultConfig) and gets the welcome instead. Only the latest
+-- entry is ever shown: add at the end, never renumber, and keep it to a sentence or two about
+-- what looks or works differently.
+local MESSAGES = {
+    L["The settings have been rebuilt: two pages that explain every icon, and a layout editor to move and resize them."],
+}
+local WELCOME_MESSAGE =
+    L["Thanks for installing! The icons on your items show what you can still learn, use, sell or auction. The settings explain each icon and let you choose what is shown."]
+local RESET_MESSAGE = L["Your settings came from an older version and are back to the defaults."]
+-- The command comes early in the sentence: at the end of a line the dialog wraps it after the
+-- slash. Each stretch has its own color, so nothing depends on how a nested color ends.
+local MESSAGE_FOOTER = "|cffb0b0b0" .. string.format(L["Type %s to open the settings at any time."],
+    "|r" .. SETTINGS_COMMAND .. "|cffb0b0b0") .. "|r"
+local MESSAGE_DIALOG = "CAERDON_WARDROBE_MESSAGE"
+-- Seconds after login, so the dialog does not come up behind the loading screen.
+local MESSAGE_DELAY = 3
+local pendingMessage
 
 function CaerdonWardrobeConfigMixin:OnLoad()
     self:RegisterEvent("VARIABLES_LOADED");
+    self:RegisterEvent("PLAYER_LOGIN");
 
     self.name = "Caerdon Wardrobe"
     self.okay = self.OnSave
@@ -30,7 +48,9 @@ function CaerdonWardrobeConfigMixin:OnLoad()
     self.OnRefresh = self.refresh;
 
     local category, layout = Settings.RegisterCanvasLayoutCategory(self, self.name, self.name);
-    category.ID = self.name;
+    -- The category keeps the numeric ID it was created with: Settings.OpenToCategory takes
+    -- nothing else. The sub-pages and NS:OpenSettings get the category from here.
+    NS.SettingsCategory = category
     Settings.RegisterAddOnCategory(category);
 
     -- Any anchors assigned to the frame will be disposed. Intended anchors need to be provided through
@@ -43,35 +63,63 @@ function CaerdonWardrobeConfigMixin:OnLoad()
 end
 
 local SUPPORT_URL = "https://buymeacoffee.com/caerdon"
+local SUPPORT_STAR = "|TInterface\\Store\\category-icon-featured:18:18:0:0:64:64:16:48:16:48|t "
+local SUPPORT_GAP = 24     -- between the description and the box
+local SUPPORT_PADDING = 14 -- inside the box
 
--- Support link at the bottom of the main settings page.
+-- Support link on the main settings page: a box of its own below the description.
 function CaerdonWardrobeConfigMixin:CreateSupportSection()
     local subText = _G[self:GetName() .. "SubText"]
     if not subText then return end
 
-    local header = self:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    header:SetJustifyH("LEFT")
-    header:SetPoint("TOPLEFT", subText, "BOTTOMLEFT", 0, -8)
-    header:SetText(L["Support Caerdon Wardrobe"])
+    local card = CreateFrame("Frame", nil, self, "BackdropTemplate")
+    card:SetPoint("TOPLEFT", subText, "BOTTOMLEFT", -8, -SUPPORT_GAP)
+    card:SetPoint("TOPRIGHT", subText, "BOTTOMRIGHT", 8, -SUPPORT_GAP)
+    card:SetHeight(110)
+    if card.SetBackdrop then
+        card:SetBackdrop({
+            bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        card:SetBackdropColor(1, 0.82, 0, 0.06)
+        card:SetBackdropBorderColor(1, 0.82, 0, 0.6)
+    end
 
-    local body = self:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    local header = card:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    header:SetJustifyH("LEFT")
+    header:SetPoint("TOPLEFT", card, "TOPLEFT", SUPPORT_PADDING, -SUPPORT_PADDING)
+    header:SetText(SUPPORT_STAR .. L["Support Caerdon Wardrobe"])
+
+    local body = card:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     body:SetJustifyH("LEFT")
     body:SetJustifyV("TOP")
-    body:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
-    body:SetPoint("RIGHT", self, "RIGHT", -32, 0)
+    body:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
+    body:SetPoint("RIGHT", card, "RIGHT", -SUPPORT_PADDING, 0)
     body:SetText(L["If Caerdon Wardrobe has been useful to you and you'd like to buy me a drink, this is where to do it:"])
 
     -- The game cannot open a browser, so the link sits in a read-only box to copy from.
-    local editBox = CreateFrame("EditBox", "CaerdonWardrobeConfigSupportLink", self, "InputBoxTemplate")
+    local editBox = CreateFrame("EditBox", "CaerdonWardrobeConfigSupportLink", card, "InputBoxTemplate")
     editBox:SetAutoFocus(false)
     editBox:SetSize(250, 22)
-    editBox:SetPoint("TOPLEFT", body, "BOTTOMLEFT", 6, -8)
+    editBox:SetPoint("TOPLEFT", body, "BOTTOMLEFT", 6, -10)
     editBox:SetText(SUPPORT_URL)
     editBox:SetCursorPosition(0)
 
+    -- The sentence wraps with the page's width, so the box takes its height from what is in it.
+    local function FitCard()
+        card:SetHeight(SUPPORT_PADDING + header:GetStringHeight() + 8 + body:GetStringHeight() + 10 +
+            editBox:GetHeight() + SUPPORT_PADDING)
+    end
+    card:SetScript("OnShow", FitCard)
+    card:SetScript("OnSizeChanged", FitCard)
+
     local copyKey = (IsMacClient and IsMacClient()) and "Cmd+C" or "Ctrl+C"
     local hintText = string.format(L["Click the link, then press %s to copy it."], copyKey)
-    local hint = self:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    local hint = card:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     hint:SetJustifyH("LEFT")
     hint:SetPoint("LEFT", editBox, "RIGHT", 10, 0)
     hint:SetText(hintText)
@@ -106,16 +154,87 @@ function CaerdonWardrobeConfigMixin:CreateSupportSection()
     self.supportLink = editBox
 end
 
+-- Opens the settings on the main page (/caerdon, and the button of the one-time dialog).
+function NS:OpenSettings()
+    if InCombatLockdown and InCombatLockdown() then
+        print(MESSAGE_PREFIX .. L["The settings can't be opened in combat."])
+        return
+    end
+    local category = NS.SettingsCategory
+    local id = category and ((category.GetID and category:GetID()) or category.ID)
+    if type(id) == "number" then
+        Settings.OpenToCategory(id)
+    end
+end
+
+SLASH_CAERDON1 = "/caerdon"
+SlashCmdList["CAERDON"] = function()
+    NS:OpenSettings()
+end
+
+-- The dialog waits for the end of combat, because its button cannot open the settings during it.
+-- An entry of MESSAGES counts as seen once it is on screen, so one that never got there comes
+-- back at the next login.
+function CaerdonWardrobeConfigMixin:ShowPendingMessage()
+    if not pendingMessage then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
+
+    local message = pendingMessage
+    pendingMessage = nil
+    if (tonumber(CaerdonWardrobeConfig.MessageSeen) or 0) < #MESSAGES then
+        CaerdonWardrobeConfig.MessageSeen = #MESSAGES
+    end
+
+    local shown
+    if StaticPopupDialogs and StaticPopup_Show then
+        if not StaticPopupDialogs[MESSAGE_DIALOG] then
+            StaticPopupDialogs[MESSAGE_DIALOG] = {
+                text = "|cffffd100Caerdon Wardrobe|r\n\n%s\n\n%s",
+                button1 = L["Open Settings"],
+                button2 = CLOSE or L["Close"],
+                OnAccept = function() NS:OpenSettings() end,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+            }
+        end
+        shown = StaticPopup_Show(MESSAGE_DIALOG, message, MESSAGE_FOOTER)
+    end
+    if not shown then
+        print(MESSAGE_PREFIX .. message .. " " .. MESSAGE_FOOTER)
+    end
+end
+
 function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
     -- BlizzardOptionsPanel_OnEvent(self, event, ...);
 
-    if (event == "VARIABLES_LOADED") then
+    if (event == "PLAYER_LOGIN") then
+        self:UnregisterEvent(event);
+        C_Timer.After(MESSAGE_DELAY, function() self:ShowPendingMessage() end)
+    elseif (event == "PLAYER_REGEN_ENABLED") then
+        self:UnregisterEvent(event);
+        self:ShowPendingMessage()
+    elseif (event == "VARIABLES_LOADED") then
         self.variablesLoaded = true;
         self:UnregisterEvent(event);
 
-        if not CaerdonWardrobeConfig or CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
-            print("Caerdon: Old settings detected - updating to defaults.  Please check your settings!")
+        if not CaerdonWardrobeConfig then
             CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
+            pendingMessage = WELCOME_MESSAGE
+        elseif CaerdonWardrobeConfig.Version ~= NS:GetDefaultConfig().Version then
+            CaerdonWardrobeConfig = CopyTable(NS:GetDefaultConfig())
+            pendingMessage = RESET_MESSAGE
+        elseif (tonumber(CaerdonWardrobeConfig.MessageSeen) or 0) < #MESSAGES then
+            pendingMessage = MESSAGES[#MESSAGES]
+        end
+        if IsLoggedIn() then
+            C_Timer.After(MESSAGE_DELAY, function() self:ShowPendingMessage() end)
         end
 
         -- Ensure new config sections exist for users with existing configs
@@ -238,6 +357,8 @@ end
 function NS:GetDefaultConfig()
     return {
         Version = 25,
+        -- The last one-time chat message shown. A fresh install has nothing to catch up on.
+        MessageSeen = #MESSAGES,
 
         Debug = {
             Enabled = false,
