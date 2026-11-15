@@ -745,23 +745,36 @@ end
 local TABS_LEFT, TABS_TOP = 240, -44
 local BASE_HEIGHT = 458
 
--- What the installed addons do differently from what this window shows, a sentence each. An
--- integration says it itself (GetLayoutNote on its feature), and integrations only register
--- when their addon is loaded, so a player only reads about addons they have.
+-- What the installed addons do differently from what this window shows. An integration says it
+-- itself: GetLayoutNote on its feature returns a sentence that starts with the addon's name and
+-- a colon, and optionally a button's text and what it does (opening that addon's own settings).
+-- Integrations only register when their addon is loaded, so a player only reads about addons
+-- they have.
 local function IntegrationNotes()
     local notes = {}
     local features = CaerdonWardrobe.GetRegisteredFeatures and CaerdonWardrobe:GetRegisteredFeatures()
     for _, feature in pairs(features or {}) do
         if type(feature.GetLayoutNote) == "function" then
-            local ok, note = pcall(feature.GetLayoutNote, feature)
+            local ok, note, actionText, action = pcall(feature.GetLayoutNote, feature)
             if ok and type(note) == "string" and note ~= "" then
-                notes[#notes + 1] = note
+                local hasAction = type(actionText) == "string" and type(action) == "function"
+                notes[#notes + 1] = {
+                    text = note,
+                    actionText = hasAction and actionText or nil,
+                    action = hasAction and action or nil
+                }
             end
         end
     end
-    table.sort(notes)
+    table.sort(notes, function(a, b) return a.text < b.text end)
     return notes
 end
+
+-- The notes are shown as a callout at the top of the window: a tinted, bordered box with a
+-- warning icon per addon. They began as one more grey line under the hint at the bottom, where
+-- nobody read them, while the controls above looked as if they moved everything.
+local BANNER_LEFT, BANNER_TOP, BANNER_WIDTH = 20, -38, 508
+local BANNER_PADDING, BANNER_ICON, BANNER_BUTTON, BANNER_ROW_GAP, BANNER_BELOW = 8, 20, 150, 6, 8
 
 function Editor:GetFrame()
     if self.frame then
@@ -814,11 +827,32 @@ function Editor:GetFrame()
     close:SetScript("OnLeave", function() GameTooltip:Hide() end)
     self.close = close
 
+    -- What an installed addon places itself, said first (RefreshIntegrationNotes fills it).
+    local banner = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    banner:SetPoint("TOPLEFT", frame, "TOPLEFT", BANNER_LEFT, BANNER_TOP)
+    banner:SetSize(BANNER_WIDTH, 1)
+    banner:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    banner:SetBackdropColor(0.32, 0.21, 0.02, 0.92)
+    banner:SetBackdropBorderColor(1, 0.82, 0, 0.9)
+    banner:Hide()
+    banner.rows = {}
+    self.banner = banner
+
+    -- Everything else sits in a frame of its own, which the banner pushes down.
+    local body = CreateFrame("Frame", nil, frame)
+    body:SetSize(548, BASE_HEIGHT)
+    body:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    self.body = body
+
     -- The large slot: a real 37 px slot in a frame scaled up, with room around it for an icon
     -- that hangs over the corner.
-    local box = CreateFrame("Frame", nil, frame)
+    local box = CreateFrame("Frame", nil, body)
     box:SetSize(200, 200)
-    box:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -44)
+    box:SetPoint("TOPLEFT", body, "TOPLEFT", 20, -44)
     local boxBackground = box:CreateTexture(nil, "BACKGROUND")
     boxBackground:SetAllPoints()
     boxBackground:SetColorTexture(0, 0, 0, 0.45)
@@ -831,16 +865,16 @@ function Editor:GetFrame()
     self.bigButton:SetPoint("CENTER", holder, "CENTER", 0, 0)
     self:SetSample(self.bigButton, self:GetLargeSample())
 
-    CreateLabel(frame, "GameFontHighlightSmall", "Click a part of the slot, or pick it on the right.", 20, -250, 200)
+    CreateLabel(body, "GameFontHighlightSmall", "Click a part of the slot, or pick it on the right.", 20, -250, 200)
 
     -- Which part is being edited: a button each, the chosen one underlined. Placed by
     -- RefreshSelection, which leaves out the parts that are switched off.
     self.tabs = {}
     for _, part in ipairs(PARTS) do
-        local tab = CreateTextButton(frame, part.label, part.width, TABS_LEFT, TABS_TOP, function()
+        local tab = CreateTextButton(body, part.label, part.width, TABS_LEFT, TABS_TOP, function()
             self:SelectPart(part.key)
         end)
-        tab.underline = frame:CreateTexture(nil, "OVERLAY")
+        tab.underline = body:CreateTexture(nil, "OVERLAY")
         tab.underline:SetColorTexture(1, 0.82, 0, 1)
         tab.underline:SetPoint("TOPLEFT", tab, "BOTTOMLEFT", 4, -1)
         tab.underline:SetPoint("TOPRIGHT", tab, "BOTTOMRIGHT", -4, -1)
@@ -850,13 +884,13 @@ function Editor:GetFrame()
     end
 
     -- Position: nine squares laid out like the slot.
-    CreateLabel(frame, "GameFontNormal", "Position", 240, -80)
+    CreateLabel(body, "GameFontNormal", "Position", 240, -80)
     self.cells = {}
     for index, anchor in ipairs(ANCHORS) do
         local column, row = (index - 1) % 3, math.floor((index - 1) / 3)
-        local cell = CreateFrame("Button", nil, frame)
+        local cell = CreateFrame("Button", nil, body)
         cell:SetSize(22, 22)
-        cell:SetPoint("TOPLEFT", frame, "TOPLEFT", 240 + column * 24, -100 - row * 24)
+        cell:SetPoint("TOPLEFT", body, "TOPLEFT", 240 + column * 24, -100 - row * 24)
         cell.fill = cell:CreateTexture(nil, "BACKGROUND")
         cell.fill:SetAllPoints()
         local hover = cell:CreateTexture(nil, "HIGHLIGHT")
@@ -876,54 +910,51 @@ function Editor:GetFrame()
     end
 
     -- Size
-    CreateLabel(frame, "GameFontNormal", "Size", 336, -80)
-    self.size = CreateStepper(frame, 336, -100, function(direction) self:StepSize(direction) end)
+    CreateLabel(body, "GameFontNormal", "Size", 336, -80)
+    self.size = CreateStepper(body, 336, -100, function(direction) self:StepSize(direction) end)
 
     -- Why the text is not exactly where its anchor says.
-    self.movedNote = CreateLabel(frame, "GameFontHighlightSmall", "", 336, -132, 196)
+    self.movedNote = CreateLabel(body, "GameFontHighlightSmall", "", 336, -132, 196)
     self.movedNote:Hide()
 
     -- Nudge: four buttons in a cross.
-    CreateLabel(frame, "GameFontNormal", "Nudge", 240, -184)
+    CreateLabel(body, "GameFontNormal", "Nudge", 240, -184)
     self.nudge = {
-        up = CreateTextButton(frame, "^", 24, 264, -204, function() self:Nudge(0, 1) end),
-        left = CreateTextButton(frame, "<", 24, 240, -228, function() self:Nudge(-1, 0) end),
-        right = CreateTextButton(frame, ">", 24, 288, -228, function() self:Nudge(1, 0) end),
-        down = CreateTextButton(frame, "v", 24, 264, -252, function() self:Nudge(0, -1) end),
+        up = CreateTextButton(body, "^", 24, 264, -204, function() self:Nudge(0, 1) end),
+        left = CreateTextButton(body, "<", 24, 240, -228, function() self:Nudge(-1, 0) end),
+        right = CreateTextButton(body, ">", 24, 288, -228, function() self:Nudge(1, 0) end),
+        down = CreateTextButton(body, "v", 24, 264, -252, function() self:Nudge(0, -1) end),
     }
-    self.nudgeValue = CreateLabel(frame, "GameFontHighlight", "", 336, -209, 190)
-    self.nudgeClear = CreateTextButton(frame, "Clear", 60, 336, -228, function() self:ClearNudge() end)
+    self.nudgeValue = CreateLabel(body, "GameFontHighlight", "", 336, -209, 190)
+    self.nudgeClear = CreateTextButton(body, "Clear", 60, 336, -228, function() self:ClearNudge() end)
 
     -- True-size examples, which also choose what the large slot shows.
-    CreateLabel(frame, "GameFontNormal", "Actual size, in a standard slot. Click one to see it large.", 20, -288)
-    local stripFrame, _, strip = self:CreateSampleStrip(frame, {
+    CreateLabel(body, "GameFontNormal", "Actual size, in a standard slot. Click one to see it large.", 20, -288)
+    local stripFrame, _, strip = self:CreateSampleStrip(body, {
         captions = true,
         onClick = function(index) self:ShowLarge(index) end
     })
-    stripFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -304)
+    stripFrame:SetPoint("TOPLEFT", body, "TOPLEFT", 20, -304)
     self.strip = strip
 
-    CreateLabel(frame, "GameFontHighlightSmall",
+    CreateLabel(body, "GameFontHighlightSmall",
         "Lists that fit the icon into a row, such as auction results and recipes, keep their own layout. " ..
         "Parts you have switched off on the Icons page are left out here.",
         20, -380, 508)
 
-    self.resetPart = CreateTextButton(frame, "Reset this part", 126, 20, -422, function() self:ResetSelected() end,
+    self.resetPart = CreateTextButton(body, "Reset this part", 126, 20, -422, function() self:ResetSelected() end,
         "Puts the selected part back to the addon's default position and size, with no nudge.")
-    self.resetAll = CreateTextButton(frame, "Reset everything", 126, 150, -422, function() self:ResetAll() end,
+    self.resetAll = CreateTextButton(body, "Reset everything", 126, 150, -422, function() self:ResetAll() end,
         "Puts every part back to the addon's defaults: icon top left, texts at the bottom, level gain bottom right, all at 100%.")
-    self.undo = CreateTextButton(frame, "Undo changes", 116, 280, -422, function() self:UndoChanges() end,
+    self.undo = CreateTextButton(body, "Undo changes", 116, 280, -422, function() self:UndoChanges() end,
         "Puts every part back to how it was when you opened this window.")
-    self.done = CreateTextButton(frame, "Done", 90, 438, -422, function() self:Finish() end,
+    self.done = CreateTextButton(body, "Done", 90, 438, -422, function() self:Finish() end,
         "Keeps your changes and closes the editor.")
 
-    -- The notes of installed addons go under the hint and the window grows by their height
-    -- (RefreshIntegrationNotes), so the buttons hang from its bottom edge.
-    self.integrationNotes = CreateLabel(frame, "GameFontHighlightSmall", "", 20, -410, 508)
-    self.integrationNotes:Hide()
+    -- The window grows by the banner's height, so the buttons hang from its bottom edge.
     for button, x in pairs({ [self.resetPart] = 20, [self.resetAll] = 150, [self.undo] = 280, [self.done] = 438 }) do
         button:ClearAllPoints()
-        button:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, 14)
+        button:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", x, 14)
     end
 
     return frame
@@ -956,15 +987,75 @@ end
 
 function Editor:RefreshIntegrationNotes()
     local notes = IntegrationNotes()
-    local label = self.integrationNotes
-    label:SetText(table.concat(notes, "\n"))
-    label:SetShown(#notes > 0)
-    local extra = 0
-    if #notes > 0 then
-        -- A string that has never been on screen can report no height; a line each is the least.
-        extra = math.max(label:GetStringHeight() or 0, #notes * 11) + 8
+    local banner = self.banner
+    local y = -BANNER_PADDING
+
+    for index, note in ipairs(notes) do
+        local row = banner.rows[index]
+        if not row then
+            row = {}
+            row.icon = banner:CreateTexture(nil, "ARTWORK")
+            row.icon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+            row.icon:SetSize(BANNER_ICON, BANNER_ICON)
+            row.text = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            row.text:SetJustifyH("LEFT")
+            row.text:SetJustifyV("TOP")
+            row.text:SetWordWrap(true)
+            row.button = CreateFrame("Button", nil, banner, "UIPanelButtonTemplate")
+            row.button:SetSize(BANNER_BUTTON, 22)
+            banner.rows[index] = row
+        end
+
+        local textLeft = BANNER_PADDING + BANNER_ICON + 8
+        local textWidth = BANNER_WIDTH - textLeft - BANNER_PADDING - (note.action and (BANNER_BUTTON + 8) or 0)
+        row.text:SetWidth(textWidth)
+        -- The addon's name in gold, so several notes are told apart at a glance.
+        row.text:SetText((note.text:gsub("^([^:]+:)", "|cffffd100%1|r")))
+        -- A string that has not been laid out yet can report no height: estimate it then.
+        local height = row.text:GetStringHeight() or 0
+        if height <= 0 then
+            height = math.ceil(#note.text * 6.2 / textWidth) * 13
+        end
+        height = math.max(height, BANNER_ICON)
+
+        row.icon:ClearAllPoints()
+        row.icon:SetPoint("TOPLEFT", banner, "TOPLEFT", BANNER_PADDING, y)
+        row.text:ClearAllPoints()
+        row.text:SetPoint("TOPLEFT", banner, "TOPLEFT", textLeft, y - 2)
+        row.icon:Show()
+        row.text:Show()
+        if note.action then
+            row.button:SetText(note.actionText)
+            row.button:ClearAllPoints()
+            row.button:SetPoint("TOPRIGHT", banner, "TOPRIGHT", -BANNER_PADDING, y)
+            row.button:SetScript("OnClick", function()
+                PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+                local ok, err = pcall(note.action)
+                if not ok then
+                    geterrorhandler()(err)
+                end
+            end)
+        end
+        row.button:SetShown(note.action ~= nil)
+        y = y - height - BANNER_ROW_GAP
     end
-    self.frame:SetHeight(BASE_HEIGHT + extra)
+    for index = #notes + 1, #banner.rows do
+        local row = banner.rows[index]
+        row.icon:Hide()
+        row.text:Hide()
+        row.button:Hide()
+    end
+
+    local offset = 0
+    if #notes > 0 then
+        local bannerHeight = -y - BANNER_ROW_GAP + BANNER_PADDING
+        banner:SetHeight(bannerHeight)
+        offset = bannerHeight + BANNER_BELOW
+    end
+    banner:SetShown(#notes > 0)
+    self.body:ClearAllPoints()
+    self.body:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -offset)
+    self.frame:SetHeight(BASE_HEIGHT + offset)
 end
 
 -- Makes the parts of the large slot clickable. They exist once the slot has been drawn.
@@ -1016,7 +1107,7 @@ function Editor:RefreshSelection()
             tab:SetShown(shown)
             if shown then
                 tab:ClearAllPoints()
-                tab:SetPoint("TOPLEFT", self.frame, "TOPLEFT", x, TABS_TOP)
+                tab:SetPoint("TOPLEFT", self.body, "TOPLEFT", x, TABS_TOP)
                 x = x + part.width + 2
             end
             if part.key == selected then

@@ -89,10 +89,52 @@ function BaganatorMixin:GetName()
     return addonName
 end
 
--- Shown in the layout editor (see "Layout editor" in CLAUDE.md).
+-- Shown in the layout editor's callout (see "Layout editor" in CLAUDE.md): what does not work
+-- here first, then where it is done instead, with a button that goes there.
+local BAGANATOR_ICONS_TAB = 4 -- General, Layout, Theme, Icons: the order of its settings tabs in v857
+
+-- Baganator's settings window, if it is on screen. It is created on first use and named after
+-- the active skin (BaganatorCustomiseDialogFrameblizzard), which nothing public tells us, so
+-- it is looked up by the start of its name.
+local function FindOpenBaganatorSettings()
+    for name, value in pairs(_G) do
+        if type(name) == "string" and type(value) == "table" and
+            string.find(name, "^BaganatorCustomiseDialogFrame") and
+            type(value.IsShown) == "function" and type(value.SetIndex) == "function" and value:IsShown() then
+            return value
+        end
+    end
+end
+
+-- Opens Baganator's settings on the tab that holds Icon Corners. Its "ShowCustomise" event (what
+-- its slash command fires) toggles the window, and with a tab number it always goes to Theme
+-- whatever the number (seen in game with 4, and in its code: SetIndex(3)), so the window is
+-- opened first and the tab chosen on the window itself.
+local function OpenBaganatorIconSettings()
+    local dialog = FindOpenBaganatorSettings()
+    if not dialog then
+        Baganator.CallbackRegistry:TriggerEvent("ShowCustomise")
+        dialog = FindOpenBaganatorSettings()
+    end
+    if dialog then
+        if type(dialog.Views) == "table" and dialog.Views[BAGANATOR_ICONS_TAB] then
+            dialog:SetIndex(BAGANATOR_ICONS_TAB)
+        end
+        if dialog.Raise then
+            dialog:Raise()
+        end
+    end
+end
+
 function BaganatorMixin:GetLayoutNote()
-    return "Baganator: where the icon, the binding text and the level gain sit is set in Baganator's own settings " ..
-        "(Icon Corners). Their sizes are set here."
+    local text = "Baganator: Position and Nudge do not apply in Baganator's bags. It places the icon, the " ..
+        "binding text and the level gain itself, in its own settings under Icons, Icon Corners. Size does " ..
+        "apply there, and every other window follows all of this."
+    local registry = Baganator.CallbackRegistry
+    if registry and registry.TriggerEvent then
+        return text, "Baganator settings", OpenBaganatorIconSettings
+    end
+    return text
 end
 
 -- Nothing is hidden because of what else is on the slot. Until 2026-11-14 the upgrade arrow was
