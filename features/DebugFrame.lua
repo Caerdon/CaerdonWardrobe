@@ -2606,6 +2606,63 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Bags: what is in each bag slot right now, and, for a bag, how it compares with them.
+    -- Printed for every item: which bags a slot accepts and what a bag holds is not documented,
+    -- so the slots and the item's bag family are how that gets found out.
+    if CaerdonBagSlots and item.GetBagSlotInfo then
+        local bagInfo = item:GetBagSlotInfo()
+        local bagState = CaerdonBagSlots:GetDebugState()
+        addLine(0, "")
+        addLine(0, "[Bag Slots]")
+        addKV(1, "Show Bag Upgrades", CaerdonWardrobeConfig.Icon.ShowBagUpgrades ~= false)
+        addKV(1, "Show Spare Bags", CaerdonWardrobeConfig.Icon.ShowSpareBags ~= false)
+        -- For a bag: the kind of bag it is. For anything else: the kinds of bag that take it.
+        addKV(1, "Item Bag Family", CaerdonBagSlots:GetItemFamily(item:GetItemLink() or item:GetItemID()))
+        if bagInfo then
+            addKV(1, "Judged As", bagInfo.kind == "reagent" and "reagent bag" or
+                bagInfo.kind == "profession" and string.format("profession bag (subclass %s \"%s\")",
+                    tostring(bagInfo.subClassID), tostring(bagInfo.subTypeName)) or
+                bagInfo.kind == "quiver" and string.format("quiver (subclass %s \"%s\")",
+                    tostring(bagInfo.subClassID), tostring(bagInfo.subTypeName)) or "bag")
+            addKV(1, "Size", bagInfo.size and
+                string.format("%d (tooltip line \"%s\", matched by %s)", bagInfo.size,
+                    tostring(bagInfo.sizeText), tostring(bagInfo.sizeMatchedBy)) or "not read")
+            addKV(1, "Belongs In A Slot Now", bagInfo.isUpgrade)
+            addKV(1, "Spare", bagInfo.isSpare)
+            addKV(1, "Reason", bagInfo.reason)
+            if bagInfo.replacesBag then
+                addKV(1, "Would Replace Container", bagInfo.replacesBag)
+            end
+            if bagInfo.hasUse ~= nil then
+                addKV(1, "Toon Shoots What It Holds", bagInfo.hasUse)
+            end
+            addLine(1, string.format("Slots It Fits: %d, %d empty", bagInfo.slotCount, bagInfo.emptySlots))
+            for _, comparison in ipairs(bagInfo.comparisons) do
+                addLine(2, string.format("- container %d (%s slot): %s%s", comparison.bag,
+                    comparison.group == "reagent" and "reagent bag" or "bag",
+                    tostring(comparison.result),
+                    comparison.label and string.format(" against the %s there, %d slots", comparison.label,
+                        comparison.size or 0) or ""))
+            end
+        else
+            addKV(1, "Judged As", "not judged (not a bag or a quiver)")
+        end
+        addKV(1, "Reagent Bag Slot Takes Profession Bags", string.format("%s (%s)",
+            tostring(bagState.reagentTakesProfession), tostring(bagState.reagentTakesProfessionWhy)))
+        addKV(1, "Ammo Weapons Equipped", bagState.ammoWeapons)
+        for _, kind in ipairs({ "bag", "reagent" }) do
+            local group = bagState.groups[kind]
+            addLine(1, (kind == "reagent" and "Reagent Bag Slots" or "Bag Slots") ..
+                (#group.slots == 0 and ": none on this client" or (group.pending and " (contents pending):" or ":")))
+            for _, slotText in ipairs(group.slots) do
+                addLine(2, "- " .. slotText)
+            end
+        end
+        addKV(1, "Slot Count Format", string.format("\"%s\"%s, pattern \"%s\"", tostring(bagState.format),
+            bagState.formatIsDefault and " (built-in; CONTAINER_SLOTS is not set)" or " (CONTAINER_SLOTS)",
+            tostring(bagState.pattern)))
+    end
+
     -- Why a sellable item does (or does not) carry the auction icon: every number in the verdict.
     if CaerdonAuctionValue and item.GetAuctionValueInfo then
         local auctionState = CaerdonAuctionValue:GetDebugState()

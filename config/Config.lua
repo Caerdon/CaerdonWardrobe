@@ -143,6 +143,12 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == nil then
             CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons = NS:GetDefaultConfig().Icon.ShowRecipesForOtherToons
         end
+        if CaerdonWardrobeConfig.Icon.ShowBagUpgrades == nil then
+            CaerdonWardrobeConfig.Icon.ShowBagUpgrades = NS:GetDefaultConfig().Icon.ShowBagUpgrades
+        end
+        if CaerdonWardrobeConfig.Icon.ShowSpareBags == nil then
+            CaerdonWardrobeConfig.Icon.ShowSpareBags = NS:GetDefaultConfig().Icon.ShowSpareBags
+        end
         if not CaerdonWardrobeConfig.Tooltip then
             CaerdonWardrobeConfig.Tooltip = {}
         end
@@ -301,6 +307,8 @@ function NS:GetDefaultConfig()
             ShowAuctionValue = true,
             ShowOutdatedFood = true,
             ShowRecipesForOtherToons = true,
+            ShowBagUpgrades = true,
+            ShowSpareBags = true,
             AuctionMinProfit = "auto",
             ShowUpgradeLevelDelta = false,
             SameLevelBehavior = "none",

@@ -1061,6 +1061,17 @@ function CaerdonItemMixin:GetProfessionToolInfo()
     return CaerdonProfessionTools:GetItemInfo(itemID, self:GetItemName())
 end
 
+-- A bag (ordinary, reagent or profession bag) held against the bag slots it fits: whether it
+-- belongs in one now (a slot is empty or holds a bag it improves on) or is a spare. nil for
+-- anything else. Quivers are bags here too. See CaerdonBagSlots:GetItemInfo for the fields.
+function CaerdonItemMixin:GetBagSlotInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonBagSlots:GetItemInfo(itemID, self:GetItemLink())
+end
+
 -- Miscellaneous / Junk items that go in an equipment slot but do nothing there: no stats shown
 -- as an equip effect, no use, no appearance to learn. The trophy fish are the classic case
 -- (15 Pound Mud Snapper 6295, "Held In Off-hand", vendors for 15s). Not Equipment as far as the
@@ -1853,6 +1864,29 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     if (mogStatus == nil or mogStatus == "") and self:IsEquippableJunk(bindingResult) then
         mogStatus = "sellable"
+    end
+
+    -- Bags (ordinary, reagent and profession bags, quivers) against the toon's own bag slots: one that
+    -- belongs in a slot now (a slot it fits is empty or holds a bag it improves on) gets the
+    -- learnable icon, wherever it is seen; one that would improve none of them, with every
+    -- slot filled, is a spare to sell (the auction step below decides between the vendor and
+    -- the auction house).
+    if (mogStatus == nil or mogStatus == "" or mogStatus == "oldexpansion") and
+        (itemClassID == Enum.ItemClass.Container or itemClassID == Enum.ItemClass.Quiver) then
+        local bagInfo = self:GetBagSlotInfo()
+        if bagInfo then
+            if bagInfo.isUpgrade then
+                -- A red class line (a soul bag on a priest) means this toon can never equip it.
+                if CaerdonWardrobeConfig.Icon.ShowBagUpgrades ~= false and
+                    not bindingResult.raceClassRestricted then
+                    -- Any other red text in the tooltip: a level this toon has not reached yet.
+                    mogStatus = bindingResult.unusableItem and "lowSkill" or "own"
+                end
+            elseif bagInfo.isSpare and CaerdonWardrobeConfig.Icon.ShowSpareBags ~= false and
+                itemSellPrice and itemSellPrice > 0 and self:IsSellable() then
+                mogStatus = "sellable"
+            end
+        end
     end
 
     -- Consumables this toon's class or race can never use (Scroll: STHENIC LUNATE 211855,
