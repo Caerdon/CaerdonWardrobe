@@ -737,6 +737,25 @@ local function DescribeNudge(x, y)
 end
 
 local TABS_LEFT, TABS_TOP = 240, -44
+local BASE_HEIGHT = 458
+
+-- What the installed addons do differently from what this window shows, a sentence each. An
+-- integration says it itself (GetLayoutNote on its feature), and integrations only register
+-- when their addon is loaded, so a player only reads about addons they have.
+local function IntegrationNotes()
+    local notes = {}
+    local features = CaerdonWardrobe.GetRegisteredFeatures and CaerdonWardrobe:GetRegisteredFeatures()
+    for _, feature in pairs(features or {}) do
+        if type(feature.GetLayoutNote) == "function" then
+            local ok, note = pcall(feature.GetLayoutNote, feature)
+            if ok and type(note) == "string" and note ~= "" then
+                notes[#notes + 1] = note
+            end
+        end
+    end
+    table.sort(notes)
+    return notes
+end
 
 function Editor:GetFrame()
     if self.frame then
@@ -744,7 +763,7 @@ function Editor:GetFrame()
     end
 
     local frame = CreateFrame("Frame", "CaerdonWardrobeLayoutEditorFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(548, 458)
+    frame:SetSize(548, BASE_HEIGHT)
     -- Left of center, so bags on the right of the screen stay in view.
     frame:SetPoint("CENTER", UIParent, "CENTER", -300, 60)
     frame:SetFrameStrata("DIALOG")
@@ -892,6 +911,15 @@ function Editor:GetFrame()
     self.done = CreateTextButton(frame, "Done", 90, 438, -422, function() self:Finish() end,
         "Keeps your changes and closes the editor.")
 
+    -- The notes of installed addons go under the hint and the window grows by their height
+    -- (RefreshIntegrationNotes), so the buttons hang from its bottom edge.
+    self.integrationNotes = CreateLabel(frame, "GameFontHighlightSmall", "", 20, -410, 508)
+    self.integrationNotes:Hide()
+    for button, x in pairs({ [self.resetPart] = 20, [self.resetAll] = 150, [self.undo] = 280, [self.done] = 438 }) do
+        button:ClearAllPoints()
+        button:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, 14)
+    end
+
     return frame
 end
 
@@ -918,6 +946,19 @@ function Editor:RefreshNotes()
         self.movedNote:SetText(note)
     end
     self.movedNote:SetShown(note and true or false)
+end
+
+function Editor:RefreshIntegrationNotes()
+    local notes = IntegrationNotes()
+    local label = self.integrationNotes
+    label:SetText(table.concat(notes, "\n"))
+    label:SetShown(#notes > 0)
+    local extra = 0
+    if #notes > 0 then
+        -- A string that has never been on screen can report no height; a line each is the least.
+        extra = math.max(label:GetStringHeight() or 0, #notes * 11) + 8
+    end
+    self.frame:SetHeight(BASE_HEIGHT + extra)
 end
 
 -- Makes the parts of the large slot clickable. They exist once the slot has been drawn.
@@ -1020,6 +1061,7 @@ function Editor:Refresh()
     self.nudgeValue:SetText(DescribeNudge(tonumber(settings.OffsetX) or 0, tonumber(settings.OffsetY) or 0))
 
     self:RefreshSelection()
+    self:RefreshIntegrationNotes()
     self:RedrawSamples()
 end
 

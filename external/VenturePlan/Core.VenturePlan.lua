@@ -16,6 +16,11 @@ local function hookOrAssign(t, key, hookFunc)
 	end
 end
 
+-- Shown in the layout editor (see "Layout editor" in CLAUDE.md).
+function VenturePlanMixin:GetLayoutNote()
+    return "Venture Plan: the icon and the text keep their own places and sizes on a reward."
+end
+
 function VenturePlanMixin:Init()
 	local function OnSetReward(...)
 		self:UpdateButton(...)

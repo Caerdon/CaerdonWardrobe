@@ -10,6 +10,11 @@ end
 
 local refreshTimer
 
+-- Shown in the layout editor (see "Layout editor" in CLAUDE.md).
+function SortedMixin:GetLayoutNote()
+    return "Sorted: the icon is centered in a column of its own and keeps its size."
+end
+
 function SortedMixin:Init()
     local Sorted = LibStub("Sorted.")
     local statusProminentSize
