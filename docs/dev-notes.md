@@ -21,6 +21,20 @@ Keep entries short and factual. No session narration, quotes or test counts. "Of
 - **Recipe tooltips:** "Requires Cooking (40)" is a `UsageRequirement` line (`requirementType` Skill). A non-red line is the client's verdict that the rank is met and overrides the cached rank; a red line uses the cache to tell "rank too low" (`lowSkill`) from "no profession". Recipe items report a generic "Learning" spell, so the name-based `GetRecipe` lookup identifies the recipe.
 - **Collections:** the wardrobe UI hides uncollected appearances and transmog is restricted to same-type items, but the `C_TransmogCollection` APIs are unchanged.
 
+## Client Sources
+
+Two public mirrors cover both flavors. The clones live outside the addon folder, in `~/Projects/WoW/Builds/` (`source/<flavor>`, `resources/<flavor>`); `update.sh` in that folder creates or refreshes them. Neither belongs in the repo.
+
+- **Blizzard's Lua and XML:** `git clone --depth 1 --branch <branch> https://github.com/Gethe/wow-ui-source <dir>`, with `live` for retail and `forever` for Forever (`ptr`, `ptr2` and `beta` exist too). `version.txt` and the commit subject name the build. `Ketho/wow-ui-source-forever` carries the same `forever` commit.
+- **Listings:** `Ketho/BlizzardInterfaceResources`, branches `live` and `forever`, folder `Resources/`: `GlobalAPI.lua` (every global function, documented or not), `Events.lua`, `LuaEnum.lua`, `GlobalStrings/enUS.lua` (other locales beside it), `FrameXML.lua`, `Mixins.lua`. It is large, so clone with `--depth 1 --filter=blob:none --sparse` and then `git sparse-checkout set --no-cone` the files needed. In Git Bash set `MSYS_NO_PATHCONV=1` for that command, or the leading-slash patterns are rewritten to Windows paths and nothing is checked out.
+- **Previous builds are kept.** `update.sh` tags each build it fetches as `build/<version>` in that clone, and an update never drops an older tag. `update.sh changes [path]` summarises the two newest; `update.sh deepen [N]` fetches N earlier builds from the mirror's history. For anything else: `git -C source/<flavor> diff build/<old> build/<new> -- <path>`, or `git show build/<old>:<path>` to read one old file. After a client patch, read that diff for the Blizzard addons the features hook before trusting them.
+- **The installed client** can export its own code (`ExportInterfaceFiles code` in the login-screen console, started with `-console`) into `BlizzardInterfaceCode/` under the flavor's folder. That is the only source guaranteed to match the installed build, but it is a manual step for the author, so it is the exception: ask for one only when a specific build is needed and no mirror has it (the listings mirror can trail the source mirror by a build). Move the result to `~/Projects/WoW/Builds/exports/<flavor>-<build>/` instead of reading it in the game folder, and keep older exports there for comparison.
+- **Pitfalls when reading the mirrors:**
+  - The API documentation folder lists a function for both flavors even when its Blizzard addon is not loaded on one (housing events exist in Forever's listing). Presence in a listing means the client knows the name, not that the feature works.
+  - A Blizzard addon folder can hold several TOC files (per game family); read the one for the flavor before concluding what loads.
+  - A tooltip line's fields (`bonding`, `isValidInvSlot`, ...) are not in the documentation for either flavor. Only an in-game dump shows which exist.
+- **Cross-checks worth repeating after a client patch** (all are greps over the mirrors): every `C_*` function the addon calls against both `GlobalAPI.lua` files; every event name against both `Events.lua` files; the tooltip and binding enums in both `LuaEnum.lua` files; the global strings the tooltip scan matches; every `hooksecurefunc` target against both source trees.
+
 ## Transmog on Forever
 
 Selling an item to a vendor teaches its appearance ("added to your appearance collection"), with no equip or bind. The collect APIs do not model this, so three flags on `GetTransmogInfo()` cover it. All need both collect verdicts (`PlayerCanCollectSource`, `AccountCanCollectSource`) to be ready.

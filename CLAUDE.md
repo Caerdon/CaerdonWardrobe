@@ -6,10 +6,12 @@ This file is loaded into every session, so it holds only what an agent needs bef
 
 ## Useful Paths
 
-- **Blizzard source (local copy, may be absent):** `../../../BlizzardInterfaceCode/`
-- **WoW Forever Blizzard source:** GitHub `Ketho/wow-ui-source-forever`, branch `forever` (shallow clone it when needed). Retail mirror: `Gethe/wow-ui-source`, branch `live`.
+- **Local clones of both flavors (may be absent):** `~/Projects/WoW/Builds/`, with `source/retail`, `source/forever`, `resources/retail`, `resources/forever`. `update.sh` there creates or refreshes all four and prints each build; run it before trusting a clone after a client patch. It keeps every build it has fetched as a `build/<version>` tag, so two builds can be diffed (`update.sh changes`).
+- **The client's own export** is a manual step only the author can do. The mirrors are the default; ask for an export only when a specific build is needed and no mirror has it, and file it under `Builds/exports/` (notes: Client Sources).
+- **Blizzard source, both flavors:** GitHub `Gethe/wow-ui-source`, branch `live` (retail) and branch `forever` (also `ptr`, `ptr2`, `beta`). `version.txt` names the build.
   - API documentation: `Interface/AddOns/Blizzard_APIDocumentationGenerated/` (only `C_*` namespaces and a subset of bare globals)
   - Collections: `Blizzard_FrameXMLUtil/CollectionsUtil.lua`, `Blizzard_Collections/Shared/Blizzard_Wardrobe_Sets.lua`
+- **Per-flavor listings:** GitHub `Ketho/BlizzardInterfaceResources`, branches `live` and `forever`. One file each for every global API, event, enum value and enUS global string (the source mirror has no global strings). Commands and pitfalls: notes, Client Sources.
 
 ## What the Addon Does
 
@@ -57,6 +59,7 @@ The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for 
 ## Rules
 
 - **WoW Forever is not retail.** Its server rules differ (what a bag slot accepts, when an appearance is learned, armor proficiency). Do not write a rule from retail knowledge; get a Copy Details export that shows it.
+- **Retail and Forever share one code base and TOC.** Check an API, event, enum value, global string or hooked Blizzard function against both flavors' source before relying on it, then confirm in each client. Text differs between them (retail "Warbound", Forever "Account bound"), so a fixture or expected value belongs to one flavor.
 - **Feature detection, not flavor checks.** `CaerdonAPI:IsForeverClient()` is for reporting. `select(4, GetBuildInfo())` is `16001` on Forever, so a `>= 110000` gate is false there: use one only for features Forever really lacks (housing), never to pick an API path.
 - **Legacy globals:** many undocumented ones still exist on Forever, but confirm each by finding a call in Blizzard's camelot-loaded Lua. Never call `GetSpecialization`, `GetSpecializationInfo` or `GetSpecializationInfoByID` directly; use the `CaerdonAPI` wrappers.
 - **Investigating an item:** extend the Copy Details export instead of adding prints. Keep additions structured and readable.
@@ -88,6 +91,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Working on | Section |
 |---|---|
 | Anything Forever-specific | WoW Forever Client |
+| Getting Blizzard's code or listings for either flavor | Client Sources |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |
