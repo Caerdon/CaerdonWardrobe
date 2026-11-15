@@ -40,10 +40,16 @@
 -- for its room, so room says nothing about a quiver against a bag. They fit the normal bag
 -- slots only: on WoW Forever a quiver will not go in the reagent bag slot (tried in game).
 --
--- A quiver is no use to a toon that shoots nothing (a priest's ranged weapon is a wand), so an
--- empty slot only makes one an upgrade when the toon has the weapon for it equipped right now:
--- a bow or crossbow for a quiver, a gun for an ammo pouch. Read from the equipped item, not
--- from a list of classes. A quiver of the same kind already equipped counts as using one.
+-- A bag that only holds some kinds of items is no use to a toon that has none of them, so an
+-- empty slot only makes one an upgrade when the toon has a use for it (info.hasUse):
+--   a quiver: the weapon for it is equipped right now, a bow or crossbow for a quiver, a gun
+--     for an ammo pouch (a priest's ranged weapon is a wand). Read from the equipped item,
+--     not from a list of classes.
+--   a profession bag: the toon has a profession that deals in what the bag holds. The bag's
+--     subclass names it (Herb, Mining, Engineering, ...); PROFESSION_BAG_USERS adds the
+--     professions that use those materials. A soul bag is a warlock's.
+-- A bag of the same kind already equipped counts as having a use for one. Ordinary bags and
+-- reagent bags hold what every toon carries and are not asked.
 --
 -- No API gives the size of a bag that is not equipped, so the tooltip's "6 Slot Bag" line is
 -- read (the CONTAINER_SLOTS format). Equipped bags are read from the container API.
@@ -65,6 +71,34 @@ local WEAPON_CLASS = Enum.ItemClass and Enum.ItemClass.Weapon or 2
 local BOW_SUBCLASS = Enum.ItemWeaponSubclass and Enum.ItemWeaponSubclass.Bows or 2
 local GUN_SUBCLASS = Enum.ItemWeaponSubclass and Enum.ItemWeaponSubclass.Guns or 3
 local CROSSBOW_SUBCLASS = Enum.ItemWeaponSubclass and Enum.ItemWeaponSubclass.Crossbow or 18
+
+-- Base profession skill lines, as select(7, GetProfessionInfo(index)) reports them.
+local BLACKSMITHING, LEATHERWORKING, ALCHEMY, HERBALISM, COOKING, MINING = 164, 165, 171, 182, 185, 186
+local ENGINEERING, ENCHANTING, FISHING, SKINNING, JEWELCRAFTING, INSCRIPTION = 202, 333, 356, 393, 755, 773
+
+local function ContainerSubclass(name, fallback)
+    return Enum.ItemContainerSubclass and Enum.ItemContainerSubclass[name] or fallback
+end
+
+-- Container subclass -> the professions that deal in what such a bag holds: the one the
+-- subclass is named after, and the ones that craft with the same materials. `names` is for
+-- the reason text and the export only.
+local PROFESSION_BAG_USERS = {
+    [ContainerSubclass("Herb", 2)] = {
+        lines = { HERBALISM, ALCHEMY, INSCRIPTION }, names = "Herbalism, Alchemy, Inscription" },
+    [ContainerSubclass("Enchanting", 3)] = { lines = { ENCHANTING }, names = "Enchanting" },
+    [ContainerSubclass("Engineering", 4)] = { lines = { ENGINEERING }, names = "Engineering" },
+    [ContainerSubclass("Gem", 5)] = { lines = { JEWELCRAFTING, MINING }, names = "Jewelcrafting, Mining" },
+    [ContainerSubclass("Mining", 6)] = {
+        lines = { MINING, BLACKSMITHING, ENGINEERING, JEWELCRAFTING },
+        names = "Mining, Blacksmithing, Engineering, Jewelcrafting" },
+    [ContainerSubclass("Leatherworking", 7)] = {
+        lines = { LEATHERWORKING, SKINNING }, names = "Leatherworking, Skinning" },
+    [ContainerSubclass("Inscription", 8)] = { lines = { INSCRIPTION }, names = "Inscription" },
+    [ContainerSubclass("Tacklebox", 9)] = { lines = { FISHING }, names = "Fishing" },
+    [ContainerSubclass("Cooking", 10)] = { lines = { COOKING }, names = "Cooking" },
+}
+local SOUL_SUBCLASS = ContainerSubclass("Soul", 1)
 
 -- After a bag event the slots are read at once and again this much later: container sizes
 -- can lag behind the event when bags are moved around.
@@ -270,6 +304,27 @@ local function ReadAmmoWeapons()
     return result
 end
 
+-- The toon's professions right now: { lines = { [skill line] = true }, text, signature }.
+local function ReadProfessions()
+    local result = { lines = {} }
+    local names, ids = {}, {}
+    if GetProfessions and GetProfessionInfo then
+        for _, professionIndex in pairs({ GetProfessions() }) do
+            local name, _, _, _, _, _, skillLine = GetProfessionInfo(professionIndex)
+            if skillLine and not result.lines[skillLine] then
+                result.lines[skillLine] = true
+                names[#names + 1] = string.format("%s (%d)", tostring(name), skillLine)
+                ids[#ids + 1] = skillLine
+            end
+        end
+    end
+    table.sort(names)
+    table.sort(ids)
+    result.text = #names > 0 and table.concat(names, ", ") or "none"
+    result.signature = table.concat(ids, "/")
+    return result
+end
+
 local function BuildContext()
     local bagSlots = NUM_BAG_SLOTS or 4
     local reagentSlots = NUM_REAGENTBAG_SLOTS or 0
@@ -285,9 +340,13 @@ local function BuildContext()
     end
 
     local classicRules = ClassicEquipmentRules()
+    local professions = ReadProfessions()
     return {
         slots = slots,
-        signature = table.concat(parts, ","),
+        -- The professions are part of it: learning or dropping one changes which profession
+        -- bags the toon has a use for, and nothing else refreshes the icons then.
+        signature = table.concat(parts, ",") .. "|professions:" .. professions.signature,
+        professions = professions,
         -- Not part of the signature: an equipment change refreshes everything by itself.
         ammoWeapons = ReadAmmoWeapons(),
         reagentTakesProfession = classicRules or seenProfessionBagInReagentSlot,
@@ -379,8 +438,10 @@ end
 --     size, sizeText, sizeMatchedBy = how big it is and the tooltip line that said so,
 --     slotCount, emptySlots = the slots it fits,
 --     reagentSlotCounts = for a profession bag, whether the reagent bag slot is one of them,
---     hasUse = for a quiver, whether the toon has the weapon for it (or such a quiver)
---       equipped; false keeps an empty slot from making it an upgrade,
+--     hasUse = for a quiver or a profession bag, whether the toon has a use for it (the
+--       weapon equipped, a matching profession, or such a bag already equipped); false keeps
+--       an empty slot from making it an upgrade. nil when nothing is asked,
+--     usedBy = for a quiver or a profession bag, what it takes to have a use for it, in words,
 --     replacesBag = the container whose bag it would replace, when it is an upgrade for a
 --       filled slot,
 --     comparisons = { { bag, group, result, kind, size, itemID, label } } for every slot it
@@ -472,6 +533,33 @@ function CaerdonBagSlots:GetItemInfo(itemID, itemLink)
             hasWeapon = weapons.arrows or weapons.bullets
         end
         info.hasUse = hasWeapon or sameKindEquipped
+        info.usedBy = subClassID == QUIVER_SUBCLASS and "a bow or crossbow equipped" or
+            subClassID == AMMO_POUCH_SUBCLASS and "a gun equipped" or "a bow, crossbow or gun equipped"
+        info.usedByHave = weapons.text
+    elseif kind == "profession" then
+        -- Whether this toon deals in what the bag holds. A subclass the table does not know is
+        -- not asked.
+        local users = PROFESSION_BAG_USERS[subClassID]
+        local hasProfession
+        if subClassID == SOUL_SUBCLASS then
+            local _, classFile = UnitClass("player")
+            hasProfession = classFile == "WARLOCK"
+            info.usedBy = "a warlock"
+            info.usedByHave = "class " .. tostring(classFile)
+        elseif users then
+            hasProfession = false
+            for _, skillLine in ipairs(users.lines) do
+                if ctx.professions.lines[skillLine] then
+                    hasProfession = true
+                    break
+                end
+            end
+            info.usedBy = "one of " .. users.names
+            info.usedByHave = "professions: " .. ctx.professions.text
+        end
+        if hasProfession ~= nil then
+            info.hasUse = hasProfession or sameKindEquipped
+        end
     end
 
     if info.slotCount == 0 then
@@ -479,8 +567,8 @@ function CaerdonBagSlots:GetItemInfo(itemID, itemLink)
     elseif pending then
         info.reason = "a bag slot's contents are not known yet"
     elseif info.emptySlots > 0 and info.hasUse == false then
-        info.reason = string.format("a slot is empty, but nothing equipped shoots what it holds (%s)",
-            ctx.ammoWeapons.text)
+        info.reason = string.format("a slot is empty, but this toon has no use for it: it takes %s (%s)",
+            tostring(info.usedBy), tostring(info.usedByHave))
     elseif info.emptySlots > 0 then
         -- Any bag beats an empty slot, so the size does not have to be readable for this.
         info.isUpgrade = true
@@ -523,6 +611,7 @@ function CaerdonBagSlots:GetDebugState()
         reagentTakesProfessionWhy = ctx.reagentTakesProfessionWhy,
         ammoWeapons = string.format("arrows %s, bullets %s (%s)", tostring(ctx.ammoWeapons.arrows),
             tostring(ctx.ammoWeapons.bullets), ctx.ammoWeapons.text),
+        professions = ctx.professions.text,
         groups = { bag = { slots = {} }, reagent = { slots = {} } },
     }
     for _, slot in ipairs(ctx.slots) do
@@ -579,6 +668,9 @@ local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 -- Fires when a bag slot's content changes; guarded in case a client does not have it.
 pcall(eventFrame.RegisterEvent, eventFrame, "BAG_CONTAINER_UPDATE")
+-- A profession learned or dropped. Also fires on every skill point; the check is cheap and
+-- only refreshes when the set of professions changed.
+pcall(eventFrame.RegisterEvent, eventFrame, "SKILL_LINES_CHANGED")
 eventFrame:SetScript("OnEvent", function()
     if not context then
         return

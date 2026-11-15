@@ -2634,7 +2634,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 addKV(1, "Would Replace Container", bagInfo.replacesBag)
             end
             if bagInfo.hasUse ~= nil then
-                addKV(1, "Toon Shoots What It Holds", bagInfo.hasUse)
+                addKV(1, "Toon Has A Use For It", string.format("%s (takes %s; %s)", tostring(bagInfo.hasUse),
+                    tostring(bagInfo.usedBy), tostring(bagInfo.usedByHave)))
             end
             addLine(1, string.format("Slots It Fits: %d, %d empty", bagInfo.slotCount, bagInfo.emptySlots))
             for _, comparison in ipairs(bagInfo.comparisons) do
@@ -2650,6 +2651,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Reagent Bag Slot Takes Profession Bags", string.format("%s (%s)",
             tostring(bagState.reagentTakesProfession), tostring(bagState.reagentTakesProfessionWhy)))
         addKV(1, "Ammo Weapons Equipped", bagState.ammoWeapons)
+        addKV(1, "Professions", bagState.professions)
         for _, kind in ipairs({ "bag", "reagent" }) do
             local group = bagState.groups[kind]
             addLine(1, (kind == "reagent" and "Reagent Bag Slots" or "Bag Slots") ..
