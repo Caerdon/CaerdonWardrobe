@@ -717,6 +717,10 @@ local PAWN_UPGRADE_THRESHOLD = 1.005
 -- for "scored, not better" and for "cannot judge" (trinkets, no scales, data not loaded), so the
 -- scores are compared here the way Pawn does (unenchanted values, the weaker of two slots).
 -- Anything short of a clear "not better" returns false, which leaves the item-level fallback on.
+-- "Not better" includes "equal at nothing": when every visible scale scores both the candidate
+-- and the equipped piece at zero, Pawn is saying neither has anything this toon's scales weigh
+-- (two plain maces on a priest), and a higher item level in a stat the class does not use is not
+-- an upgrade. Until 2026-11-14 that case counted as "no verdict" and item level decided.
 -- ignoredScales (optional, scale name -> true) are left out: see GetPawnOffTreeScales.
 -- Second return value: the per-scale numbers, for the Debug Frame export.
 local function PawnPrefersEquipped(item, ignoredScales)
@@ -763,10 +767,11 @@ local function PawnPrefersEquipped(item, ignoredScales)
             return false, "nothing equipped to compare"
         end
 
-        local scalesCompared = 0
+        local scalesSeen, scalesCompared = 0, 0
         local parts = {}
         for scaleName in pairs(PawnCommon.Scales) do
             if PawnIsScaleVisible(scaleName) and not (ignoredScales and ignoredScales[scaleName]) then
+                scalesSeen = scalesSeen + 1
                 local _, candidateValue = PawnGetSingleValueFromItem(candidate, scaleName)
                 if not candidateValue then
                     return false, "no candidate value for " .. scaleName
@@ -787,15 +792,21 @@ local function PawnPrefersEquipped(item, ignoredScales)
                 if candidateValue > lowestEquipped * PAWN_UPGRADE_THRESHOLD then
                     return false, table.concat(parts, "; ")
                 end
-                -- A scale that values neither item says nothing about which is better.
+                -- Counted apart: a scale that values the equipped piece, and rates the candidate
+                -- no higher, prefers what is equipped. One that values neither calls them equal.
                 if lowestEquipped > 0 then
                     scalesCompared = scalesCompared + 1
                 end
             end
         end
 
+        if scalesSeen == 0 then
+            return false, "no visible Pawn scale to compare on"
+        end
         if scalesCompared == 0 then
-            return false, "no visible scale values the equipped item"
+            -- Reaching here means no scale rated the candidate above the equipped piece, and
+            -- none rated the equipped piece above zero: both score nothing everywhere.
+            return true, table.concat(parts, "; ") .. " (no visible scale values either item: equal for Pawn)"
         end
         return true, table.concat(parts, "; ")
     end)
