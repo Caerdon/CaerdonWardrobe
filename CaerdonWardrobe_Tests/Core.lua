@@ -1,0 +1,472 @@
+-- Caerdon Wardrobe Tests: a development addon, never packaged.
+--
+-- It runs in the client next to the addon, proves what can only be proven there, and writes
+-- what it found to its saved variables (CaerdonWardrobeTestsDB). That file is how a result
+-- leaves the game: the client writes it on /reload and on logout, and tools/test-results.lua
+-- reads it from the WTF folder.
+--
+-- This file: the shared table, who and where we are, the saved results, and the job runner.
+
+local ADDON_NAME, T = ...
+
+CaerdonWardrobeTests = T
+
+T.NAME = ADDON_NAME
+T.SUBJECT = "CaerdonWardrobe" -- the addon under test
+T.SCHEMA = 1
+
+------------------------------------------------------------------------------------------
+-- Output
+------------------------------------------------------------------------------------------
+
+local PREFIX = "|cff33ccffCaerdon tests:|r "
+
+function T.Print(message, ...)
+    if select("#", ...) > 0 then
+        message = message:format(...)
+    end
+    print(PREFIX .. message)
+end
+
+------------------------------------------------------------------------------------------
+-- Plain data
+------------------------------------------------------------------------------------------
+
+local MAX_KEYS = 200
+
+-- A copy that the saved variables can hold: strings, numbers, booleans and tables of them.
+-- Anything else becomes a "<kind>" marker, so a result never drags a frame or a function
+-- into the file. A secret value cannot be stored or compared, so it becomes "<secret>".
+function T.Plain(value, depth)
+    if issecretvalue(value) then
+        return "<secret>"
+    end
+    local kind = type(value)
+    if kind == "string" or kind == "boolean" or kind == "nil" then
+        return value
+    elseif kind == "number" then
+        -- NaN and the infinities do not survive the file.
+        if value ~= value or value == math.huge or value == -math.huge then
+            return "<" .. tostring(value) .. ">"
+        end
+        return value
+    elseif kind ~= "table" then
+        return "<" .. kind .. ">"
+    end
+    if type(rawget(value, 0)) == "userdata" then
+        return "<frame>"
+    end
+    depth = depth or 6
+    if depth <= 0 then
+        return "<table>"
+    end
+    local copy, count = {}, 0
+    for key, item in pairs(value) do
+        count = count + 1
+        if count > MAX_KEYS then
+            copy["<more>"] = true
+            break
+        end
+        -- Methods are left out: a color or a location is a mixin, and its functions say nothing.
+        if issecretvalue(item) or type(item) ~= "function" then
+            local keyKind = type(key)
+            if issecretvalue(key) then
+                key = "<secret>"
+            elseif keyKind ~= "string" and keyKind ~= "number" then
+                key = "<" .. keyKind .. ">"
+            end
+            copy[key] = T.Plain(item, depth - 1)
+        end
+    end
+    return copy
+end
+
+-- Appends to a list that keeps only its newest entries.
+function T.Push(list, entry, limit)
+    list[#list + 1] = entry
+    while #list > limit do
+        table.remove(list, 1)
+    end
+end
+
+function T.SortedKeys(map)
+    local keys = {}
+    for key in pairs(map) do
+        keys[#keys + 1] = key
+    end
+    table.sort(keys, function(a, b)
+        if type(a) == type(b) then
+            return a < b
+        end
+        return tostring(a) < tostring(b)
+    end)
+    return keys
+end
+
+------------------------------------------------------------------------------------------
+-- Client and toon
+------------------------------------------------------------------------------------------
+
+-- flavor is "retail" or "forever" (the names the static check uses); build is "1.60.1.70938".
+function T.GetClient()
+    if not T.client then
+        local version, build, _, toc = GetBuildInfo()
+        local flavor = CaerdonAPI:GetClientFlavor()
+        T.client = {
+            flavor = string.lower(flavor),
+            version = version,
+            build = version .. "." .. build,
+            toc = toc,
+            projectID = WOW_PROJECT_ID,
+            locale = GetLocale(),
+        }
+    end
+    return T.client
+end
+
+local function ReadProfessions()
+    local found = {}
+    local indexes = { GetProfessions() } -- nil where the toon has none: read by position
+    for position = 1, 6 do
+        local index = indexes[position]
+        if index then
+            local name, _, rank, _, _, _, skillLine = GetProfessionInfo(index)
+            found[#found + 1] = { name = name, rank = rank, skillLine = skillLine, primary = position <= 2 }
+        end
+    end
+    return found
+end
+
+-- Read fresh on every call: level and professions change during a session.
+--
+-- signature is what a toon-dependent result is valid for: class, race, faction, level and
+-- primary professions. A result recorded under another signature is stale.
+function T.GetToon()
+    local name, realm = UnitFullName("player")
+    local _, class = UnitClass("player")
+    local _, race = UnitRace("player")
+    local faction = UnitFactionGroup("player")
+    local level = UnitLevel("player")
+    local professions = ReadProfessions()
+    local primary = {}
+    for _, profession in ipairs(professions) do
+        if profession.primary then
+            primary[#primary + 1] = tostring(profession.skillLine or profession.name)
+        end
+    end
+    table.sort(primary)
+    return {
+        key = ("%s-%s"):format(name or "?", realm or GetRealmName() or "?"),
+        class = class,
+        race = race,
+        faction = faction,
+        level = level,
+        professions = professions,
+        signature = ("%s/%s/%s/%d/%s"):format(tostring(class), tostring(race), tostring(faction), level or 0,
+            table.concat(primary, "+")),
+    }
+end
+
+-- Whether the toon is of the kind a test asks for:
+-- { class = "HUNTER", race = "Dwarf", faction = "Alliance", minLevel = 10, maxLevel = 39 }.
+function T.ToonMatches(toon, want)
+    if not want then
+        return true
+    end
+    if want.class and want.class ~= toon.class then return false end
+    if want.race and want.race ~= toon.race then return false end
+    if want.faction and want.faction ~= toon.faction then return false end
+    if want.minLevel and toon.level < want.minLevel then return false end
+    if want.maxLevel and toon.level > want.maxLevel then return false end
+    return true
+end
+
+------------------------------------------------------------------------------------------
+-- Saved results
+------------------------------------------------------------------------------------------
+
+local KEEP_BUILDS = 3
+
+local function NewDB()
+    return {
+        schema = T.SCHEMA,
+        sessions = {},  -- the last logins: who, where, which build
+        builds = {},    -- build -> when it was first seen
+        contracts = {}, -- build -> test id -> result
+        verdicts = {},  -- test id -> toon kind -> record
+        journal = {},   -- learn events with what happened around them
+        events = {},    -- build -> event -> how often it fired
+        snapshots = {}, -- toon -> base / last / diff
+        timing = {},    -- timing runs
+        logins = {},    -- what each login and reload cost
+        probes = {},    -- toon -> item ID -> what the client and the addon say about it
+        errors = {},    -- errors in the tests themselves
+        pending = {},   -- what a reload was asked to prove
+    }
+end
+
+local function OpenDB()
+    local db = CaerdonWardrobeTestsDB
+    if type(db) ~= "table" or db.schema ~= T.SCHEMA then
+        db = NewDB()
+        CaerdonWardrobeTestsDB = db
+    end
+    for key, value in pairs(NewDB()) do
+        if db[key] == nil then
+            db[key] = value
+        end
+    end
+    T.db = db
+end
+
+-- Results are kept for the newest builds only: a contract is a fact about one build.
+local function NoteBuild()
+    local db, build = T.db, T.GetClient().build
+    db.builds[build] = db.builds[build] or GetServerTime()
+    local builds = T.SortedKeys(db.builds)
+    table.sort(builds, function(a, b) return db.builds[a] > db.builds[b] end)
+    for index = KEEP_BUILDS + 1, #builds do
+        local old = builds[index]
+        db.builds[old], db.contracts[old], db.events[old] = nil, nil, nil
+    end
+    db.contracts[build] = db.contracts[build] or {}
+    db.events[build] = db.events[build] or {}
+end
+
+function T.RecordError(where, message, stack)
+    T.Push(T.db.errors, {
+        at = GetServerTime(),
+        where = where,
+        message = tostring(message),
+        stack = stack,
+    }, 30)
+    T.Print("|cffff4040error in %s:|r %s", tostring(where), tostring(message))
+end
+
+------------------------------------------------------------------------------------------
+-- Events
+------------------------------------------------------------------------------------------
+
+local frame = CreateFrame("Frame")
+local handlers = {}
+
+-- Returns false when the client does not know the event.
+function T.RegisterEvent(event, handler)
+    local list = handlers[event]
+    if not list then
+        if not pcall(frame.RegisterEvent, frame, event) then
+            return false
+        end
+        list = {}
+        handlers[event] = list
+    end
+    list[#list + 1] = handler
+    return true
+end
+
+frame:SetScript("OnEvent", function(_, event, ...)
+    local list = handlers[event]
+    for index = 1, #list do
+        xpcall(list[index], geterrorhandler(), event, ...)
+    end
+end)
+
+local initializers, logins = {}, {}
+
+-- fn runs once the saved results are loaded; a login function once the toon can be read.
+function T.OnInit(fn) initializers[#initializers + 1] = fn end
+function T.OnLogin(fn) logins[#logins + 1] = fn end
+
+T.RegisterEvent("ADDON_LOADED", function(_, name)
+    if name ~= ADDON_NAME then
+        return
+    end
+    T.loadedAt = GetTime()
+    OpenDB()
+    for _, fn in ipairs(initializers) do
+        xpcall(fn, geterrorhandler())
+    end
+end)
+
+T.RegisterEvent("PLAYER_LOGIN", function()
+    T.loginTime = GetTime()
+    NoteBuild()
+    local client, toon = T.GetClient(), T.GetToon()
+    T.Push(T.db.sessions, {
+        at = GetServerTime(),
+        flavor = client.flavor,
+        build = client.build,
+        toc = client.toc,
+        locale = client.locale,
+        toon = toon.key,
+        signature = toon.signature,
+        subjectVersion = C_AddOns.GetAddOnMetadata(T.SUBJECT, "Version"),
+        testsVersion = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version"),
+    }, 20)
+    for _, fn in ipairs(logins) do
+        xpcall(fn, geterrorhandler())
+    end
+end)
+
+------------------------------------------------------------------------------------------
+-- Jobs
+------------------------------------------------------------------------------------------
+
+-- A job is a function that runs in a coroutine, one job at a time, so a test can wait for
+-- the client (an item to load, the queue to drain) and still read from top to bottom.
+-- Nothing runs in combat.
+
+local queue, active = {}, nil
+
+local function Pack(...)
+    return { n = select("#", ...), ... }
+end
+
+local function OnUpdate()
+    if InCombatLockdown() then
+        return
+    end
+    if not active then
+        active = table.remove(queue, 1)
+        if not active then
+            frame:SetScript("OnUpdate", nil)
+            return
+        end
+    end
+    if active.wake and GetTime() < active.wake then
+        return
+    end
+    local ok, wake = coroutine.resume(active.co)
+    if not ok then
+        T.RecordError(active.name, wake, debugstack(active.co))
+        active = nil
+    elseif coroutine.status(active.co) == "dead" then
+        active = nil
+    else
+        active.wake = (type(wake) == "number" and wake > 0) and wake or nil
+    end
+end
+
+function T.Start(name, body)
+    queue[#queue + 1] = { name = name, co = coroutine.create(body) }
+    frame:SetScript("OnUpdate", OnUpdate)
+end
+
+function T.IsBusy()
+    return active ~= nil or #queue > 0
+end
+
+function T.ActiveJob()
+    return active and active.name
+end
+
+-- Inside a job: come back next frame, or after some seconds.
+function T.Yield()
+    coroutine.yield(0)
+end
+
+function T.Sleep(seconds)
+    coroutine.yield(GetTime() + seconds)
+end
+
+-- Inside a job: wait until predicate() holds. False when the timeout came first.
+function T.WaitUntil(predicate, timeout)
+    local deadline = GetTime() + timeout
+    while not predicate() do
+        if GetTime() >= deadline then
+            return false
+        end
+        coroutine.yield(0)
+    end
+    return true
+end
+
+-- Inside a job: runs body(...) to its end and returns true plus its results, or false, the
+-- error and a stack. Its waits are passed on to the job runner. This stands in for pcall,
+-- which cannot be used around code that waits: the client's Lua cannot yield across it.
+function T.Protected(body, ...)
+    local co = coroutine.create(body)
+    local results = Pack(coroutine.resume(co, ...))
+    while results[1] and coroutine.status(co) ~= "dead" do
+        coroutine.yield(results[2])
+        results = Pack(coroutine.resume(co))
+    end
+    if not results[1] then
+        return false, tostring(results[2]), debugstack(co)
+    end
+    return true, unpack(results, 2, results.n)
+end
+
+------------------------------------------------------------------------------------------
+-- The addon under test
+------------------------------------------------------------------------------------------
+
+-- Whether the addon has nothing queued. This reads the queue's own fields and is the one
+-- place the tests know how the queue is built: when the core can answer the question itself,
+-- ask it here instead.
+function T.CoreIsIdle()
+    local core = CaerdonWardrobe
+    if next(core.waitingToProcess) ~= nil or core.processItemCoroutine ~= nil or core.processQueue ~= nil then
+        return false
+    end
+    if core.pendingTooltipRetries and next(core.pendingTooltipRetries) ~= nil then
+        return false
+    end
+    for _, items in pairs(core.featureProcessItems) do
+        if next(items) ~= nil then
+            return false
+        end
+    end
+    return true
+end
+
+-- Inside a job: wait until the queue has been empty for `settle` seconds in a row.
+function T.WaitForIdle(settle, timeout)
+    local idleSince
+    return T.WaitUntil(function()
+        if T.CoreIsIdle() then
+            idleSince = idleSince or GetTime()
+            return GetTime() - idleSince >= settle
+        end
+        idleSince = nil
+        return false
+    end, timeout)
+end
+
+-- Inside a job: a CaerdonItem for an item ID or link with its data loaded, or nil and why.
+function T.LoadItem(itemRef, timeout)
+    local item
+    if type(itemRef) == "number" then
+        if not C_Item.DoesItemExistByID(itemRef) then
+            return nil, "the client has no item " .. itemRef
+        end
+        item = CaerdonItem:CreateFromItemID(itemRef)
+    else
+        item = CaerdonItem:CreateFromItemLink(itemRef)
+    end
+    local loaded = false
+    item:ContinueOnItemLoad(function() loaded = true end)
+    if not T.WaitUntil(function() return loaded end, timeout or 10) then
+        return nil, "the item's data did not load"
+    end
+    if not item:GetItemLink() then
+        return nil, "the item has no link"
+    end
+    return item
+end
+
+-- Inside a job: the addon's verdict for a loaded item. Returns true, status, binding text
+-- and the binding result, or false when the tooltip never became ready.
+function T.GetVerdict(item, feature, locationInfo, timeout)
+    local deadline = GetTime() + (timeout or 12)
+    while true do
+        local isReady, status, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
+        if isReady then
+            return true, status, bindingStatus, bindingResult
+        end
+        if GetTime() >= deadline then
+            return false
+        end
+        T.Sleep(0.5)
+    end
+end

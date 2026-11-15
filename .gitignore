@@ -1,3 +1,5 @@
 *.un~
 /libs
 CLAUDE.local.md
+*.local.lua
+CaerdonWardrobe_Tests/StaticFacts.lua

@@ -1,0 +1,22 @@
+## Interface: 110205, 110207, 120000, 120001, 120005, 120007, 120100, 120105, 120107, 16001
+## Title: Caerdon Wardrobe Tests
+## Notes: Development tests for Caerdon Wardrobe. Not part of the released addon.
+## Author: Caerdon
+## Version: 1
+## Dependencies: CaerdonWardrobe
+## SavedVariables: CaerdonWardrobeTestsDB
+## IconTexture: Interface\Store\category-icon-featured
+
+Core.lua
+Runner.lua
+Facts.lua
+StaticFacts.lua
+Contracts.lua
+Verdicts.lua
+VerdictCases.lua
+Journal.lua
+Snapshot.lua
+Timing.lua
+Plan.lua
+Plan.local.lua
+Commands.lua

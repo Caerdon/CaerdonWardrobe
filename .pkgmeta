@@ -14,4 +14,5 @@ enable-nolib-creation: no
 ignore:
   - docs
   - tools
+  - CaerdonWardrobe_Tests
   - "*.md"

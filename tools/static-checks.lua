@@ -1,6 +1,11 @@
 -- Static checks for CaerdonWardrobe. Offline: this reads code, it does not run a client.
 --
---   luajit tools/static-checks.lua [--builds DIR] [--verbose]
+--   luajit tools/static-checks.lua [--builds DIR] [--verbose] [--emit-facts]
+--
+-- It reads the addon and the test addon (CaerdonWardrobe_Tests), which runs in the same
+-- clients. --emit-facts writes what the check concluded to CaerdonWardrobe_Tests/StaticFacts.lua
+-- (generated, not tracked), where the test addon compares it with the client; a run without
+-- it reports that file when it is out of date.
 --
 -- What it checks, for retail and for Forever separately:
 --   * every global the addon reads, every C_* function, namespace function and Enum value it
@@ -37,6 +42,11 @@ local scriptDir = (arg[0] or ""):gsub("\\", "/"):match("^(.*)/[^/]*$") or "."
 local addonDir = scriptDir .. "/.."
 local buildsDir = os.getenv("CAERDON_BUILDS")
 local verbose = false
+local emitFacts = false
+
+-- The addons to read, as folders below the repository's root. The first is the addon itself.
+local ADDON_ROOTS = { "", "CaerdonWardrobe_Tests/" }
+local FACTS_FILE = "CaerdonWardrobe_Tests/StaticFacts.lua"
 
 do
     local i = 1
@@ -46,8 +56,10 @@ do
             i = i + 1
         elseif arg[i] == "--verbose" then
             verbose = true
+        elseif arg[i] == "--emit-facts" then
+            emitFacts = true
         else
-            io.stderr:write("usage: luajit tools/static-checks.lua [--builds DIR] [--verbose]\n")
+            io.stderr:write("usage: luajit tools/static-checks.lua [--builds DIR] [--verbose] [--emit-facts]\n")
             os.exit(2)
         end
         i = i + 1
@@ -512,7 +524,7 @@ local function loadClient(flavor)
         key = flavor.key,
         reads = {}, writes = {}, xmlNames = {}, templateChildren = {}, xmlSources = {},
         members = {}, methodOwners = {}, parents = {},
-        uncompiled = {}, missingFiles = {}, skippedAddons = {}, luaFiles = 0, addons = 0,
+        uncompiled = {}, missingFiles = {}, skippedAddons = {}, loadedAddons = {}, luaFiles = 0, addons = 0,
     }
 
     local resources = buildsDir .. "/resources/" .. flavor.key
@@ -586,6 +598,7 @@ local function loadClient(flavor)
         local files = readToc(tocText, flavor, "game")
         if files then
             client.addons = client.addons + 1
+            client.loadedAddons[#client.loadedAddons + 1] = folder
             for _, file in ipairs(files) do loadFile(dirOf(toc.path) .. "/" .. file) end
         else
             client.skippedAddons[#client.skippedAddons + 1] = folder
@@ -752,7 +765,13 @@ local function loadAddon()
         if seen[path] or path:lower():match("^libs/") then return end
         seen[path] = true
         local text = readFile(addonDir .. "/" .. path)
-        if not text then fail("the addon loads " .. path .. ", which is missing") end
+        if not text then
+            -- A "*.local.lua" file is one machine's own and is not tracked.
+            if path:lower():match("%.local%.lua$") then return end
+            -- Generated and not tracked: its absence is noted in the report.
+            if path == FACTS_FILE then return end
+            fail("the addon loads " .. path .. ", which is missing")
+        end
         if path:lower():match("%.xml$") then
             text = text:gsub("<!%-%-.-%-%->", "")
             for name in text:gmatch('%f[%w]name%s*=%s*"([^"$]+)"') do addon.ownNames[name] = true end
@@ -765,26 +784,33 @@ local function loadAddon()
         end
     end
 
-    local tocText
-    for _, file in ipairs(gitLines(addonDir, "ls-files")) do
-        if file:match("^[^/]+%.toc$") then
-            tocText = readFile(addonDir .. "/" .. file)
-            break
+    -- Untracked files count too, so a new file is checked before its first commit.
+    local files = gitLines(addonDir, "ls-files --cached --others --exclude-standard")
+    for index, root in ipairs(ADDON_ROOTS) do
+        local tocText
+        for _, file in ipairs(files) do
+            if file:sub(1, #root) == root and file:sub(#root + 1):match("^[^/]+%.toc$") then
+                tocText = readFile(addonDir .. "/" .. file)
+                break
+            end
         end
-    end
-    if not tocText then fail("no tracked TOC file in " .. addonDir) end
-    for line in tocText:gmatch("[^\n]+") do
-        line = trim(line)
-        local savedVariables = line:match("^##%s*SavedVariables%a*%s*:%s*(.+)$")
-        if savedVariables then
-            for name in savedVariables:gmatch("[%w_]+") do addon.ownNames[name] = true end
-        elseif line ~= "" and line:sub(1, 1) ~= "#" then
-            loadFile(line)
+        if tocText then
+            for line in tocText:gmatch("[^\n]+") do
+                line = trim(line)
+                local savedVariables = line:match("^##%s*SavedVariables%a*%s*:%s*(.+)$")
+                if savedVariables then
+                    for name in savedVariables:gmatch("[%w_]+") do addon.ownNames[name] = true end
+                elseif line ~= "" and line:sub(1, 1) ~= "#" then
+                    loadFile(root .. line)
+                end
+            end
+        elseif index == 1 then
+            fail("no TOC file in " .. addonDir)
         end
     end
 
     addon.notLoaded = {}
-    for _, file in ipairs(gitLines(addonDir, "ls-files")) do
+    for _, file in ipairs(files) do
         local lower = file:lower()
         if (lower:match("%.lua$") or lower:match("%.xml$")) and not seen[file]
             and not lower:match("^tools/") and not lower:match("^libs/") and lower ~= "bindings.xml" then
@@ -832,10 +858,16 @@ local function report(section, line)
     findingCount = findingCount + 1
 end
 
+-- What the check concluded, for the test addon to compare with the client (--emit-facts):
+-- names and events that are not in both clients, and every hook target with its state.
+local staticFacts = { names = {}, events = {}, hooks = {} }
+
 -- inRetail / inForever: whether each client has the name. Both true is the normal case.
-local function compare(section, name, inRetail, inForever, where)
-    if inRetail and inForever then return end
-    local state = inRetail and "retail" or inForever and "forever" or "neither"
+-- factKind files the conclusion under staticFacts.
+local function compare(section, name, inRetail, inForever, where, factKind)
+    local state = (inRetail and inForever) and "both" or inRetail and "retail" or inForever and "forever" or "neither"
+    if factKind and (state ~= "both" or factKind == "hooks") then staticFacts[factKind][name] = state end
+    if state == "both" then return end
     local entry = allow.clientSpecific[name]
     if entry then
         allowUsed[name] = true
@@ -888,7 +920,7 @@ do
     for _, name in ipairs(sortedKeys(addon.reads)) do
         if not addon.ownNames[name] and not isThirdParty(name) then
             local kind = (retail.strings[name] or forever.strings[name]) and "Global strings the addon reads" or section
-            compare(kind, name, hasGlobal(retail, name), hasGlobal(forever, name), places(addon.reads[name]))
+            compare(kind, name, hasGlobal(retail, name), hasGlobal(forever, name), places(addon.reads[name]), "names")
         elseif isThirdParty(name) then
             allowUsed["thirdParty:" .. name] = true
         end
@@ -918,7 +950,7 @@ do
             local parent = name:match("^(.*)%.[^.]+$")
             local inRetail, inForever = enumValue(retail, name), enumValue(forever, name)
             if parent == root or inRetail ~= enumValue(retail, parent) or inForever ~= enumValue(forever, parent) then
-                compare(enums, name, inRetail, inForever, where)
+                compare(enums, name, inRetail, inForever, where, "names")
             end
         elseif deeper == "" then
             -- A function of a namespace, or a method of a global frame or mixin.
@@ -926,9 +958,9 @@ do
                 return (client.api[name] or definesMethod(client, root, first)) and true or false
             end
             if root:match("^C_") then
-                compare(functions, name, retail.api[name] or false, forever.api[name] or false, where)
+                compare(functions, name, retail.api[name] or false, forever.api[name] or false, where, "names")
             elseif has(retail) or has(forever) then
-                compare(functions, name, has(retail), has(forever), where)
+                compare(functions, name, has(retail), has(forever), where, "names")
             elseif retail.namespaces[root] or forever.namespaces[root] then
                 unresolvedMembers[#unresolvedMembers + 1] = ("%-52s %s"):format(name, where)
             end
@@ -942,7 +974,8 @@ do
     local seen = {}
     for _, name in ipairs(sortedKeys(addon.events)) do
         seen[name] = true
-        compare(section, name, retail.events[name] or false, forever.events[name] or false, places(addon.events[name]))
+        compare(section, name, retail.events[name] or false, forever.events[name] or false, places(addon.events[name]),
+            "events")
     end
     -- A string that is an event (or a global string) in one client only is worth a look
     -- wherever it appears: a table of event names, a name passed to _G[...].
@@ -973,12 +1006,15 @@ do
     for _, hook in ipairs(addon.hooks) do
         if hook.name then
             local function has(client) return (client.api[hook.name] or client.writes[hook.name]) and true or false end
-            compare(section, hook.name, has(retail), has(forever), hook.place)
+            compare(section, hook.name, has(retail), has(forever), hook.place, "hooks")
+        elseif addon.ownNames[hook.root] then
+            -- The test addon hooks the addon's own frame, which is not the client's business.
         elseif isThirdParty(hook.root) then
             allowUsed["thirdParty:" .. hook.root] = true
             thirdPartyHooks[#thirdPartyHooks + 1] = ("%s.%s  %s"):format(hook.path, hook.method, hook.place)
         else
-            compare(section, hook.path .. "." .. hook.method, hasMethod(retail, hook), hasMethod(forever, hook), hook.place)
+            compare(section, hook.path .. "." .. hook.method, hasMethod(retail, hook), hasMethod(forever, hook),
+                hook.place, "hooks")
         end
     end
 end
@@ -999,6 +1035,81 @@ do
     for _, name in ipairs(sortedKeys(allow.thirdParty)) do
         if not allowUsed["thirdParty:" .. name] then
             report(section, ("%-52s thirdParty: the addon no longer reads it"):format(name))
+        end
+    end
+end
+
+------------------------------------------------------------------------------------------
+-- Facts for the test addon
+------------------------------------------------------------------------------------------
+
+-- The file is generated, so it is compared as text: the same conclusions give the same bytes.
+local function factsText()
+    local out = {
+        "-- Generated by `luajit tools/static-checks.lua --emit-facts`. Do not edit.",
+        "--",
+        "-- What the static check concluded about each client from Blizzard's code and listings.",
+        "-- The \"static.*\" contracts compare it with the client itself.",
+        "",
+        "local _, T = ...",
+        "",
+        "T.StaticFacts = {",
+        "    -- The builds of Blizzard's code the conclusions were drawn from.",
+        ("    builds = { retail = %q, forever = %q },"):format(retail.sourceBuild, forever.sourceBuild),
+    }
+    local function map(name, comment, values)
+        out[#out + 1] = ""
+        out[#out + 1] = "    -- " .. comment
+        out[#out + 1] = "    " .. name .. " = {"
+        for _, key in ipairs(sortedKeys(values)) do
+            out[#out + 1] = ("        [%q] = %q,"):format(key, values[key])
+        end
+        out[#out + 1] = "    },"
+    end
+    local function lists(name, comment, field)
+        out[#out + 1] = ""
+        out[#out + 1] = "    -- " .. comment
+        out[#out + 1] = "    " .. name .. " = {"
+        for _, client in ipairs(clients) do
+            local names = {}
+            for index, value in ipairs(client[field]) do names[index] = value end
+            table.sort(names)
+            out[#out + 1] = "        " .. client.key .. " = {"
+            for _, value in ipairs(names) do out[#out + 1] = ("            %q,"):format(value) end
+            out[#out + 1] = "        },"
+        end
+        out[#out + 1] = "    },"
+    end
+    map("names", "Names the addon uses that one client lacks, or both: name -> the client that has it.",
+        staticFacts.names)
+    map("events", "Events the addon uses that one client lacks, or both.", staticFacts.events)
+    map("hooks", "Literal hooksecurefunc targets on Blizzard names: target -> the clients that have it.",
+        staticFacts.hooks)
+    lists("notLoaded", "Blizzard addons the check says a client never loads.", "skippedAddons")
+    lists("loads", "Blizzard addons the check says a client loads, at login or on demand.", "loadedAddons")
+    out[#out + 1] = "}"
+    out[#out + 1] = ""
+    return table.concat(out, "\n")
+end
+
+local factsMissing = false
+do
+    local text = factsText()
+    local path = addonDir .. "/" .. FACTS_FILE
+    if emitFacts then
+        local handle = io.open(path, "wb")
+        if not handle then fail("cannot write " .. path) end
+        handle:write(text)
+        handle:close()
+    else
+        -- The file is not tracked, so a clone without it is not at fault; a stale one is,
+        -- because the test addon would compare the client with yesterday's conclusions.
+        local existing = readFile(path)
+        if existing == nil then
+            factsMissing = true
+        elseif existing ~= text then
+            report("Generated files that are out of date",
+                ("%-52s run the check with --emit-facts"):format(FACTS_FILE))
         end
     end
 end
@@ -1037,6 +1148,9 @@ if #unresolvedMembers > 0 then
 end
 if #addon.notLoaded > 0 then
     print(("  %d tracked files the TOC never reaches: %s"):format(#addon.notLoaded, table.concat(addon.notLoaded, ", ")))
+end
+if factsMissing then
+    print(("  %s is not there: --emit-facts writes it, and the test addon's static.* contracts skip without it"):format(FACTS_FILE))
 end
 for _, client in ipairs(clients) do
     if #client.uncompiled > 0 or #client.missingFiles > 0 then
