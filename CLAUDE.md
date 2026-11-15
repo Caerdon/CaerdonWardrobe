@@ -38,6 +38,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`).
 - `config/`: `Config.lua` (defaults, migrations, the main page, `/caerdon`, the one-time message dialog), `Icons.lua` and `Display.lua` (the two settings pages), `ConfigPanel.lua` (layout helpers), `LayoutEditor.lua` (`/caerdonlayout`).
 - `features/DebugFrame.lua`: the Debug Frame and its **Copy Details** export (`/cdebug`). `CaerdonButtonGeometry.lua`: the export's button measurements.
+- `tools/`: development scripts, not packaged. `static-checks.lua` with its allowlist `static-checks-allow.lua`.
 
 ### Status order in `GetCaerdonStatus`
 
@@ -73,6 +74,7 @@ The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for 
 - **Settings:** an option only where the choice is real. One block per icon on the Icons page; no per-window toggle by reflex; no on / off switches in the layout editor. A new setting needs a default in `GetDefaultConfig`, a nil-migration in `config/Config.lua` and one option on a page.
 - **Placement:** a window opts in to the standard icon size with `GetSlotStatusSize`. Do not replace a hand-tuned value for a window that has not been measured, and do not judge a button's shape from its numbers alone.
 - **Tests:** the modules can be run offline under LuaJIT with a mocked client. That checks logic, not the client; say which of the two a claim rests on.
+- **Static check:** `luajit tools/static-checks.lua` reports every name the addon uses that one client or neither has, and every global it writes that is not on the allowlist. Run it before calling a change done and after a client patch. A new flavor-specific name needs an allowlist entry naming its guard (notes: Static Check).
 
 ## WoW Forever Essentials
 
@@ -92,6 +94,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 |---|---|
 | Anything Forever-specific | WoW Forever Client |
 | Getting Blizzard's code or listings for either flavor | Client Sources |
+| Checking names against both clients, the allowlist | Static Check |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |

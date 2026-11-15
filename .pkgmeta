@@ -13,4 +13,5 @@ enable-nolib-creation: no
 
 ignore:
   - docs
+  - tools
   - "*.md"
