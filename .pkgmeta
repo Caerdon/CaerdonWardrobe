@@ -10,3 +10,7 @@ externals:
     branch: master
 
 enable-nolib-creation: no
+
+ignore:
+  - docs
+  - "*.md"
