@@ -232,6 +232,12 @@ local function printSnapshots(db)
                 print("    the addon's settings differ from the base:")
                 for _, line in ipairs(diff.settingsChanged) do print("      " .. line) end
             end
+            if not diff.addonsChanged then
+                print("    which other addons the base was taken with is not on record")
+            elseif #diff.addonsChanged > 0 then
+                print("    other addons differ from the base, so a change above may not be the addon's:")
+                for _, line in ipairs(diff.addonsChanged) do print("      " .. line) end
+            end
             for _, entry in ipairs(diff.onlyInBase) do print("      only in the base: " .. plainText(entry)) end
             for _, entry in ipairs(diff.onlyInAfter) do print("      only in the latest: " .. plainText(entry)) end
         elseif store.base then
@@ -240,9 +246,50 @@ local function printSnapshots(db)
     end
 end
 
+-- What differs between two recorded sets of other addons, as lines; nil when one is unknown.
+local function addonChanges(db, beforeKey, afterKey)
+    local sets = db.addonSets or {}
+    local before = beforeKey and sets[beforeKey] and sets[beforeKey].addons
+    local after = afterKey and sets[afterKey] and sets[afterKey].addons
+    if not before or not after then
+        return nil
+    end
+    local lines = {}
+    for _, name in ipairs(sortedKeys(before)) do
+        if after[name] == nil then
+            lines[#lines + 1] = name .. " " .. before[name] .. " was removed"
+        elseif after[name] ~= before[name] then
+            lines[#lines + 1] = name .. " " .. before[name] .. " -> " .. after[name]
+        end
+    end
+    for _, name in ipairs(sortedKeys(after)) do
+        if before[name] == nil then
+            lines[#lines + 1] = name .. " " .. after[name] .. " was added"
+        end
+    end
+    return lines
+end
+
+-- Says so when a record was taken with other addons than the one before it: the two are
+-- then not a before and after of the addon alone.
+local function printAddonChange(db, previous, record)
+    if not previous or previous.addons == record.addons then
+        return
+    end
+    local lines = addonChanges(db, previous.addons, record.addons)
+    if not lines then
+        print("      (which other addons were enabled is not on record for the next entry or the one above)")
+    elseif #lines > 0 then
+        print("      (other addons changed between the entry above and the next: " .. table.concat(lines, "; ") .. ")")
+    end
+end
+
 local function printTiming(db)
     print("  Timing (addon time is the client profiler's, summed per frame):")
+    local previous
     for _, record in ipairs(db.timing or {}) do
+        printAddonChange(db, previous, record)
+        previous = record
         if record.kind == "refresh" then
             print(("    %s  %-8s %-10s x%d  draws %s  addon ms median %s worst %s  last icon ms %s  first icon ms %s  memory KB %s  [%s, %s, addon %s]")
                 :format(when(record.at), "refresh", tostring(record.label), #record.runs, figure(record.medianDraws),

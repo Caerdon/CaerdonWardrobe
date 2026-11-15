@@ -74,6 +74,7 @@ local function BaseRecord(kind, label)
         flavor = client.flavor,
         build = client.build,
         subjectVersion = C_AddOns.GetAddOnMetadata(T.SUBJECT, "Version"),
+        addons = T.NoteAddons(),
         profilerOn = C_AddOnProfiler.IsEnabled(),
         open = { merchant = T.IsOpen("merchant"), bank = T.IsOpen("bank"), mail = T.IsOpen("mail") },
         framerate = Round(GetFramerate(), 1),

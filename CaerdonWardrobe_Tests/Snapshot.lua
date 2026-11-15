@@ -301,6 +301,7 @@ local function Take(label)
         flavor = client.flavor,
         build = client.build,
         subjectVersion = C_AddOns.GetAddOnMetadata(T.SUBJECT, "Version"),
+        addons = T.NoteAddons(),
         bank = T.IsOpen("bank") and true or false,
         config = T.Plain(CaerdonWardrobeConfig, 5),
         containers = {},
@@ -399,6 +400,8 @@ function T.TakeSnapshot(asBase)
             store.last = snapshot
             store.diff = T.DiffSnapshots(store.base, snapshot)
             local diff = store.diff
+            -- nil when the base's set is no longer on record.
+            diff.addonsChanged = T.DiffAddonSets(T.GetAddonSet(store.base.addons), T.GetAddonSet(snapshot.addons))
             T.Print("snapshot taken: %s. Against the base: %d the same, %s%d changed|r, %d only in the base, %d new.",
                 summary, diff.same, #diff.changed > 0 and "|cffff4040" or "|cff40ff40", #diff.changed,
                 #diff.onlyInBase, #diff.onlyInAfter)
@@ -409,6 +412,15 @@ function T.TakeSnapshot(asBase)
             if #diff.settingsChanged > 0 then
                 T.Print("the addon's settings differ from the base (%d values), which can change what is drawn.",
                     #diff.settingsChanged)
+            end
+            if diff.addonsChanged == nil then
+                T.Print("the base is too old to say which other addons it was taken with: take a new base.")
+            elseif #diff.addonsChanged > 0 then
+                T.Print("other addons differ from the base (%d), which can change what is drawn: take a new base before judging a change.",
+                    #diff.addonsChanged)
+                for index = 1, math.min(#diff.addonsChanged, 6) do
+                    print("  " .. diff.addonsChanged[index])
+                end
             end
         end
         if T.OnTestsFinished then

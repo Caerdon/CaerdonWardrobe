@@ -200,6 +200,7 @@ local function NewDB()
         timing = {},    -- timing runs
         logins = {},    -- what each login and reload cost
         probes = {},    -- toon -> item ID -> what the client and the addon say about it
+        addonSets = {}, -- key -> the other addons that were enabled, with their versions
         errors = {},    -- errors in the tests themselves
         pending = {},   -- what a reload was asked to prove
     }
@@ -231,6 +232,85 @@ local function NoteBuild()
     end
     db.contracts[build] = db.contracts[build] or {}
     db.events[build] = db.events[build] or {}
+end
+
+------------------------------------------------------------------------------------------
+-- The other addons
+------------------------------------------------------------------------------------------
+
+-- Other addons feed the verdicts (Pawn the upgrade arrow, Auctionator the auction icon) and
+-- decide which buttons get drawn (a bag addon), and the set changes over time. So every
+-- snapshot, timing record and session names the set it was taken with, and a comparison can
+-- say that the difference may not be the addon's.
+
+local KEEP_ADDON_SETS = 30
+
+-- Every addon enabled for this toon, with its version: enabled, not loaded, so an addon that
+-- loads on demand halfway through a session does not make a new set.
+local function ReadAddons()
+    local addons = {}
+    local character = UnitGUID("player")
+    for index = 1, C_AddOns.GetNumAddOns() do
+        local name = C_AddOns.GetAddOnInfo(index)
+        if name and C_AddOns.GetAddOnEnableState(name, character) > Enum.AddOnEnableState.None then
+            addons[name] = tostring(C_AddOns.GetAddOnMetadata(name, "Version") or "")
+        end
+    end
+    return addons
+end
+
+-- Pure: a short key for a set, the same for the same addons and versions.
+function T.AddonSetKey(addons)
+    local hash = 5381
+    for _, name in ipairs(T.SortedKeys(addons)) do
+        local text = name .. "=" .. addons[name] .. ";"
+        for index = 1, #text do
+            hash = (hash * 33 + text:byte(index)) % 4294967296
+        end
+    end
+    return tostring(hash)
+end
+
+-- Pure: what differs between two sets, as readable lines. nil when either set is unknown.
+function T.DiffAddonSets(before, after)
+    if not before or not after then
+        return nil
+    end
+    local lines = {}
+    for _, name in ipairs(T.SortedKeys(before)) do
+        if after[name] == nil then
+            lines[#lines + 1] = ("%s %s was removed"):format(name, before[name])
+        elseif after[name] ~= before[name] then
+            lines[#lines + 1] = ("%s %s -> %s"):format(name, before[name], after[name])
+        end
+    end
+    for _, name in ipairs(T.SortedKeys(after)) do
+        if before[name] == nil then
+            lines[#lines + 1] = ("%s %s was added"):format(name, after[name])
+        end
+    end
+    return lines
+end
+
+-- Stores the current set once and returns its key, which a record keeps.
+function T.NoteAddons()
+    local addons = ReadAddons()
+    local key = T.AddonSetKey(addons)
+    local sets = T.db.addonSets
+    if not sets[key] then
+        sets[key] = { addons = addons, firstSeen = GetServerTime() }
+        local keys = T.SortedKeys(sets)
+        table.sort(keys, function(a, b) return sets[a].firstSeen > sets[b].firstSeen end)
+        for index = KEEP_ADDON_SETS + 1, #keys do
+            sets[keys[index]] = nil
+        end
+    end
+    return key
+end
+
+function T.GetAddonSet(key)
+    local set = key and T.db.addonSets[key]
+    return set and set.addons
 end
 
 function T.RecordError(where, message, stack)
@@ -302,6 +382,7 @@ T.RegisterEvent("PLAYER_LOGIN", function()
         signature = toon.signature,
         subjectVersion = C_AddOns.GetAddOnMetadata(T.SUBJECT, "Version"),
         testsVersion = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version"),
+        addons = T.NoteAddons(),
     }, 20)
     for _, fn in ipairs(logins) do
         xpcall(fn, geterrorhandler())
