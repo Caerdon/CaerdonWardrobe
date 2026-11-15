@@ -1099,6 +1099,9 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
 end
 
 local ITEM_PROFICIENCY_USE_ERROR = Enum.TransmogUseErrorType and Enum.TransmogUseErrorType.ItemProficiency or 10
+-- A source in no wardrobe category (Weapon / Miscellaneous such as the Arclight Spanner 6219):
+-- the collection has nowhere to put it, so the item teaches nothing.
+local NO_COLLECTION_CATEGORY = Enum.TransmogCollectionType and Enum.TransmogCollectionType.None or 0
 
 -- Wowhead Transmog Guide - https://www.wowhead.com/transmogrification-overview-frequently-asked-questions
 function CaerdonEquipmentMixin:GetTransmogInfo()
@@ -1123,6 +1126,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- neither this toon nor the account can collect it (see the return struct).
     local proficiencySourceNotCollectable = false
     local proficiencySourceNotCollectableKnownLook = false
+    -- The item's source is in no wardrobe category, so neither flag above may be set for it.
+    local noCollectionCategory = false
     local hasMetRequirements = true
     local needsItem = false
     local otherNeedsItem = false
@@ -1266,6 +1271,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
         sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
         if sourceInfo then
+            noCollectionCategory = sourceInfo.categoryID == NO_COLLECTION_CATEGORY
             if not sourceUseErrorType and sourceInfo.useErrorType then
                 sourceUseErrorType = sourceInfo.useErrorType
             end
@@ -1400,6 +1406,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     elseif accountCanCollect then
                         otherNeedsItem = true
                         isCompletionistItem = otherSourceFound
+                    elseif noCollectionCategory then
+                        -- Nothing to learn: the "selling it teaches the look" cases below are
+                        -- all sources the wardrobe has a category for.
                     elseif collectInfoReady and isValidSourceForPlayer and not sourceInfo.useErrorType then
                         validSourceNotCollectable = true
                         validSourceNotCollectableKnownLook = otherSourceFoundForPlayer or otherSourceFound
@@ -1415,6 +1424,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     needsItem = true
                 elseif accountCanCollect then
                     otherNeedsItem = true
+                elseif noCollectionCategory then
+                    -- Nothing to learn (see above).
                 elseif collectInfoReady and isValidSourceForPlayer and not sourceInfo.useErrorType then
                     validSourceNotCollectable = true
                 elseif collectInfoReady and not isValidSourceForPlayer and
@@ -1615,6 +1626,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- teaches the appearance anyway. CaerdonItem shows it as "other" instead of sellable.
         proficiencySourceNotCollectable = proficiencySourceNotCollectable,
         proficiencySourceNotCollectableKnownLook = proficiencySourceNotCollectableKnownLook,
+        -- The source's categoryID is TransmogCollectionType.None: the wardrobe has no place for
+        -- it, so it is never reported through the two "not collectable" flags above. Seen on
+        -- WoW Forever for the Arclight Spanner 6219 (Weapon / Miscellaneous), whose source only
+        -- turns up through the dress-up fallback; C_TransmogCollection.GetItemInfo is nil for it.
+        noCollectionCategory = noCollectionCategory,
         isNotReady = isNotReady,
         matchesLootSpec = matchesLootSpec,
         isRecraftable = isRecraftable,

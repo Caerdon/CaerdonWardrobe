@@ -74,6 +74,7 @@ local function ResetTooltipData(embeddedLink)
     t.requiredTradeSkillMissingOrUnleveled = false
     t.requiredTradeSkillTooLow = false
     t.raceClassRestricted = false
+    t.skillRequirementMet = false
     t.embeddedLink = embeddedLink
     return t
 end
@@ -936,6 +937,11 @@ function CaerdonItemMixin:GetTooltipData(data)
                     tooltipData.raceClassRestricted = true
                 end
             elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
+                -- "Requires Engineering (50)" not in red: the client's own verdict that this
+                -- toon has the skill at that rank.
+                if leftHex and leftHex ~= "ffff2020" then
+                    tooltipData.skillRequirementMet = true
+                end
                 if isRecipe or isMiscellaneousStudy then
                     -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
                     local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
@@ -1043,6 +1049,16 @@ function CaerdonItemMixin:GetFoodDrinkInfo()
         return nil
     end
     return CaerdonFoodDrink:GetItemInfo(itemID, self:GetItemLink())
+end
+
+-- A tool of a profession this toon has (Mining Pick, Blacksmith Hammer, Arclight Spanner):
+-- nil for anything else. See CaerdonProfessionTools:GetItemInfo for the fields.
+function CaerdonItemMixin:GetProfessionToolInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonProfessionTools:GetItemInfo(itemID, self:GetItemName())
 end
 
 -- Miscellaneous / Junk items that go in an equipment slot but do nothing there: no stats shown
@@ -1364,6 +1380,8 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         skillTooLow = skillTooLow,
         -- Red race / class requirement line: this toon can never use the item.
         raceClassRestricted = raceClassRestricted,
+        -- The tooltip has a skill requirement line ("Requires Engineering (50)") that is met.
+        skillRequirementMet = (tooltipData and tooltipData.skillRequirementMet) or false,
         -- The tooltip carries the client's "Already known" line.
         alreadyKnown = (tooltipData and tooltipData.isKnownSpell) or false
     }
@@ -1715,6 +1733,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 -- weapon and has no use or equip effect line, yet fishing needs it.
                 local isFishingPole = itemClassID == Enum.ItemClass.Weapon and
                     itemSubClassID == Enum.ItemWeaponSubclass.Fishingpole
+                -- So is a tool of one of the toon's professions, which lives in the bags on a
+                -- client without profession gear slots: a known tool or one the toon's recipes
+                -- name (Mining Pick, Blacksmith Hammer), or a weapon that needs a profession
+                -- skill the toon has (Arclight Spanner 6219, "Requires Engineering (50)").
+                local isProfessionTool = (itemClassID == Enum.ItemClass.Weapon and
+                    bindingResult.skillRequirementMet) or self:GetProfessionToolInfo() ~= nil
                 local protectRecraftPotential = transmogInfo and transmogInfo.isRecraftable
                 if protectRecraftPotential then
                     redundantForPlayer = false
@@ -1724,6 +1748,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     self:IsSellable() and
                     not isArtifactItem and
                     not isFishingPole and
+                    not isProfessionTool and
                     not preserveLegendary and
                     not preserveUtility and
                     not preserveCosmeticEquipEffect and
@@ -1865,8 +1890,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     -- have no status of their own. Anything with another status keeps it.
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
         local isSellable = mogStatus == "sellable"
+        -- A tool the toon's own recipes name (an enchanting rod) is not stock to list.
         local isPlainTradeGood = (mogStatus == nil or mogStatus == "") and
-            (itemClassID == Enum.ItemClass.Tradegoods or isCraftingReagent)
+            (itemClassID == Enum.ItemClass.Tradegoods or isCraftingReagent) and
+            self:GetProfessionToolInfo() == nil
         if isSellable or isPlainTradeGood then
             local auctionInfo = self:GetAuctionValueInfo()
             if auctionInfo and auctionInfo.shouldAuction then

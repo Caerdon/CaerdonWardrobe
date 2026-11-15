@@ -54,6 +54,13 @@ local function EnsureVariables()
         CaerdonRecipeData[realmName][playerName].scannedProfessions = {}
     end
 
+    -- Tools this toon's own recipes ask for, by profession name:
+    -- { skillLine = base profession skill line, names = { [tool name] = true } }.
+    -- Read by CaerdonProfessionTools.
+    if not CaerdonRecipeData[realmName][playerName].tools then
+        CaerdonRecipeData[realmName][playerName].tools = {}
+    end
+
     PlayerRecipeData = CaerdonRecipeData[realmName][playerName]
 end
 
@@ -97,6 +104,51 @@ local function IsRecipeListUnfiltered()
     return true
 end
 
+-- Saves the tools the open profession's recipes ask for ("Tools: Arclight Spanner, Blacksmith
+-- Hammer" on the recipe form, which Blizzard builds from the same call). Recipes the toon has
+-- not learned yet count too: they name the tools it will need. Names are only ever added.
+local function RecordRecipeTools(recipeIDs)
+    if type(C_TradeSkillUI.GetRecipeRequirements) ~= "function" then
+        return
+    end
+
+    local baseInfo = TradeSkillCall("GetBaseProfessionInfo")
+    local professionName = baseInfo and (baseInfo.parentProfessionName or baseInfo.professionName)
+    if not professionName or professionName == "" then
+        return
+    end
+
+    local toolType = Enum.RecipeRequirementType and Enum.RecipeRequirementType.Totem or 1
+    local entry = PlayerRecipeData.tools[professionName]
+    local added = false
+    for _, recipeID in ipairs(recipeIDs) do
+        local ok, requirements = pcall(C_TradeSkillUI.GetRecipeRequirements, recipeID)
+        if ok and type(requirements) == "table" then
+            for _, requirement in ipairs(requirements) do
+                local toolName = requirement.type == toolType and requirement.name
+                if type(toolName) == "string" and toolName ~= "" then
+                    if not entry then
+                        entry = { names = {} }
+                        PlayerRecipeData.tools[professionName] = entry
+                    end
+                    entry.names = entry.names or {}
+                    if not entry.names[toolName] then
+                        entry.names[toolName] = true
+                        added = true
+                    end
+                end
+            end
+        end
+    end
+
+    if entry then
+        entry.skillLine = baseInfo.parentProfessionID or baseInfo.professionID or entry.skillLine
+    end
+    if added and CaerdonProfessionTools then
+        CaerdonProfessionTools:OnToolsRecorded()
+    end
+end
+
 -- Function to gather known recipes when the player opens the profession window
 local function GatherRecipes()
     if not C_TradeSkillUI.IsTradeSkillReady() then
@@ -131,6 +183,16 @@ local function GatherRecipes()
             PlayerRecipeData.scannedProfessions[professionName] = true
         end
     end
+
+    if isOwn then
+        RecordRecipeTools(recipeIDs)
+    end
+end
+
+-- The tools this toon's recipes ask for, as saved by RecordRecipeTools (nil before the saved
+-- variables are loaded).
+function CaerdonRecipe:GetRecordedTools()
+    return PlayerRecipeData and PlayerRecipeData.tools
 end
 
 -- Function to cache individual profession skill lines (specializations)

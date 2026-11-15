@@ -2361,6 +2361,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "validSourceNotCollectableKnownLook", transmogInfo.validSourceNotCollectableKnownLook)
         addKV(1, "proficiencySourceNotCollectable", transmogInfo.proficiencySourceNotCollectable)
         addKV(1, "proficiencySourceNotCollectableKnownLook", transmogInfo.proficiencySourceNotCollectableKnownLook)
+        addKV(1, "noCollectionCategory", transmogInfo.noCollectionCategory)
     end
 
     if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then
@@ -2571,6 +2572,37 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                     tostring(foodDrinkInfo.betterItem.name), foodDrinkInfo.betterItem.itemID,
                     foodDrinkInfo.betterItem.requiredLevel, foodDrinkInfo.betterItem.amount))
             end
+        end
+    end
+
+    -- Profession tools: what counts as a tool for this toon and whether this item is one.
+    if CaerdonProfessionTools and item.GetProfessionToolInfo then
+        local toolState = CaerdonProfessionTools:GetDebugState()
+        local toolInfo = item:GetProfessionToolInfo()
+        local function listOrNone(list)
+            return (list and #list > 0) and table.concat(list, "; ") or "none"
+        end
+
+        addLine(0, "")
+        addLine(0, "[Profession Tools]")
+        addKV(1, "Is Tool", toolInfo ~= nil)
+        if toolInfo then
+            addKV(1, "Tool", toolInfo.toolName)
+            addKV(1, "For", listOrNone(toolInfo.professions))
+            addKV(1, "Source", toolInfo.source)
+            addKV(1, "Matched By", toolInfo.match)
+        end
+        addKV(1, "Known Tool Items Apply", toolState.carriedInBags)
+        addKV(1, "Tool Names Pending", toolState.namesPending)
+        addKV(1, "Professions", listOrNone(toolState.professions))
+        addKV(1, "Tools", listOrNone(toolState.tools))
+        addKV(1, "Recipe Tools Recorded", listOrNone(toolState.recordedProfessions))
+        -- Whether this client has profession gear slots at all, for a better gate than the
+        -- ranged slot some day. Printed, not used.
+        if C_TradeSkillUI and C_TradeSkillUI.GetProfessionSlots and Enum.Profession and Enum.Profession.Mining then
+            local ok, slots = pcall(C_TradeSkillUI.GetProfessionSlots, Enum.Profession.Mining)
+            addKV(1, "GetProfessionSlots (Mining)", ok and type(slots) == "table" and
+                (#slots .. " slots") or tostring(slots))
         end
     end
 
