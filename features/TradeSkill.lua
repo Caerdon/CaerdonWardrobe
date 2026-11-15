@@ -30,6 +30,7 @@ function TradeSkillMixin:OnInitializedFrame(listFrame, frame, elementData)
         local recipeInfo
 
         local options = {
+            fixedLayout = true,
             statusProminentSize = 13,
             statusOffsetX = 16,
             statusOffsetY = 5,

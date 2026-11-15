@@ -114,6 +114,11 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     scrollChild:SetWidth(scrollFrame:GetWidth())
 
     -- The controls are built once; what they show is read again every time the page opens.
+    -- OnRefresh is what the settings window calls each time it displays a page. OnShow alone
+    -- misses the first time: the frame starts out shown, so putting it on screen is not a "show".
+    frame.OnRefresh = function()
+        self:RefreshControls()
+    end
     frame:SetScript("OnShow", function()
         self:RefreshControls()
     end)
@@ -368,7 +373,8 @@ function CaerdonWardrobeConfigPanelMixin:AddAllNoneButtons(y, checkboxes)
 end
 
 -- A label with a dropdown to its right. values = { { title, value, tooltip } ... }
--- opts = { indent = levels, dependsOn = checkbox }; info.width sets the dropdown's width.
+-- opts = { indent = levels, dependsOn = checkbox }; info.width sets the dropdown's width, and
+-- info.formatUnknown(value) gives the text for a saved value that is not one of the entries.
 function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     opts = opts or {}
     local parent = self.scrollChild
@@ -378,6 +384,7 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
 
     local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. info.key, parent, "UIDropDownMenuTemplate")
     dropdown.key = info.key
+    dropdown.caerdonInfo = info
     dropdown:SetPoint("LEFT", label, "RIGHT", -8, -2)
     if UIDropDownMenu_SetWidth then
         UIDropDownMenu_SetWidth(dropdown, info.width or 150)
@@ -408,13 +415,17 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     dropdown.caerdonDependsOn = opts.dependsOn
     dropdown.caerdonRefresh = function()
         local current = GetValue(info)
-        local title = ""
+        local title
         for _, entry in ipairs(values) do
             if entry.value == current then
                 title = entry.title
             end
         end
-        text:SetText(title)
+        -- A value that is not in the list (set by something other than this dropdown) still shows.
+        if not title and current ~= nil and info.formatUnknown then
+            title = info.formatUnknown(current)
+        end
+        text:SetText(title or "")
     end
     dropdown.caerdonSetEnabled = function(enabled)
         if enabled then
@@ -436,6 +447,18 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     self:RegisterControl(dropdown)
     self.nextPoint = self.nextPoint - DROPDOWN_ROW_HEIGHT
     return dropdown
+end
+
+-- A frame built elsewhere, placed in the flow of the page. opts = { indent = levels }
+function CaerdonWardrobeConfigPanelMixin:AddFrame(frame, height, opts)
+    opts = opts or {}
+    local parent = self.scrollChild
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
+    frame:SetParent(parent)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", parent, "TOPLEFT", x, self.nextPoint - 2)
+    self.nextPoint = self.nextPoint - height - 6
+    return frame
 end
 
 -- A button on its own row. opts = { indent = levels, width = pixels, tooltip = text }

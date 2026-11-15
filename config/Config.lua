@@ -163,6 +163,41 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
                 byOther[key] = value
             end
         end
+        -- Layout settings (size and nudge of the icon and the texts): fill in what is missing.
+        local defaultConfig = NS:GetDefaultConfig()
+        for _, key in ipairs({ "Scale", "OffsetX", "OffsetY" }) do
+            if CaerdonWardrobeConfig.Icon[key] == nil then
+                CaerdonWardrobeConfig.Icon[key] = defaultConfig.Icon[key]
+            end
+            if CaerdonWardrobeConfig.Binding[key] == nil then
+                CaerdonWardrobeConfig.Binding[key] = defaultConfig.Binding[key]
+            end
+        end
+        -- A gear set's name used to share the binding text's position, so it starts from
+        -- wherever that is now.
+        local binding = CaerdonWardrobeConfig.Binding
+        if type(binding.GearSet) ~= "table" then
+            binding.GearSet = {
+                Position = binding.Position,
+                Scale = binding.Scale,
+                OffsetX = binding.OffsetX,
+                OffsetY = binding.OffsetY
+            }
+        end
+        for key, value in pairs(defaultConfig.Binding.GearSet) do
+            if binding.GearSet[key] == nil then
+                binding.GearSet[key] = value
+            end
+        end
+        binding.GearSetScale = nil -- a factor on the text's size, from before it had its own layout
+        if type(CaerdonWardrobeConfig.Icon.UpgradeDelta) ~= "table" then
+            CaerdonWardrobeConfig.Icon.UpgradeDelta = {}
+        end
+        for key, value in pairs(defaultConfig.Icon.UpgradeDelta) do
+            if CaerdonWardrobeConfig.Icon.UpgradeDelta[key] == nil then
+                CaerdonWardrobeConfig.Icon.UpgradeDelta[key] = value
+            end
+        end
         if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
         end
@@ -206,6 +241,18 @@ function NS:GetDefaultConfig()
         Icon = {
             EnableAnimation = true,
             Position = "TOPLEFT",
+            -- Size in percent of each window's own icon size, and a nudge to the right / upwards in
+            -- pixels on a standard slot.
+            Scale = 100,
+            OffsetX = 0,
+            OffsetY = 0,
+            -- The item level gain ("+5") on an upgrade.
+            UpgradeDelta = {
+                Position = "BOTTOMRIGHT",
+                Scale = 100,
+                OffsetX = 0,
+                OffsetY = 0
+            },
 
             ShowLearnable = {
                 BankAndBags = true,
@@ -273,7 +320,17 @@ function NS:GetDefaultConfig()
             ShowBoE = true,
             ShowGearSets = true,
             ShowGearSetsAsIcon = false,
-            Position = "BOTTOM"
+            Position = "BOTTOM",
+            Scale = 100,
+            OffsetX = 0,
+            OffsetY = 0,
+            -- A gear set's name is drawn in the binding text's place and has its own layout.
+            GearSet = {
+                Position = "BOTTOM",
+                Scale = 100,
+                OffsetX = 0,
+                OffsetY = 0
+            }
         },
 
         Merchant = {

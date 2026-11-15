@@ -79,6 +79,7 @@ function WorldQuestsListMixin:RefreshButtons()
 		local line = self.WorldQuestList.l[i]
 
         local options = {
+            fixedLayout = true,
             statusProminentSize = 10,
             statusOffsetX = 0,
             statusOffsetY = 8,

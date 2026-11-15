@@ -38,5 +38,6 @@
 
     <Include file="ConfigPanel.lua" />
 	<Include file="Icons.lua" />
+	<Include file="LayoutEditor.lua" />
 	<Include file="Display.lua" />
 </Ui>

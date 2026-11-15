@@ -64,6 +64,7 @@ function AngrierWorldQuestsMixin:OnQuestLog_Update()
 		local count = 1
 		for button in pool:EnumerateActive() do
 			local options = {
+				fixedLayout = true,
 				relativeFrame = button.TagTexture,
 				statusProminentSize = 13,
 				statusOffsetX = 3,

@@ -14,21 +14,23 @@ function CaerdonWardrobeConfigDisplay:Register()
 
     self:AddTitle("Display", "How the icons and text are drawn, and the settings that are not about an icon.")
 
+    -- Where things sit on a slot is edited on a slot, not in a list of options: this shows the
+    -- current layout on real slots and opens the editor.
+    self:AddSection("Layout")
+    self:AddLabel("How the icon and the texts you have switched on sit on an item slot right now:")
+    local strip, stripHeight = CaerdonWardrobeLayoutEditor:CreateSampleStrip(self.scrollChild)
+    self:AddFrame(strip, stripHeight)
+    self:RegisterControl({
+        caerdonRefresh = function()
+            CaerdonWardrobeLayoutEditor:RedrawSamples()
+        end
+    })
+    self:AddButton("Adjust layout...", function()
+        CaerdonWardrobeLayoutEditor:Open()
+    end, { tooltip = "Closes the settings and opens the layout editor next to your bags, where you can move and resize each part on an example slot." })
+
     self:AddSection("Icons")
     self:AddCheckbox({ key = "enableIconAnimation", text = "Animate icons", tooltip = "Turns the icon animation on or off, mostly seen on unlearned and openable items.", configSection = "Icon", configValue = "EnableAnimation" })
-    self:AddDropdown({ key = "iconPosition", text = "Icon corner:", configSection = "Icon", configValue = "Position" }, {
-        { title = "Top Left",     value = "TOPLEFT",     tooltip = "Show the primary icon in the top left" },
-        { title = "Top Right",    value = "TOPRIGHT",    tooltip = "Show the primary icon in the top right" },
-        { title = "Bottom Left",  value = "BOTTOMLEFT",  tooltip = "Show the primary icon in the bottom left" },
-        { title = "Bottom Right", value = "BOTTOMRIGHT", tooltip = "Show the primary icon in the bottom right" }
-    })
-
-    self:AddSection("Binding text")
-    self:AddDropdown({ key = "bindingPosition", text = "Position:", configSection = "Binding", configValue = "Position" }, {
-        { title = "Top",    value = "TOP",    tooltip = "Show the binding text on the top of the item" },
-        { title = "Center", value = "CENTER", tooltip = "Show the binding text on the center of the item" },
-        { title = "Bottom", value = "BOTTOM", tooltip = "Show the binding text on the bottom of the item" }
-    })
 
     self:AddSection("Vendor window")
     self:AddCheckbox({ key = "merchantHideCollectedItems", text = "Gray out items I have already collected", tooltip = "Grays out and fades vendor items that you have already learned or collected.", configSection = "Merchant", configSubsection = "Filter", configValue = "HideCollected" })

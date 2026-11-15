@@ -393,6 +393,49 @@ local function GetClipInsideScale(clipper, statusPosition, extent, xOffset)
     return nil
 end
 
+-- The player's own layout (Display settings): where the status icon and the texts sit on a slot,
+-- how big they are, and a nudge. It applies on top of each window's own values, and not at all
+-- where a window fits them by hand into a row: options.fixedLayout, or an overridden position.
+local function PercentToScale(value)
+    local percent = tonumber(value)
+    if not percent or percent <= 0 then
+        return 1
+    end
+    return percent / 100
+end
+
+-- Returns the anchor, the size factor, the nudge to the right and upwards (in pixels on a slot
+-- with a 20 px icon), and whether the window fits the icon by hand.
+local function GetIconLayout(options)
+    local config = CaerdonWardrobeConfig.Icon
+    if options.fixedLayout or options.overrideStatusPosition then
+        return options.overrideStatusPosition or config.Position or "TOPLEFT", 1, 0, 0, true
+    end
+    return config.Position or "TOPLEFT", PercentToScale(config.Scale), tonumber(config.OffsetX) or 0,
+        tonumber(config.OffsetY) or 0, false
+end
+
+-- The same for the text on a slot. A slot shows either the binding text or a gear set's name,
+-- never both, and each has its own layout (Binding and Binding.GearSet).
+local function GetTextLayout(options, isGearSet)
+    local config = CaerdonWardrobeConfig.Binding
+    if options.fixedLayout or options.overrideBindingPosition then
+        return options.overrideBindingPosition or config.Position or "BOTTOM", 1, 0, 0, true
+    end
+    local layout = config
+    if isGearSet and type(config.GearSet) == "table" then
+        layout = config.GearSet
+    end
+    return layout.Position or config.Position or "BOTTOM", PercentToScale(layout.Scale),
+        tonumber(layout.OffsetX) or 0, tonumber(layout.OffsetY) or 0, false
+end
+
+-- The status icon's size before a minor icon is reduced: the window's own, times the player's.
+function CaerdonWardrobeMixin:GetStatusBaseSize(options)
+    local _, scale = GetIconLayout(options)
+    return (options.statusProminentSize or ICON_PROMINENT_SIZE) * scale
+end
+
 function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
     if not item then return end
@@ -403,7 +446,9 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
     end
 
     local statusScale = options.statusScale or 1
-    local statusPosition = options.overrideStatusPosition or CaerdonWardrobeConfig.Icon.Position
+    local statusPosition, _, nudgeX, nudgeY, handFitted = GetIconLayout(options)
+    local onSide = string.find(statusPosition, "LEFT") or string.find(statusPosition, "RIGHT")
+    local onTopOrBottom = string.find(statusPosition, "TOP") or string.find(statusPosition, "BOTTOM")
 
     -- Clip-aware callers: decide from the icon's full size whether it has to go inside the slot,
     -- and size it for that before anything below reads its size. The full size is kept on the
@@ -433,21 +478,16 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
     local xAdjust = iconWidth / ICON_PROMINENT_SIZE
     local yAdjust = iconHeight / ICON_PROMINENT_SIZE
 
-    local xOffset = 4 * xAdjust
-    if statusPosition == "TOP" or statusPosition == "BOTTOM" then
-        xOffset = 0
-    end
-
-    if options.statusOffsetX ~= nil then
+    -- The inset from the anchor's edge: none along an axis the anchor is centered on. A window's
+    -- own inset is made for a corner, so it follows the same rule, except where the window also
+    -- chose the anchor itself and its numbers mean exactly what they say.
+    local xOffset = onSide and 4 * xAdjust or 0
+    if options.statusOffsetX ~= nil and (onSide or handFitted) then
         xOffset = options.statusOffsetX
     end
 
-    local yOffset = 4 * yAdjust
-    if statusPosition == "LEFT" or statusPosition == "RIGHT" then
-        yOffset = 0
-    end
-
-    if options.statusOffsetY ~= nil then
+    local yOffset = onTopOrBottom and 4 * yAdjust or 0
+    if options.statusOffsetY ~= nil and (onTopOrBottom or handFitted) then
         yOffset = options.statusOffsetY
     end
 
@@ -473,6 +513,11 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
     if string.find(statusPosition, "RIGHT") then
         xOffset = xOffset * -1
     end
+
+    -- The player's nudge: in the directions of the screen, and in step with the icon's size so
+    -- it is the same share of a small slot as of a large one.
+    xOffset = xOffset + nudgeX * xAdjust
+    yOffset = yOffset + nudgeY * yAdjust
 
     local xBackgroundOffset = icon.caerdonBackgroundNudge or 0
     if options.statusBackgroundOffsetX ~= nil then
@@ -719,7 +764,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local showGearSetText = isEquipmentSetItem and bindingStatus and IsGearSetStatus(bindingStatus, item) and
         CaerdonWardrobeConfig.Binding.ShowGearSets
     local bindingAnchor = (options and options.overrideBindingPosition) or CaerdonWardrobeConfig.Binding.Position
-    caerdonButton.bindingBottomPadding = 0
+    caerdonButton.bindingTextMovedFor = nil
+    caerdonButton.caerdonFixedLayout = (options and options.fixedLayout) and true or false
+    caerdonButton.caerdonSample = (options and options.sample) and true or false
     local deltaAnchorFrame = (options and options.relativeFrame) or originalButton
 
     -- local mogFlash = caerdonButton.mogFlash
@@ -745,9 +792,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             return
         end
 
-        local baseYOffset = 2
         if caerdonButton then
-            caerdonButton.upgradeDeltaBaseYOffset = baseYOffset
             caerdonButton.upgradeDeltaAnchor = deltaAnchorFrame
         end
         upgradeDeltaText:SetFormattedText("+%d", delta)
@@ -1150,9 +1195,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     if not upgradeDeltaShown and upgradeDeltaText and housingInfo and
         housingInfo.firstAcquisitionBonus and housingInfo.firstAcquisitionBonus > 0 and
         (status == "own") then
-        local baseYOffset = 2
         if caerdonButton then
-            caerdonButton.upgradeDeltaBaseYOffset = baseYOffset
             caerdonButton.upgradeDeltaAnchor = deltaAnchorFrame
         end
         upgradeDeltaText:SetFormattedText("+%d", housingInfo.firstAcquisitionBonus)
@@ -1163,10 +1206,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeDeltaShown = true
     end
 
-    local iconSize = ICON_PROMINENT_SIZE
-    if options.statusProminentSize then
-        iconSize = options.statusProminentSize
-    end
+    local iconSize = self:GetStatusBaseSize(options)
 
     if isProminent then
         mogStatusBackground:SetSize(iconSize, iconSize)
@@ -1218,6 +1258,108 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     end
 end
 
+-- Text and the level gain ("+5") on one slot.
+--
+-- The level gain goes where it is put and stays there. Text on the same row moves clear of it,
+-- away from the row's edge, but only when the two would really run into each other: BoE in the
+-- bottom left and "+5" in the bottom right fit side by side and are left alone. This is the same
+-- thing text does for a stack count, so a number in a corner always keeps its corner. (Until
+-- 2026-11-14 it was the level gain that moved, above any text on the bottom edge, which left it
+-- part-way up the slot when the player had asked for the corner.)
+-- How far the level gain stays from any edge of the slot it is anchored to. It was 2, which
+-- left the digits crammed against the edge once it sat in a corner by itself.
+local LEVEL_GAIN_INSET = 4
+
+-- The player's layout for the level gain; hand-fitted windows keep the bottom right.
+local function GetLevelGainLayout(caerdonButton)
+    local point, scale, nudgeX, nudgeY = "BOTTOMRIGHT", 1, 0, 0
+    local layout = CaerdonWardrobeConfig.Icon.UpgradeDelta
+    if layout and not caerdonButton.caerdonFixedLayout then
+        point = layout.Position or point
+        scale = PercentToScale(layout.Scale)
+        nudgeX, nudgeY = tonumber(layout.OffsetX) or 0, tonumber(layout.OffsetY) or 0
+    end
+    return point, scale, nudgeX, nudgeY
+end
+
+local function RowOf(anchor)
+    return (string.find(anchor, "TOP") and "TOP") or (string.find(anchor, "BOTTOM") and "BOTTOM") or "MIDDLE"
+end
+
+-- A string's width, in its own units, depends on the scale it is drawn at: letters are fitted to
+-- whole pixels, so small text comes out wider for its size than large text. The layout editor's
+-- large slot is a normal slot scaled up four times, where "BoE" measured about 19 units against
+-- about 22 at normal size, and so it showed two parts fitting side by side that collide on a
+-- real slot. A sample therefore measures its text on a string at normal scale instead.
+local measureString
+local function MeasureStringWidth(fontString, atNormalScale)
+    if not atNormalScale then
+        return fontString:GetStringWidth() or 0
+    end
+    if not measureString then
+        local frame = CreateFrame("Frame", nil, UIParent)
+        frame:SetSize(1, 1)
+        frame:SetPoint("BOTTOMRIGHT", UIParent, "TOPLEFT", -100, 100) -- off screen
+        frame:SetAlpha(0)
+        measureString = frame:CreateFontString(nil, "ARTWORK")
+    end
+    local file, height, flags = fontString:GetFont()
+    if not file then
+        return fontString:GetStringWidth() or 0
+    end
+    measureString:SetFont(file, height, flags)
+    measureString:SetText(fontString:GetText() or "")
+    return measureString:GetStringWidth() or 0
+end
+
+-- Where something of this width ends up across the slot, as left and right edge from the
+-- slot's left. offset is what SetPoint gets: positive to the right.
+local function HorizontalSpan(anchor, width, offset, slotWidth)
+    if string.find(anchor, "LEFT") then
+        return offset, offset + width
+    elseif string.find(anchor, "RIGHT") then
+        return slotWidth - width + offset, slotWidth + offset
+    end
+    return (slotWidth - width) / 2 + offset, (slotWidth + width) / 2 + offset
+end
+
+-- How far from its row's edge text has to stay to clear a level gain on that row, or nil when
+-- no level gain is showing there or the two do not meet sideways. On the middle row it is how
+-- far up the text has to go.
+local function GetLevelGainClearance(caerdonButton, slotWidth, textAnchor, textLeft, textRight, textHeight)
+    local deltaText = caerdonButton.upgradeDeltaText
+    if not (deltaText and deltaText:IsShown()) then
+        return nil
+    end
+    local gain = deltaText:GetText()
+    if not gain or gain == "" then
+        return nil
+    end
+
+    local point, scale, nudgeX, nudgeY = GetLevelGainLayout(caerdonButton)
+    local row = RowOf(point)
+    if row ~= RowOf(textAnchor) then
+        return nil
+    end
+
+    local inset = (string.find(point, "RIGHT") and -LEVEL_GAIN_INSET) or
+        (string.find(point, "LEFT") and LEVEL_GAIN_INSET) or 0
+    local gainWidth = MeasureStringWidth(deltaText, caerdonButton.caerdonSample) * scale
+    local gainLeft, gainRight = HorizontalSpan(point, gainWidth, inset + nudgeX, slotWidth)
+    if textRight <= gainLeft + 1 or textLeft >= gainRight - 1 then
+        return nil -- side by side, with a pixel to spare
+    end
+
+    local _, fontHeight = deltaText:GetFont()
+    local height = (fontHeight or 12) * scale
+    if row == "BOTTOM" then
+        return LEVEL_GAIN_INSET + nudgeY + height + 1
+    elseif row == "TOP" then
+        return LEVEL_GAIN_INSET - nudgeY + height + 1
+    end
+    return (height + textHeight) / 2 + 1
+end
+
 function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
     if not originalButton then return end
     local caerdonButton = self:GetCaerdonButton(originalButton)
@@ -1232,11 +1374,17 @@ function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
     if not anchorFrame then
         anchorFrame = originalButton
     end
-    local baseYOffset = caerdonButton.upgradeDeltaBaseYOffset or 0
-    local padding = caerdonButton.bindingBottomPadding or 0
+    -- The same space from every edge it touches; none along an axis it is centered on.
+    local point, scale, nudgeX, nudgeY = GetLevelGainLayout(caerdonButton)
+    local xOffset = (string.find(point, "RIGHT") and -LEVEL_GAIN_INSET) or
+        (string.find(point, "LEFT") and LEVEL_GAIN_INSET) or 0
+    local yOffset = (string.find(point, "BOTTOM") and LEVEL_GAIN_INSET) or
+        (string.find(point, "TOP") and -LEVEL_GAIN_INSET) or 0
 
     deltaText:ClearAllPoints()
-    deltaText:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", -2, baseYOffset + padding)
+    deltaText:SetScale(scale)
+    -- Offsets of a scaled region are in its own units; keep them the same size on screen.
+    deltaText:SetPoint(point, anchorFrame, point, (xOffset + nudgeX) / scale, (yOffset + nudgeY) / scale)
 end
 
 function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus,
@@ -1297,7 +1445,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     bindsOnText:SetText(bindingText)
     bindsOnText:SetJustifyV("BOTTOM")
     if caerdonButton then
-        caerdonButton.bindingBottomPadding = 0
+        caerdonButton.bindingTextMovedFor = nil
     end
 
     -- Measure text and resize accordingly
@@ -1307,7 +1455,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     bindsOnText:SetPoint("LEFT")
     bindsOnText:SetPoint("RIGHT")
 
-    local newWidth = bindsOnText:GetStringWidth()
+    local newWidth = MeasureStringWidth(bindsOnText, options and options.sample)
     if newWidth > button:GetWidth() then
         newWidth = button:GetWidth()
     end
@@ -1316,19 +1464,30 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
 
     -- When bindingScale < 1, the font string needs extra logical width to prevent
     -- text truncation after SetScale shrinks the effective render area.
-    local bindingScale = options.bindingScale or 1
+    local isGearSet = IsGearSetStatus(bindingStatus, item)
+    local bindingPosition, userScale, nudgeX, nudgeY, handFitted = GetTextLayout(options, isGearSet)
+    local bindingScale = (options.bindingScale or 1) * userScale
     local scaledWidth = (bindingScale < 1) and (newWidth / bindingScale) or newWidth
+    if bindingScale > 1 then
+        -- Enlarged text: what it covers on screen still has to fit the button.
+        scaledWidth = math.min(newWidth, button:GetWidth() / bindingScale)
+    end
 
     bindsOnText:ClearAllPoints()
     bindsOnText:SetSize(scaledWidth, newHeight)
 
-    local bindingPosition = options.overrideBindingPosition or CaerdonWardrobeConfig.Binding.Position
     local xOffset = 1
     if options.bindingOffsetX ~= nil then
         xOffset = options.bindingOffsetX
     end
 
+    -- Space from the top or bottom edge. None in the middle row, where there is no edge and the
+    -- text should line up with a level gain beside it; it used to sit 2 higher there. Hand-fitted
+    -- windows keep the 2, which their look was tuned with.
     local yOffset = 2
+    if not handFitted and RowOf(bindingPosition) == "MIDDLE" then
+        yOffset = 0
+    end
     if options.bindingOffsetY ~= nil then
         yOffset = options.bindingOffsetY
     end
@@ -1341,6 +1500,16 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
         bindsOnText:SetJustifyV("TOP")
     else
         bindsOnText:SetJustifyV("MIDDLE")
+    end
+
+    -- Text the player put on a side sits against that side. A hand-fitted window keeps it centered
+    -- in its box, the way its offsets were tuned.
+    if not handFitted and string.find(bindingPosition, "LEFT") then
+        bindsOnText:SetJustifyH("LEFT")
+    elseif not handFitted and string.find(bindingPosition, "RIGHT") then
+        bindsOnText:SetJustifyH("RIGHT")
+    else
+        bindsOnText:SetJustifyH("CENTER")
     end
 
     if string.find(bindingPosition, "BOTTOM") then
@@ -1359,26 +1528,62 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
         xOffset = xOffset * -1
     end
 
+    -- Offsets of a scaled font string are in its own units. Keep the usual spacing the same on
+    -- screen whatever size the player picked, then add the player's nudge.
+    if userScale ~= 1 then
+        xOffset = xOffset / userScale
+        yOffset = yOffset / userScale
+    end
+    xOffset = xOffset + nudgeX / bindingScale
+    yOffset = yOffset + nudgeY / bindingScale
+
+    -- A level gain on the same row keeps its place and the text moves clear of it, the way it
+    -- already sits above a stack count. Hand-fitted windows stay as they were tuned. What moved
+    -- the text is noted on the overlay, for the layout editor to explain.
+    local movedFor = (hasCount and string.find(bindingPosition, "BOTTOM")) and "count" or nil
+    if not handFitted and caerdonButton then
+        local slotWidth = ((options and options.relativeFrame) or button):GetWidth()
+        local textLeft, textRight = HorizontalSpan(bindingPosition, math.min(newWidth * bindingScale, slotWidth),
+            xOffset * bindingScale, slotWidth)
+        local clearance = GetLevelGainClearance(caerdonButton, slotWidth, bindingPosition, textLeft, textRight,
+            newHeight * bindingScale)
+        if clearance then
+            local row = RowOf(bindingPosition)
+            local onScreen = yOffset * bindingScale
+            if row == "BOTTOM" then
+                if onScreen < clearance then
+                    onScreen = clearance
+                    movedFor = "gain"
+                end
+            elseif row == "TOP" then
+                if onScreen > -clearance then
+                    onScreen = -clearance
+                    movedFor = "gain"
+                end
+            else
+                -- From the middle there are two ways out; take the one away from the status icon.
+                local iconAnchor = GetIconLayout(options)
+                onScreen = onScreen + ((RowOf(iconAnchor) == "TOP") and -clearance or clearance)
+                movedFor = "gain"
+            end
+            yOffset = onScreen / bindingScale
+        end
+    end
+    if caerdonButton then
+        caerdonButton.bindingTextMovedFor = movedFor
+    end
+
     if options and options.relativeFrame then
         bindsOnText:SetPoint(bindingPosition, options.relativeFrame, bindingPosition, xOffset, yOffset)
     else
         bindsOnText:SetPoint(bindingPosition, xOffset, yOffset)
     end
 
-    if (options.bindingScale) then
-        bindsOnText:SetScale(options.bindingScale)
+    if bindingScale ~= 1 then
+        bindsOnText:SetScale(bindingScale)
     end
 
     if caerdonButton then
-        local hasBindingText = bindingText ~= nil and bindingText ~= ""
-        if hasBindingText and bindingPosition and string.find(bindingPosition, "BOTTOM") then
-            local _, fontHeight = bindsOnText:GetFont()
-            local scale = bindsOnText:GetScale() or 1
-            local bindingHeight = (fontHeight or bindsOnText:GetHeight() or 0) * scale
-            caerdonButton.bindingBottomPadding = bindingHeight + 2
-        else
-            caerdonButton.bindingBottomPadding = 0
-        end
         self:UpdateUpgradeDeltaPosition(button)
     end
 end
