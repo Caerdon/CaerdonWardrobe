@@ -256,12 +256,11 @@ function DressingRoomMixin:UpdateSetSelectionButton(button)
         locationKey = format("dressup-set-%s-%s", setID, appearanceID)
     }
 
+    -- The default slot look on the row's 24 px icon, which comes out at the smallest size.
     local options = {
         relativeFrame = button.Icon,
         bindingScale = 0.7,
-        statusProminentSize = 13,
-        statusOffsetX = 1,
-        statusOffsetY = 1
+        statusProminentSize = button.Icon and CaerdonWardrobe:GetSlotStatusSize(button.Icon:GetSize()) or 13
     }
 
     local function doUpdate()

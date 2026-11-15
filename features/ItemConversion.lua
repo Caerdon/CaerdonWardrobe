@@ -51,8 +51,13 @@ function ItemConversionMixin:OnOutputSlotRefreshIcon(outputSlot)
 		locationKey = "itemConversion-output"
 	}
 
+	-- The default slot look on the 48 px output slot: a square, unmasked icon with nothing clipping it.
+	local options = {
+		statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(outputSlot:GetSize())
+	}
+
 	local function doUpdate()
-		CaerdonWardrobe:UpdateButton(outputSlot, item, self, locationInfo)
+		CaerdonWardrobe:UpdateButton(outputSlot, item, self, locationInfo, options)
 	end
 
 	if item:IsItemDataCached() then

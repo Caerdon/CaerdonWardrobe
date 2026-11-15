@@ -21,6 +21,9 @@ CaerdonButtonGeometry = {}
 
 local MAX_SHAPES_PER_WINDOW = 6
 local MEASURE_DELAY = 0.2
+-- A button drawn just before its window is shown has no layout yet: it is looked at again.
+local MEASURE_RETRY_DELAY = 1
+local MAX_MEASURE_RETRIES = 3
 local MAX_PARENT_DEPTH = 40
 
 -- The display options an integration can pass. hasCount depends on the item, so it is reported
@@ -257,25 +260,28 @@ local function HasTexture(texture)
     return atlas ~= nil and atlas ~= ""
 end
 
--- Measures one remembered button. Returns the sample, or nil when the button has no layout
--- right now (hidden, recycled, not placed yet).
+-- Measures one remembered button. Returns the sample, or nil and the reason when the button has
+-- no layout right now (hidden, recycled, not placed yet).
 local function Measure(entry)
     local button = entry.button
     local caerdonButton = CaerdonWardrobe:GetCaerdonButton(button)
-    if not (caerdonButton and button.IsVisible and button:IsVisible()) then
-        return nil
+    if not caerdonButton then
+        return nil, "the button has no overlay any more"
+    end
+    if not (button.IsVisible and button:IsVisible()) then
+        return nil, "the button, or a frame it is in, was hidden"
     end
 
     local buttonRect = GetRectOf(button)
     local scale = button:GetEffectiveScale()
     if not (buttonRect and scale and scale > 0) then
-        return nil
+        return nil, "the button was shown but had no size on screen"
     end
 
     local overlayOn = entry.relativeFrame or button
     local overlayRect = GetRectOf(overlayOn)
     if not overlayRect then
-        return nil
+        return nil, "what the overlay sits on had no size on screen"
     end
 
     local sample = {
@@ -442,15 +448,28 @@ local function MeasurePending()
     measureScheduled = false
     local batch = pending
     pending = {}
-    for _, entry in pairs(batch) do
-        local ok, result = pcall(Measure, entry)
+    local retry = false
+    for key, entry in pairs(batch) do
+        local ok, result, reason = pcall(Measure, entry)
         if ok then
             if result then
                 Store(entry, result)
+            else
+                local window = windows[entry.window]
+                window.unmeasured[entry.signature] = reason
+                entry.tries = (entry.tries or 0) + 1
+                if entry.tries <= MAX_MEASURE_RETRIES and not pending[key] then
+                    pending[key] = entry
+                    retry = true
+                end
             end
         else
             lastError = tostring(result)
         end
+    end
+    if retry and not measureScheduled then
+        measureScheduled = true
+        C_Timer.After(MEASURE_RETRY_DELAY, MeasurePending)
     end
 end
 
@@ -476,7 +495,7 @@ function CaerdonButtonGeometry:Note(feature, button, options, mogStatus, binding
 
     local window = windows[windowName]
     if not window then
-        window = { shapes = {}, order = {}, seen = {}, dropped = 0 }
+        window = { shapes = {}, order = {}, seen = {}, unmeasured = {}, dropped = 0 }
         windows[windowName] = window
         windowOrder[#windowOrder + 1] = windowName
     end
@@ -532,6 +551,54 @@ local function Point(point)
     return string.format("%s to %s, %s / %s", tostring(point.point), tostring(point.relativePoint), Num(point.x), Num(point.y))
 end
 
+-- The player's layout (Display settings, layout editor) moves and resizes every part in a window
+-- that is not hand-fitted, so measurements only compare between captures taken with the same one.
+local LAYOUT_PARTS = {
+    { label = "icon",          path = { "Icon" } },
+    { label = "text",          path = { "Binding" } },
+    { label = "gear set name", path = { "Binding", "GearSet" } },
+    { label = "level gain",    path = { "Icon", "UpgradeDelta" } },
+}
+local LAYOUT_KEYS = { "Position", "Scale", "OffsetX", "OffsetY" }
+
+local function Dig(root, path)
+    for _, key in ipairs(path) do
+        root = type(root) == "table" and root[key] or nil
+    end
+    return type(root) == "table" and root or nil
+end
+
+-- One line saying whether the layout is the default one, then each part's anchor, size and nudge.
+-- A missing value reads as its default, as it does when the part is drawn.
+local function DescribeLayout()
+    local defaults = NS and NS.GetDefaultConfig and NS:GetDefaultConfig() or nil
+    local parts, changed = {}, false
+    for _, part in ipairs(LAYOUT_PARTS) do
+        local config = Dig(CaerdonWardrobeConfig, part.path) or {}
+        local default = Dig(defaults, part.path) or {}
+        local values = {}
+        for _, key in ipairs(LAYOUT_KEYS) do
+            local value = config[key]
+            if value == nil then
+                value = default[key]
+            end
+            if default[key] ~= nil and tostring(value) ~= tostring(default[key]) then
+                changed = true
+            end
+            values[key] = value == nil and "?" or FormatOption(value)
+        end
+        parts[#parts + 1] = string.format("%s %s %s%% nudge %s / %s", part.label, values.Position, values.Scale,
+            values.OffsetX, values.OffsetY)
+    end
+
+    local verdict = "defaults unknown"
+    if defaults then
+        verdict = changed and "CHANGED from the default, and part of every number below except in hand-fitted windows"
+            or "default"
+    end
+    return verdict, parts
+end
+
 -- The export text, as { indent, text } rows.
 function CaerdonButtonGeometry:GetReportLines()
     local lines = {}
@@ -543,6 +610,13 @@ function CaerdonButtonGeometry:GetReportLines()
     add(1, "Units: the decorated button's own. Outside = how far a part sticks out of the frame the overlay is on (negative = inside).")
     if UIParent and UIParent.GetEffectiveScale then
         add(1, "UI scale: " .. string.format("%.3f", UIParent:GetEffectiveScale()))
+    end
+    local okLayout, layoutVerdict, layoutParts = pcall(DescribeLayout)
+    if okLayout then
+        add(1, "Player's layout: " .. layoutVerdict)
+        for _, part in ipairs(layoutParts) do
+            add(2, part)
+        end
     end
     if lastError then
         add(1, "Last measuring error: " .. lastError)
@@ -563,7 +637,8 @@ function CaerdonButtonGeometry:GetReportLines()
             local sample = window.shapes[signature]
             local seen = window.seen[signature] or 0
             if not sample then
-                add(2, string.format("Shape %d: drawn %d times, never measurable (hidden or not laid out)", index, seen))
+                add(2, string.format("Shape %d: drawn %d times, never measurable: %s", index, seen,
+                    window.unmeasured[signature] or "not looked at yet"))
                 add(3, "Signature: " .. signature)
             else
                 add(2, string.format("Shape %d: drawn %d times, measured %d, last %.1fs ago", index, seen,

@@ -253,6 +253,114 @@ function BetterBagsVendorMixin:Refresh()
     end
 end
 
+-- BetterBags' own guild bank ("Next" guild bank). Blizzard's GuildBankFrame stays hidden while it is
+-- open, so the GuildBank feature's icons land on buttons nobody sees. This feature decorates
+-- BetterBags' guild bank buttons instead and follows the GuildBank rules.
+local BetterBagsGuildBankMixin = {}
+
+-- NextGuildButtonFrame objects (BetterBags owns them and pools them).
+local trackedGuildButtons = setmetatable({}, { __mode = "k" })
+
+function BetterBagsGuildBankMixin:GetName()
+    return "BetterBagsGuildBank"
+end
+
+function BetterBagsGuildBankMixin:GetStatusRuleName()
+    return "GuildBank"
+end
+
+-- The guild bank tab and slot a button shows an item of, or nil for a free slot or a pooled button.
+-- data is set by SetItemFromData and cleared by SetFreeSlots and Release; tab is the item's own
+-- tab, also in the view that shows every tab at once.
+local function GetGuildTabAndSlot(guildButton)
+    local data = guildButton.data
+    if type(data) == "table" and guildButton.tab and data.slotid then
+        return guildButton.tab, data.slotid
+    end
+end
+
+function BetterBagsGuildBankMixin:UpdateGuildButton(guildButton)
+    local button = guildButton.button
+    if not button then
+        return
+    end
+
+    local tab, slot = GetGuildTabAndSlot(guildButton)
+    local itemLink = tab and GetGuildBankItemLink(tab, slot)
+    if not itemLink then
+        button.caerdonDebugItemLink = nil
+        CaerdonWardrobe:ClearButton(button)
+        return
+    end
+
+    -- The tooltip is owned by this button, which is where the debug keybind looks.
+    button.caerdonDebugItemLink = itemLink
+
+    local options = GetSlotOptions(button)
+    local locationInfo = {
+        locationKey = format("tab%d-index%d", tab, slot),
+        tab = tab,
+        index = slot
+    }
+
+    local item = CaerdonItem:CreateFromItemLink(itemLink)
+    local function doUpdate()
+        -- The button may have been redrawn for something else while the item loaded.
+        local currentTab, currentSlot = GetGuildTabAndSlot(guildButton)
+        if currentTab == tab and currentSlot == slot and GetGuildBankItemLink(tab, slot) == itemLink then
+            CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
+        end
+    end
+
+    if item:IsItemDataCached() then
+        doUpdate()
+    else
+        item:ContinueOnItemLoad(doUpdate)
+    end
+end
+
+function BetterBagsGuildBankMixin:Init()
+    local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
+    local events = BetterBags:GetModule("Events")
+
+    -- Sent after every draw of a button, for an item and for a free slot. A released button is
+    -- hidden and sends nothing; its next draw is announced again.
+    events:RegisterMessage('guild/Updated', function(_, guildButton)
+        if type(guildButton) ~= "table" then
+            return
+        end
+        trackedGuildButtons[guildButton] = true
+        -- A problem on this side must not interrupt BetterBags' guild bank draw.
+        local ok, failure = pcall(self.UpdateGuildButton, self, guildButton)
+        if not ok then
+            geterrorhandler()(failure)
+        end
+    end)
+end
+
+function BetterBagsGuildBankMixin:GetTooltipData(item, locationInfo)
+    return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
+end
+
+function BetterBagsGuildBankMixin:GetDisplayInfo(button, item)
+    local guildBankFeature = CaerdonWardrobe:GetFeature("GuildBank")
+    if guildBankFeature then
+        return guildBankFeature:GetDisplayInfo(button, item)
+    end
+    return {}
+end
+
+function BetterBagsGuildBankMixin:Refresh()
+    CaerdonWardrobeFeatureMixin:Refresh(self)
+
+    for guildButton in pairs(trackedGuildButtons) do
+        -- Pooled buttons and free slots have no item; BetterBags draws them again when they do.
+        if GetGuildTabAndSlot(guildButton) and guildButton.frame and guildButton.frame:IsShown() then
+            self:UpdateGuildButton(guildButton)
+        end
+    end
+end
+
 local Version = nil
 local isActive = false
 
@@ -261,6 +369,7 @@ if select(4, C_AddOns.GetAddOnInfo(addonName)) then
 		Version = C_AddOns.GetAddOnMetadata(addonName, 'Version')
 		CaerdonWardrobe:RegisterFeature(BetterBagsMixin)
 		CaerdonWardrobe:RegisterFeature(BetterBagsVendorMixin)
+		CaerdonWardrobe:RegisterFeature(BetterBagsGuildBankMixin)
 		isActive = true
 	end
 end

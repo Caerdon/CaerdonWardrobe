@@ -61,10 +61,13 @@ end
 function EncounterJournalMixin:UpdateScrollBox(scrollBox, key, sortPending)
     local index = 1
     scrollBox:ForEachFrame(function(button)
+        -- The list clips 2 px left of a loot row's 42 px icon, which is all this inset lets the
+        -- 20 px icon hang out. One the player has made bigger goes inside the icon instead.
         local options = {
             relativeFrame = button.icon,
             statusOffsetX = 8,
-            statusOffsetY = 7
+            statusOffsetY = 7,
+            keepInsideWhenClipped = true
         }
 
         local itemLink = button.link
@@ -144,11 +147,9 @@ function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
     local button = suggestion.reward
     local rewardData = suggestion.reward.data;
 
-    -- TODO: Check out rewardData content to determine if I can hook into this.
-    -- Right now have only seen currency (currencyType, currencyQuantity, currencyIcon)
-    -- Assuming I may have itemLink based on some other code for now.
-    -- DevTools_Dump(rewardData)
-
+    -- rewardData has an itemLink for an item reward (seen in game on retail 12.1.5), or
+    -- currencyType / currencyQuantity / currencyIcon. The 30 px icon sits in a ring
+    -- (adventureguide-rewardring), so the inset keeps the status icon on it.
     local options = {
         relativeFrame = button.icon,
         statusOffsetX = 8,
@@ -209,11 +210,10 @@ function EncounterJournalMixin:OnEncounterJournalUpdateSearchPreview()
             local spellID, name, icon, path, typeText, displayInfo, itemID, stype, itemLink =
                 EncounterJournal_GetSearchDisplay(index);
             if itemLink then
+                -- The default slot look on the preview's 19 px icon, which comes out at the smallest size.
                 local options = {
-                    statusProminentSize = 13,
                     relativeFrame = button.icon,
-                    statusOffsetX = 2,
-                    statusOffsetY = 2
+                    statusProminentSize = button.icon and CaerdonWardrobe:GetSlotStatusSize(button.icon:GetSize()) or 13
                 }
 
                 local item = CaerdonItem:CreateFromItemLink(itemLink)
