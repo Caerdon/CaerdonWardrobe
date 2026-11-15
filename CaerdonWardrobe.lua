@@ -180,6 +180,12 @@ end
 
 local ICON_PROMINENT_SIZE = 20
 local ICON_SIZE_DIFFERENTIAL = 0.8
+-- The small upgrade arrow on another icon (an upgrade that also has a look to learn): its ring
+-- as a share of that icon's size, the arrow as a share of the ring, and how far the ring's
+-- center sits inside the icon's corner, as a share of the ring.
+local UPGRADE_BADGE_SCALE = 0.65
+local UPGRADE_BADGE_ARROW = 0.7
+local UPGRADE_BADGE_OVERLAP = 0.4
 -- The slot the default sizes were made for: a Blizzard bag slot.
 local REFERENCE_SLOT_SIZE = 37
 -- Below the first the icon stops being readable (the 20 px rows of the auction and profession
@@ -550,6 +556,32 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
         background:ClearAllPoints()
         background:SetPoint("CENTER", icon)
     end
+
+    -- The upgrade badge sits on the icon's corner that points into the slot, overlapping it a
+    -- little, and is sized from the icon as it is now (smaller where the icon was moved inside).
+    -- The corner comes from where the icon is really anchored, which in a host addon's bags is
+    -- the host's choice, not the player's setting.
+    local badge, ring = icon.upgradeBadge, icon.upgradeBadgeRing
+    if badge and ring and icon.caerdonBadgeActive then
+        local parent = icon:GetParent()
+        if parent and badge:GetParent() ~= parent then
+            ring:SetParent(parent)
+            badge:SetParent(parent)
+        end
+        local _, _, anchoredTo = icon:GetPoint(1)
+        anchoredTo = anchoredTo or statusPosition
+        local size = (icon:GetWidth() or 0) * UPGRADE_BADGE_SCALE
+        local towardsRight = not string.find(anchoredTo, "RIGHT")
+        local towardsBottom = not string.find(anchoredTo, "BOTTOM")
+        local overlap = size * UPGRADE_BADGE_OVERLAP
+        ring:SetSize(size, size)
+        badge:SetSize(size * UPGRADE_BADGE_ARROW, size * UPGRADE_BADGE_ARROW)
+        ring:ClearAllPoints()
+        ring:SetPoint("CENTER", icon, (towardsBottom and "BOTTOM" or "TOP") .. (towardsRight and "RIGHT" or "LEFT"),
+            towardsRight and -overlap or overlap, towardsBottom and overlap or -overlap)
+        badge:ClearAllPoints()
+        badge:SetPoint("CENTER", ring, "CENTER", 0, 0)
+    end
 end
 
 function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoothing, startDelay, endDelay)
@@ -596,6 +628,10 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
             else
                 mogStatusBackground:SetAlpha(assignedAlpha)
                 mogStatus:SetAlpha(assignedAlpha)
+            end
+            if mogStatus.upgradeBadge then
+                mogStatus.upgradeBadge:SetAlpha(isFiltered and 0.3 or assignedAlpha)
+                mogStatus.upgradeBadgeRing:SetAlpha(isFiltered and 0.3 or assignedAlpha)
             end
         end
 
@@ -663,6 +699,10 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
                     background:SetAlpha(0)
                     background:Hide()
                 end
+                if statusTexture.upgradeBadge then
+                    statusTexture.upgradeBadge:Hide()
+                    statusTexture.upgradeBadgeRing:Hide()
+                end
             end)
             mogStatus:HookScript("OnShow", function(statusTexture)
                 local background = statusTexture.mogStatusBackground
@@ -677,6 +717,10 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
                     end
                     background:SetAlpha(alpha)
                     background._caerdonPrevAlpha = nil
+                end
+                if statusTexture.upgradeBadge and statusTexture.caerdonBadgeActive then
+                    statusTexture.upgradeBadge:Show()
+                    statusTexture.upgradeBadgeRing:Show()
                 end
             end)
             mogStatus._caerdonBackgroundHooked = true
@@ -771,6 +815,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             SetPartShown(caerdonButton, mogStatus, false)
         end
         SetPartShown(caerdonButton, upgradeDeltaText, false)
+        if mogStatus and mogStatus.upgradeBadge then
+            mogStatus.caerdonBadgeActive = false
+            mogStatus.upgradeBadge:Hide()
+            mogStatus.upgradeBadgeRing:Hide()
+        end
         return
     end
 
@@ -826,17 +875,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeDeltaShown = true
     end
 
-    local function ApplyUpgradeArrowColor(defaultR, defaultG, defaultB)
+    local function ApplyUpgradeArrowColor(defaultR, defaultG, defaultB, arrow)
+        arrow = arrow or mogStatus
         if transmogInfo and transmogInfo.pawnOffTreeUpgrade then
             -- Pawn only rates it higher for another talent tree's scale: same "usable but
             -- off-spec" red as a loot spec mismatch. Hiding that scale in Pawn removes the arrow.
-            mogStatus:SetVertexColor(1, 0.35, 0.35)
+            arrow:SetVertexColor(1, 0.35, 0.35)
         elseif transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
-            mogStatus:SetVertexColor(1, 0.35, 0.35)
+            arrow:SetVertexColor(1, 0.35, 0.35)
         elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
-            mogStatus:SetVertexColor(1, 1, 0)
+            arrow:SetVertexColor(1, 1, 0)
         else
-            mogStatus:SetVertexColor(defaultR, defaultG, defaultB)
+            arrow:SetVertexColor(defaultR, defaultG, defaultB)
         end
     end
 
@@ -943,6 +993,28 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus.caerdonBackgroundNudge = nil
 
     local isProminent = false
+
+    -- The upgrade icon: an arrow on a ring. lowSkill: the toon's level is not there yet.
+    local function DrawUpgradeIcon(lowSkill)
+        isProminent = false
+        iconBackgroundAdjustment = 4
+        mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
+        mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+        if lowSkill then
+            mogStatusBackground:SetVertexColor(0.4, 1, 0)
+        else
+            mogStatusBackground:SetVertexColor(0, 1, 1)
+        end
+
+        mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
+        mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+        ApplyUpgradeArrowColor(0.4, 1, 0.2)
+        if lowSkill then
+            ShowUpgradeDeltaText(0.9, 0.82, 0.1)
+        else
+            ShowUpgradeDeltaText()
+        end
+    end
     local caerdonType = item and item.GetCaerdonItemType and item:GetCaerdonItemType()
     local housingInfo = (caerdonType == CaerdonItemType.Housing and item:GetItemData() and item:GetItemData():GetHousingInfo()) or
         nil
@@ -995,28 +1067,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "upgrade" then
         isProminent = false
         if shouldShowUpgradeIcon then
-            iconBackgroundAdjustment = 4
-            mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-            mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-            mogStatusBackground:SetVertexColor(0, 1, 1)
-
-            mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-            mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-            ApplyUpgradeArrowColor(0.4, 1, 0.2)
-            ShowUpgradeDeltaText()
+            DrawUpgradeIcon(false)
         end
     elseif status == "upgradeLowSkill" then
         isProminent = false
         if shouldShowUpgradeIcon then
-            iconBackgroundAdjustment = 4
-            mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-            mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-            mogStatusBackground:SetVertexColor(0.4, 1, 0)
-
-            mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-            mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-            ApplyUpgradeArrowColor(0.4, 1, 0.2)
-            ShowUpgradeDeltaText(0.9, 0.82, 0.1)
+            DrawUpgradeIcon(true)
         end
     elseif status == "locked" then
         isProminent = true
@@ -1202,6 +1258,45 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         -- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
     end
 
+    -- An upgrade whose status went to something else, in practice a look to learn
+    -- (transmogInfo.upgradeStatus is the status logic's own verdict): the arrow rides on that
+    -- icon as a small badge, so an upgrade always reads as one. Where the window does not show
+    -- that icon at all, the item is drawn as the upgrade it is.
+    local badgeStatus = transmogInfo and transmogInfo.upgradeStatus
+    local showBadge = false
+    if badgeStatus and shouldShowUpgradeIcon and status ~= "upgrade" and status ~= "upgradeLowSkill" and
+        status ~= "waiting" then
+        local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
+        if statusTexture == nil or statusTexture == "" or statusTexture == 0 then
+            DrawUpgradeIcon(badgeStatus == "upgradeLowSkill")
+        else
+            showBadge = true
+        end
+    end
+
+    local upgradeBadge, upgradeBadgeRing = mogStatus.upgradeBadge, mogStatus.upgradeBadgeRing
+    if showBadge and not upgradeBadge then
+        upgradeBadgeRing = caerdonButton:CreateTexture(nil, "ARTWORK", nil, 3)
+        upgradeBadge = caerdonButton:CreateTexture(nil, "ARTWORK", nil, 4)
+        upgradeBadgeRing:Hide()
+        upgradeBadge:Hide()
+        mogStatus.upgradeBadge, mogStatus.upgradeBadgeRing = upgradeBadge, upgradeBadgeRing
+    end
+    mogStatus.caerdonBadgeActive = showBadge
+    caerdonButton.caerdonHasUpgradeBadge = showBadge
+    if showBadge then
+        upgradeBadgeRing:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
+        upgradeBadgeRing:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+        if badgeStatus == "upgradeLowSkill" then
+            upgradeBadgeRing:SetVertexColor(0.4, 1, 0)
+        else
+            upgradeBadgeRing:SetVertexColor(0, 1, 1)
+        end
+        upgradeBadge:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
+        upgradeBadge:SetTexture("Interface\\Buttons\\JumpUpArrow")
+        ApplyUpgradeArrowColor(0.4, 1, 0.2, upgradeBadge)
+    end
+
     if not upgradeDeltaShown and transmogInfo and transmogInfo.upgradeItemLevelDelta and transmogInfo.upgradeItemLevelDelta > 0 then
         ShowUpgradeDeltaText()
     end
@@ -1249,10 +1344,24 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         true or false
     caerdonButton.caerdonHasGain = upgradeDeltaShown
 
+    -- The badge is on screen with its icon. Where a host addon shows the icon later, the icon's
+    -- OnShow brings the badge along.
+    if upgradeBadge then
+        local badgeShown = showBadge and mogStatus:IsShown() and true or false
+        upgradeBadge:SetShown(badgeShown)
+        upgradeBadgeRing:SetShown(badgeShown)
+        upgradeBadge:SetAlpha(alpha)
+        upgradeBadgeRing:SetAlpha(alpha)
+    end
+
     C_Timer.After(0, function()
         if (caerdonButton.searchOverlay and caerdonButton.searchOverlay:IsShown()) then
             mogStatusBackground:SetAlpha(0.3)
             mogStatus:SetAlpha(0.3)
+            if upgradeBadge then
+                upgradeBadge:SetAlpha(0.3)
+                upgradeBadgeRing:SetAlpha(0.3)
+            end
         end
     end)
 
@@ -1776,6 +1885,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                 end
             end
         end
+    end
+
+    -- The status logic's own upgrade verdict, for the badge on an icon that is not the arrow.
+    if transmogInfo and bindingResult then
+        transmogInfo.upgradeStatus = bindingResult.upgradeStatus
     end
 
     if button then

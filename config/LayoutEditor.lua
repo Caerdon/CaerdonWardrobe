@@ -178,8 +178,14 @@ local function BuildSample(template, enabled)
         has.gear = true
     end
     if template.delta then
-        -- The drawing code only shows it when the level gain is switched on.
-        sample.transmogInfo = { upgradeItemLevelDelta = 5, isUpgrade = template.arrow or nil }
+        -- The drawing code only shows it when the level gain is switched on. An example with a
+        -- gain and an icon that is not the arrow is an upgrade with a look to learn, which carries
+        -- the arrow as a small badge (when the arrow is switched on).
+        sample.transmogInfo = {
+            upgradeItemLevelDelta = 5,
+            isUpgrade = template.arrow or nil,
+            upgradeStatus = (not template.arrow and enabled.arrow) and "upgrade" or nil
+        }
         has.delta = enabled.delta
     end
 

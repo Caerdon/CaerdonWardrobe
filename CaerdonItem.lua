@@ -1585,6 +1585,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     isUpgrade = nil
                 end
             end
+            -- The upgrade verdict as it is used below, kept for the caller: when a look to learn
+            -- ends up as the status, the icon still gets a small upgrade arrow on it.
+            bindingResult.upgradeStatus = isUpgrade and
+                (transmogInfo.hasMetRequirements and "upgrade" or "upgradeLowSkill") or nil
             if transmogInfo.isArtifactItem then
                 isArtifactItem = true
             end
