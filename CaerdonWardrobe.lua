@@ -186,6 +186,10 @@ local ICON_SIZE_DIFFERENTIAL = 0.8
 local UPGRADE_BADGE_SCALE = 0.65
 local UPGRADE_BADGE_ARROW = 0.7
 local UPGRADE_BADGE_OVERLAP = 0.4
+-- The circle a ring icon is clipped to where its shadow would show (options.roundStatusIcon), as
+-- a share of the icon's size. The ring measures 0.88 of it. Nothing of the shadow may be left:
+-- it is a drop shadow, heavier below, and a rim of it swings around as the icon turns.
+local RING_ICON_CLIP = 0.9
 -- The slot the default sizes were made for: a Blizzard bag slot.
 local REFERENCE_SLOT_SIZE = 37
 -- Below the first the icon stops being readable (the 20 px rows of the auction and profession
@@ -481,6 +485,10 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 
     -- Scaling values if the icon is different than prominent-sized
     local iconWidth, iconHeight = icon:GetSize()
+
+    if icon.caerdonRingMask then
+        icon.caerdonRingMask:SetSize(iconWidth * RING_ICON_CLIP, iconHeight * RING_ICON_CLIP)
+    end
     local xAdjust = iconWidth / ICON_PROMINENT_SIZE
     local yAdjust = iconHeight / ICON_PROMINENT_SIZE
 
@@ -849,9 +857,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- end
 
     local upgradeDeltaShown = false
+    -- False once the feature's display info says so (displayInfo.levelGain), read further down.
+    local levelGainAllowed = true
 
     local function ShowUpgradeDeltaText(r, g, b)
-        if not upgradeDeltaText or not transmogInfo or not CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta then
+        if not upgradeDeltaText or not transmogInfo or not levelGainAllowed or
+            not CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta then
             return
         end
 
@@ -967,9 +978,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     local displayInfo
     if feature then
-        displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
+        displayInfo = feature:GetDisplayInfoInternal(originalButton, item, feature, locationInfo, options, mogStatus,
             bindingStatus)
     end
+    -- A feature can leave the level gain out (levelGain = { shouldShow = false }), for a window
+    -- that already shows the upgrade its own way. No other feature sets it.
+    levelGainAllowed = not (displayInfo and displayInfo.levelGain and displayInfo.levelGain.shouldShow == false)
     local equipLocation = item and item.GetEquipLocation and item:GetEquipLocation()
     local isTabard = equipLocation == "INVTYPE_TABARD"
     local isShirt = equipLocation == "INVTYPE_BODY"
@@ -993,6 +1007,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus.caerdonBackgroundNudge = nil
 
     local isProminent = false
+
+    -- The store's category icons: a ring in the middle half of a 64 px texture. The crop is the
+    -- ring's square, which also cuts the shadow around it off square (see roundStatusIcon below).
+    local isRingIcon = false
+    local function SetRingIcon(texture)
+        isRingIcon = true
+        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
+        mogStatus:SetTexture(texture)
+    end
 
     -- The upgrade icon: an arrow on a ring. lowSkill: the toon's level is not there yet.
     local function DrawUpgradeIcon(lowSkill)
@@ -1041,11 +1064,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
     elseif status == "openable" then
         isProminent = true
-        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-        mogStatus:SetTexture("Interface\\Store\\category-icon-free")
+        SetRingIcon("Interface\\Store\\category-icon-free")
     elseif status == "readable" then
-        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-        mogStatus:SetTexture("Interface\\Store\\category-icon-services")
+        SetRingIcon("Interface\\Store\\category-icon-services")
     elseif status == "lowSkill" or status == "lowSkillPlus" then
         mogStatus:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
         mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
@@ -1076,18 +1097,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
     elseif status == "locked" then
         isProminent = true
-        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-        mogStatus:SetTexture("Interface\\Store\\category-icon-key")
+        SetRingIcon("Interface\\Store\\category-icon-key")
     elseif status == "oldexpansion" and displayInfo and displayInfo.oldExpansionIcon.shouldShow then
         alpha = 0.9
-        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-        mogStatus:SetTexture("Interface\\Store\\category-icon-wow")
+        SetRingIcon("Interface\\Store\\category-icon-wow")
     elseif status == "needForProfession" then
         -- TODO: Need to improve to pass data for icon determination.
         isProminent = true
         if displayInfo and displayInfo.ownIcon.shouldShow then
-            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-            mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+            SetRingIcon("Interface\\Store\\category-icon-featured")
             -- mogStatus:SetTexture("Interface\\WorldMap\\worldquest-icon-enchanting")
         end
     elseif status == "canCombine" then
@@ -1157,14 +1175,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
 
         if not housingIconSet then
-            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-            mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+            SetRingIcon("Interface\\Store\\category-icon-featured")
         end
     elseif status == "own" or status == "ownPlus" then
         isProminent = true
         if displayInfo and displayInfo.ownIcon.shouldShow then
-            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-            mogStatus:SetTexture("Interface\\Store\\category-icon-featured")
+            SetRingIcon("Interface\\Store\\category-icon-featured")
             if status == "ownPlus" then
                 mogStatus:SetVertexColor(0.4, 1, 0)
             end
@@ -1172,8 +1188,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "other" or status == "otherPlus" then
         isProminent = true
         if displayInfo and displayInfo.otherIcon.shouldShow then
-            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-            mogStatus:SetTexture("Interface\\Store\\category-icon-placeholder")
+            SetRingIcon("Interface\\Store\\category-icon-placeholder")
             if status == "otherPlus" then
                 mogStatus:SetVertexColor(0.4, 1, 0)
             end
@@ -1232,8 +1247,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus:SetTexture("Interface\\PaperDollInfoFrame\\StatSortArrows")
             mogStatus:SetVertexColor(1, 0.95, 0.75)
         elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
-            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-            mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
+            SetRingIcon("Interface\\Store\\category-icon-clothes")
         end
     elseif (status == "auction" or status == "auctionGoods") and displayInfo and displayInfo.auctionIcon and displayInfo.auctionIcon.shouldShow then
         -- The auction house pays enough more than a vendor to list it instead.
@@ -1247,13 +1261,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         -- "auction" lands here where its own icon is off (anything but bags and bank).
         if displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
             alpha = 0.9
-            mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-            mogStatus:SetTexture("Interface\\Store\\category-icon-bag")
+            SetRingIcon("Interface\\Store\\category-icon-bag")
         end
     elseif status == "waiting" then
         alpha = 0.5
-        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-        mogStatus:SetTexture("Interface\\Common\\StreamCircle")
+        SetRingIcon("Interface\\Common\\StreamCircle")
         -- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
         -- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
         -- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
@@ -1331,6 +1343,27 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- The full size, for the clip-aware placement to shrink from and return to.
     mogStatus.caerdonBaseSize = iconSize - iconBackgroundAdjustment
     mogStatus.caerdonBaseBackgroundSize = iconSize
+
+    -- options.roundStatusIcon, for a window with a light background (parchment): a ring icon's
+    -- square holds a piece of its shadow, which is lost on a dark slot but shows there and turns
+    -- with the animation. The icon is clipped to the ring; SetStatusIconPosition sizes the mask.
+    local ringMask = mogStatus.caerdonRingMask
+    local wantRingMask = (isRingIcon and options.roundStatusIcon) and true or false
+    if wantRingMask and not ringMask then
+        ringMask = caerdonButton:CreateMaskTexture()
+        ringMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE",
+            "CLAMPTOBLACKADDITIVE")
+        ringMask:SetPoint("CENTER", mogStatus, "CENTER", 0, 0)
+        mogStatus.caerdonRingMask = ringMask
+    end
+    if ringMask and wantRingMask ~= (mogStatus.caerdonRingMaskOn or false) then
+        if wantRingMask then
+            mogStatus:AddMaskTexture(ringMask)
+        else
+            mogStatus:RemoveMaskTexture(ringMask)
+        end
+        mogStatus.caerdonRingMaskOn = wantRingMask
+    end
 
     self:SetStatusIconPosition(mogStatus, originalButton, item, feature, locationInfo, options, status, bindingStatus)
 

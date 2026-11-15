@@ -97,6 +97,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Auction icon | Auction Value |
 | Stale icons, refresh events | Refresh |
 | Baganator, BetterBags | Bag Addon Integrations |
+| Quest rewards in the Dialogue UI addon | Dialogue UI |
 | Icon size, clipping, measuring a window | Icon Size and Placement |
 | Settings pages, layout settings | Settings |
 | Layout editor | Layout Editor |
