@@ -268,6 +268,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowSpareBags == nil then
             CaerdonWardrobeConfig.Icon.ShowSpareBags = NS:GetDefaultConfig().Icon.ShowSpareBags
         end
+        if CaerdonWardrobeConfig.Icon.ShowOnDialogueUI == nil then
+            CaerdonWardrobeConfig.Icon.ShowOnDialogueUI = NS:GetDefaultConfig().Icon.ShowOnDialogueUI
+        end
         if not CaerdonWardrobeConfig.Tooltip then
             CaerdonWardrobeConfig.Tooltip = {}
         end
@@ -430,6 +433,8 @@ function NS:GetDefaultConfig()
             ShowRecipesForOtherToons = true,
             ShowBagUpgrades = true,
             ShowSpareBags = true,
+            -- The Dialogue UI addon's quest rewards (external/DialogueUI).
+            ShowOnDialogueUI = true,
             AuctionMinProfit = "auto",
             ShowUpgradeLevelDelta = false,
             SameLevelBehavior = "none",

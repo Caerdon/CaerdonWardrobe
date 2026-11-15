@@ -36,6 +36,13 @@ function CaerdonWardrobeConfigDisplay:Register()
     self:AddCheckbox({ key = "merchantHideCollectedItems", text = "Gray out items I have already collected", tooltip = "Grays out and fades vendor items that you have already learned or collected.", configSection = "Merchant", configSubsection = "Filter", configValue = "HideCollected" })
     self:AddCheckbox({ key = "merchantSuppressLegionRemixHelperWarning", text = "Hide the Legion Remix Helper conflict warning", tooltip = "Don't show the warning about Legion Remix Helper's merchant filtering being enabled.", configSection = "Merchant", configSubsection = "Filter", configValue = "SuppressLegionRemixHelperWarning" })
 
+    -- Another addon's window with markers of its own, so someone who chose its look may want it
+    -- left alone. Only offered to those who have it.
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("DialogueUI") then
+        self:AddSection("Dialogue UI")
+        self:AddCheckbox({ key = "showOnDialogueUI", text = "Show icons on its quest rewards", tooltip = "Draws this addon's icons and binding text on the quest rewards in Dialogue UI's window. Which icons show there follows the quest reward settings on the Icons page. Blizzard's own quest windows are not affected.", configSection = "Icon", configValue = "ShowOnDialogueUI" })
+    end
+
     self:AddSection("Tooltip")
     self:AddCheckbox({ key = "showRecipeLearners", text = "Add who could learn a recipe to its tooltip", tooltip = "Adds a line to a recipe's tooltip naming your other toons on this realm that have the profession and have not learned it.", configSection = "Tooltip", configValue = "ShowRecipeLearners" })
 

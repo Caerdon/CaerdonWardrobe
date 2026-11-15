@@ -11,10 +11,18 @@ function DialogueUIMixin:GetName()
 end
 
 -- Item buttons that show a reward right now: [button] = what was last sent to the core for it
--- (the reward's link, plus whether Dialogue UI had its own upgrade arrow on the button), or true
--- while the client has no link for it yet. Dialogue UI pools the buttons (weak keys: they are its
+-- (the reward's link, plus whether Dialogue UI had its own upgrade arrow on the button), true
+-- while the client has no link for it yet, or SWITCHED_OFF while the player's setting keeps this
+-- addon off Dialogue UI's rewards. Dialogue UI pools the buttons (weak keys: they are its
 -- own) and releases every one of them before it lays a dialog out again.
 local trackedButtons = setmetatable({}, { __mode = "k" })
+local SWITCHED_OFF = "off"
+
+-- The player's choice (Display page): nothing of this addon's on Dialogue UI's rewards.
+local function IsEnabled()
+    local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    return not (icon and icon.ShowOnDialogueUI == false)
+end
 
 -- Dialogue UI puts its own upgrade arrow on a reward it rates as one (its "Evaluate Item Rewards"
 -- option; the verdict is Pawn's where Pawn is installed) and flags the button. On those buttons
@@ -55,6 +63,9 @@ local function GetRewardOptions(button)
 end
 
 function DialogueUIMixin:GetLayoutNote()
+    if not IsEnabled() then
+        return nil
+    end
     return "Dialogue UI: Position, Size and Nudge do not apply on its quest rewards. The icon sits in the " ..
         "top right corner there, over Dialogue UI's own mark for an item the character cannot use, the " ..
         "text at the bottom and the level gain in the bottom right."
@@ -82,6 +93,16 @@ function DialogueUIMixin:UpdateRewardButton(button)
     -- Rewards only: a required item is handed in, not received.
     if button.objectType ~= "item" or not index or (rewardType ~= "reward" and rewardType ~= "choice") then
         self:ReleaseRewardButton(button)
+        return
+    end
+
+    if not IsEnabled() then
+        -- Still tracked, so Refresh draws it once the setting is switched back on. Dialogue UI
+        -- sets a button again many times a second; clearing it once is enough.
+        if trackedButtons[button] ~= SWITCHED_OFF then
+            trackedButtons[button] = SWITCHED_OFF
+            self:ClearRewardButton(button)
+        end
         return
     end
 
