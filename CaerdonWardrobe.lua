@@ -1214,6 +1214,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         local showEqualLevel = transmogInfo and
             showNeutralSameLevel and
             transmogInfo.equalItemLevelEquipped and
+            not transmogInfo.identicalToEquipped and
             canEquipForNeutral and
             matchesCurrentSpec and
             transmogInfo.hasMetRequirements and

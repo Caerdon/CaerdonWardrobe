@@ -1716,12 +1716,17 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     bindingStatus = equipmentSets[1]
                 end
             else
+                -- A piece that does exactly what the equipped one does (same tooltip lines) is a
+                -- duplicate: nothing to weigh, whatever the same-level setting says, and its use
+                -- or equip effect is one the toon already has.
+                local identicalToEquipped = transmogInfo and transmogInfo.identicalToEquipped
                 local redundantForPlayer = transmogInfo and
-                    (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped)
+                    (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped or identicalToEquipped)
                 local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
                 local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
                 local protectEqualItemLevel = false
                 if sameLevelBehavior ~= "sellable" and transmogInfo and transmogInfo.equalItemLevelEquipped and
+                    not identicalToEquipped and
                     canEquipEqualItem and
                     matchesCurrentSpec and
                     transmogInfo.hasMetRequirements then

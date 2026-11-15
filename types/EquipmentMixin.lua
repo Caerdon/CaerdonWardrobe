@@ -562,6 +562,8 @@ local function HasEqualEquippedItemLevel(item)
     local uniqueLimitedToOne = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
     local betterUniqueEquipped = false
     local hasEqualMatch = false
+    -- Second return value: the slots whose piece ties, for IsIdenticalToTiedEquipped.
+    local tiedSlots = nil
     for _, slotID in ipairs(inventorySlots) do
         local equipped = snapshot[slotID]
         if equipped and equipped.level then
@@ -574,6 +576,8 @@ local function HasEqualEquippedItemLevel(item)
 
             if normEquipped and normCandidate and normEquipped == normCandidate then
                 hasEqualMatch = true
+                tiedSlots = tiedSlots or {}
+                tiedSlots[#tiedSlots + 1] = slotID
             end
 
             if uniqueLimitedToOne and not betterUniqueEquipped then
@@ -589,7 +593,188 @@ local function HasEqualEquippedItemLevel(item)
         return false
     end
 
-    return hasEqualMatch
+    return hasEqualMatch, tiedSlots
+end
+
+-- "Same item level" only makes a piece worth keeping when it does something the equipped one
+-- does not. Whether it does is read off the two tooltips: every line is compared as text except
+-- the ones below, which say nothing about what a piece does when worn. That leaves armor, stats,
+-- damage and speed, the slot and armor / weapon type, enchants, sockets, use / equip / proc
+-- effects and set bonuses. An unknown line type is compared, so a doubt reads as "different" and
+-- the piece keeps its protection.
+local comparisonIgnoredLineTypes = {}
+for _, lineTypeName in ipairs({ "Blank", "Separator", "ItemName", "ItemBinding", "SellPrice", "ItemLevel",
+    "FlavorText", "UsageRequirement", "TradeTimeRemaining" }) do
+    local lineType = Enum.TooltipDataLineType and Enum.TooltipDataLineType[lineTypeName]
+    if lineType then
+        comparisonIgnoredLineTypes[lineType] = true
+    end
+end
+local comparisonEnchantLineType = Enum.TooltipDataLineType and Enum.TooltipDataLineType.ItemEnchantmentPermanent
+
+-- "Durability 20 / 20" has no line type of its own and differs between armor types and
+-- qualities without changing what the piece does.
+local durabilityPattern
+if DURABILITY_TEMPLATE then
+    local sample = DURABILITY_TEMPLATE:format(12345, 67890)
+    sample = sample:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+    sample = sample:gsub("12345", "%%d+")
+    sample = sample:gsub("67890", "%%d+")
+    durabilityPattern = "^%s*" .. sample .. "%s*$"
+end
+
+-- The compared lines of an item link's tooltip, or nil when the tooltip has none (data not
+-- loaded): two empty lists must never count as identical.
+local function BuildComparisonLines(itemLink)
+    if not itemLink or not C_TooltipInfo or not C_TooltipInfo.GetHyperlink then
+        return nil
+    end
+
+    local data = C_TooltipInfo.GetHyperlink(itemLink)
+    if not data or not data.lines then
+        return nil
+    end
+
+    local lines = { hasEnchant = false }
+    for _, line in ipairs(data.lines) do
+        if not comparisonIgnoredLineTypes[line.type] then
+            local left = line.leftText and tostring(line.leftText) or ""
+            local right = line.rightText and tostring(line.rightText) or ""
+            if (left ~= "" or right ~= "") and not (durabilityPattern and left:match(durabilityPattern)) then
+                local isEnchant = comparisonEnchantLineType ~= nil and line.type == comparisonEnchantLineType
+                if isEnchant then
+                    lines.hasEnchant = true
+                end
+                lines[#lines + 1] = {
+                    text = right ~= "" and (left .. " | " .. right) or left,
+                    isEnchant = isEnchant,
+                }
+            end
+        end
+    end
+
+    if #lines == 0 then
+        return nil
+    end
+    return lines
+end
+
+-- True when the candidate's lines match the equipped piece's, in order. An enchant on the equipped
+-- piece alone does not make the candidate worth keeping, so it is skipped when the candidate has
+-- none; an enchant on the candidate always counts. Second return value: the first difference.
+local function CompareComparisonLines(candidateLines, equippedLines)
+    local skipEquippedEnchants = not candidateLines.hasEnchant
+    local candidateIndex = 1
+    for _, equippedLine in ipairs(equippedLines) do
+        if not (skipEquippedEnchants and equippedLine.isEnchant) then
+            local candidateLine = candidateLines[candidateIndex]
+            if not candidateLine or candidateLine.text ~= equippedLine.text then
+                return false, format('"%s" here, "%s" equipped',
+                    candidateLine and candidateLine.text or "(no more lines)", equippedLine.text)
+            end
+            candidateIndex = candidateIndex + 1
+        end
+    end
+
+    local extraLine = candidateLines[candidateIndex]
+    if extraLine then
+        return false, format('"%s" here, "(no more lines)" equipped', extraLine.text)
+    end
+    return true
+end
+
+-- The stat numbers themselves, from C_Item.GetItemStats (a table of stat key -> value). They are
+-- checked next to the tooltip lines, not instead of them: the table has no weapon speed or damage
+-- range, no use / equip / proc effect and no set bonus. False only when both items have a table
+-- and the tables differ; no table for either leaves the verdict to the tooltip lines.
+-- Second return value: the first difference, or what was compared.
+local function GetItemStatTable(itemLink)
+    if not itemLink or not C_Item.GetItemStats then
+        return nil
+    end
+    local stats = C_Item.GetItemStats(itemLink)
+    return type(stats) == "table" and stats or nil
+end
+
+local function CompareItemStatTables(candidateStats, equippedStats)
+    if not candidateStats or not equippedStats then
+        return true, "none from the API"
+    end
+
+    local count = 0
+    for stat, value in pairs(candidateStats) do
+        count = count + 1
+        if equippedStats[stat] ~= value then
+            return false, format("%s %s here, %s equipped", tostring(stat), tostring(value), tostring(equippedStats[stat]))
+        end
+    end
+    for stat, value in pairs(equippedStats) do
+        if candidateStats[stat] == nil then
+            return false, format("%s nil here, %s equipped", tostring(stat), tostring(value))
+        end
+    end
+    return true, format("%d the same", count)
+end
+
+-- True when every equipped piece that ties the candidate's item level (tiedSlots, from
+-- HasEqualEquippedItemLevel) also does exactly what the candidate does: the same stat table and
+-- the same tooltip lines. With two slots, a tie against a different piece in the other slot keeps
+-- it a real choice. The equipped piece itself is never its own duplicate.
+-- Second return value: the verdict per slot, for the Debug Frame export.
+local function IsIdenticalToTiedEquipped(item, tiedSlots)
+    if not tiedSlots then
+        return false, nil
+    end
+
+    local itemLocation = item:GetItemLocation()
+    if itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsEquipmentSlot() then
+        return false, "the item is the equipped piece"
+    end
+
+    local candidateLink = item:GetItemLink()
+    local candidateLines = BuildComparisonLines(candidateLink)
+    if not candidateLines then
+        return false, "no tooltip lines for the item"
+    end
+    local candidateStats = GetItemStatTable(candidateLink)
+
+    local snapshot = GetEquippedGearSnapshot()
+    local identical = true
+    local detail = nil
+    for _, slotID in ipairs(tiedSlots) do
+        local equipped = snapshot[slotID]
+        if equipped and not equipped.comparisonLines then
+            equipped.comparisonLines = BuildComparisonLines(equipped.link)
+            equipped.comparisonStats = GetItemStatTable(equipped.link)
+        end
+
+        local slotDetail
+        if not (equipped and equipped.comparisonLines) then
+            identical = false
+            slotDetail = "no tooltip lines for the equipped piece"
+        else
+            local sameStats, statDetail = CompareItemStatTables(candidateStats, equipped.comparisonStats)
+            local sameLines, lineDifference = CompareComparisonLines(candidateLines, equipped.comparisonLines)
+            if sameStats and sameLines then
+                slotDetail = format("identical (stats: %s; tooltip lines: %d the same)", statDetail, #candidateLines)
+            else
+                identical = false
+                slotDetail = "differs ("
+                if not sameStats then
+                    slotDetail = slotDetail .. "stats: " .. statDetail
+                end
+                if not sameLines then
+                    slotDetail = slotDetail .. (sameStats and "" or "; ") .. "tooltip lines: " .. lineDifference
+                end
+                slotDetail = slotDetail .. ")"
+            end
+        end
+
+        slotDetail = format("slot%d: %s", slotID, slotDetail)
+        detail = detail and (detail .. "; " .. slotDetail) or slotDetail
+    end
+
+    return identical, detail
 end
 
 local function GetUpgradeItemLevelDelta(item)
@@ -1146,7 +1331,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local validSourceInfoForPlayer
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
     local betterItemEquipped, betterItemEquippedViaPvp = HasBetterOrEqualEquippedItem(item)
-    local equalItemLevelEquipped = HasEqualEquippedItemLevel(item)
+    local equalItemLevelEquipped, tiedEquippedSlots = HasEqualEquippedItemLevel(item)
+    local identicalToEquipped, equippedLineComparison = IsIdenticalToTiedEquipped(item, tiedEquippedSlots)
     local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(item)
     local lowerArmorClassThanEquipped = IsLowerArmorClassThanEquipped(item)
     local isArtifactItem = false
@@ -1590,6 +1776,11 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         uniqueUpgradeCandidate = uniqueUpgradeCandidate,
         betterItemEquipped = betterItemEquipped,
         equalItemLevelEquipped = equalItemLevelEquipped,
+        -- Every equipped piece that ties the item level has the same tooltip lines apart from the
+        -- name: a duplicate, not a sidegrade, so the equal-level protection does not apply.
+        -- equippedLineComparison is the per-slot verdict, for the Debug Frame export.
+        identicalToEquipped = identicalToEquipped,
+        equippedLineComparison = equippedLineComparison,
         upgradeItemLevelDelta = shouldShowUpgrade and upgradeItemLevelDelta or nil,
         pawnIdentifiedUpgrade = pawnIdentifiedUpgrade,
         -- Higher item level than the equipped piece, but Pawn scores the equipped piece at least

@@ -47,6 +47,12 @@ Ensembles teach **sources**, not appearances. Check `sourceInfo.isCollected`; do
 
 - **`isUpgrade`:** Pawn's verdict, else the unique-upgrade heuristic, else `upgradeItemLevelDelta > 0` (unless unique-blocked). `pawnIdentifiedUpgrade` is true only for Pawn's own verdict (yellow arrow; green means item level).
 - **`equalItemLevelEquipped`:** same item level as equipped and equippable. Such a collected item is not `sellable`; it shows the neutral balance icon (`Icon.SameLevelBehavior`) unless it is off-spec, a tabard / shirt, or in a gear set.
+- **`identicalToEquipped`:** the exception to the line above. A tie is only worth keeping when the piece does something the equipped one does not, so a piece that matches every equipped piece it ties is a duplicate: no protection and no balance icon under any `SameLevelBehavior`, and it counts as redundant (its use or equip effect is one the toon already has). Two checks, both must pass (`IsIdenticalToTiedEquipped`):
+  - `C_Item.GetItemStats` tables equal. The table has no weapon speed or damage range, no effects and no set bonus, so it cannot decide alone; when either item has no table the lines decide.
+  - `C_TooltipInfo.GetHyperlink` lines equal as text, in order. Ignored: name, binding, sell price, item level, flavor text, usage requirements, blank lines and the durability line. Everything else counts, including the slot line's armor / weapon type and any line type not listed, so a doubt reads as "different".
+  - An enchant on the equipped piece alone is skipped; one on the candidate counts. With two slots, a tie against a different piece in the other slot keeps the protection. Empty line lists (data not loaded) never match.
+  - A different item level with the same stats needs no rule here: the upgrade verdict or `betterItemEquipped` already decides it.
+  - **Export:** `identicalToEquipped` and `equippedLineComparison` (per slot: what matched, or the first difference). Confirmed in game for two plain cloaks with the same armor; the rest is offline, and what `GetItemStats` returns on Forever (armor, enchants) has not been recorded.
 - **`canEquipForPlayer`:** Blizzard's collect logic plus the tooltip scan. **`upgradeMatchesSpec`:** off-spec upgrades keep the arrow, tinted red, when "mismatched spec" is on.
 - **Gear set items** suppress the arrow; only the level gain text remains. **Tabards** never show as upgrades.
 - **Legendaries** with a use or equip effect are never `sellable`.
@@ -63,7 +69,7 @@ Equipment is `sellable` when it is `collected`, redundant or without use / equip
 
 - **Fishing poles** (weapon subclass `Fishingpole`).
 - **Profession tools:** a Weapon with a met skill requirement line (`bindingResult.skillRequirementMet`; armor with a profession requirement is judged normally), or anything `GetProfessionToolInfo()` names.
-- **Equal item level** (see Upgrades), recraftable items, legendaries and cosmetics with an effect, tabards with a use, teleport items, artifacts.
+- **Equal item level** unless the piece is `identicalToEquipped` (see Upgrades), recraftable items, legendaries and cosmetics with an effect, tabards with a use, teleport items, artifacts.
 
 Other sources of `sellable`:
 
