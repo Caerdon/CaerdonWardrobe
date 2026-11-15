@@ -535,6 +535,7 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
         if parent and background:GetParent() ~= parent then
             background:SetParent(parent)
         end
+
     end
     if not options.fixedStatusPosition then
         if background then
@@ -574,7 +575,11 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
         local mogStatus = caerdonButton.mogStatus
         if mogStatus then
             local mogStatusBackground = mogStatus.mogStatusBackground
-            if not mogStatus:IsShown() then
+            -- A hidden icon has nothing to show, except where a host addon shows it later: there
+            -- it is always hidden while it is drawn (Baganator shows it once it has heard that
+            -- there is something to show), and it must keep the alpha it was drawn with. Clearing
+            -- it here left the upgrade arrow invisible on a visible ring.
+            if not mogStatus:IsShown() and not caerdonButton.caerdonHostPlacesParts then
                 if mogStatusBackground then
                     mogStatusBackground:SetAlpha(0)
                 end
@@ -614,6 +619,16 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
     end
 end
 
+-- options.hostPlacesParts: the addon whose buttons these are anchors the status icon, the binding
+-- text and the level gain itself and decides which of them is visible (Baganator's corner
+-- widgets). The drawing code then only fills them and sets their size: it never anchors, shows
+-- or hides them. Noted on the overlay because a button is also cleared without options.
+local function SetPartShown(caerdonButton, region, shown)
+    if region and not (caerdonButton and caerdonButton.caerdonHostPlacesParts) then
+        region:SetShown(shown)
+    end
+end
+
 function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, locationInfo, options)
     if not originalButton then
         return
@@ -624,6 +639,9 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
     if not button then
         button = self:EnsureCaerdonButton(originalButton)
         createdNew = true
+    end
+    if options then
+        button.caerdonHostPlacesParts = options.hostPlacesParts and true or false
     end
 
     if not button.mogStatus then
@@ -725,11 +743,14 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local upgradeDeltaText = caerdonButton.upgradeDeltaText
     if upgradeDeltaText then
         upgradeDeltaText:SetText("")
-        upgradeDeltaText:Hide()
+        SetPartShown(caerdonButton, upgradeDeltaText, false)
     end
     if not options then
         options = {}
     end
+    -- What ends up on the button, for GetDrawnParts.
+    caerdonButton.caerdonHasIcon = false
+    caerdonButton.caerdonHasGain = false
 
     if not status then
         if mogAnim and mogAnim:IsPlaying() then
@@ -739,7 +760,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatusBackground:SetVertexColor(1, 1, 1)
             mogStatusBackground:SetTexture(nil)
             mogStatusBackground:SetAlpha(0)
-            mogStatusBackground:Hide()
+            SetPartShown(caerdonButton, mogStatusBackground, false)
         end
         if mogStatus then
             mogStatus:SetVertexColor(1, 1, 1)
@@ -747,11 +768,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus:SetAlpha(0)
             mogStatus:SetDesaturated(false)
             mogStatus.assignedAlpha = 0
-            mogStatus:Hide()
+            SetPartShown(caerdonButton, mogStatus, false)
         end
-        if upgradeDeltaText then
-            upgradeDeltaText:Hide()
-        end
+        SetPartShown(caerdonButton, upgradeDeltaText, false)
         return
     end
 
@@ -802,7 +821,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             upgradeDeltaText:SetTextColor(0.2, 1.0, 0.2)
         end
         upgradeDeltaText:SetAlpha(1.0)
-        upgradeDeltaText:Show()
+        SetPartShown(caerdonButton, upgradeDeltaText, true)
         self:UpdateUpgradeDeltaPosition(originalButton)
         upgradeDeltaShown = true
     end
@@ -893,12 +912,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- 		caerdonButton.mogAnim = mogAnim
     -- 	end
 
-    if mogStatusBackground then
-        mogStatusBackground:Show()
-    end
-    if mogStatus then
-        mogStatus:Show()
-    end
+    SetPartShown(caerdonButton, mogStatusBackground, true)
+    SetPartShown(caerdonButton, mogStatus, true)
 
     local displayInfo
     if feature then
@@ -1201,7 +1216,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeDeltaText:SetFormattedText("+%d", housingInfo.firstAcquisitionBonus)
         upgradeDeltaText:SetTextColor(1, 0.82, 0) -- Gold for house XP
         upgradeDeltaText:SetAlpha(1.0)
-        upgradeDeltaText:Show()
+        SetPartShown(caerdonButton, upgradeDeltaText, true)
         self:UpdateUpgradeDeltaPosition(originalButton)
         upgradeDeltaShown = true
     end
@@ -1227,6 +1242,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     mogStatus:SetAlpha(alpha)
     mogStatus.assignedAlpha = alpha
+
+    -- A status with no icon of its own (or one this window does not show) leaves the texture empty.
+    local drawnTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
+    caerdonButton.caerdonHasIcon = (drawnTexture ~= nil and drawnTexture ~= "" and drawnTexture ~= 0 and alpha > 0) and
+        true or false
+    caerdonButton.caerdonHasGain = upgradeDeltaShown
 
     C_Timer.After(0, function()
         if (caerdonButton.searchOverlay and caerdonButton.searchOverlay:IsShown()) then
@@ -1366,6 +1387,14 @@ function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
     if not caerdonButton then return end
 
     local deltaText = caerdonButton.upgradeDeltaText
+    if caerdonButton.caerdonHostPlacesParts then
+        -- The host addon anchors and shows it; only its size is the player's setting here.
+        if deltaText then
+            local _, hostScale = GetLevelGainLayout(caerdonButton)
+            deltaText:SetScale(hostScale)
+        end
+        return
+    end
     if not (deltaText and deltaText:IsShown()) then
         return
     end
@@ -1394,6 +1423,9 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     local bindsOnText = caerdonButton and caerdonButton.bindsOnText
     if bindsOnText then
         bindsOnText:SetText("")
+    end
+    if caerdonButton then
+        caerdonButton.caerdonHasText = false
     end
 
     if not feature then return end
@@ -1446,6 +1478,25 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     bindsOnText:SetJustifyV("BOTTOM")
     if caerdonButton then
         caerdonButton.bindingTextMovedFor = nil
+    end
+
+    if caerdonButton then
+        caerdonButton.caerdonHasText = bindingText ~= ""
+    end
+
+    if options and options.hostPlacesParts then
+        -- The host addon anchors the text and shows it; here it only gets its size. Measured on a
+        -- string of its own, because measuring in place would mean taking its anchors away.
+        local _, hostUserScale = GetTextLayout(options, IsGearSetStatus(bindingStatus, item))
+        local hostScale = (options.bindingScale or 1) * hostUserScale
+        local _, hostFontHeight = bindsOnText:GetFont()
+        local hostWidth = math.min(MeasureStringWidth(bindsOnText, true) + 1, button:GetWidth() / hostScale)
+        bindsOnText:SetSize(hostWidth, hostFontHeight or bindsOnText:GetStringHeight() or 0)
+        bindsOnText:SetScale(hostScale)
+        if caerdonButton then
+            self:UpdateUpgradeDeltaPosition(button)
+        end
+        return
     end
 
     -- Measure text and resize accordingly
@@ -1733,11 +1784,28 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
         self:SetButtonRefreshGeneration(button, self.refreshGeneration)
 
+        -- For a feature that has to know when its button was drawn and what is on it (Baganator
+        -- decides per corner which widget shows). An error there must not stop the other items.
+        if feature and feature.OnButtonDrawn then
+            xpcall(feature.OnButtonDrawn, geterrorhandler(), feature, button, item, locationInfo, options)
+        end
+
         -- Debug only: remember what was drawn where, for the export's [Button Geometry] section.
         if CaerdonWardrobeConfig.Debug.Enabled and CaerdonButtonGeometry then
             CaerdonButtonGeometry:Note(feature, button, options, mogStatus, bindingStatus)
         end
     end
+end
+
+-- Whether the last draw left a status icon, a binding text (or gear set name) and a level gain
+-- on the button.
+function CaerdonWardrobeMixin:GetDrawnParts(originalButton)
+    local caerdonButton = self:GetCaerdonButton(originalButton)
+    if not caerdonButton then
+        return false, false, false
+    end
+    return caerdonButton.caerdonHasIcon == true, caerdonButton.caerdonHasText == true,
+        caerdonButton.caerdonHasGain == true
 end
 
 function CaerdonWardrobeMixin:RegisterFeature(mixin)

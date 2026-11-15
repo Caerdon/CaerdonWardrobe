@@ -29,7 +29,7 @@ local OPTION_KEYS = {
     "statusProminentSize", "statusOffsetX", "statusOffsetY", "statusScale",
     "statusBackgroundOffsetX", "statusBackgroundOffsetY", "overrideStatusPosition", "fixedStatusPosition",
     "bindingScale", "bindingOffsetX", "bindingOffsetY", "overrideBindingPosition", "itemCountOffset",
-    "keepInsideWhenClipped"
+    "keepInsideWhenClipped", "hostPlacesParts", "fixedLayout"
 }
 -- Where a button usually keeps its own item icon, to see whether the overlay could sit on it.
 local ICON_KEYS = { "icon", "Icon", "IconTexture", "ItemIcon", "Item", "NormalTexture", "TagTexture", "rewardicon" }
@@ -339,6 +339,7 @@ local function Measure(entry)
             backgroundWidth = backgroundRect and backgroundRect.width / scale or nil,
             backgroundOutside = backgroundRect and Outside(backgroundRect, overlayRect, scale) or nil
         }
+
     end
 
     local bindsOnText = caerdonButton.bindsOnText
@@ -600,6 +601,7 @@ function CaerdonButtonGeometry:GetReportLines()
                         add(4, string.format("Background: %s wide, outside: %s", Num(sample.icon.backgroundWidth),
                             Sides(sample.icon.backgroundOutside)))
                     end
+
                 else
                     add(3, "Icon: none seen yet in this shape")
                 end
