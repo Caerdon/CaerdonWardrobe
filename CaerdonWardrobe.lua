@@ -184,9 +184,16 @@ function CaerdonWardrobeMixin:OnLoad()
     hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
 end
 
--- TODO: Pretty sure I don't need to do this... get setID from GetItemInfo?
+-- The binding text is one of these labels or an equipment set's name; anything else is a set.
+-- Every label has to be listed: one that is missing is drawn with the gear set's layout, colour
+-- and switches instead of the binding text's.
+local BINDING_LABELS = {
+    [L["BoA"]] = true,
+    [L["BoE"]] = true,
+    [L["WuE"]] = true,
+}
 local function IsGearSetStatus(status, item)
-    return status and status ~= "" and status ~= L["BoA"] and status ~= L["BoE"]
+    return status and status ~= "" and not BINDING_LABELS[status]
 end
 
 local ICON_PROMINENT_SIZE = 20
@@ -1612,7 +1619,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
                 local color = BAG_ITEM_QUALITY_COLORS[Enum.ItemQuality.Heirloom]
                 bindsOnText:SetTextColor(color.r, color.g, color.b, 1)
                 bindingText = bindingStatus
-            elseif bindingStatus == L["BoE"] then
+            elseif bindingStatus == L["BoE"] or bindingStatus == L["WuE"] then
                 bindingText = "|cFF00FF00" .. bindingStatus .. "|r"
             else
                 bindingText = bindingStatus

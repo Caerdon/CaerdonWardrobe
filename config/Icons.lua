@@ -209,6 +209,7 @@ function CaerdonWardrobeConfigIcons:Register()
     self:AddLabel("Show:")
     self:AddCheckboxGrid({
         { key = "showBoE", text = "Bind on equip", tooltip = "Shows BoE on items that bind when equipped.", configSection = "Binding", configValue = "ShowBoE" },
+        { key = "showWuE", text = "Warbound until equipped", tooltip = "Shows WuE on items you can send to your other characters until one of them equips it (\"Account bound until equipped\" on WoW Forever).", configSection = "Binding", configValue = "ShowWuE" },
         { key = "showBoA", text = "Bind on account", tooltip = "Shows BoA on items that are bound to your account.", configSection = "Binding", configValue = "ShowBoA" },
         { key = "showBoARepItems", text = "Reputation items (BoA)", tooltip = "Shows BoA on account-bound reputation items.", configSection = "Binding", configValue = "ShowBoARepItems" },
         { key = "showGearSets", text = "Gear set names", tooltip = "Shows the gear set's name on items that belong to a saved gear set.", configSection = "Binding", configValue = "ShowGearSets" },

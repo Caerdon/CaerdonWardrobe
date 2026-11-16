@@ -277,6 +277,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == nil then
             CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners = NS:GetDefaultConfig().Tooltip.ShowRecipeLearners
         end
+        if CaerdonWardrobeConfig.Binding.ShowWuE == nil then
+            CaerdonWardrobeConfig.Binding.ShowWuE = NS:GetDefaultConfig().Binding.ShowWuE
+        end
         if CaerdonWardrobeConfig.Icon.AuctionMinProfit == nil then
             CaerdonWardrobeConfig.Icon.AuctionMinProfit = NS:GetDefaultConfig().Icon.AuctionMinProfit
         end
@@ -452,6 +455,7 @@ function NS:GetDefaultConfig()
             ShowBoA = true,
             ShowBoARepItems = false,
             ShowBoE = true,
+            ShowWuE = true,
             ShowGearSets = true,
             ShowGearSetsAsIcon = false,
             Position = "BOTTOM",
