@@ -148,7 +148,7 @@ local function MeasureRefresh()
     end
     for event, entry in pairs(run.events) do
         events = events or {}
-        events[event] = { count = entry.count, firstMs = Round(entry.first - started, 1) }
+        events[event] = { count = entry.count, firstMs = Round(entry.first - started, 1), items = entry.items }
     end
 
     return {

@@ -250,7 +250,7 @@ local WATCHED_IN_RUN = {
 }
 
 for _, event in ipairs(WATCHED_IN_RUN) do
-    T.RegisterEvent(event, function()
+    T.RegisterEvent(event, function(_, first, second)
         local run = T.timingRun
         if run then
             local entry = run.events[event]
@@ -259,6 +259,12 @@ for _, event in ipairs(WATCHED_IN_RUN) do
                 run.events[event] = entry
             end
             entry.count = entry.count + 1
+            -- Item data arriving: which item, and whether the client has it at all. An item
+            -- that never loads is asked for again on every refresh.
+            if event == "GET_ITEM_INFO_RECEIVED" and entry.count <= 8 then
+                entry.items = entry.items or {}
+                entry.items[#entry.items + 1] = T.Plain({ id = first, ok = second })
+            end
         end
     end)
 end

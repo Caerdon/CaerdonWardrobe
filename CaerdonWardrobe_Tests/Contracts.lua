@@ -115,6 +115,7 @@ for how, instruction in pairs(RELOAD_HOW) do
 end
 
 local lastBlocked
+local TIMER_REFUSED = "ReloadUI() is refused without a click or key press behind it"
 
 local function OnActionBlocked(event, addon, blockedFunction)
     if addon == T.NAME then
@@ -133,9 +134,15 @@ function T.RequestReload(how)
         local pending = T.db.pending.reload
         if pending and pending.how == how then
             T.db.pending.reload = nil
-            T.SetResult("reload." .. how, "fail", { blocked = lastBlocked },
-                "the UI was still running 2 seconds after ReloadUI()")
-            T.Print("ReloadUI() did nothing (%s). Recorded; use /reload to save the results.", how)
+            if how == "timer" then
+                -- Without a click or key press the client may refuse, and that is an answer.
+                T.SetResult("reload.timer", "info", { blocked = lastBlocked }, TIMER_REFUSED)
+                T.Print("The client refused to reload without a click or key press behind it, which is what this was asking. Use /reload to save the results.")
+            else
+                T.SetResult("reload." .. how, "fail", { blocked = lastBlocked },
+                    "the UI was still running 2 seconds after ReloadUI()")
+                T.Print("ReloadUI() did nothing (%s). Recorded; use /reload to save the results.", how)
+            end
         end
     end)
     ReloadUI()
@@ -146,6 +153,11 @@ T.OnLogin(function()
     if pending then
         T.db.pending.reload = nil
         T.SetResult("reload." .. pending.how, "pass", { secondsAway = GetServerTime() - pending.at })
+    end
+    -- A refusal recorded as a failure before it was called an answer.
+    local stored = (T.db.contracts[T.GetClient().build] or {})["reload.timer"]
+    if stored and stored.status == "fail" then
+        stored.status, stored.message = "info", TIMER_REFUSED
     end
 end)
 

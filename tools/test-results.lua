@@ -296,6 +296,24 @@ local function printAddonChange(db, previous, record)
     end
 end
 
+-- The events that came during one timed refresh, with the items an item-data event named.
+local function describeEvents(run)
+    local events = {}
+    for _, name in ipairs(sortedKeys(run.events or {})) do
+        local entry = run.events[name]
+        local text = ("%s x%d from %s ms"):format(name, entry.count, figure(entry.firstMs))
+        if entry.items then
+            local items = {}
+            for _, item in ipairs(entry.items) do
+                items[#items + 1] = tostring(item.id) .. (item.ok == true and "" or (" (" .. tostring(item.ok) .. ")"))
+            end
+            text = text .. " [items " .. table.concat(items, ", ") .. "]"
+        end
+        events[#events + 1] = text
+    end
+    return events
+end
+
 local function printTiming(db)
     print("  Timing (addon time is the client profiler's, summed per frame):")
     local previous
@@ -321,7 +339,9 @@ local function printTiming(db)
                 for _, name in ipairs(sortedKeys(record.runs[1].byFeature)) do
                     parts[#parts + 1] = name .. " " .. record.runs[1].byFeature[name].draws
                 end
-                print("        drawn per refresh: " .. table.concat(parts, ", "))
+                local events = describeEvents(record.runs[1])
+                print("        drawn per refresh: " .. table.concat(parts, ", ")
+                    .. (#events > 0 and ("; events in the first: " .. table.concat(events, ", ")) or ""))
             end
             if fewest ~= most then
                 print(("        NOT A CLEAN RUN: the refreshes drew between %d and %d items, so something else was drawing too")
@@ -333,11 +353,7 @@ local function printTiming(db)
                         local entry = run.byFeature[name]
                         parts[#parts + 1] = ("%s %d (%s-%s ms)"):format(name, entry.draws, figure(entry.firstMs), figure(entry.lastMs))
                     end
-                    local events = {}
-                    for _, name in ipairs(sortedKeys(run.events or {})) do
-                        local entry = run.events[name]
-                        events[#events + 1] = ("%s x%d from %s ms"):format(name, entry.count, figure(entry.firstMs))
-                    end
+                    local events = describeEvents(run)
                     print(("          %2d: %d draws%s%s%s"):format(index, run.draws,
                         #parts > 0 and (": " .. table.concat(parts, ", ")) or "",
                         #events > 0 and ("; events: " .. table.concat(events, ", ")) or "",
