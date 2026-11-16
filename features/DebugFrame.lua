@@ -2153,6 +2153,22 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- What the addon has cost this session: login milestones, what the client was asked to
+    -- load, what caused each full refresh and, when its profile has run, the time and memory
+    -- of the functions a draw goes through. Session-wide, not about this item.
+    if CaerdonCounters and CaerdonCounters.GetReportLines then
+        addLine(0, "")
+        addLine(0, "[Counters]")
+        local ok, counterLines = pcall(CaerdonCounters.GetReportLines, CaerdonCounters)
+        if ok then
+            for _, counterLine in ipairs(counterLines) do
+                addLine(counterLine.indent, counterLine.text)
+            end
+        else
+            addKV(1, "Report failed", tostring(counterLines))
+        end
+    end
+
     addLine(0, "")
     addLine(0, "[Caerdon]")
     local identifiedType = item:GetCaerdonItemType()

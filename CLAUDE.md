@@ -37,6 +37,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
 - Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`).
 - `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
+- `CaerdonCounters.lua`: loaded first. Login milestones, loads asked of the client and full refreshes by trigger, always; time and memory per function while its profile is switched on, which the test addon does (the export's `[Counters]` section).
 - `config/`: `Config.lua` (defaults, migrations, the main page, `/caerdon`, the one-time message dialog), `Icons.lua` and `Display.lua` (the two settings pages), `ConfigPanel.lua` (layout helpers), `LayoutEditor.lua` (`/caerdonlayout`).
 - `features/DebugFrame.lua`: the Debug Frame and its **Copy Details** export (`/cdebug`). `CaerdonButtonGeometry.lua`: the export's button measurements.
 - `tools/`: development scripts, not packaged. `static-checks.lua` with its allowlist `static-checks-allow.lua`; `test-results.lua` prints what the test addon saved in each client.
@@ -72,6 +73,7 @@ The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for 
 - **Every feature's `Refresh()` must re-run `UpdateButton`** for the buttons it decorated. `RefreshItems` only wipes caches.
 - **Features call `ContinueOnItemLoad` before `UpdateButton`**, so `customDataLoaded` is true.
 - **A verdict that depends on game state needs its own refresh:** the status cache is keyed by item link, so the module must call `RefreshItems` when that state changes. The signal modules show the pattern: compare a signature, refresh only on a change.
+- **The counters wrap functions by name** (`Counters:Attach`). Renaming or splitting one of them means changing its line there; the export says "not found" for one it missed (notes: Counters).
 - **Do not refresh on `TRANSMOG_SOURCE_COLLECTABILITY_UPDATE`:** the addon's own queries trigger it, which risks a loop.
 - **Do not change `LoadSources`' `#waitingForItems == 0` check** or remove the once-guard in `ContinueWithCancelOnItemLoad` (notes: LoadSources).
 - **Settings:** an option only where the choice is real. One block per icon on the Icons page; no per-window toggle by reflex; no on / off switches in the layout editor. A new setting needs a default in `GetDefaultConfig`, a nil-migration in `config/Config.lua` and one option on a page.
@@ -100,6 +102,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Getting Blizzard's code or listings for either flavor | Client Sources |
 | Checking names against both clients, the allowlist | Static Check |
 | The test addon, `/cwtest`, reading its results | Test Addon |
+| What a draw or a refresh costs, who asked the client for an item | Counters |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |

@@ -22,6 +22,8 @@
 
 ## IconTexture: Interface\Store\category-icon-featured
 
+CaerdonCounters.lua
+
 libs\libs.xml
 LibConfig.lua
 

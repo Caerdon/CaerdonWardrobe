@@ -1553,6 +1553,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     local itemLink = self:GetItemLink()
     if not itemLink then
         -- Requiring an itemLink for now unless I find a reason not to
+        if CaerdonCounters.on then CaerdonCounters:Mark("no link") end
         return
     end
 
@@ -1571,6 +1572,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
         local cached = statusCache[statusCacheKey]
         if cached then
+            if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end
             return cached[1], self:GetCopyStatus(cached[2], cached[4]), cached[3], cached[4]
         end
     end
@@ -1586,6 +1588,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
         isReady = false
+        if CaerdonCounters.on then CaerdonCounters:Mark("tooltip not ready") end
         return isReady -- Don't cache: result will change once tooltip data loads
     end
 

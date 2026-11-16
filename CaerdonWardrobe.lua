@@ -12,6 +12,10 @@ BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
 BINDING_NAME_PRINTMOUSEOVERLINKDETAILS = L["Print Mouseover Link Details"]
 BINDING_NAME_CAERDONDEBUGHOVER = L["Open Debug for Hovered Item"]
 
+-- Counters for the Debug Frame export and the test addon (CaerdonCounters.lua).
+local Counters = CaerdonCounters
+local milestones = Counters.milestones
+
 local availableFeatures = {}
 local registeredFeatures = {}
 local eventFeatureHandlers = {} -- event name -> list of {instance, handler}
@@ -1932,6 +1936,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         self:SetItemButtonMogStatusFilter(button, options.isFiltered)
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
         self:SetButtonRefreshGeneration(button, self.refreshGeneration)
+        if not milestones.firstDraw then
+            Counters:Milestone("firstDraw")
+        end
 
         -- For a feature that has to know when its button was drawn and what is on it (Baganator
         -- decides per corner which widget shows). An error there must not stop the other items.
@@ -2079,6 +2086,9 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
             options = options,
             locationKey = locationKey
         }
+        if not milestones.firstRequest then
+            Counters:Milestone("firstRequest")
+        end
 
         -- Re-register OnUpdate if it was unregistered while idle
         if not self:GetScript("OnUpdate") then
@@ -2137,7 +2147,11 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
                         -- Item not cached, add to continuable container
                         self.featureProcessContinuables[feature] = self.featureProcessContinuables[feature] or
                             ContinuableContainer:Create();
+                        -- The container asks the client for the item here; the counters file the
+                        -- question under the feature.
+                        Counters.requester = feature:GetName()
                         self.featureProcessContinuables[feature]:AddContinuable(item);
+                        Counters.requester = nil
                         self.featureProcessItems[feature] = self.featureProcessItems[feature] or {}
                         self.featureProcessItems[feature][queueKey] = processInfo
                     end
@@ -2191,6 +2205,10 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 end
 
 function CaerdonWardrobeMixin:OnEvent(event, ...)
+    -- For the counters: a full refresh asked for from inside a handler is this event's.
+    local outerEvent = Counters.event
+    Counters.event = event
+
     local handler = self[event]
     if (handler) then
         handler(self, ...)
@@ -2203,6 +2221,8 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
             entry.handler(entry.instance, ...)
         end
     end
+
+    Counters.event = outerEvent
 end
 
 local next = next -- faster lookup as a local apparently (haven't measured)
@@ -2218,7 +2238,13 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
     if (self.timeSinceLastUpdate > 0.05) then
         if self.processItemCoroutine then
             if coroutine.status(self.processItemCoroutine) ~= "dead" then
+                if Counters.on then
+                    Counters:BeginPass()
+                end
                 local ok, result = coroutine.resume(self.processItemCoroutine)
+                if Counters.on then
+                    Counters:EndPass(coroutine.status(self.processItemCoroutine) == "dead")
+                end
                 if not ok then
                     error(result)
                 end
@@ -2231,6 +2257,9 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
         else
             -- Nothing to process - unregister until new work arrives
             self:SetScript("OnUpdate", nil)
+            if milestones.firstDraw and not milestones.queueIdle then
+                Counters:Milestone("queueIdle")
+            end
         end
 
         self.timeSinceLastUpdate = 0
@@ -2283,6 +2312,8 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
 end
 
 function CaerdonWardrobeMixin:RefreshItems()
+    Counters:NoteRefresh()
+
     if self.refreshTimer then
         self.refreshTimer:Cancel()
     end

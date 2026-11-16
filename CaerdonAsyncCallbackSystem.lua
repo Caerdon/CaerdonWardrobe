@@ -53,6 +53,8 @@ function CaerdonAsyncCallbackSystemMixin:AddCallback(id, successCallbackFunction
 	table.insert(successCallbacks, successCallbackFunction);
 	table.insert(failureCallbacks, failureCallbackFunction);
 	local needsAccessorCall = #successCallbacks == 1;
+	-- Before the question is put: the client can answer from inside the call.
+	CaerdonCounters:NoteLoadAsked(self.api.event, id, needsAccessorCall);
 	if needsAccessorCall then
 		self.api.accessor(id);
 	end
@@ -77,11 +79,15 @@ function CaerdonAsyncCallbackSystemMixin:FireSuccessCallbacks(id)
 	local callbacks = self:GetSuccessCallbacks(id);
 	if callbacks then
 		self:ClearCallbacks(id);
+		-- What the callbacks ask for next is counted for whoever asked for this.
+		local requester = CaerdonCounters.requester;
+		CaerdonCounters.requester = CaerdonCounters:NoteLoadAnswered(self.api.event, id, true) or requester;
 		for i, callback in ipairs(callbacks) do
 			if callback ~= CANCELED_SENTINEL then
 				xpcall(callback, CallErrorHandler);
 			end
 		end
+		CaerdonCounters.requester = requester;
 
 		-- The cancel functions have a reference to this table, so ensure that it's cleared out.
 		for i = #callbacks, 1, -1 do
@@ -94,11 +100,14 @@ function CaerdonAsyncCallbackSystemMixin:FireFailureCallbacks(id)
 	local callbacks = self:GetFailureCallbacks(id);
 	if callbacks then
 		self:ClearCallbacks(id);
+		local requester = CaerdonCounters.requester;
+		CaerdonCounters.requester = CaerdonCounters:NoteLoadAnswered(self.api.event, id, false) or requester;
 		for i, callback in ipairs(callbacks) do
 			if callback ~= CANCELED_SENTINEL then
 				xpcall(callback, CallErrorHandler);
 			end
 		end
+		CaerdonCounters.requester = requester;
 
 		-- The cancel functions have a reference to this table, so ensure that it's cleared out.
 		for i = #callbacks, 1, -1 do
