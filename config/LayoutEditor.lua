@@ -58,12 +58,12 @@ local function EnabledParts()
     local enabled = {
         icon = true,
         arrow = icon.ShowUpgradeIcon ~= false,
-        text = (binding.ShowBoE or binding.ShowBoA) and true or false,
+        text = (binding.ShowBoE or binding.ShowWuE or binding.ShowBoA) and true or false,
         gear = binding.ShowGearSets and true or false,
         delta = icon.ShowUpgradeLevelDelta and true or false,
     }
     -- The text the examples carry: whichever kind of binding text is switched on.
-    enabled.textLabel = binding.ShowBoE and L["BoE"] or L["BoA"]
+    enabled.textLabel = (binding.ShowBoE and L["BoE"]) or (binding.ShowWuE and L["WuE"]) or L["BoA"]
     return enabled
 end
 

@@ -92,6 +92,10 @@ function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, featur
         displayInfo.bindingStatus.shouldShow = false
     end
 
+    if not CaerdonWardrobeConfig.Binding.ShowWuE and bindingStatus == L["WuE"] then
+        displayInfo.bindingStatus.shouldShow = false
+    end
+
     return displayInfo
 end
 
