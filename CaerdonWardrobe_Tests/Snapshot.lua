@@ -267,6 +267,17 @@ local function ReadDrawn(button)
     return drawn
 end
 
+-- For the other check that draws on the hidden buttons (Rotation.lua). Jobs run one at a
+-- time, so the buttons are shared: whoever used one clears it.
+T.HiddenButton = GetButton
+T.FeatureProxy = GetProxy
+T.ReadDrawn = ReadDrawn
+
+-- finish is called once the addon has drawn the hidden button; nil stops waiting for it.
+function T.AwaitDraw(button, finish)
+    awaiting[button] = finish
+end
+
 ------------------------------------------------------------------------------------------
 -- Taking a snapshot
 ------------------------------------------------------------------------------------------

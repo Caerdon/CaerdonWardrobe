@@ -197,7 +197,7 @@ local COUNTED = {
     "PLAYER_EQUIPMENT_CHANGED", "QUEST_TURNED_IN", "TRANSMOG_COLLECTION_SOURCE_ADDED", "NEW_RECIPE_LEARNED",
 }
 
-T.counters = { refreshItems = 0, processItem = 0, byFeature = {} }
+T.counters = { refreshItems = 0, processItem = 0, byFeature = {}, requests = {} }
 local sessionCounts = {}
 
 for _, event in ipairs(COUNTED) do
@@ -219,7 +219,25 @@ T.OnInit(function()
     hooksecurefunc(CaerdonWardrobe, "RefreshItems", function()
         T.counters.refreshItems = T.counters.refreshItems + 1
     end)
-    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, _, item, feature)
+    -- Requests per feature: a feature that asks for draws and gets none has another problem
+    -- than one whose hooks never call (the bag button check, Rotation.lua).
+    hooksecurefunc(CaerdonWardrobe, "UpdateButton", function(_, _, item, feature)
+        if type(feature) ~= "table" then
+            return
+        end
+        local ok, name = pcall(feature.GetName, feature)
+        name = ok and type(name) == "string" and name or "?"
+        local entry = T.counters.requests[name]
+        if not entry then
+            entry = { calls = 0, empty = 0 }
+            T.counters.requests[name] = entry
+        end
+        entry.calls = entry.calls + 1
+        if item == nil or item:IsItemEmpty() then
+            entry.empty = entry.empty + 1
+        end
+    end)
+    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, button, item, feature, locationInfo)
         T.counters.processItem = T.counters.processItem + 1
         local ok, name = pcall(feature.GetName, feature)
         name = ok and type(name) == "string" and name or "?"
@@ -227,6 +245,8 @@ T.OnInit(function()
         T.counters.byFeature[name] = (T.counters.byFeature[name] or 0) + 1
         -- Every item drawn this session, for the probe of appearance sources (Sources.lua).
         T.NoteDrawn(item, name)
+        -- Which button was drawn for which bag slot, for the bag button check (Rotation.lua).
+        T.NoteBagButton(button, name, locationInfo)
         local run = T.timingRun
         if run then
             local now = T.Milliseconds()

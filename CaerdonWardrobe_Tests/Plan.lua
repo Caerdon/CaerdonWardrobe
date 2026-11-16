@@ -31,6 +31,17 @@ CaerdonWardrobeTestsPlan = {
         runs = 10,         -- forced refreshes per /cwtest timing <label>
         idleSeconds = 180, -- /cwtest timing idle
     },
+
+    -- The bag addons, and the UI suites with bags of their own, that the addon has an
+    -- integration for, by the name of their folder (the integration's `addon`). /cwtest
+    -- rotation visits the installed ones, one per reload, with only that one enabled
+    -- (Rotation.lua). A new bag integration gets a line here.
+    rotation = {
+        addons = {
+            "AdiBags", "ArkInventory", "Baganator", "Bagnon", "Bagnonium", "BaudBag", "BetterBags",
+            "cargBags_Nivaya", "ElvUI", "Inventorian", "KkthnxUI", "LiteBag", "NDui", "Sorted",
+        },
+    },
 }
 
 function T.GetPlan()

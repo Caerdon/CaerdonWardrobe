@@ -18,6 +18,8 @@ Journal.lua
 Snapshot.lua
 Sightings.lua
 Integrations.lua
+Rotation.lua
+RotationPanel.lua
 Sources.lua
 Search.lua
 Timing.lua

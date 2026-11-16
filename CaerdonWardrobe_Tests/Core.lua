@@ -211,6 +211,7 @@ local function NewDB()
         traces = {},    -- the last session that traced who asks for the plan's items
         sightings = {}, -- case -> item -> a bag state checked when an item showed it
         integrations = {}, -- feature -> the other addon's version -> hook points found
+        rotation = { history = {} }, -- the bag addon rotation: the run in progress, finished runs
         addonSets = {}, -- key -> the other addons that were enabled, with their versions
         errors = {},    -- errors in the tests themselves
         pending = {},   -- what a reload was asked to prove

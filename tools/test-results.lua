@@ -7,7 +7,7 @@
 -- install folders. --file reads one saved variables file instead.
 --
 -- Sections (all of them when none is named): sessions, contracts, verdicts, snapshot,
--- timing, journal, probes, sources, search, traces, sightings, integrations, errors. "detail" adds
+-- timing, journal, probes, sources, search, traces, sightings, integrations, rotation, errors. "detail" adds
 -- every contract's stored detail, and
 -- "contract:<id>" prints one contract in full.
 --
@@ -671,6 +671,94 @@ local function printIntegrations(db)
     end
 end
 
+-- The bag addon rotation: the run in progress, the finished runs, the last check outside a run.
+local function printRotationStop(record, indent)
+    local title = tostring(record.stop)
+    if record.isAddon and record.version and record.version ~= "" then
+        title = title .. " " .. record.version
+    end
+    print(("%s%-8s %s: %d buttons checked, %d as the addon draws them  (%s%s)"):format(indent, tostring(record.verdict),
+        title, record.checked or 0, record.same or 0, when(record.at), record.forced and ", asked for with Check now" or ""))
+    if (record.checked or 0) > 0 then
+        print(("%s    drawn again by the refresh: %d, picture read on %d, slot named by %d buttons; %d of %d filled slots on screen"):format(
+            indent, (record.checked or 0) - (record.notRedrawn or 0), record.picturesRead or 0, record.slotsNamed or 0,
+            (record.slotsFilled or 0) - (record.notShownCount or 0), record.slotsFilled or 0))
+    end
+    for _, name in ipairs(sortedKeys(record.features)) do
+        local feature = record.features[name]
+        print(("%s    drawn by %s%s: %d visible buttons, %d not visible%s"):format(indent, name,
+            feature.expected and "" or " (not this stop's feature)", feature.visible or 0, feature.hidden or 0,
+            feature.requests and ("; this session %d requests (%d for an empty slot), %d draws"):format(feature.requests,
+                feature.emptyRequests or 0, feature.draws or 0) or ""))
+    end
+    for _, entry in ipairs(record.integrations or {}) do
+        print(("%s    integration %s: %s, %s"):format(indent, tostring(entry.feature), tostring(entry.verdict),
+            tostring(entry.summary)))
+    end
+    for _, reason in ipairs(record.reasons or {}) do
+        print(indent .. (record.verdict == "fail" and "    FAIL: " or "    ") .. plainText(reason))
+    end
+    for _, problem in ipairs(record.problems or {}) do
+        print(("%s      %s (bag %s slot %s, %s): %s"):format(indent, plainText(problem.link), tostring(problem.bag),
+            tostring(problem.slot), tostring(problem.feature), plainText(problem.what)))
+    end
+    for _, note in ipairs(record.notes or {}) do
+        -- An integration that is waiting has its own line above.
+        if not note:find("^integration ") then
+            print(indent .. "    note: " .. plainText(note))
+        end
+    end
+    if sections.rotation and record.notShown and #record.notShown > 0 then
+        local links = {}
+        for index, link in ipairs(record.notShown) do links[index] = plainText(link) end
+        print(indent .. "    no visible button for: " .. table.concat(links, ", "))
+    end
+end
+
+local function printRotationRun(run, indent)
+    for index, stop in ipairs(run.stops or {}) do
+        local record = run.results and run.results[stop]
+        if record then
+            printRotationStop(record, indent)
+        else
+            print(("%s%-8s %s"):format(indent, index == run.index and "here" or "to come", tostring(stop)))
+        end
+    end
+end
+
+local function printRotation(db)
+    local rotation = db.rotation or {}
+    local history = rotation.history or {}
+    if not rotation.run and #history == 0 and not rotation.single then
+        print("  Rotation: never run (/cwtest rotation start)")
+        return
+    end
+    print("  Rotation (every installed bag addon in turn; each visible bag button against what the addon draws for its slot):")
+    if rotation.run then
+        local run = rotation.run
+        print(("    In progress on %s since %s, addon %s: stop %s of %d, phase %s"):format(tostring(run.toon),
+            when(run.startedAt), tostring(run.subjectVersion), tostring(run.index), #(run.stops or {}), tostring(run.phase)))
+        printRotationRun(run, "      ")
+    end
+    for index = #history, 1, -1 do
+        local run = history[index]
+        print(("    %s %s on %s, addon %s, build %s, started %s"):format(run.aborted and "Stopped early" or "Finished",
+            when(run.finishedAt), tostring(run.toon), tostring(run.subjectVersion), tostring(run.build), when(run.startedAt)))
+        printRotationRun(run, "      ")
+        if run.comparedWith then
+            print(("      against the run of %s (addon %s): %d things shown differently"):format(when(run.comparedWith.at),
+                tostring(run.comparedWith.subjectVersion), run.changeCount or 0))
+            for _, change in ipairs(run.changes or {}) do
+                print(("        %s: %s %s"):format(tostring(change.stop), plainText(change.link or ""), plainText(change.summary)))
+            end
+        end
+    end
+    if rotation.single then
+        print("    Last check outside a run:")
+        printRotationStop(rotation.single, "      ")
+    end
+end
+
 local function printErrors(db)
     if #(db.errors or {}) == 0 then
         return
@@ -711,6 +799,7 @@ for _, file in ipairs(files) do
             if wants("traces") then printTraces(db) end
             if wants("sightings") then printSightings(db) end
             if wants("integrations") then printIntegrations(db) end
+            if wants("rotation") then printRotation(db) end
             if wants("errors") then printErrors(db) end
         end
     end

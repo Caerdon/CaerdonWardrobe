@@ -40,7 +40,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `config/`: `Config.lua` (defaults, migrations, the main page, `/caerdon`, the one-time message dialog), `Icons.lua` and `Display.lua` (the two settings pages), `ConfigPanel.lua` (layout helpers), `LayoutEditor.lua` (`/caerdonlayout`).
 - `features/DebugFrame.lua`: the Debug Frame and its **Copy Details** export (`/cdebug`). `CaerdonButtonGeometry.lua`: the export's button measurements.
 - `tools/`: development scripts, not packaged. `static-checks.lua` with its allowlist `static-checks-allow.lua`; `test-results.lua` prints what the test addon saved in each client.
-- `CaerdonWardrobe_Tests/`: the test addon, a second addon for development that runs in both clients and is not packaged (`/cwtest`): client contracts, verdict tests, snapshot and diff, timing, a journal of what was learned, bag states checked when an item shows one, a record per integration.
+- `CaerdonWardrobe_Tests/`: the test addon, a second addon for development that runs in both clients and is not packaged (`/cwtest`): client contracts, verdict tests, snapshot and diff, timing, a journal of what was learned, bag states checked when an item shows one, a record per integration, a rotation through the installed bag addons (`/cwtest rotation`).
 
 ### Status order in `GetCaerdonStatus`
 

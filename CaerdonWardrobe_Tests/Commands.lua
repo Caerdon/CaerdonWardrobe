@@ -25,6 +25,8 @@ function T.AfterLogin()
     T.CheckIntegrations()
     -- From here on the bags are read whenever they change (Sightings.lua).
     T.ScanSightings()
+    -- A rotation that this reload is a step of goes on (Rotation.lua).
+    T.ResumeRotation()
 end
 
 ------------------------------------------------------------------------------------------
@@ -71,6 +73,11 @@ local function StatusText()
     lines[#lines + 1] = ("Bag states: %d of %d seen%s"):format(seen, #sightingRows,
         disagree > 0 and (", |cffff4040%d items disagree|r"):format(disagree) or "")
 
+    local rotation = T.RotationStatusLine()
+    if rotation then
+        lines[#lines + 1] = rotation
+    end
+
     local last = T.db.timing[#T.db.timing]
     if last then
         lines[#lines + 1] = ("Last timing: %s, addon time %s ms"):format(tostring(last.label),
@@ -96,7 +103,7 @@ end
 
 local function CreateWindow()
     window = CreateFrame("Frame", "CaerdonWardrobeTestsWindow", UIParent, "BasicFrameTemplateWithInset")
-    window:SetSize(428, 346)
+    window:SetSize(428, 388)
     window:SetPoint("CENTER")
     window:SetFrameStrata("DIALOG")
     window:SetMovable(true)
@@ -115,6 +122,7 @@ local function CreateWindow()
     window.status:SetJustifyH("LEFT")
     window.status:SetJustifyV("TOP")
 
+    AddButton(window, "Bag addon rotation...", 1, 5, function() T.ShowRotationPanel() end)
     AddButton(window, "Run tests", 1, 4, function() T.RunTests() end)
     AddButton(window, "Run every test again", 2, 4, function() T.RunTests({ force = true }) end)
     AddButton(window, "Snapshot: set the base", 1, 3, function() T.TakeSnapshot(true) end)
@@ -160,6 +168,8 @@ local HELP = {
     "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
     "/cwtest sightings - bag states (openable, locked, refundable, bound) checked when an item showed one",
     "/cwtest integrations - whether each integration found the places it hooks in the other addon",
+    "/cwtest rotation - the panel that takes every installed bag addon in turn, one per reload",
+    "/cwtest rotation status | start [addon ...] | next | skip | check | abort - the same, typed",
     "/cwtest coverage - verdict tests per kind of toon",
     "/cwtest journal [count] - the last things this account learned",
     "/cwtest reload [timer] - save the results by reloading",
@@ -253,6 +263,10 @@ end
 
 COMMANDS.integrations = function()
     T.PrintIntegrations()
+end
+
+COMMANDS.rotation = function(rest)
+    T.RotationCommand(rest, "slash")
 end
 
 COMMANDS.coverage = PrintCoverage
