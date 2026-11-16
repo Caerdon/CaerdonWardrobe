@@ -1,5 +1,5 @@
 return {
-    at = 1794819749,
+    at = 1794821001,
     calls = {
         ["C_Item.DoesItemExistByID"] = {
             ["71:|cnIQ2:|Hitem:4632::::::::31:1485:::::::::|h[Ornate Bronze Lockbox]|h|r"] = { { true, n = 1 } },
@@ -84,6 +84,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["4632"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["4632"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -152,11 +153,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 4632,
     link = "|cnIQ2:|Hitem:4632::::::::31:1485:::::::::|h[Ornate Bronze Lockbox]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Ornate Bronze Lockbox",
     notes = {},
     request = { itemID = 4632, link = "|cnIQ2:|Hitem:4632::::::::31:1485:::::::::|h[Ornate Bronze Lockbox]|h|r" },

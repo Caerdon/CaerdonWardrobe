@@ -1,5 +1,5 @@
 return {
-    at = 1794819760,
+    at = 1794821010,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r"] = { { 2, n = 1 } },
@@ -41,7 +41,7 @@ return {
             ["60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r|<function>"] = { { callback = { { "3685" }, n = 1 }, n = 0 } },
         },
         ["C_Container.GetContainerItemInfo"] = {
-            ["5|6"] = {
+            ["5|5"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -61,10 +61,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["5|6|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["5|5|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=5,9:slotIndex=5}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["3685|true"] = { { 6, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { 3685, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=5,9:slotIndex=5}"] = { { 3685, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r"] = {
                 [1] = {
@@ -93,11 +93,11 @@ return {
             ["60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r"] = { { 3685, "Trade Goods", "Cooking", "INVTYPE_NON_EQUIP_IGNORE", 132834, 7, 8, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=5,9:slotIndex=6}"] = { { "|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r", n = 1 } },
+            ["{5:bagID=5,9:slotIndex=5}"] = { { "|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { "Raptor Egg", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=5,9:slotIndex=5}"] = { { "Raptor Egg", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=5,9:slotIndex=5}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r"] = { { false, n = 1 } } },
         ["C_TooltipInfo.GetHyperlink"] = {
             ["60:|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r"] = {
@@ -137,6 +137,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["3685"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["3685"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -205,14 +206,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 3685,
     link = "|cnIQ1:|Hitem:3685::::::::31:1485:::::::::|h[Raptor Egg]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Raptor Egg",
     notes = {},
-    request = { bag = 5, slot = 6 },
+    request = { bag = 5, slot = 5 },
     verdict = {
         binding = "",
         bindingResult = {

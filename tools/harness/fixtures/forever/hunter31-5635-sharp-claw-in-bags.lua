@@ -1,5 +1,5 @@
 return {
-    at = 1794819760,
+    at = 1794821010,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|60:|cnIQ1:|Hitem:5635::::::::31:1485:::::::::|h[Sharp Claw]|h|r"] = { { 2, n = 1 } },
@@ -139,6 +139,8 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["5635"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["5635"] = { { { [2751] = "objective" }, n = 2 } } },
+        ["CaerdonQuestItems.GetQuestieHiddenReason"] = { ["2751"] = { { n = 1 } } },
         ["LibQuestieDB.Quest.Get"] = {
             ["2751|10:zoneOrSort"] = { { -121, n = 1 } },
             ["2751|13:requiredRaces"] = { { 8589934770, n = 1 } },
@@ -212,11 +214,15 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 5635,
     link = "|cnIQ1:|Hitem:5635::::::::31:1485:::::::::|h[Sharp Claw]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = {
+        ["Auctionator.Database.GetPriceHistory"] = true,
+        ["CaerdonQuestItems.GetIndexedQuests"] = true,
+        ["CaerdonQuestItems.GetQuestieHiddenReason"] = true,
+    },
     name = "Sharp Claw",
     notes = {},
     request = { bag = 5, slot = 3 },

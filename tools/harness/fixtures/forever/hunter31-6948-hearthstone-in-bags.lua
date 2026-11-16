@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|1"] = {
@@ -105,6 +105,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["6948"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["6948"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -173,11 +174,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 6948,
     link = "|cnIQ1:|Hitem:6948::::::::31:1485::75:::::::|h[Hearthstone]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Hearthstone",
     notes = {},
     request = { bag = 0, slot = 1 },

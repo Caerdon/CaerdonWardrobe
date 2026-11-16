@@ -275,12 +275,36 @@ local function HookModel()
     end
 end
 
+-- A seam is a function of the addon itself (RecordKeys.lua says which, and why). It is
+-- always called as a method, and the module is no part of the question.
+local function HookSeam(name)
+    if hooked[name] then
+        return
+    end
+    hooked[name] = true
+    local value, _, owner, key = Resolve(name)
+    if type(value) ~= "function" then
+        refused[name] = "the addon has no such function"
+        refusedCount = refusedCount + 1
+        return
+    end
+    hooksecurefunc(owner, key, function(...)
+        if current then
+            OnCall(name, value, owner, ...)
+        end
+    end)
+    hookCount = hookCount + 1
+end
+
 function Recorder.EnsureHooks()
     if not T.ApiNames then
         return false
     end
     for name in pairs(Names()) do
         HookName(name)
+    end
+    for _, name in ipairs(Keys.SEAMS) do
+        HookSeam(name)
     end
     HookModel()
     return true
@@ -485,6 +509,13 @@ local function AskAboutTheToon()
     for slot = 0, 19 do
         GetInventoryItemID("player", slot)
         GetInventoryItemLink("player", slot)
+    end
+    -- And what the addon asked once, when the session began.
+    for _, question in ipairs(Keys.ONCE_A_SESSION) do
+        local ask = Resolve(question[1])
+        if type(ask) == "function" then
+            pcall(ask, unpack(question, 2))
+        end
     end
 end
 

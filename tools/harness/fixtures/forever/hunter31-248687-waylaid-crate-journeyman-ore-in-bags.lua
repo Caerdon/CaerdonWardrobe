@@ -1,5 +1,5 @@
 return {
-    at = 1794819760,
+    at = 1794821010,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["5|1"] = {
@@ -117,6 +117,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["248687"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["248687"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -185,11 +186,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 248687,
     link = "|cnIQ1:|Hitem:248687::::::::31:1485:::::::::|h[Waylaid Crate: Journeyman Ore]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Waylaid Crate: Journeyman Ore",
     notes = {},
     request = { bag = 5, slot = 1 },

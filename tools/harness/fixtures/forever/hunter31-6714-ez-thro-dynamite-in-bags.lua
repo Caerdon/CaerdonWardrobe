@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["3|8"] = {
+            ["0|12"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,10 +22,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["3|8|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=3,9:slotIndex=8}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|12|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["6714|true"] = { { 5, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=3,9:slotIndex=8}"] = { { 6714, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { 6714, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["66:|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r"] = {
                 [1] = {
@@ -52,13 +52,13 @@ return {
         },
         ["C_Item.GetItemLearnTransmogSet"] = { ["66:|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r"] = { { n = 1 } } },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=3,9:slotIndex=8}"] = { { "|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=12}"] = { { "|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=3,9:slotIndex=8}"] = { { "Ez-Thro Dynamite", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { "Ez-Thro Dynamite", n = 1 } } },
         ["C_Item.GetItemSpell"] = {
             ["66:|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r"] = { { "Ez-Thro Dynamite", 8331, n = 2 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=3,9:slotIndex=8}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["66:|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r"] = { { false, n = 1 } } },
         ["C_Spell.GetSpellDescription"] = {
             ["8331"] = {
@@ -122,6 +122,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["6714"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["6714"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -190,14 +191,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 6714,
     link = "|cnIQ1:|Hitem:6714::::::::31:1485:::::::::|h[Ez-Thro Dynamite]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Ez-Thro Dynamite",
     notes = {},
-    request = { bag = 3, slot = 8 },
+    request = { bag = 0, slot = 12 },
     verdict = {
         binding = "",
         bindingResult = {

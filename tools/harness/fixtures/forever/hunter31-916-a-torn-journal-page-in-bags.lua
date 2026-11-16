@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["3|4"] = {
+            ["2|3"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,8 +22,8 @@ return {
                 },
             },
         },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=3,9:slotIndex=4}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=3,9:slotIndex=4}"] = { { 916, n = 1 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=2,9:slotIndex=3}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=2,9:slotIndex=3}"] = { { 916, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["68:|cnIQ1:|Hitem:916::::::::31:1485:::::::::|h[A Torn Journal Page]|h|r"] = {
                 [1] = {
@@ -49,11 +49,11 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=3,9:slotIndex=4}"] = { { "|cnIQ1:|Hitem:916::::::::31:1485:::::::::|h[A Torn Journal Page]|h|r", n = 1 } },
+            ["{5:bagID=2,9:slotIndex=3}"] = { { "|cnIQ1:|Hitem:916::::::::31:1485:::::::::|h[A Torn Journal Page]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=3,9:slotIndex=4}"] = { { "A Torn Journal Page", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=2,9:slotIndex=3}"] = { { "A Torn Journal Page", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["68:|cnIQ1:|Hitem:916::::::::31:1485:::::::::|h[A Torn Journal Page]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=3,9:slotIndex=4}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=2,9:slotIndex=3}"] = { { true, n = 1 } } },
         ["C_QuestLog.IsWorldQuest"] = { ["3:916"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["68:|cnIQ1:|Hitem:916::::::::31:1485:::::::::|h[A Torn Journal Page]|h|r"] = { { false, n = 1 } },
@@ -170,14 +170,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 916,
     link = "|cnIQ1:|Hitem:916::::::::31:1485:::::::::|h[A Torn Journal Page]|h|r",
     methods = {},
     name = "A Torn Journal Page",
     notes = {},
-    request = { bag = 3, slot = 4 },
+    request = { bag = 2, slot = 3 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

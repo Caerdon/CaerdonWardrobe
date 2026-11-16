@@ -1,9 +1,9 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
-        ["C_ArtifactUI.IsArtifactItem"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { false, n = 1 } } },
+        ["C_ArtifactUI.IsArtifactItem"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { false, n = 1 } } },
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|15"] = {
+            ["0|14"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -23,11 +23,11 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|15|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { true, n = 1 } } },
-        ["C_Item.GetCurrentItemLevel"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { 10, n = 1 } } },
-        ["C_Item.GetItemGUID"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { "Item-6928-0-400000002317FE15", n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { 12225, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|14|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { true, n = 1 } } },
+        ["C_Item.GetCurrentItemLevel"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { 10, n = 1 } } },
+        ["C_Item.GetItemGUID"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { "Item-6928-0-400000002317FE15", n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { 12225, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r"] = {
                 [1] = {
@@ -56,10 +56,10 @@ return {
             ["78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r"] = { { 12225, "Weapon", "Fishing Pole", "INVTYPE_2HWEAPON", 132932, 2, 20, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=15}"] = { { "|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=14}"] = { { "|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { "Blump Family Fishing Pole", n = 1 } } },
-        ["C_Item.GetItemQuality"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { 1, n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { "Blump Family Fishing Pole", n = 1 } } },
+        ["C_Item.GetItemQuality"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { 1, n = 1 } } },
         ["C_Item.GetItemSpecInfo"] = {
             ["78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r"] = { { n = 0 } },
         },
@@ -70,13 +70,13 @@ return {
         ["C_Item.GetItemUniquenessByID"] = {
             ["78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r"] = { { false, n = 4 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { true, n = 1 } } },
         ["C_Item.IsDressableItemByID"] = { ["12225"] = { { true, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r"] = { { false, n = 1 } },
         },
         ["C_TooltipInfo.GetBagItem"] = {
-            ["0|15"] = {
+            ["0|14"] = {
                 [1] = {
                     [1] = {
                         dataInstanceID = 0,
@@ -399,6 +399,7 @@ return {
             },
         },
         ["C_TransmogCollection.PlayerCanCollectSource"] = { ["160456"] = { { true, false, n = 2 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["12225"] = { { n = 2 } } },
         ["DressUpModel:GetItemTransmogInfo"] = { ["16"] = { { { appearanceID = 160456, illusionID = 0, secondaryAppearanceID = 0 }, n = 1 } } },
         PawnGetItemData = {
             ["78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r"] = {
@@ -465,97 +466,10 @@ return {
                 },
             },
         },
-        PawnGetItemDataForInventorySlot = {
-            ["16|true"] = {
-                [1] = {
-                    [1] = {
-                        CanEquip = true,
-                        ID = 2013,
-                        InvType = "INVTYPE_2HWEAPON",
-                        Level = 26,
-                        Link = "|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r",
-                        Name = "Cryptbone Staff",
-                        NumLines = 15,
-                        PrettyLink = "|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r",
-                        Rarity = 2,
-                        SocketBonusStats = {},
-                        Stats = {
-                            Dps = 17.413793103448281,
-                            Intellect = 6,
-                            IsStaff = 1,
-                            MaxDamage = 61,
-                            MeleeDps = 17.413793103448281,
-                            MeleeMaxDamage = 61,
-                            MeleeMinDamage = 40,
-                            MeleeSpeed = 2.9,
-                            MinDamage = 40,
-                            Speed = 2.9,
-                            Spirit = 4,
-                            Strength = 4,
-                            TwoHandDps = 17.413793103448281,
-                            TwoHandMaxDamage = 61,
-                            TwoHandMinDamage = 40,
-                            TwoHandSpeed = 2.9,
-                        },
-                        Texture = 135163,
-                        UnenchantedSocketBonusStats = {},
-                        UnenchantedStats = {
-                            Dps = 17.413793103448281,
-                            Intellect = 6,
-                            IsStaff = 1,
-                            MaxDamage = 61,
-                            MeleeDps = 17.413793103448281,
-                            MeleeMaxDamage = 61,
-                            MeleeMinDamage = 40,
-                            MeleeSpeed = 2.9,
-                            MinDamage = 40,
-                            Speed = 2.9,
-                            Spirit = 4,
-                            Strength = 4,
-                            TwoHandDps = 17.413793103448281,
-                            TwoHandMaxDamage = 61,
-                            TwoHandMinDamage = 40,
-                            TwoHandSpeed = 2.9,
-                        },
-                        UnknownLines = {
-                            ["2d"] = 1,
-                            ["Trend (2d)"] = 1,
-                            ["|cffabd473AllClassPlan:|r |cff60ff60Sell on AH|r - AH 77s 0c · vendor 36s 44c"] = 1,
-                            ["|cffabd473AllClassPlan:|r |cffaaaaaaAbout the same as what you're wearing"] = 1,
-                        },
-                        Values = {
-                            [1] = {
-                                [1] = "\"Classic\":HUNTER1",
-                                [2] = 42.627586206896552,
-                                [3] = 42.627586206896552,
-                                [4] = "Hunter: Beast Mastery",
-                            },
-                            [2] = {
-                                [1] = "\"Classic\":HUNTER2",
-                                [2] = 42.627586206896552,
-                                [3] = 42.627586206896552,
-                                [4] = "Hunter: Marksmanship",
-                            },
-                            [3] = {
-                                [1] = "\"Classic\":HUNTER3",
-                                [2] = 111.8827586206897,
-                                [3] = 111.8827586206897,
-                                [4] = "Hunter: Survival",
-                            },
-                        },
-                    },
-                    [2] = true,
-                    n = 2,
-                },
-            },
-        },
         PawnGetSingleValueFromItem = {
             ["{8:CanEquip=true,2:ID=12225,7:InvType=16:INVTYPE_2HWEAPON,5:Level=10,4:Link=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,4:Name=25:Blump Family Fishing Pole,8:NumLines=8,10:PrettyLink=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,6:Rarity=1,16:SocketBonusStats={},5:Stats={3:Dps=5.666666#1224:2901528245"] = { { 11.33333333333333, 11.33333333333333, n = 2 } },
             ["{8:CanEquip=true,2:ID=12225,7:InvType=16:INVTYPE_2HWEAPON,5:Level=10,4:Link=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,4:Name=25:Blump Family Fishing Pole,8:NumLines=8,10:PrettyLink=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,6:Rarity=1,16:SocketBonusStats={},5:Stats={3:Dps=5.666666#1224:2901528246"] = { { 11.33333333333333, 11.33333333333333, n = 2 } },
             ["{8:CanEquip=true,2:ID=12225,7:InvType=16:INVTYPE_2HWEAPON,5:Level=10,4:Link=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,4:Name=25:Blump Family Fishing Pole,8:NumLines=8,10:PrettyLink=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,6:Rarity=1,16:SocketBonusStats={},5:Stats={3:Dps=5.666666#1224:2901528247"] = { { 34, 34, n = 2 } },
-            ["{8:CanEquip=true,2:ID=2013,7:InvType=16:INVTYPE_2HWEAPON,5:Level=26,4:Link=65:|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r,4:Name=15:Cryptbone Staff,8:NumLines=15,10:PrettyLink=65:|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r,6:Rarity=2,16:SocketBonusStats={},5:Stats={3:Dps=17.413793103448,9:Intellect=6,7:IsStaff=1,9:#1478:828838749"] = { { 42.627586206896552, 42.627586206896552, n = 2 } },
-            ["{8:CanEquip=true,2:ID=2013,7:InvType=16:INVTYPE_2HWEAPON,5:Level=26,4:Link=65:|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r,4:Name=15:Cryptbone Staff,8:NumLines=15,10:PrettyLink=65:|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r,6:Rarity=2,16:SocketBonusStats={},5:Stats={3:Dps=17.413793103448,9:Intellect=6,7:IsStaff=1,9:#1478:828838750"] = { { 42.627586206896552, 42.627586206896552, n = 2 } },
-            ["{8:CanEquip=true,2:ID=2013,7:InvType=16:INVTYPE_2HWEAPON,5:Level=26,4:Link=65:|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r,4:Name=15:Cryptbone Staff,8:NumLines=15,10:PrettyLink=65:|cnIQ2:|Hitem:2013::::::::31:1485:::::::::|h[Cryptbone Staff]|h|r,6:Rarity=2,16:SocketBonusStats={},5:Stats={3:Dps=17.413793103448,9:Intellect=6,7:IsStaff=1,9:#1478:828838751"] = { { 111.8827586206897, 111.8827586206897, n = 2 } },
         },
         PawnIsItemAnUpgrade = {
             ["{8:CanEquip=true,2:ID=12225,7:InvType=16:INVTYPE_2HWEAPON,5:Level=10,4:Link=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,4:Name=25:Blump Family Fishing Pole,8:NumLines=8,10:PrettyLink=78:|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r,6:Rarity=1,16:SocketBonusStats={},5:Stats={3:Dps=5.666666#1203:828834192"] = { { n = 5 } },
@@ -631,14 +545,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 12225,
     link = "|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Blump Family Fishing Pole",
     notes = {},
-    request = { bag = 0, slot = 15 },
+    request = { bag = 0, slot = 14 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

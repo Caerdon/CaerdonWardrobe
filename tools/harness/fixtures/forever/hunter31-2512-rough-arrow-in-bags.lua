@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821010,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["4|3"] = {
+            ["4|1"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -16,16 +16,16 @@ return {
                         itemID = 2512,
                         itemName = "Rough Arrow",
                         quality = 1,
-                        stackCount = 191,
+                        stackCount = 200,
                     },
                     n = 1,
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["4|3|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=4,9:slotIndex=3}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["4|1|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=4,9:slotIndex=1}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["2512|true"] = { { 1191, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=4,9:slotIndex=3}"] = { { 2512, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=4,9:slotIndex=1}"] = { { 2512, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["61:|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r"] = {
                 [1] = {
@@ -51,11 +51,11 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=4,9:slotIndex=3}"] = { { "|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r", n = 1 } },
+            ["{5:bagID=4,9:slotIndex=1}"] = { { "|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=4,9:slotIndex=3}"] = { { "Rough Arrow", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=4,9:slotIndex=1}"] = { { "Rough Arrow", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["61:|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=4,9:slotIndex=3}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=4,9:slotIndex=1}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["61:|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r"] = { { false, n = 1 } } },
         ["C_TooltipInfo.GetHyperlink"] = {
             ["61:|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r"] = {
@@ -98,6 +98,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["2512"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["2512"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -166,14 +167,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 2512,
     link = "|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Rough Arrow",
     notes = {},
-    request = { bag = 4, slot = 3 },
+    request = { bag = 4, slot = 1 },
     verdict = {
         binding = "",
         bindingResult = {

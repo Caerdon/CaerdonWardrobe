@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["3|2"] = {
+            ["2|1"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,9 +22,9 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["3|2|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=3,9:slotIndex=2}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=3,9:slotIndex=2}"] = { { 2784, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["2|1|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=2,9:slotIndex=1}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=2,9:slotIndex=1}"] = { { 2784, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["63:|cnIQ1:|Hitem:2784::::::::31:1485:::::::::|h[Musquash Root]|h|r"] = {
                 [1] = {
@@ -50,11 +50,11 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=3,9:slotIndex=2}"] = { { "|cnIQ1:|Hitem:2784::::::::31:1485:::::::::|h[Musquash Root]|h|r", n = 1 } },
+            ["{5:bagID=2,9:slotIndex=1}"] = { { "|cnIQ1:|Hitem:2784::::::::31:1485:::::::::|h[Musquash Root]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=3,9:slotIndex=2}"] = { { "Musquash Root", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=2,9:slotIndex=1}"] = { { "Musquash Root", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["63:|cnIQ1:|Hitem:2784::::::::31:1485:::::::::|h[Musquash Root]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=3,9:slotIndex=2}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=2,9:slotIndex=1}"] = { { true, n = 1 } } },
         ["C_QuestLog.IsWorldQuest"] = { ["4:2784"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["63:|cnIQ1:|Hitem:2784::::::::31:1485:::::::::|h[Musquash Root]|h|r"] = { { false, n = 1 } } },
         ["C_TooltipInfo.GetHyperlink"] = {
@@ -157,14 +157,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 2784,
     link = "|cnIQ1:|Hitem:2784::::::::31:1485:::::::::|h[Musquash Root]|h|r",
     methods = {},
     name = "Musquash Root",
     notes = {},
-    request = { bag = 3, slot = 2 },
+    request = { bag = 2, slot = 1 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

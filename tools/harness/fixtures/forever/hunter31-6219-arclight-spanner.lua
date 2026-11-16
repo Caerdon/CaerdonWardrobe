@@ -1,5 +1,5 @@
 return {
-    at = 1794819749,
+    at = 1794821001,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|66:|cnIQ1:|Hitem:6219::::::::31:1485:::::::::|h[Arclight Spanner]|h|r"] = { { 2, n = 1 } },
@@ -564,6 +564,7 @@ return {
         },
         ["C_TransmogCollection.PlayerCanCollectSource"] = { ["158371"] = { { true, false, n = 2 } } },
         ["C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance"] = { ["158371"] = { { false, n = 1 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["6219"] = { { n = 2 } } },
         ["DressUpModel:GetItemTransmogInfo"] = { ["16"] = { { { appearanceID = 158371, illusionID = 0, secondaryAppearanceID = 0 }, n = 1 } } },
         PawnGetItemData = {
             ["66:|cnIQ1:|Hitem:6219::::::::31:1485:::::::::|h[Arclight Spanner]|h|r"] = {
@@ -694,11 +695,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 6219,
     link = "|cnIQ1:|Hitem:6219::::::::31:1485:::::::::|h[Arclight Spanner]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Arclight Spanner",
     notes = {},
     request = { itemID = 6219, link = "|cnIQ1:|Hitem:6219::::::::31:1485:::::::::|h[Arclight Spanner]|h|r" },

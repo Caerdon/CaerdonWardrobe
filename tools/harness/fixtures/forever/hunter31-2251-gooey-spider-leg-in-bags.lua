@@ -1,5 +1,5 @@
 return {
-    at = 1794819760,
+    at = 1794821010,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|66:|cnIQ1:|Hitem:2251::::::::31:1485:::::::::|h[Gooey Spider Leg]|h|r"] = { { 2, n = 1 } },
@@ -139,6 +139,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["2251"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["2251"] = { { { [93] = "objective" }, n = 2 } } },
         ["LibQuestieDB.Quest.Get"] = { ["93|4:name"] = { { "Dusky Crab Cakes", n = 1 } } },
     },
     config = {
@@ -208,11 +209,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 2251,
     link = "|cnIQ1:|Hitem:2251::::::::31:1485:::::::::|h[Gooey Spider Leg]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Gooey Spider Leg",
     notes = {},
     request = { bag = 5, slot = 4 },

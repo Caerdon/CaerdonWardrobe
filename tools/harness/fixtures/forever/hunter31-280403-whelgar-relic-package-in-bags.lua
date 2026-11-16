@@ -1,20 +1,20 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["1|6"] = {
+            ["1|3"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
                         hasNoValue = true,
-                        hyperlink = "|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r",
-                        iconFileID = 134417,
+                        hyperlink = "|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r",
+                        iconFileID = 132763,
                         isBound = true,
                         isFiltered = false,
                         isLocked = false,
                         isReadable = false,
-                        itemID = 280397,
-                        itemName = "Heart of Golm",
+                        itemID = 280403,
+                        itemName = "Whelgar Relic Package",
                         quality = 1,
                         stackCount = 1,
                     },
@@ -22,14 +22,14 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|6|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { 280397, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|3|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=3}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=3}"] = { { 280403, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
-            ["65:|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r"] = {
+            ["73:|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r"] = {
                 [1] = {
-                    [1] = "Heart of Golm",
-                    [2] = "|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r",
+                    [1] = "Whelgar Relic Package",
+                    [2] = "|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r",
                     [3] = 1,
                     [4] = 1,
                     [5] = 1,
@@ -37,7 +37,7 @@ return {
                     [7] = "Quest",
                     [8] = 1,
                     [9] = "INVTYPE_NON_EQUIP_IGNORE",
-                    [10] = 134417,
+                    [10] = 132763,
                     [11] = 0,
                     [12] = 12,
                     [13] = 0,
@@ -50,27 +50,29 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=1,9:slotIndex=6}"] = { { "|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r", n = 1 } },
+            ["{5:bagID=1,9:slotIndex=3}"] = { { "|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { "Heart of Golm", n = 1 } } },
-        ["C_Item.GetItemSpell"] = { ["65:|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { true, n = 1 } } },
-        ["C_QuestLog.IsWorldQuest"] = { ["6:280397"] = { { false, n = 1 } } },
-        ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["65:|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r"] = { { false, n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=3}"] = { { "Whelgar Relic Package", n = 1 } } },
+        ["C_Item.GetItemSpell"] = { ["73:|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r"] = { { n = 0 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=3}"] = { { true, n = 1 } } },
+        ["C_QuestLog.IsWorldQuest"] = { ["6:280403"] = { { false, n = 1 } } },
+        ["C_Soulbinds.IsItemConduitByItemInfo"] = {
+            ["73:|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r"] = { { false, n = 1 } },
+        },
         ["C_TooltipInfo.GetHyperlink"] = {
-            ["65:|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r"] = {
+            ["73:|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r"] = {
                 [1] = {
                     [1] = {
                         dataInstanceID = 0,
-                        hyperlink = "|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r",
-                        id = 280397,
+                        hyperlink = "|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r",
+                        id = 280403,
                         isAzeriteEmpoweredItem = false,
                         isAzeriteItem = false,
                         isCorruptedItem = false,
                         lines = {
                             [1] = {
                                 leftColor = { b = 1, g = 1, r = 1 },
-                                leftText = "Heart of Golm",
+                                leftText = "Whelgar Relic Package",
                                 quality = 1,
                                 type = 22,
                             },
@@ -88,7 +90,7 @@ return {
                 },
             },
         },
-        ["C_ToyBox.GetToyLink"] = { ["280397"] = { { n = 0 } } },
+        ["C_ToyBox.GetToyLink"] = { ["280403"] = { { n = 0 } } },
     },
     config = {
         Binding = {
@@ -157,14 +159,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
-    itemID = 280397,
-    link = "|cnIQ1:|Hitem:280397::::::::31:1485:::::::::|h[Heart of Golm]|h|r",
+    itemID = 280403,
+    link = "|cnIQ1:|Hitem:280403::::::::31:1485:::::::::|h[Whelgar Relic Package]|h|r",
     methods = {},
-    name = "Heart of Golm",
+    name = "Whelgar Relic Package",
     notes = {},
-    request = { bag = 1, slot = 6 },
+    request = { bag = 1, slot = 3 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|68:|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r"] = { { 2, n = 1 } },
@@ -41,7 +41,7 @@ return {
             ["68:|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r|<function>"] = { { callback = { { "4305" }, n = 1 }, n = 0 } },
         },
         ["C_Container.GetContainerItemInfo"] = {
-            ["1|1"] = {
+            ["0|19"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -61,10 +61,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|1|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=1}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|19|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["4305|true"] = { { 6, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=1}"] = { { 4305, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { 4305, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["68:|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r"] = {
                 [1] = {
@@ -93,11 +93,11 @@ return {
             ["68:|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r"] = { { 4305, "Trade Goods", "Cloth", "INVTYPE_NON_EQUIP_IGNORE", 132907, 7, 5, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=1,9:slotIndex=1}"] = { { "|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=19}"] = { { "|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=1}"] = { { "Bolt of Silk Cloth", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { "Bolt of Silk Cloth", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["68:|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=1}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["68:|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r"] = { { false, n = 1 } },
         },
@@ -139,6 +139,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["4305"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["4305"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -207,14 +208,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 4305,
     link = "|cnIQ1:|Hitem:4305::::::::31:1485:::::::::|h[Bolt of Silk Cloth]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Bolt of Silk Cloth",
     notes = {},
-    request = { bag = 1, slot = 1 },
+    request = { bag = 0, slot = 19 },
     verdict = {
         binding = "",
         bindingResult = {

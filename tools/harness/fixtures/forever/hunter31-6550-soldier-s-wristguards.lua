@@ -1,5 +1,5 @@
 return {
-    at = 1794819749,
+    at = 1794821001,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|71:|cnIQ2:|Hitem:6550::::::::31:1485:::::::::|h[Soldier's Wristguards]|h|r"] = { { 2, n = 1 } },
@@ -380,6 +380,7 @@ return {
         },
         ["C_TransmogCollection.GetSourceItemID"] = { ["158544"] = { { 6550, n = 1 } } },
         ["C_TransmogCollection.PlayerCanCollectSource"] = { ["158544"] = { { true, false, n = 2 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["6550"] = { { n = 2 } } },
         PawnGetItemData = {
             ["71:|cnIQ2:|Hitem:6550::::::::31:1485:::::::::|h[Soldier's Wristguards]|h|r"] = {
                 [1] = {
@@ -488,11 +489,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 6550,
     link = "|cnIQ2:|Hitem:6550::::::::31:1485:::::::::|h[Soldier's Wristguards]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Soldier's Wristguards",
     notes = {},
     request = { itemID = 6550, link = "|cnIQ2:|Hitem:6550::::::::31:1485:::::::::|h[Soldier's Wristguards]|h|r" },

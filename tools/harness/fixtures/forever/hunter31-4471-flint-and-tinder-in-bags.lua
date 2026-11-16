@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r"] = { { 2, n = 1 } },
@@ -41,7 +41,7 @@ return {
             ["66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r|<function>"] = { { callback = { { "4471" }, n = 1 }, n = 0 } },
         },
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|17"] = {
+            ["0|16"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -61,9 +61,9 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|17|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { 4471, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|16|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { 4471, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r"] = {
                 [1] = {
@@ -92,11 +92,11 @@ return {
             ["66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r"] = { { 4471, "Trade Goods", "Other", "INVTYPE_NON_EQUIP_IGNORE", 135237, 7, 11, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=17}"] = { { "|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=16}"] = { { "|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { "Flint and Tinder", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { "Flint and Tinder", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { false, n = 1 } } },
         ["C_QuestLog.IsOnQuest"] = { ["80001"] = { { false, n = 1 } } },
         ["C_QuestLog.IsQuestFlaggedCompleted"] = { ["80001"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r"] = { { false, n = 1 } } },
@@ -132,6 +132,8 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["4471"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["4471"] = { { { [80001] = "objective" }, n = 2 } } },
+        ["CaerdonQuestItems.GetQuestieHiddenReason"] = { ["80001"] = { { "hidden by Questie", n = 1 } } },
         ["LibQuestieDB.Quest.Get"] = { ["80001|4:name"] = { { "Rekindle", n = 1 } } },
     },
     config = {
@@ -201,14 +203,18 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 4471,
     link = "|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = {
+        ["Auctionator.Database.GetPriceHistory"] = true,
+        ["CaerdonQuestItems.GetIndexedQuests"] = true,
+        ["CaerdonQuestItems.GetQuestieHiddenReason"] = true,
+    },
     name = "Flint and Tinder",
     notes = {},
-    request = { bag = 0, slot = 17 },
+    request = { bag = 0, slot = 16 },
     verdict = {
         binding = "",
         bindingResult = {

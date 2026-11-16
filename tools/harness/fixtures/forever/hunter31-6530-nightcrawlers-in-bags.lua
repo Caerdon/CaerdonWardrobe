@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|3"] = {
@@ -59,6 +59,8 @@ return {
             ["63:|cnIQ1:|Hitem:6530::::::::31:1485:::::::::|h[Nightcrawlers]|h|r"] = { { "Nightcrawlers", 8088, n = 2 } },
         },
         ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=3}"] = { { false, n = 1 } } },
+        ["C_QuestLog.IsOnQuest"] = { ["95065"] = { { false, n = 1 } } },
+        ["C_QuestLog.IsQuestFlaggedCompleted"] = { ["95065"] = { { true, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["63:|cnIQ1:|Hitem:6530::::::::31:1485:::::::::|h[Nightcrawlers]|h|r"] = { { false, n = 1 } } },
         ["C_Spell.GetSpellDescription"] = {
             ["8088"] = { { "When applied to your fishing pole, increases Fishing by 50 for 10 min.", n = 1 } },
@@ -109,6 +111,8 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["6530"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["6530"] = { { { [95065] = "objective" }, n = 2 } } },
+        ["LibQuestieDB.Quest.Get"] = { ["95065|4:name"] = { { "Fishin' Time", n = 1 } } },
     },
     config = {
         Binding = {
@@ -177,11 +181,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 6530,
     link = "|cnIQ1:|Hitem:6530::::::::31:1485:::::::::|h[Nightcrawlers]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Nightcrawlers",
     notes = {},
     request = { bag = 0, slot = 3 },

@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["2|8"] = {
+            ["1|8"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,9 +22,9 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["2|8|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=2,9:slotIndex=8}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=2,9:slotIndex=8}"] = { { 5732, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|8|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=8}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=8}"] = { { 5732, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["54:|cnIQ1:|Hitem:5732::::::::31:1485:::::::::|h[NG-5]|h|r"] = {
                 [1] = {
@@ -50,11 +50,11 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=2,9:slotIndex=8}"] = { { "|cnIQ1:|Hitem:5732::::::::31:1485:::::::::|h[NG-5]|h|r", n = 1 } },
+            ["{5:bagID=1,9:slotIndex=8}"] = { { "|cnIQ1:|Hitem:5732::::::::31:1485:::::::::|h[NG-5]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=2,9:slotIndex=8}"] = { { "NG-5", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=8}"] = { { "NG-5", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["54:|cnIQ1:|Hitem:5732::::::::31:1485:::::::::|h[NG-5]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=2,9:slotIndex=8}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=8}"] = { { true, n = 1 } } },
         ["C_QuestLog.IsWorldQuest"] = { ["4:5732"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["54:|cnIQ1:|Hitem:5732::::::::31:1485:::::::::|h[NG-5]|h|r"] = { { false, n = 1 } } },
         ["C_TooltipInfo.GetHyperlink"] = {
@@ -157,14 +157,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 5732,
     link = "|cnIQ1:|Hitem:5732::::::::31:1485:::::::::|h[NG-5]|h|r",
     methods = {},
     name = "NG-5",
     notes = {},
-    request = { bag = 2, slot = 8 },
+    request = { bag = 1, slot = 8 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

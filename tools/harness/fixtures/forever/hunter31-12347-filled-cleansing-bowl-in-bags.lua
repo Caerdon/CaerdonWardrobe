@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["2|6"] = {
+            ["1|6"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,9 +22,9 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["2|6|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=2,9:slotIndex=6}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=2,9:slotIndex=6}"] = { { 12347, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|6|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { 12347, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["74:|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r"] = {
                 [1] = {
@@ -50,13 +50,13 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=2,9:slotIndex=6}"] = { { "|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r", n = 1 } },
+            ["{5:bagID=1,9:slotIndex=6}"] = { { "|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=2,9:slotIndex=6}"] = { { "Filled Cleansing Bowl", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { "Filled Cleansing Bowl", n = 1 } } },
         ["C_Item.GetItemSpell"] = {
             ["74:|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r"] = { { "Purify and Place Food", 16072, n = 2 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=2,9:slotIndex=6}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { true, n = 1 } } },
         ["C_QuestLog.IsWorldQuest"] = { ["5:12347"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["74:|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r"] = { { false, n = 1 } },
@@ -176,14 +176,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 12347,
     link = "|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r",
     methods = {},
     name = "Filled Cleansing Bowl",
     notes = {},
-    request = { bag = 2, slot = 6 },
+    request = { bag = 1, slot = 6 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

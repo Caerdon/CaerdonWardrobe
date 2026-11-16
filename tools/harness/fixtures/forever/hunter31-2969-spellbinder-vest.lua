@@ -1,5 +1,5 @@
 return {
-    at = 1794819749,
+    at = 1794821001,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|66:|cnIQ2:|Hitem:2969::::::::31:1485:::::::::|h[Spellbinder Vest]|h|r"] = { { 2, n = 1 } },
@@ -393,6 +393,7 @@ return {
         },
         ["C_TransmogCollection.GetSourceItemID"] = { ["157062"] = { { 2969, n = 1 } } },
         ["C_TransmogCollection.PlayerCanCollectSource"] = { ["157062"] = { { true, false, n = 2 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["2969"] = { { n = 2 } } },
         PawnGetItemData = {
             ["66:|cnIQ2:|Hitem:2969::::::::31:1485:::::::::|h[Spellbinder Vest]|h|r"] = {
                 [1] = {
@@ -566,11 +567,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 2969,
     link = "|cnIQ2:|Hitem:2969::::::::31:1485:::::::::|h[Spellbinder Vest]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Spellbinder Vest",
     notes = {},
     request = { itemID = 2969, link = "|cnIQ2:|Hitem:2969::::::::31:1485:::::::::|h[Spellbinder Vest]|h|r" },

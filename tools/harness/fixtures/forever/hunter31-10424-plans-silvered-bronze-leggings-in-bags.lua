@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["1|5"] = {
+            ["1|2"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,9 +22,9 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|5|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { 10424, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|2|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=2}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=2}"] = { { 10424, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["82:|cnIQ2:|Hitem:10424::::::::31:1485:::::::::|h[Plans: Silvered Bronze Leggings]|h|r"] = {
                 [1] = {
@@ -53,19 +53,19 @@ return {
             ["81:|cnIQ2:|Hitem:10423::::::::31:1485:::1:3524::::::|h[Silvered Bronze Leggings]|h|r"] = { { 10423, "Armor", "Mail", "INVTYPE_LEGS", 134584, 4, 3, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=1,9:slotIndex=5}"] = {
+            ["{5:bagID=1,9:slotIndex=2}"] = {
                 [1] = {
                     [1] = "|cnIQ2:|Hitem:10424::::::::31:1485:::::::::|h[Plans: Silvered Bronze Leggings]|h|r",
                     n = 1,
                 },
             },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { "Plans: Silvered Bronze Leggings", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=2}"] = { { "Plans: Silvered Bronze Leggings", n = 1 } } },
         ["C_Item.GetItemSpell"] = {
             ["81:|cnIQ2:|Hitem:10423::::::::31:1485:::1:3524::::::|h[Silvered Bronze Leggings]|h|r"] = { { n = 0 } },
             ["82:|cnIQ2:|Hitem:10424::::::::31:1485:::::::::|h[Plans: Silvered Bronze Leggings]|h|r"] = { { "Learning", 402265, n = 2 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=2}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["82:|cnIQ2:|Hitem:10424::::::::31:1485:::::::::|h[Plans: Silvered Bronze Leggings]|h|r"] = { { false, n = 1 } },
         },
@@ -183,6 +183,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["10424"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["10424"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -251,14 +252,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 10424,
     link = "|cnIQ2:|Hitem:10424::::::::31:1485:::::::::|h[Plans: Silvered Bronze Leggings]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Plans: Silvered Bronze Leggings",
     notes = {},
-    request = { bag = 1, slot = 5 },
+    request = { bag = 1, slot = 2 },
     verdict = {
         binding = "",
         bindingResult = {

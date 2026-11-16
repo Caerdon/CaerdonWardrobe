@@ -1,20 +1,20 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["1|9"] = {
+            ["1|10"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
                         hasNoValue = true,
-                        hyperlink = "|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r",
-                        iconFileID = 134457,
+                        hyperlink = "|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r",
+                        iconFileID = 134327,
                         isBound = true,
                         isFiltered = false,
                         isLocked = false,
-                        isReadable = false,
-                        itemID = 280394,
-                        itemName = "Goaz Stone",
+                        isReadable = true,
+                        itemID = 4432,
+                        itemName = "Sully Balloo's Letter",
                         quality = 1,
                         stackCount = 1,
                     },
@@ -22,58 +22,56 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|9|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=9}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=9}"] = { { 280394, n = 1 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=10}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=10}"] = { { 4432, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
-            ["64:|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r"] = {
+            ["71:|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r"] = {
                 [1] = {
-                    [1] = "Goaz Stone",
-                    [2] = "|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r",
+                    [1] = "Sully Balloo's Letter",
+                    [2] = "|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r",
                     [3] = 1,
                     [4] = 1,
-                    [5] = 1,
+                    [5] = 0,
                     [6] = "Quest",
                     [7] = "Quest",
                     [8] = 1,
                     [9] = "INVTYPE_NON_EQUIP_IGNORE",
-                    [10] = 134457,
+                    [10] = 134327,
                     [11] = 0,
                     [12] = 12,
                     [13] = 0,
                     [14] = 4,
                     [15] = 0,
                     [17] = false,
-                    [18] = "",
+                    [18] = "My dear Sara...",
                     n = 18,
                 },
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=1,9:slotIndex=9}"] = { { "|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r", n = 1 } },
+            ["{5:bagID=1,9:slotIndex=10}"] = { { "|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=9}"] = { { "Goaz Stone", n = 1 } } },
-        ["C_Item.GetItemSpell"] = {
-            ["64:|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r"] = { { "Goaz Stone", 1308528, n = 2 } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=10}"] = { { "Sully Balloo's Letter", n = 1 } } },
+        ["C_Item.GetItemSpell"] = { ["71:|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r"] = { { n = 0 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=10}"] = { { true, n = 1 } } },
+        ["C_QuestLog.IsWorldQuest"] = { ["4:4432"] = { { false, n = 1 } } },
+        ["C_Soulbinds.IsItemConduitByItemInfo"] = {
+            ["71:|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r"] = { { false, n = 1 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=9}"] = { { true, n = 1 } } },
-        ["C_QuestLog.IsWorldQuest"] = { ["6:280394"] = { { false, n = 1 } } },
-        ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["64:|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r"] = { { false, n = 1 } } },
-        ["C_Spell.GetSpellDescription"] = { ["1308528"] = { { "Activate a Goaz Warder.", n = 1 } } },
         ["C_TooltipInfo.GetHyperlink"] = {
-            ["64:|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r"] = {
+            ["71:|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r"] = {
                 [1] = {
                     [1] = {
                         dataInstanceID = 0,
-                        hyperlink = "|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r",
-                        id = 280394,
+                        hyperlink = "|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r",
+                        id = 4432,
                         isAzeriteEmpoweredItem = false,
                         isAzeriteItem = false,
                         isCorruptedItem = false,
                         lines = {
                             [1] = {
                                 leftColor = { b = 1, g = 1, r = 1 },
-                                leftText = "Goaz Stone",
+                                leftText = "Sully Balloo's Letter",
                                 quality = 1,
                                 type = 22,
                             },
@@ -83,12 +81,18 @@ return {
                                 leftText = "Quest Item",
                                 type = 20,
                             },
-                            [3] = {
-                                leftColor = { b = 0, g = 1, r = 0 },
-                                leftText = "Use: Activate a Goaz Warder. (10 |4Sec:Sec; Cooldown)",
-                                spellID = 1308528,
-                                type = 44,
+                            [3] = { leftColor = { b = 1, g = 1, r = 1 }, leftText = "Unique", type = 0 },
+                            [4] = {
+                                isGameInfo = false,
+                                leftColor = { b = 0, g = 0.82352942228317261, r = 1 },
+                                leftText = "\"My dear Sara...\"",
+                                type = 37,
                                 wrapText = true,
+                            },
+                            [5] = {
+                                leftColor = { b = 0, g = 1, r = 0 },
+                                leftText = "<This item can be read>",
+                                type = 0,
                             },
                         },
                         type = 0,
@@ -97,7 +101,7 @@ return {
                 },
             },
         },
-        ["C_ToyBox.GetToyLink"] = { ["280394"] = { { n = 0 } } },
+        ["C_ToyBox.GetToyLink"] = { ["4432"] = { { n = 0 } } },
     },
     config = {
         Binding = {
@@ -166,14 +170,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
-    itemID = 280394,
-    link = "|cnIQ1:|Hitem:280394::::::::31:1485::11:::::::|h[Goaz Stone]|h|r",
+    itemID = 4432,
+    link = "|cnIQ1:|Hitem:4432::::::::31:1485:::::::::|h[Sully Balloo's Letter]|h|r",
     methods = {},
-    name = "Goaz Stone",
+    name = "Sully Balloo's Letter",
     notes = {},
-    request = { bag = 1, slot = 9 },
+    request = { bag = 1, slot = 10 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,
@@ -188,6 +192,6 @@ return {
         },
         itemType = "Quest",
         ready = true,
-        status = "quest",
+        status = "readable",
     },
 }

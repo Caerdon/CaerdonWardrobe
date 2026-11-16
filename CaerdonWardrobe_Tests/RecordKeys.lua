@@ -147,8 +147,8 @@ Keys.ALSO_NAMES = {
     -- CaerdonAuctionValue keeps Auctionator's API table in a local and calls these off it.
     "Auctionator.API.v1.GetAuctionAgeByItemLink", "Auctionator.API.v1.RegisterForDBUpdate",
     -- CaerdonQuestItems does the same with QuestieDB and Questie.
-    "LibQuestieDB.RequireContract", "LibQuestieDB.Quest.Get", "LibQuestieDB.Quest.GetAllIds",
-    "Questie.API.RegisterOnReady", "QuestieLoader.ImportModule",
+    "LibQuestieDB.RequireContract", "LibQuestieDB.Quest", "LibQuestieDB.Quest.Get", "LibQuestieDB.Quest.GetAllIds",
+    "LibQuestieDB.Enum", "Questie.API.RegisterOnReady", "QuestieLoader.ImportModule",
 }
 
 -- A hooked function tells the recorder what it was asked, not what it answered, so the
@@ -158,12 +158,30 @@ local GETTER_PREFIXES = {
     "Get", "Is", "Has", "Have", "Can", "Does", "Should", "Are", "Was", "Unit", "Player", "Account", "Calculate",
     "InCombat", "QuestCan", "ContainerIDTo", "Pawn",
 }
--- LibQuestieDB.RequireContract is left out on purpose. Answered, it switches QuestieDB on in a
--- replay, and the quest module then reads every quest in it to build its index, over several
--- frames: no recording of one call holds that. Unanswered, a replay runs as a client without
--- QuestieDB, and a verdict that rested on it does not come out and is rejected at import.
 Keys.ALSO = {
     EquipmentManager_GetLocationData = true,
+    -- Answers whether QuestieDB keeps the contract the addon was written for.
+    ["LibQuestieDB.RequireContract"] = true,
+}
+
+-- What the addon asks once a session and never again, with the arguments it asks with. A
+-- replay starts a session of its own and asks again, so the recorder puts these questions at
+-- the end of every run. When the addon changes what it asks, a replay names the new question.
+Keys.ONCE_A_SESSION = {
+    -- CaerdonQuestItems: QUESTIEDB_CONTRACT, the version of QuestieDB's contract it was written for.
+    { "LibQuestieDB.RequireContract", 2 },
+}
+
+-- Seams: functions of the addon itself whose answer for one item stands in for data that
+-- cannot be asked for one item at a time. The quest module builds an index over every quest
+-- in QuestieDB, over several frames, once a session, and reads Questie's own tables; neither
+-- fits into a recording of one call. So the recorder keeps what these answered, and a replay
+-- puts that in the function's place: the code that judges runs for real on recorded facts,
+-- the code that gathers them does not run. A seam the recording has nothing for is left as
+-- it is.
+Keys.SEAMS = {
+    "CaerdonQuestItems.GetIndexedQuests",
+    "CaerdonQuestItems.GetQuestieHiddenReason",
 }
 
 -- Functions that hand their answer to a function they are given, at once. The recorder asks

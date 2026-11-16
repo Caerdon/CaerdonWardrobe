@@ -1,8 +1,8 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|13"] = {
+            ["0|11"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,10 +22,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|13|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=13}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|11|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=11}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["4596|true"] = { { 1, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=13}"] = { { 4596, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=11}"] = { { 4596, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["81:|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r"] = {
                 [1] = {
@@ -54,18 +54,18 @@ return {
             ["81:|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r"] = { { n = 1 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=13}"] = {
+            ["{5:bagID=0,9:slotIndex=11}"] = {
                 [1] = {
                     [1] = "|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r",
                     n = 1,
                 },
             },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=13}"] = { { "Minor Discolored Healing Potion", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=11}"] = { { "Minor Discolored Healing Potion", n = 1 } } },
         ["C_Item.GetItemSpell"] = {
             ["81:|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r"] = { { "Minor Discolored Healing Potion", 1244863, n = 2 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=13}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=11}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["81:|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r"] = { { false, n = 1 } },
         },
@@ -124,6 +124,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["4596"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["4596"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -192,14 +193,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 4596,
     link = "|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Minor Discolored Healing Potion",
     notes = {},
-    request = { bag = 0, slot = 13 },
+    request = { bag = 0, slot = 11 },
     verdict = {
         binding = "",
         bindingResult = {

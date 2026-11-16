@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|68:|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r"] = { { 2, n = 1 } },
@@ -41,7 +41,7 @@ return {
             ["68:|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r|<function>"] = { { callback = { { "5784" }, n = 1 }, n = 0 } },
         },
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|20"] = {
+            ["0|18"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -61,10 +61,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|20|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=20}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|18|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["5784|true"] = { { 3, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=20}"] = { { 5784, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { 5784, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["68:|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r"] = {
                 [1] = {
@@ -93,11 +93,11 @@ return {
             ["68:|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r"] = { { 5784, "Trade Goods", "Leather", "INVTYPE_NON_EQUIP_IGNORE", 134304, 7, 6, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=20}"] = { { "|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=18}"] = { { "|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=20}"] = { { "Slimy Murloc Scale", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { "Slimy Murloc Scale", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["68:|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=20}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["68:|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r"] = { { false, n = 1 } },
         },
@@ -139,6 +139,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["5784"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["5784"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -207,14 +208,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 5784,
     link = "|cnIQ1:|Hitem:5784::::::::31:1485:::::::::|h[Slimy Murloc Scale]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Slimy Murloc Scale",
     notes = {},
-    request = { bag = 0, slot = 20 },
+    request = { bag = 0, slot = 18 },
     verdict = {
         binding = "",
         bindingResult = {

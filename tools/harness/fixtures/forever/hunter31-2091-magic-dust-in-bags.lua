@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|2"] = {
@@ -115,6 +115,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["2091"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["2091"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -183,11 +184,11 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 2091,
     link = "|cnIQ1:|Hitem:2091::::::::31:1485:::::::::|h[Magic Dust]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Magic Dust",
     notes = {},
     request = { bag = 0, slot = 2 },

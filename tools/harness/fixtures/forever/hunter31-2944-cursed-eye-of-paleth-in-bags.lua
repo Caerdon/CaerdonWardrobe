@@ -1,9 +1,9 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
-        ["C_ArtifactUI.IsArtifactItem"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { false, n = 1 } } },
+        ["C_ArtifactUI.IsArtifactItem"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { false, n = 1 } } },
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|16"] = {
+            ["0|15"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -23,11 +23,11 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|16|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { true, n = 1 } } },
-        ["C_Item.GetCurrentItemLevel"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { 31, n = 1 } } },
-        ["C_Item.GetItemGUID"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { "Item-6928-0-400000004C8BBF71", n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { 2944, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|15|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { true, n = 1 } } },
+        ["C_Item.GetCurrentItemLevel"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { 31, n = 1 } } },
+        ["C_Item.GetItemGUID"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { "Item-6928-0-400000004CF141BC", n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { 2944, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r"] = {
                 [1] = {
@@ -56,10 +56,10 @@ return {
             ["72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r"] = { { 2944, "Armor", "Miscellaneous", "INVTYPE_HOLDABLE", 134336, 4, 0, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=16}"] = { { "|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=15}"] = { { "|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { "Cursed Eye of Paleth", n = 1 } } },
-        ["C_Item.GetItemQuality"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { 2, n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { "Cursed Eye of Paleth", n = 1 } } },
+        ["C_Item.GetItemQuality"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { 2, n = 1 } } },
         ["C_Item.GetItemSpecInfo"] = { ["72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r"] = { { n = 0 } } },
         ["C_Item.GetItemSpell"] = {
             ["2944"] = { { n = 0 } },
@@ -68,16 +68,16 @@ return {
         ["C_Item.GetItemUniquenessByID"] = {
             ["72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r"] = { { false, n = 4 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { true, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r"] = { { false, n = 1 } },
         },
         ["C_TooltipInfo.GetBagItem"] = {
-            ["0|16"] = {
+            ["0|15"] = {
                 [1] = {
                     [1] = {
                         dataInstanceID = 0,
-                        guid = "Item-6928-0-400000004C8BBF71",
+                        guid = "Item-6928-0-400000004CF141BC",
                         id = 2944,
                         isAzeriteEmpoweredItem = false,
                         isAzeriteItem = false,
@@ -131,7 +131,7 @@ return {
                 [2] = {
                     [1] = {
                         dataInstanceID = 0,
-                        guid = "Item-6928-0-400000004C8BBF71",
+                        guid = "Item-6928-0-400000004CF141BC",
                         id = 2944,
                         isAzeriteEmpoweredItem = false,
                         isAzeriteItem = false,
@@ -185,7 +185,7 @@ return {
                 [3] = {
                     [1] = {
                         dataInstanceID = 0,
-                        guid = "Item-6928-0-400000004C8BBF71",
+                        guid = "Item-6928-0-400000004CF141BC",
                         id = 2944,
                         isAzeriteEmpoweredItem = false,
                         isAzeriteItem = false,
@@ -297,7 +297,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["2944"] = { { n = 0 } } },
-        ["C_TradeSkillUI.GetOriginalCraftRecipeID"] = { ["28:Item-6928-0-400000004C8BBF71"] = { { n = 2 } } },
+        ["C_TradeSkillUI.GetOriginalCraftRecipeID"] = { ["28:Item-6928-0-400000004CF141BC"] = { { n = 2 } } },
         ["C_TransmogCollection.AccountCanCollectSource"] = { ["157041"] = { { true, true, n = 2 } } },
         ["C_TransmogCollection.GetAllAppearanceSources"] = { ["64086"] = { { { 157041, 158710, 158972, 296237, 313072 }, n = 1 } } },
         ["C_TransmogCollection.GetAppearanceInfoBySource"] = {
@@ -355,6 +355,7 @@ return {
             ["313072"] = { { 282088, n = 1 } },
         },
         ["C_TransmogCollection.PlayerCanCollectSource"] = { ["157041"] = { { true, true, n = 2 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["2944"] = { { n = 2 } } },
         PawnGetItemData = {
             ["72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r"] = {
                 [1] = {
@@ -380,7 +381,6 @@ return {
                 },
             },
         },
-        PawnGetItemDataForInventorySlot = { ["17|true"] = { { [2] = false, n = 2 } } },
         PawnIsItemAnUpgrade = {
             ["{8:CanEquip=true,2:ID=2944,7:InvType=16:INVTYPE_HOLDABLE,5:Level=31,4:Link=72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r,4:Name=20:Cursed Eye of Paleth,8:NumLines=8,10:PrettyLink=72:|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r,6:Rarity=2,16:SocketBonusStats={},5:Stats={7:IsFrill=1,17:ShadowSpellDamage#600:4028273555"] = { { n = 5 } },
         },
@@ -455,14 +455,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 2944,
     link = "|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Cursed Eye of Paleth",
     notes = {},
-    request = { bag = 0, slot = 16 },
+    request = { bag = 0, slot = 15 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,

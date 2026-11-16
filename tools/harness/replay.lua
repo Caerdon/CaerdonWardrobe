@@ -118,6 +118,37 @@ function Provider:Answer(name, owner, ...)
     return true, list[cursor]
 end
 
+-- An answer's values as the code may keep and change them.
+function Provider:Results(answer)
+    local results = {}
+    for index = 1, answer.n or #answer do
+        results[index] = Revive(answer[index], self.client.env)
+    end
+    return unpack(results, 1, answer.n or #answer)
+end
+
+-- Puts what the recording holds for a seam (RecordKeys.SEAMS) in the place of the addon's
+-- own function. A seam the recording has nothing for stays as the addon defines it.
+function Provider:InstallSeams()
+    self.seams = {}
+    for _, name in ipairs(Keys.SEAMS) do
+        local ownerName, key = name:match("^(.-)%.([^.]+)$")
+        local owner = rawget(self.client.env, ownerName)
+        if type(owner) == "table" and type(owner[key]) == "function" and (self.calls[name] or self.shared[name]) then
+            local real = owner[key]
+            owner[key] = function(module, ...)
+                local found, answer = self:Answer(name, nil, ...)
+                if not found then
+                    self.unanswered[#self.unanswered + 1] = { name = name, key = answer, phase = self.phase }
+                    return real(module, ...)
+                end
+                return self:Results(answer)
+            end
+            self.seams[#self.seams + 1] = name
+        end
+    end
+end
+
 function Provider:Function(name, owner)
     return function(...)
         local found, answer = self:Answer(name, owner, ...)
@@ -272,6 +303,7 @@ function H.StartRecordedClient(environment, recording, options)
 
     H.LoadBlizzardBase(client)
     H.LoadAddon(client, "CaerdonWardrobe", options.addonDir or H.addonDir, options.skip)
+    provider:InstallSeams()
 
     -- The addon's modules set themselves up on these. What they ask the client meanwhile is
     -- no part of the recording (it was made long after login), so it is counted apart.
@@ -403,6 +435,10 @@ function H.DescribeReplay(result, verbose)
                     lines[#lines + 1] = "  " .. entry.name
                 end
             end
+        end
+        if result.provider and result.provider.seams and #result.provider.seams > 0 then
+            lines[#lines + 1] = ("answered from the recording in the addon's place: %s"):format(
+                table.concat(result.provider.seams, ", "))
         end
         for name, times in pairs(result.passed or {}) do
             lines[#lines + 1] = ("called without an answer, as recorded: %s (%d)"):format(name, times)

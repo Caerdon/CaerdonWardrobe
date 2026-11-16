@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|59:|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r"] = { { 2, n = 1 } },
@@ -41,7 +41,7 @@ return {
             ["59:|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r|<function>"] = { { callback = { { "730" }, n = 1 }, n = 0 } },
         },
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|19"] = {
+            ["0|17"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -61,10 +61,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|19|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|17|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["730|true"] = { { 44, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { 730, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { 730, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["59:|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r"] = {
                 [1] = {
@@ -93,11 +93,11 @@ return {
             ["59:|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r"] = { { 730, "Trade Goods", "Cooking", "INVTYPE_NON_EQUIP_IGNORE", 133884, 7, 8, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=19}"] = { { "|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=17}"] = { { "|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { "Murloc Eye", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { "Murloc Eye", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["59:|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=19}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=17}"] = { { false, n = 1 } } },
         ["C_QuestLog.IsOnQuest"] = {
             ["38"] = { { false, n = 1 } },
             ["91920"] = { { false, n = 1 } },
@@ -143,6 +143,8 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["730"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["730"] = { { { [38] = "objective", [91920] = "objective", [92110] = "objective" }, n = 2 } } },
+        ["CaerdonQuestItems.GetQuestieHiddenReason"] = { ["38"] = { { n = 1 } }, ["91920"] = { { n = 1 } } },
         ["LibQuestieDB.Quest.Get"] = {
             ["38|10:questFlags"] = { { 8, n = 1 } },
             ["38|10:questLevel"] = { { 13, n = 1 } },
@@ -231,14 +233,18 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 730,
     link = "|cnIQ1:|Hitem:730::::::::31:1485:::::::::|h[Murloc Eye]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = {
+        ["Auctionator.Database.GetPriceHistory"] = true,
+        ["CaerdonQuestItems.GetIndexedQuests"] = true,
+        ["CaerdonQuestItems.GetQuestieHiddenReason"] = true,
+    },
     name = "Murloc Eye",
     notes = {},
-    request = { bag = 0, slot = 19 },
+    request = { bag = 0, slot = 17 },
     verdict = {
         binding = "",
         bindingResult = {

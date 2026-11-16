@@ -1,8 +1,8 @@
 return {
-    at = 1794819759,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|12"] = {
+            ["0|10"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,10 +22,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|12|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|10|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=10}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["6372|true"] = { { 3, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { 6372, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=10}"] = { { 6372, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["67:|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r"] = {
                 [1] = {
@@ -52,13 +52,13 @@ return {
         },
         ["C_Item.GetItemLearnTransmogSet"] = { ["67:|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r"] = { { n = 1 } } },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=12}"] = { { "|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r", n = 1 } },
+            ["{5:bagID=0,9:slotIndex=10}"] = { { "|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { "Swim Speed Potion", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=10}"] = { { "Swim Speed Potion", n = 1 } } },
         ["C_Item.GetItemSpell"] = {
             ["67:|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r"] = { { "Swim Speed", 7840, n = 2 } },
         },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=12}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=10}"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["67:|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r"] = { { false, n = 1 } },
         },
@@ -110,6 +110,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["6372"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["6372"] = { { n = 2 } } },
     },
     config = {
         Binding = {
@@ -178,14 +179,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 6372,
     link = "|cnIQ1:|Hitem:6372::::::::31:1485:::::::::|h[Swim Speed Potion]|h|r",
-    methods = {},
+    methods = { ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Swim Speed Potion",
     notes = {},
-    request = { bag = 0, slot = 12 },
+    request = { bag = 0, slot = 10 },
     verdict = {
         binding = "",
         bindingResult = {

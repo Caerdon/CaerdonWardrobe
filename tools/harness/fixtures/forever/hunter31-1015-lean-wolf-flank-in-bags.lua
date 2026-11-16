@@ -1,5 +1,5 @@
 return {
-    at = 1794819759,
+    at = 1794821010,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|65:|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r"] = { { 2, n = 1 } },
@@ -41,7 +41,7 @@ return {
             ["65:|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r|<function>"] = { { callback = { { "1015" }, n = 1 }, n = 0 } },
         },
         ["C_Container.GetContainerItemInfo"] = {
-            ["0|18"] = {
+            ["5|6"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -61,10 +61,10 @@ return {
                 },
             },
         },
-        ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|18|false"] = { { n = 0 } } },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { true, n = 1 } } },
+        ["C_Container.GetContainerItemPurchaseInfo"] = { ["5|6|false"] = { { n = 0 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["1015|true"] = { { 8, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { 1015, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { 1015, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["65:|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r"] = {
                 [1] = {
@@ -93,11 +93,11 @@ return {
             ["65:|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r"] = { { 1015, "Trade Goods", "Cooking", "INVTYPE_NON_EQUIP_IGNORE", 133970, 7, 8, n = 7 } },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=0,9:slotIndex=18}"] = { { "|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r", n = 1 } },
+            ["{5:bagID=5,9:slotIndex=6}"] = { { "|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { "Lean Wolf Flank", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { "Lean Wolf Flank", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["65:|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=0,9:slotIndex=18}"] = { { false, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { false, n = 1 } } },
         ["C_QuestLog.IsOnQuest"] = { ["90"] = { { false, n = 1 } } },
         ["C_QuestLog.IsQuestFlaggedCompleted"] = { ["90"] = { { true, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = { ["65:|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r"] = { { false, n = 1 } } },
@@ -139,6 +139,7 @@ return {
             },
         },
         ["C_ToyBox.GetToyLink"] = { ["1015"] = { { n = 0 } } },
+        ["CaerdonQuestItems.GetIndexedQuests"] = { ["1015"] = { { { [90] = "objective" }, n = 2 } } },
         ["LibQuestieDB.Quest.Get"] = { ["90|4:name"] = { { "Seasoned Wolf Kabobs", n = 1 } } },
     },
     config = {
@@ -208,14 +209,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 1015,
     link = "|cnIQ1:|Hitem:1015::::::::31:1485:::::::::|h[Lean Wolf Flank]|h|r",
-    methods = { ["Auctionator.Database.GetPriceHistory"] = true },
+    methods = { ["Auctionator.Database.GetPriceHistory"] = true, ["CaerdonQuestItems.GetIndexedQuests"] = true },
     name = "Lean Wolf Flank",
     notes = {},
-    request = { bag = 0, slot = 18 },
+    request = { bag = 5, slot = 6 },
     verdict = {
         binding = "",
         bindingResult = {

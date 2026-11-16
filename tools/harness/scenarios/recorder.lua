@@ -124,6 +124,23 @@ return function(H, S)
             Healer = { LocalizedName = "Healer", ClassID = 5, Values = { Intellect = 1 } },
         })
         game:Set("PawnCommon.ShowItemLevelUpgrades", false)
+
+        -- A quest database of one quest, which takes the fang and which the toon has not
+        -- picked up. The addon reads every quest of it once, over several frames, to know
+        -- which quests take which item.
+        local quests = {
+            [7001] = { name = "Fangs for the Collector", objectives = { [3] = { { 900001 } } }, startedBy = { { 5 } },
+                requiredLevel = 25, questLevel = 28 },
+        }
+        game:Set("LibQuestieDB.RequireContract", function() return true end)
+        game:Set("LibQuestieDB.Quest.GetAllIds", function()
+            game.readAllQuests = (game.readAllQuests or 0) + 1
+            return { 7001 }
+        end)
+        game:Set("LibQuestieDB.Quest.Get", function(questID, field) return quests[questID] and quests[questID][field] end)
+        game:Set("LibQuestieDB.Enum", { classKeys = { HUNTER = 4 }, raceMaskById = { [3] = 4 } })
+        game:Set("C_QuestLog.IsOnQuest", function() return false end)
+        game:Set("C_QuestLog.GetTitleForQuestID", function() return nil end)
         local client = H.Client.New({ flavor = "forever", provider = game })
         game.client = client
         H.LoadBlizzardBase(client)
@@ -178,6 +195,12 @@ return function(H, S)
     game:Set("GetCursorInfo", function() return nil end)
     client.forbiddenHooks.GetCursorInfo = true
 
+    -- The addon builds its index of the quest database after the first question, over the
+    -- next frames. A recording is made in a session that has it.
+    client.env.CaerdonQuestItems:GetItemQuestInfo(900001, "Cracked Fang")
+    client:Tick(20)
+    Equal(game.readAllQuests, 1, "quests: the addon read the quest database once to build its index")
+
     local untouched = game.names["C_Item.GetItemInfo"]
     T.RecordItems({ { itemID = 900001 }, { itemID = 900002 }, { itemID = 900003 }, { itemID = 123 },
         { itemID = 900004 }, { itemID = 900005 }, { itemID = 900007 } })
@@ -212,8 +235,15 @@ return function(H, S)
     Equal(fang.attempts, 1, "record: at the first try")
     Check(vest.verdict and vest.verdict.status == "own" and vest.verdict.binding == "BoE",
         "record: the vest is learnable and binds on equip (" .. tostring(vest.verdict and vest.verdict.status) .. ")")
-    Check(fang.verdict and fang.verdict.ready == true and type(fang.verdict.status) == "string",
-        "record: the fang has a verdict")
+    Check(fang.verdict and fang.verdict.ready == true and fang.verdict.status == "quest",
+        "record: the fang is wanted by a quest the toon has not picked up (" .. tostring(fang.verdict
+            and fang.verdict.status) .. ")")
+    local seamAnswers = fang.calls and fang.calls["CaerdonQuestItems.GetIndexedQuests"]
+    local seamAnswer = seamAnswers and seamAnswers[H.Keys.Args(1, 900001)]
+    Check(seamAnswer and seamAnswer[1][1] and seamAnswer[1][1][7001] == "objective",
+        "record: what the addon's index says about the item is kept, without the module as part of the question")
+    Check(fang.calls and fang.calls["LibQuestieDB.Quest.Get"] ~= nil and fang.calls["LibQuestieDB.Quest.GetAllIds"] == nil,
+        "record: with what the quest database says about that quest, and not the whole of it")
     Check(vest.calls and vest.calls["C_TransmogCollection.GetSourceInfo"] ~= nil, "record: the transmog answers are in it")
     Check(vest.calls and vest.calls["UnitLevel"] ~= nil, "record: so is the toon, asked for at the end of the run")
     Check(vest.calls and vest.calls["C_Item.GetItemQualityByID"] ~= nil or vest.calls["C_Item.GetItemInfo"] ~= nil,
@@ -364,6 +394,37 @@ return function(H, S)
         local fromMirror = table.concat(result.fromMirror or {}, ",")
         Check(fromMirror:find("ITEM_SOULBOUND", 1, true) ~= nil or fromMirror:find("LOCKED", 1, true) ~= nil,
             "fault: a string the recording lacks comes from the listings mirror and is counted (" .. fromMirror .. ")")
+
+        -- The quest verdict came out of the replay through the seam, with the addon's own
+        -- judging on the recorded facts, and without the quest database being read again.
+        local fangFixture = byItem[900001]
+        do
+            local replayed = H.Replay(fangFixture.environment, fangFixture.recording)
+            Equal(replayed.status, "quest", "seam: the quest verdict is reproduced")
+            Equal(table.concat(replayed.provider.seams, ","),
+                "CaerdonQuestItems.GetIndexedQuests,CaerdonQuestItems.GetQuestieHiddenReason",
+                "seam: both of the quest module's read functions were answered from the recording")
+            local enum = replayed.client.env.LibQuestieDB.Enum
+            Check(enum.classKeys.HUNTER == 4 and enum.raceMaskById[3] == 4,
+                "seam: the quest database's tables of race and class flags are there as recorded")
+        end
+        recording = H.DeepCopy(fangFixture.recording)
+        recording.calls["CaerdonQuestItems.GetIndexedQuests"] = nil
+        result = H.Replay(fangFixture.environment, recording)
+        Check(result.state ~= "pass" and result.status ~= "quest",
+            "fault: without the seam's answer the quest verdict does not come out (" .. tostring(result.state) .. ")")
+        recording = H.DeepCopy(fangFixture.recording)
+        for _, answers in pairs(recording.calls["LibQuestieDB.Quest.Get"]) do
+            for _, answer in ipairs(answers) do
+                if answer[1] == 25 then
+                    answer[1] = 60 -- the quest's required level
+                end
+            end
+        end
+        result = H.Replay(fangFixture.environment, recording)
+        Check(result.state == "differs" and result.status ~= "quest",
+            "fault: the addon's judging runs for real: a quest far above the toon's level does not count ("
+                .. tostring(result.status) .. ")")
 
         -- 5. The history an auction addon hands to a function decides: without it the
         --    replay must not come out the same by luck, it has to say what was missing.

@@ -1,8 +1,8 @@
 return {
-    at = 1794819760,
+    at = 1794821009,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
-            ["2|5"] = {
+            ["1|5"] = {
                 [1] = {
                     [1] = {
                         hasLoot = false,
@@ -22,8 +22,8 @@ return {
                 },
             },
         },
-        ["C_Item.DoesItemExist"] = { ["{5:bagID=2,9:slotIndex=5}"] = { { true, n = 1 } } },
-        ["C_Item.GetItemID"] = { ["{5:bagID=2,9:slotIndex=5}"] = { { 279048, n = 1 } } },
+        ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { true, n = 1 } } },
+        ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { 279048, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
             ["68:|cnIQ1:|Hitem:279048::::::::31:1485:::::::::|h[Alexston's Reply]|h|r"] = {
                 [1] = {
@@ -49,11 +49,11 @@ return {
             },
         },
         ["C_Item.GetItemLink"] = {
-            ["{5:bagID=2,9:slotIndex=5}"] = { { "|cnIQ1:|Hitem:279048::::::::31:1485:::::::::|h[Alexston's Reply]|h|r", n = 1 } },
+            ["{5:bagID=1,9:slotIndex=5}"] = { { "|cnIQ1:|Hitem:279048::::::::31:1485:::::::::|h[Alexston's Reply]|h|r", n = 1 } },
         },
-        ["C_Item.GetItemName"] = { ["{5:bagID=2,9:slotIndex=5}"] = { { "Alexston's Reply", n = 1 } } },
+        ["C_Item.GetItemName"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { "Alexston's Reply", n = 1 } } },
         ["C_Item.GetItemSpell"] = { ["68:|cnIQ1:|Hitem:279048::::::::31:1485:::::::::|h[Alexston's Reply]|h|r"] = { { n = 0 } } },
-        ["C_Item.IsBound"] = { ["{5:bagID=2,9:slotIndex=5}"] = { { true, n = 1 } } },
+        ["C_Item.IsBound"] = { ["{5:bagID=1,9:slotIndex=5}"] = { { true, n = 1 } } },
         ["C_QuestLog.IsWorldQuest"] = { ["6:279048"] = { { false, n = 1 } } },
         ["C_Soulbinds.IsItemConduitByItemInfo"] = {
             ["68:|cnIQ1:|Hitem:279048::::::::31:1485:::::::::|h[Alexston's Reply]|h|r"] = { { false, n = 1 } },
@@ -162,14 +162,14 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-090229",
+    environment = "env-hunter31-20261116-092321",
     format = 1,
     itemID = 279048,
     link = "|cnIQ1:|Hitem:279048::::::::31:1485:::::::::|h[Alexston's Reply]|h|r",
     methods = {},
     name = "Alexston's Reply",
     notes = {},
-    request = { bag = 2, slot = 5 },
+    request = { bag = 1, slot = 5 },
     verdict = {
         bindingResult = {
             alreadyKnown = false,
