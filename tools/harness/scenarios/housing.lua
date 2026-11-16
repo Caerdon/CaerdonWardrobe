@@ -49,6 +49,12 @@ return function(H, S)
         [920009] = Housing("House Call", SUB_SERVICE), -- a service item, one in the bags
         [920010] = Housing("Unknown Crate"),       -- nothing anywhere: still on its way
         [920011] = Housing("Redeemable Twin"),     -- three to redeem, and an entry under its ID as a record
+        -- Service items the catalog knows nothing about and the bags do not hold (a warband
+        -- bank copy is not counted): one whose tooltip says the toon knows what it teaches,
+        -- as the Harvesting Hatchet's did in a retail client, and one that does not.
+        [920012] = Housing("Known Hatchet", SUB_SERVICE,
+            { tooltip = { { text = "Already known", type = 0, r = 1, g = 0.125, b = 0.125 } } }),
+        [920013] = Housing("New Hatchet", SUB_SERVICE),
     }
     local BY_ITEM = {
         [920001] = Entry(501, 5, 1),
@@ -212,11 +218,13 @@ return function(H, S)
         Equal(item and Status(item), "", "at the limit: no status")
     end
 
-    -- A dye gets no icon, owned or not.
+    -- A dye gets no icon, owned or not, and is not waited for: the catalog has no entry for
+    -- a dye.
     do
         local info, item = Info(920008)
         Equal(info.isDye, true, "dye: known as one")
-        Equal(item and Status(item), "<not ready>", "dye: with nothing known about it, it waits")
+        Equal(info.isPending, false, "dye: nothing is on its way")
+        Equal(item and Status(item), "", "dye: no status")
     end
 
     -- A service item counts the copy in the bags.
@@ -225,6 +233,18 @@ return function(H, S)
         Equal(info.isServiceItem, true, "service: known as one")
         Equal(info.totalOwned, 1, "service: the copy in the bags counts")
         Equal(item and Status(item), "housingOwned", "service: status")
+    end
+
+    -- A service item away from the bags, with no entry: not waited for either. What it shows
+    -- is the tooltip's to say: nothing once the toon knows what it teaches.
+    do
+        local info, item = Info(920012)
+        Equal(info.isPending, false, "known service item: nothing is on its way")
+        Equal(info.totalOwned, 0, "known service item: no count says it is owned")
+        Equal(item and Status(item), "", "known service item: no status, although nothing counts as owned")
+        info, item = Info(920013)
+        Equal(info.isPending, false, "new service item: nothing is on its way")
+        Equal(item and Status(item), "own", "new service item: something to get")
     end
 
     -- Nothing known anywhere: still on its way.

@@ -1726,7 +1726,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             -- Dyes are one-time-use consumables, not collectible — skip icon entirely.
             if not isDye then
                 local treatAsUnowned = housingInfo.isUnowned
-                if treatAsUnowned then
+                if isServiceItem and bindingResult and bindingResult.alreadyKnown then
+                    -- A service item that teaches something (the Harvesting Hatchet's "Find
+                    -- Lumber") and whose tooltip says the toon knows it: nothing to get from it,
+                    -- wherever the copy lies. The counts cannot say that; a copy in the warband
+                    -- bank is not even counted.
+                elseif treatAsUnowned then
                     mogStatus = "own"
                 else
                     local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and

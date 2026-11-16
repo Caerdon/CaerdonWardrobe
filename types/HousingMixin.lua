@@ -244,6 +244,13 @@ function CaerdonHousingMixin:GetHousingInfo()
         isPending = false
     end
 
+    -- The catalog has no entry for a service item or a dye, in the bags or anywhere else, so
+    -- none is on its way: waiting for one cost six full refreshes per such item, and a service
+    -- item in the warband bank or a dye on the auction house ended up where it started.
+    if isPending and (isServiceItem or isDye) then
+        isPending = false
+    end
+
     if itemID and not isPending then
         pendingRetryCounts[itemID] = 0
     end
