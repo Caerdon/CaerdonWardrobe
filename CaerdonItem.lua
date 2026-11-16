@@ -47,7 +47,10 @@ local bindTextTable = {
     [ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
 }
 
--- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state)
+-- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state, and what
+-- else GetCaerdonStatus adds to the key). An entry is { isReady, mogStatus, bindingStatus,
+-- bindingResult, transmogInfo }: the transmog info of a piece of equipment is kept with the
+-- verdict made from it, so drawing reads the same table and it is computed once per entry.
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
 local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
@@ -1574,6 +1577,9 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     return mogStatus
 end
 
+-- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo. transmogInfo is what
+-- GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it is shared
+-- by every copy the cache entry stands for, so read it and do not ask the item data again.
 function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need to remove feature/locationInfo but keeping it for now in case refactor to GetHyperlink causes any issues - also need to remove the GetTooltipData calls
     local itemLink = self:GetItemLink()
     if not itemLink then
@@ -1595,10 +1601,22 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 statusCacheKey = statusCacheKey .. "|n" .. CaerdonAuctionValue:GetOwnedQuantity(self:GetItemID())
             end
         end
+        -- What a window knows about this copy beyond its link and passes in (an auction row's
+        -- item level, the source a set or dressing room entry stands for) decides the transmog
+        -- info, so two rows that share a link do not share an entry.
+        local extraData = self.extraData
+        if extraData then
+            if extraData.appearanceSourceID then
+                statusCacheKey = statusCacheKey .. "|s" .. tostring(extraData.appearanceSourceID)
+            end
+            if extraData.overrideItemLevel then
+                statusCacheKey = statusCacheKey .. "|l" .. tostring(extraData.overrideItemLevel)
+            end
+        end
         local cached = statusCache[statusCacheKey]
         if cached then
             if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end
-            return cached[1], self:GetCopyStatus(cached[2], cached[4]), cached[3], cached[4]
+            return cached[1], self:GetCopyStatus(cached[2], cached[4]), cached[3], cached[4], cached[5]
         end
     end
 
@@ -1635,6 +1653,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     local mogStatus = ""
     local isReady = true
+    -- The equipment branch's transmog info, kept with the verdict and returned.
+    local statusTransmogInfo = nil
 
     if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit and caerdonType ~= CaerdonItemType.Equipment then
         local expansionID = expacID
@@ -1783,6 +1803,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 isReady = false
                 return isReady
             end
+            statusTransmogInfo = transmogInfo
             if transmogInfo.canEquipForPlayer == nil then
                 transmogInfo.canEquipForPlayer = playerCanEquipItem
             end
@@ -2129,10 +2150,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     -- Everything up to here follows from the link and the toon, and is kept per link. What
     -- belongs to this copy in its bag slot is added after the lookup (GetCopyStatus).
     if statusCacheKey then
-        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult}
+        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo}
     end
 
-    return isReady, self:GetCopyStatus(mogStatus, bindingResult), bindingStatus, bindingResult
+    return isReady, self:GetCopyStatus(mogStatus, bindingResult), bindingStatus, bindingResult, statusTransmogInfo
 end
 
 function CaerdonItemMixin:GetItemData()

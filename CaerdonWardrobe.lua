@@ -1829,10 +1829,11 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
     end
 
     local caerdonType = item:GetCaerdonItemType()
-    local itemData = item:GetItemData()
 
-    local isReady
-    isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
+    -- The transmog info comes with the status: it is the table the verdict was made from, kept
+    -- with it, so a draw never computes it again.
+    local isReady, transmogInfo
+    isReady, mogStatus, bindingStatus, bindingResult, transmogInfo = item:GetCaerdonStatus(feature, locationInfo)
     if not isReady then
         -- Tooltip data shows "Retrieving item information". Instead of
         -- polling through the coroutine, stash the item and let a single
@@ -1886,10 +1887,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         return
     end
 
-    local transmogInfo
-
     if caerdonType == CaerdonItemType.Equipment then
-        transmogInfo = itemData:GetTransmogInfo()
         if transmogInfo then
             if transmogInfo.isTransmog then
                 -- TODO: Exceptions need to be broken out
@@ -2421,23 +2419,29 @@ function CaerdonWardrobeMixin:GetTransmogEventLog()
     return transmogEventLog, self.lastRefreshTime
 end
 
+-- The four collection events also tell the equipment code that what is collected changed, so the
+-- refresh keeps nothing it was told about a source before (CaerdonEquipment:InvalidateCaches).
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED(...)
     LogTransmogEvent("TRANSMOG_COLLECTION_UPDATED", ...)
+    CaerdonEquipment:NoteCollectionChanged()
     self:RefreshItems()
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_SOURCE_ADDED(...)
     LogTransmogEvent("TRANSMOG_COLLECTION_SOURCE_ADDED", ...)
+    CaerdonEquipment:NoteCollectionChanged()
     self:RefreshItems()
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_SOURCE_REMOVED(...)
     LogTransmogEvent("TRANSMOG_COLLECTION_SOURCE_REMOVED", ...)
+    CaerdonEquipment:NoteCollectionChanged()
     self:RefreshItems()
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED(...)
     LogTransmogEvent("TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED", ...)
+    CaerdonEquipment:NoteCollectionChanged()
     self:RefreshItems()
 end
 

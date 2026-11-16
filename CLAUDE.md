@@ -58,7 +58,7 @@ Each later step only replaces the statuses listed, so a learnable look or an upg
 9. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`.
 10. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
-The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for stackable items) until `RefreshItems`. Step 10 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
+The result is cached by item link (plus `|B` when soulbound, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` for a row whose window passed a source or an item level) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 10 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
 
 ## Rules
 
@@ -72,6 +72,7 @@ The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for 
 - **Never write into `options`.** It belongs to the caller and is usually shared between buttons. Per-button state goes in `buttonState` or on the overlay's regions.
 - **Every feature's `Refresh()` must re-run `UpdateButton`** for the buttons it decorated. `RefreshItems` only wipes caches.
 - **Features call `ContinueOnItemLoad` before `UpdateButton`**, so `customDataLoaded` is true.
+- **A draw path does not call `GetTransmogInfo()`.** It reads the table `GetCaerdonStatus` returns, which is the one the verdict was made from and is shared by every button of that cache entry (notes: Processing Pipeline).
 - **One failure stays alone:** the core calls each feature's `Init`, `Refresh` and event handlers and draws each queued item through `Contained`, which hands an error to the game's error handler and carries on. A new loop over features or items does the same (notes: Processing Pipeline).
 - **A verdict that depends on game state needs its own refresh:** the status cache is keyed by item link, so the module must call `RefreshItems` when that state changes. The signal modules show the pattern: compare a signature, refresh only on a change.
 - **The counters wrap functions by name** (`Counters:Attach`). Renaming or splitting one of them means changing its line there; the export says "not found" for one it missed (notes: Counters).

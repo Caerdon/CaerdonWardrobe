@@ -268,13 +268,14 @@ local function StartSession(options)
 
     CaerdonItemType = { Equipment = "Equipment", Empty = "Empty" }
     CaerdonItem = { InvalidateStatusCache = function() statusCache = {} end }
-    local invalidate = { InvalidateCaches = function() end }
+    local invalidate = { InvalidateCaches = function() end, NoteCollectionChanged = function() end }
     CaerdonEquipment, CaerdonQuestItems, CaerdonFoodDrink, CaerdonProfessionTools, CaerdonBagSlots =
         invalidate, invalidate, invalidate, invalidate, invalidate
     CaerdonWardrobeConfig = nil -- saved variables arrive after the files
 
     -- The item side, in the shape of the real one: a cache per link, the tooltip, the binding,
-    -- the transmog info, then what belongs to the copy.
+    -- the transmog info (kept with the verdict and returned fifth, which is where a draw takes
+    -- it from), then what belongs to the copy.
     CaerdonItemMixin = {}
     function CaerdonItemMixin:GetCaerdonStatus()
         if self.noLink then
@@ -285,7 +286,7 @@ local function StartSession(options)
         if cached then
             if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end
             Spend(0.1)
-            return true, self:GetCopyStatus(cached), nil, {}
+            return true, self:GetCopyStatus(cached[1]), nil, {}, cached[2]
         end
         Spend(1, 2)
         self:GetTooltipData()
@@ -298,9 +299,9 @@ local function StartSession(options)
             error("the status code raised an error")
         end
         self:GetBindingStatus()
-        self.data:GetTransmogInfo()
-        statusCache[self.id] = "own"
-        return true, self:GetCopyStatus("own"), nil, {}
+        local transmogInfo = self.data:GetTransmogInfo()
+        statusCache[self.id] = { "own", transmogInfo }
+        return true, self:GetCopyStatus("own"), nil, {}, transmogInfo
     end
     function CaerdonItemMixin:GetTooltipData()
         Spend(2, 8)
@@ -633,28 +634,29 @@ do
     end
     Expect("UpdateButton", 45, 157.5, 0, 405, 0)
     Expect("ClearButton", 45, 90, 0, 225, 0)
-    Expect("ProcessItem", 45, 641.25, 0, 3240, 0)
+    Expect("ProcessItem", 45, 461.25, 0, 2115, 0)
     Expect("GetCaerdonStatus (computed)", 45, 348.75, 45, 1620, 90)
     Expect("GetTooltipData", 45, 90, 90, 360, 360)
     Expect("GetBindingStatus", 45, 22.5, 22.5, 45, 45)
     Expect("GetCopyStatus", 45, 11.25, 11.25, 0, 0)
-    Expect("GetTransmogInfo", 90, 360, 270, 2250, 1800)
-    Expect("GetEquipmentSets", 90, 90, 90, 450, 450)
+    -- Once per item: the status computes it, and the draw reads what the status hands back.
+    Expect("GetTransmogInfo", 45, 180, 135, 1125, 900)
+    Expect("GetEquipmentSets", 45, 45, 45, 225, 225)
     Expect("SetItemButtonStatus", 135, 213.75, 202.5, 675, 540)
     Expect("SetItemButtonBindType", 90, 56.25, 45, 225, 90)
     Expect("GetDisplayInfoInternal", 90, 22.5, 22.5, 270, 270)
     Equal(Function(report, "GetCaerdonStatus (cache hit)").calls, 0, "profile: no cache hit yet")
-    Near(Function(report, "ProcessItem").worstMs, 14.25, "profile: the worst draw")
+    Near(Function(report, "ProcessItem").worstMs, 10.25, "profile: the worst draw")
 
     Equal(profile.queueWait.count, 45, "profile: every draw had waited in the queue")
     Check(profile.queueWait.meanMs > 100 and profile.queueWait.worstMs >= profile.queueWait.meanMs,
         "profile: the wait is at least the queue's two passes")
     Equal(profile.drains.count, 1, "profile: one drain")
     Equal(profile.drains.passes, 4, "profile: four passes (20, 20, 5, and the one that finds nothing)")
-    -- A pass also holds the test addon's hook: 45 draws of 14.25 ms plus 10 ms each.
-    Near(profile.drains.ms, 641.25 + 450, "profile: the drain's time is the passes' own")
-    Near(profile.drains.worstPassMs, 20 * 24.25, "profile: the longest pass drew twenty")
-    Near(profile.drains.kb, 3240 + 4500, "profile: the drain's memory")
+    -- A pass also holds the test addon's hook: 45 draws of 10.25 ms plus 10 ms each.
+    Near(profile.drains.ms, 461.25 + 450, "profile: the drain's time is the passes' own")
+    Near(profile.drains.worstPassMs, 20 * 20.25, "profile: the longest pass drew twenty")
+    Near(profile.drains.kb, 2115 + 4500, "profile: the drain's memory")
     Equal(profile.drains.recent[1].draws, 45, "profile: the drain's draws")
 
     -- The same items again without a refresh: answered from the cache.
@@ -692,7 +694,7 @@ do
     Equal(Function(report, "GetTooltipData").kb, 0, "collector: that sample adds no memory")
     Equal(Function(report, "ProcessItem").collected, 1, "collector: so is its caller")
     Equal(report.profile.drains.collected, 1, "collector: and the pass")
-    Check(Function(report, "GetTransmogInfo").kb == 50, "collector: the calls beside it still count")
+    Check(Function(report, "GetTransmogInfo").kb == 25, "collector: the calls beside it still count")
 
     -- An error inside a wrapped function: the queue hands it to the error handler and goes
     -- on, and so does the counting.
@@ -708,7 +710,7 @@ do
     AskFor({ NewItem(3005) })
     Tick(8)
     report = CaerdonCounters:GetReport()
-    Near(Function(report, "ProcessItem").ms, 14.25, "error: the next draw is timed right")
+    Near(Function(report, "ProcessItem").ms, 10.25, "error: the next draw is timed right")
     Near(Function(report, "ProcessItem").ownMs, 0, "error: with nothing left over from the failed call")
 
     -- An error after the call had said how it ended (a cache hit whose copy raises): what the
@@ -716,7 +718,7 @@ do
     -- same depth is filed under it. Asked directly, since in the queue another wrapped call
     -- usually comes between and uses the mark up.
     CaerdonCounters:Reset()
-    Equal(statusCache[3005], "own", "mark: the item's status is in the cache (control)")
+    Equal(statusCache[3005] and statusCache[3005][1], "own", "mark: the item's status is in the cache (control)")
     local failing = NewItem(3005, { raisesInCopy = true })
     Check(not realPcall(failing.GetCaerdonStatus, failing), "mark: the cache hit raises (control)")
     CaerdonCounters:Unwound()
@@ -877,8 +879,8 @@ do
             if entry.label == "ProcessItem" then draws = entry end
         end
         Equal(draws and draws.calls, 24, "tests: 24 draws counted in the two")
-        -- Each refresh computes afresh: 14.25 ms a draw, without the 10 ms of the tests' hook.
-        Near(draws and draws.ms, 24 * 14.25, "tests: the tests' own hook is not in the figure")
+        -- Each refresh computes afresh: 10.25 ms a draw, without the 10 ms of the tests' hook.
+        Near(draws and draws.ms, 24 * 10.25, "tests: the tests' own hook is not in the figure")
         Equal(counted.profile.drains.count, 2, "tests: two drains")
     end
     local triggers = T.RefreshTriggers()

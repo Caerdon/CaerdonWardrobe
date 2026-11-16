@@ -489,6 +489,10 @@ local function EmptyTheAddonsCaches()
     if CaerdonFoodDrink.ForgetClassifications then
         CaerdonFoodDrink:ForgetClassifications()
     end
+    -- Likewise what the equipment code keeps about a source whose item the client refused.
+    if CaerdonEquipment.ForgetRefusedItems then
+        CaerdonEquipment:ForgetRefusedItems()
+    end
 end
 
 -- Asked at the end of every recorded run whether the addon asked or not: who the toon is and

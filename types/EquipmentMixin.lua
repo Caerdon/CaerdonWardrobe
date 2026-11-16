@@ -368,25 +368,57 @@ local function DetermineUniqueness(itemLinkOrID, itemID)
     return key, limitCategoryCount or 1
 end
 
-local function GetUniqueUpgradeInfo(item)
+-- The item being judged, for the upgrade helpers below: its item level, its PVP floor (a tooltip
+-- fetched from the client) and its uniqueness. Each helper used to read these for itself, so one
+-- GetTransmogInfo fetched the same tooltip up to four times. A candidate is made per call and
+-- reads each of the three when a helper first asks, so what no helper asks about is never read.
+local function NewCandidate(item)
+    return { item = item }
+end
+
+local function CandidateLevel(candidate)
+    if not candidate.levelRead then
+        candidate.levelRead = true
+        candidate.level = GetCandidateItemLevel(candidate.item)
+    end
+    return candidate.level
+end
+
+local function CandidatePvpFloor(candidate)
+    if not candidate.pvpFloorRead then
+        candidate.pvpFloorRead = true
+        candidate.pvpFloor = GetCandidatePvpFloor(candidate.item)
+    end
+    return candidate.pvpFloor
+end
+
+local function CandidateUniqueness(candidate)
+    if not candidate.uniquenessRead then
+        candidate.uniquenessRead = true
+        local itemLink = candidate.item:GetItemLink()
+        local itemID = candidate.item:GetItemID()
+        if itemLink or itemID then
+            candidate.uniqueCategoryKey, candidate.limitCategoryCount =
+                DetermineUniqueness(itemLink or itemID, itemID)
+        end
+    end
+    return candidate.uniqueCategoryKey, candidate.limitCategoryCount
+end
+
+local function GetUniqueUpgradeInfo(candidate)
+    local item = candidate.item
     if not item or not item.GetItemID then
         return false, false, nil
     end
 
-    local itemLink = item:GetItemLink()
-    local itemID = item:GetItemID()
-    if not itemLink and not itemID then
-        return false, false, nil
-    end
-
-    local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
+    local uniqueCategoryKey, limitCategoryCount = CandidateUniqueness(candidate)
     if not uniqueCategoryKey then
         return false, false, nil
     end
 
     limitCategoryCount = tonumber(limitCategoryCount) or 1
-    local candidateLevel = GetCandidateItemLevel(item)
-    local candidatePvpFloor = GetCandidatePvpFloor(item)
+    local candidateLevel = CandidateLevel(candidate)
+    local candidatePvpFloor = CandidatePvpFloor(candidate)
     local inventoryTypeName = item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
     local snapshot = GetEquippedGearSnapshot()
@@ -455,10 +487,45 @@ CaerdonEquipment.appearanceSourcesCache = appearanceSourcesCache
 local failedSourceItemLoads = {}
 CaerdonEquipment.failedSourceItemLoads = failedSourceItemLoads
 
+-- Item IDs the client answered "no such item" for (GET_ITEM_INFO_RECEIVED without success),
+-- whoever asked. A look can list a source whose item this client cannot load, and the client does
+-- not remember its own refusal: asked about such a source again it asks the server again, and the
+-- refusal comes back as an event that other addons redraw on. So what the client said about such
+-- a source the first time is kept across InvalidateCaches instead of being asked for after every
+-- refresh. Kept for the session, like the table above, which holds the same finding made the other
+-- way (a load that failed).
+local refusedItems = {}
+CaerdonEquipment.refusedItems = refusedItems
+
+local function IsRefusedItem(itemID)
+    return itemID ~= nil and (refusedItems[itemID] or failedSourceItemLoads[itemID]) or false
+end
+
+local refusalFrame = CreateFrame("Frame")
+refusalFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+refusalFrame:SetScript("OnEvent", function(_, _, itemID, success)
+    if itemID and not success then
+        refusedItems[itemID] = true
+    end
+end)
+
+-- Set when the collection changed: the next InvalidateCaches then keeps nothing, so a kept answer
+-- never outlives a change of what is collected.
+local collectionChanged = false
+
+function CaerdonEquipment:NoteCollectionChanged()
+    collectionChanged = true
+end
+
 -- Lazy-built snapshot of equipped gear data, shared by all upgrade helper functions.
 -- Built once per invalidation cycle (equipment/transmog change), avoids repeated
 -- ItemLocation creation and API calls across all bag items.
 local equippedGearSnapshot = nil
+
+-- Which equipment sets name which item link, and the GetTime() it was built at (see
+-- BuildEquipmentSetIndex).
+local equipmentSetIndex = nil
+local equipmentSetIndexTime = nil
 
 GetEquippedGearSnapshot = function()
     if equippedGearSnapshot then
@@ -490,26 +557,43 @@ GetEquippedGearSnapshot = function()
     return equippedGearSnapshot
 end
 
-function CaerdonEquipment:InvalidateCaches()
+-- For the test addon's recorder, which needs a run that asks the client for everything, as a
+-- replay will. Nothing in play calls this.
+function CaerdonEquipment:ForgetRefusedItems()
+    wipe(refusedItems)
     wipe(sourceInfoCache)
+end
+
+function CaerdonEquipment:InvalidateCaches()
+    if collectionChanged or not (next(refusedItems) or next(failedSourceItemLoads)) then
+        wipe(sourceInfoCache)
+    else
+        for sourceID, info in pairs(sourceInfoCache) do
+            if not IsRefusedItem(info.itemID) then
+                sourceInfoCache[sourceID] = nil
+            end
+        end
+    end
+    collectionChanged = false
     wipe(appearanceSourcesCache)
     cachedPvpContext = nil
     equippedGearSnapshot = nil
+    equipmentSetIndex = nil
 end
 
-local function HasBetterOrEqualEquippedItem(item)
-    local inventoryType = item:GetInventoryTypeName()
+local function HasBetterOrEqualEquippedItem(candidate)
+    local inventoryType = candidate.item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryType)
     if not inventorySlots then
         return false
     end
 
-    local candidateLevel = GetCandidateItemLevel(item)
+    local candidateLevel = CandidateLevel(candidate)
     if not candidateLevel then
         return false
     end
 
-    local candidatePvpFloor = GetCandidatePvpFloor(item)
+    local candidatePvpFloor = CandidatePvpFloor(candidate)
     local snapshot = GetEquippedGearSnapshot()
     local filledSlots = 0
     local strictlyBetterCount = 0
@@ -542,23 +626,21 @@ local function HasBetterOrEqualEquippedItem(item)
     return filledSlots > 0 and strictlyBetterCount == filledSlots, pvpScalingInvolved
 end
 
-local function HasEqualEquippedItemLevel(item)
-    local itemLink = item:GetItemLink()
-    local itemID = item:GetItemID()
-    local inventoryType = item:GetInventoryTypeName()
+local function HasEqualEquippedItemLevel(candidate)
+    local inventoryType = candidate.item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryType)
     if not inventorySlots then
         return false
     end
 
-    local candidateLevel = GetCandidateItemLevel(item)
+    local candidateLevel = CandidateLevel(candidate)
     if not candidateLevel then
         return false
     end
 
-    local candidatePvpFloor = GetCandidatePvpFloor(item)
+    local candidatePvpFloor = CandidatePvpFloor(candidate)
     local snapshot = GetEquippedGearSnapshot()
-    local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
+    local uniqueCategoryKey, limitCategoryCount = CandidateUniqueness(candidate)
     local uniqueLimitedToOne = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
     local betterUniqueEquipped = false
     local hasEqualMatch = false
@@ -777,23 +859,21 @@ local function IsIdenticalToTiedEquipped(item, tiedSlots)
     return identical, detail
 end
 
-local function GetUpgradeItemLevelDelta(item)
-    local inventoryType = item:GetInventoryTypeName()
+local function GetUpgradeItemLevelDelta(candidate)
+    local inventoryType = candidate.item:GetInventoryTypeName()
     local inventorySlots = GetInventorySlotsForType(inventoryType)
     if not inventorySlots then
         return nil
     end
 
-    local candidateLevel = GetCandidateItemLevel(item)
+    local candidateLevel = CandidateLevel(candidate)
     if not candidateLevel then
         return nil
     end
 
-    local candidatePvpFloor = GetCandidatePvpFloor(item)
+    local candidatePvpFloor = CandidatePvpFloor(candidate)
     local snapshot = GetEquippedGearSnapshot()
-    local itemLink = item:GetItemLink()
-    local itemID = item:GetItemID()
-    local uniqueCategoryKey, limitCategoryCount = DetermineUniqueness(itemLink or itemID, itemID)
+    local uniqueCategoryKey, limitCategoryCount = CandidateUniqueness(candidate)
     local restrictToMatchingUnique = uniqueCategoryKey and (tonumber(limitCategoryCount) or 1) == 1
     local matchingUniqueSlots = nil
     if restrictToMatchingUnique then
@@ -1227,60 +1307,78 @@ function CaerdonEquipmentMixin:ContinueWithCancelOnItemDataLoad(callbackFunction
     return self:LoadSources(callbackFunction)
 end
 
-function CaerdonEquipmentMixin:GetEquipmentSets()
-    local equipmentSets
+-- Item link -> the names of the equipment sets that hold a piece with that link in the bags or the
+-- bank, in the order of the client's set list; a set names a link once. A piece that is worn is
+-- not listed, as before the index.
+--
+-- Walking every set's every slot is the same work whichever item asks, and every equipment button
+-- asks, twice on its first draw. So the walk is done once and kept for the rest of the frame
+-- (GetTime() does not move within one): the draws of a frame share it, and nothing has to tell it
+-- that a piece moved, a set changed or the bank opened. (equipmentSetIndex is declared with the
+-- other caches, above InvalidateCaches.)
+local function BuildEquipmentSetIndex()
+    local index = {}
+    if not C_EquipmentSet.CanUseEquipmentSets() then
+        return index
+    end
 
-    -- Use equipment set for binding text if it's assigned to one
-    if C_EquipmentSet.CanUseEquipmentSets() then
-        local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
-        for setIndex = 1, #equipmentSetIDs do
-            local equipmentSetID = equipmentSetIDs[setIndex]
-            local name, icon, setID, isEquipped, numItems, numEquipped, numInventory, numMissing, numIgnored =
-                C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
+    local equipmentSetIDs = C_EquipmentSet.GetEquipmentSetIDs()
+    for setIndex = 1, #equipmentSetIDs do
+        local equipmentSetID = equipmentSetIDs[setIndex]
+        local name = C_EquipmentSet.GetEquipmentSetInfo(equipmentSetID)
+        local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
+        if equipLocations then
+            local listedLinks = nil
+            for locationIndex = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+                local location = equipLocations[locationIndex]
+                if location ~= nil then
+                    local locationData = EquipmentManager_GetLocationData(location)
+                    local equipSlot = tonumber(locationData.slot)
+                    local equipBag = tonumber(locationData.bag)
 
-            local equipLocations = C_EquipmentSet.GetItemLocations(equipmentSetID)
-            if equipLocations then
-                local locationIndex
-                for locationIndex = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
-                    local location = equipLocations[locationIndex]
-                    if location ~= nil then
-                        local locationData = EquipmentManager_GetLocationData(location)
-                        local equipSlot = tonumber(locationData.slot)
-                        local equipBag = tonumber(locationData.bag)
-
-                        local isFound = false
-
-                        if locationData.isBank and not locationData.bag then -- main bank container
-                            local foundLink = GetInventoryItemLink("player", equipSlot)
-                            if foundLink == self.item:GetItemLink() then
-                                isFound = true
-                            end
-                        elseif locationData.isBank or locationData.isBags then -- any other bag
-                            local itemLocation = ItemLocation:CreateFromBagAndSlot(equipBag, equipSlot)
-                            if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
-                                local foundLink = C_Item.GetItemLink(itemLocation)
-                                if foundLink == self.item:GetItemLink() then
-                                    isFound = true
-                                end
-                            end
+                    local foundLink = nil
+                    if locationData.isBank and not locationData.bag then -- main bank container
+                        foundLink = GetInventoryItemLink("player", equipSlot)
+                    elseif locationData.isBank or locationData.isBags then -- any other bag
+                        local itemLocation = ItemLocation:CreateFromBagAndSlot(equipBag, equipSlot)
+                        if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
+                            foundLink = C_Item.GetItemLink(itemLocation)
                         end
+                    end
 
-                        if isFound then
-                            if not equipmentSets then
-                                equipmentSets = {}
-                            end
-
-                            table.insert(equipmentSets, name)
-
-                            break
+                    if foundLink and not (listedLinks and listedLinks[foundLink]) then
+                        listedLinks = listedLinks or {}
+                        listedLinks[foundLink] = true
+                        local names = index[foundLink]
+                        if not names then
+                            names = {}
+                            index[foundLink] = names
                         end
+                        names[#names + 1] = name
                     end
                 end
             end
         end
     end
 
-    return equipmentSets
+    return index
+end
+
+-- The names of the equipment sets this item is part of, or nil. The list belongs to the index:
+-- read it, do not change it.
+function CaerdonEquipmentMixin:GetEquipmentSets()
+    local itemLink = self.item:GetItemLink()
+    if not itemLink then
+        return nil
+    end
+
+    local now = GetTime()
+    if not equipmentSetIndex or equipmentSetIndexTime ~= now then
+        equipmentSetIndex = BuildEquipmentSetIndex()
+        equipmentSetIndexTime = now
+    end
+
+    return equipmentSetIndex[itemLink]
 end
 
 local ITEM_PROFICIENCY_USE_ERROR = Enum.TransmogUseErrorType and Enum.TransmogUseErrorType.ItemProficiency or 10
@@ -1301,6 +1399,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         return
     end
 
+    local debugEnabled = CaerdonWardrobeConfig.Debug.Enabled
     local isBindOnPickup = item:GetBinding() == CaerdonItemBind.BindOnPickup
     local isCompletionistItem = false
     -- Uncollected source that is valid for this class with no class / race / faction error, yet
@@ -1329,11 +1428,12 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local sourceUseErrorType
     local sourceUseError
     local validSourceInfoForPlayer
-    local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(item)
-    local betterItemEquipped, betterItemEquippedViaPvp = HasBetterOrEqualEquippedItem(item)
-    local equalItemLevelEquipped, tiedEquippedSlots = HasEqualEquippedItemLevel(item)
+    local candidate = NewCandidate(item)
+    local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(candidate)
+    local betterItemEquipped, betterItemEquippedViaPvp = HasBetterOrEqualEquippedItem(candidate)
+    local equalItemLevelEquipped, tiedEquippedSlots = HasEqualEquippedItemLevel(candidate)
     local identicalToEquipped, equippedLineComparison = IsIdenticalToTiedEquipped(item, tiedEquippedSlots)
-    local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(item)
+    local upgradeItemLevelDelta = GetUpgradeItemLevelDelta(candidate)
     local lowerArmorClassThanEquipped = IsLowerArmorClassThanEquipped(item)
     local isArtifactItem = false
     local blockedOffhandSlot = IsOffhandSlotBlocked(inventoryTypeName)
@@ -1543,28 +1643,30 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                         end
                     end
 
-                    -- Populate derived fields on cached info only once
-                    if not info.itemSubTypeID then
-                        local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item
-                            .GetItemInfoInstant(info.itemID)
-                        -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
-                        info.itemSubTypeID = sourceSubTypeID             -- stuff it in here (mostly for debug)
-                    end
-                    if not info.specs then
-                        info.specs = C_Item.GetItemSpecInfo(info.itemID) -- also this
-                    end
+                    -- What follows only feeds the debug details (matchedSources, lowestLevelFound),
+                    -- so the client is asked about each source's item only with debug on. The
+                    -- answers are kept on the cached info.
+                    if info and debugEnabled then
+                        if not info.itemSubTypeID then
+                            local _, sourceType, sourceSubType, sourceEquipLoc, _, sourceTypeID, sourceSubTypeID = C_Item
+                                .GetItemInfoInstant(info.itemID)
+                            -- SubTypeID is returned from GetAppearanceSourceInfo, but it seems to be tied to the appearance, since it was wrong for an item that crossed over.
+                            info.itemSubTypeID = sourceSubTypeID
+                        end
 
-                    if info.cachedMinLevel == nil then
-                        info.cachedMinLevel = (select(5, C_Item.GetItemInfo(info.itemID))) or false
-                    end
-                    local sourceMinLevel = info.cachedMinLevel or nil
-                    if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
-                        lowestLevelFound = sourceMinLevel
-                    end
+                        -- Not for an item the client refuses: this question draws another refusal.
+                        if info.cachedMinLevel == nil and not refusedItems[info.itemID] then
+                            info.cachedMinLevel = (select(5, C_Item.GetItemInfo(info.itemID))) or false
+                        end
+                        local sourceMinLevel = info.cachedMinLevel or nil
+                        if lowestLevelFound == nil or sourceMinLevel and sourceMinLevel < lowestLevelFound then
+                            lowestLevelFound = sourceMinLevel
+                        end
 
-                    if info.isCollected and (item:GetItemSubTypeID() == info.itemSubTypeID or info.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then
-                        -- Log any matched sources even if they're treated as not found due to other logic below (for debug)
-                        table.insert(matchedSources, info)
+                        if info.isCollected and (item:GetItemSubTypeID() == info.itemSubTypeID or info.itemSubTypeID == Enum.ItemArmorSubclass.Cosmetic) then
+                            -- Log any matched sources even if they're treated as not found due to other logic below
+                            table.insert(matchedSources, info)
+                        end
                     end
                 end
 
@@ -1808,7 +1910,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         isNotReady = isNotReady,
         matchesLootSpec = matchesLootSpec,
         isRecraftable = isRecraftable,
-        forDebugUseOnly = CaerdonWardrobeConfig.Debug.Enabled and {
+        forDebugUseOnly = debugEnabled and {
             matchedSources = matchedSources,
             isInfoReady = isInfoReady,
             appearanceInfo = appearanceInfo,
@@ -1844,7 +1946,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 select(2, pcall(function() return tostring(C_PlayerInfo.CanUseItem(item:GetItemID())) end)),
             C_Item_IsUsableItem = C_Item.IsUsableItem and item:GetItemID() and
                 select(2, pcall(function() return tostring((C_Item.IsUsableItem(item:GetItemID()))) end)),
-            candidateItemLevel = GetCandidateItemLevel(item),
+            candidateItemLevel = CandidateLevel(candidate),
             equippedComparison = BuildEquippedComparisonDebug(item),
             playerLevel = UnitLevel("player"),
             itemMinLevel = item:GetMinLevel(),

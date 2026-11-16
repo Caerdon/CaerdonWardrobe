@@ -89,6 +89,100 @@ T.Contract({
     end,
 })
 
+-- The addon keeps its index of the equipment sets for as long as GetTime() gives the same
+-- value, taking that to be one frame (types/EquipmentMixin.lua, GetEquipmentSets). If the
+-- value moved within a frame the index would be built for every call: right, but no cheaper
+-- than before it existed.
+T.Contract({
+    id = "client.frameTime",
+    version = 1,
+    title = "GetTime() stands still within a frame",
+    run = function(c)
+        local before = GetTime()
+        local started = T.Milliseconds()
+        local spins = 0
+        -- Three milliseconds of nothing, counted too in case the stopwatch does not move.
+        while T.Milliseconds() - started < 3 and spins < 200000 do
+            spins = spins + 1
+        end
+        local busy = T.Milliseconds() - started
+        local after = GetTime()
+        c:Note("busyMs", busy)
+        c:Note("movedSeconds", after - before)
+        if busy < 1 then
+            return "skip", "the stopwatch did not move, so nothing was waited for"
+        end
+        c:Check(after == before, "GetTime() moved by %s s during %s ms within one frame", tostring(after - before),
+            tostring(busy))
+    end,
+})
+
+-- The transmog info of a piece of equipment is kept with the cached status, which is per
+-- link. So a piece in a bag slot can be drawn with the info that was made for another copy of
+-- its link, or for the bare link (the mail, a vendor, a loot window). That is right as long
+-- as the info does not depend on where the copy lies: the slot gives the item level and the
+-- PVP floor through other calls than the link does. Both are computed here for every piece in
+-- the bags, and what differs is listed.
+T.Contract({
+    id = "equipment.keptInfo",
+    version = 1,
+    title = "A piece of equipment's transmog info is the same for its bag slot and for its bare link",
+    run = function(c)
+        local pieces, differing, examples = 0, 0, {}
+        for _, where in ipairs(FilledBagSlots()) do
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local linkItem = link and T.LoadItem(link, 5)
+            if linkItem and linkItem:GetCaerdonItemType() == CaerdonItemType.Equipment then
+                local slotItem = CaerdonItem:CreateFromBagAndSlot(where.bag, where.slot)
+                local loaded = false
+                slotItem:ContinueOnItemLoad(function() loaded = true end)
+                -- The slot can hold something else by the time its data has come.
+                if T.WaitUntil(function() return loaded end, 5) and slotItem:GetItemLink() == link
+                    and slotItem:GetItemData() and linkItem:GetItemData() then
+                    pieces = pieces + 1
+                    local fromSlot = T.Facts.Scalars(slotItem:GetItemData():GetTransmogInfo())
+                    local fromLink = T.Facts.Scalars(linkItem:GetItemData():GetTransmogInfo())
+                    local fields = {}
+                    for key, value in pairs(fromSlot) do
+                        if fromLink[key] ~= value then
+                            fields[#fields + 1] = key
+                        end
+                    end
+                    for key in pairs(fromLink) do
+                        if fromSlot[key] == nil then
+                            fields[#fields + 1] = key
+                        end
+                    end
+                    if #fields > 0 then
+                        differing = differing + 1
+                        table.sort(fields)
+                        if #examples < 8 then
+                            local texts = {}
+                            for index, key in ipairs(fields) do
+                                texts[index] = ("%s: %s in the slot, %s for the link"):format(key, tostring(fromSlot[key]),
+                                    tostring(fromLink[key]))
+                            end
+                            examples[#examples + 1] = { link = link, bag = where.bag, slot = where.slot, fields = texts }
+                        end
+                    end
+                    if pieces % 5 == 0 then
+                        T.Yield()
+                    end
+                end
+            end
+        end
+        c:Note("pieces", pieces)
+        c:Note("differing", differing)
+        c:Note("examples", examples)
+        if pieces == 0 then
+            return "skip", "needs a piece of equipment in the bags"
+        end
+        local first = examples[1] and (examples[1].link .. ": " .. table.concat(examples[1].fields, "; ")) or ""
+        c:Check(differing == 0, "%d of %d pieces have a transmog info that depends on where the copy lies; the first is %s",
+            differing, pieces, first)
+    end,
+})
+
 ------------------------------------------------------------------------------------------
 -- Reloading the UI from addon code
 ------------------------------------------------------------------------------------------
