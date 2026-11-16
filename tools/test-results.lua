@@ -303,9 +303,10 @@ local function printTiming(db)
         printAddonChange(db, previous, record)
         previous = record
         if record.kind == "refresh" then
-            print(("    %s  %-8s %-10s x%d  draws %s  addon ms median %s worst %s  last icon ms %s  first icon ms %s  memory KB %s  [%s, %s, addon %s]")
+            print(("    %s  %-8s %-10s x%d  draws %s  addon ms median %s worst %s, longest frame %s  last icon ms %s  first icon ms %s  memory KB %s  [%s, %s, addon %s]")
                 :format(when(record.at), "refresh", tostring(record.label), #record.runs, figure(record.medianDraws),
-                    figure(record.medianCpuMs), figure(record.worstCpuMs), figure(record.medianLastDrawMs),
+                    figure(record.medianCpuMs), figure(record.worstCpuMs), figure(record.worstFrameMs),
+                    figure(record.medianLastDrawMs),
                     figure(record.medianFirstDrawMs), figure(record.medianMemoryKB), tostring(record.toon),
                     tostring(record.build), tostring(record.subjectVersion)))
             print(("        profiler after: recent %s ms (%s), peak %s ms, session %s ms (%s)%s"):format(

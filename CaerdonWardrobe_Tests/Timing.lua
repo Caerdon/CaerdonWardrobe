@@ -92,6 +92,10 @@ local SETTLE_SECONDS = 0.3
 -- Inside a job: one forced refresh, measured until the queue has drained.
 local function MeasureRefresh()
     local memoryBefore = AddonMemory()
+    -- Start on a fresh frame. The memory reading takes a while and the client's timers may
+    -- count from the start of the frame they are set in; measured in the same frame, the
+    -- first draw came before the refresh's own 0.1 s delay could have been over.
+    T.Yield()
     local drawsBefore = T.counters.processItem
     local run = {}
     T.timingRun = run
@@ -99,11 +103,15 @@ local function MeasureRefresh()
     local startedAt = GetTime()
     CaerdonWardrobe:RefreshItems()
 
-    local cpu, frames, idleSince = 0, 0, nil
+    local cpu, frames, idleSince, worstFrame = 0, 0, nil, 0
     while true do
         T.Yield()
         frames = frames + 1
-        cpu = cpu + LastFrameMs()
+        local last = LastFrameMs()
+        cpu = cpu + last
+        if last > worstFrame then
+            worstFrame = last
+        end
         local now = GetTime()
         if now - startedAt >= MIN_RUN_SECONDS and T.CoreIsIdle() then
             idleSince = idleSince or now
@@ -123,6 +131,7 @@ local function MeasureRefresh()
     return {
         cpuMs = Round(cpu),
         frames = frames,
+        worstFrameMs = Round(worstFrame),
         draws = T.counters.processItem - drawsBefore,
         firstDrawMs = run.firstDraw and Round(run.firstDraw - started, 1) or nil,
         lastDrawMs = run.lastDraw and Round(run.lastDraw - started, 1) or nil,
@@ -151,6 +160,8 @@ function T.RunRefreshTiming(label, count)
         -- More than one call per run means something else refreshed the addon meanwhile.
         record.refreshItemsCalls = T.counters.refreshItems - refreshBefore
         record.medianCpuMs, record.worstCpuMs = T.Summarize(record.runs, "cpuMs")
+        -- The longest single frame of a refresh is what a player feels.
+        record.medianWorstFrameMs, record.worstFrameMs = T.Summarize(record.runs, "worstFrameMs")
         record.medianLastDrawMs, record.worstLastDrawMs = T.Summarize(record.runs, "lastDrawMs")
         record.medianFirstDrawMs = T.Summarize(record.runs, "firstDrawMs")
         record.medianDraws = T.Summarize(record.runs, "draws")
