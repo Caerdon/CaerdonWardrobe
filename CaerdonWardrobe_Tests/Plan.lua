@@ -16,6 +16,11 @@ CaerdonWardrobeTestsPlan = {
     -- After login, once the addon's queue is empty: run every test that has to run.
     autoRun = true,
 
+    -- Once a session: record what the bags show (and the bank the first time it is opened) and
+    -- compare it with the last session's record (Snapshot.lua). This draws every item once on
+    -- hidden buttons; false leaves it out.
+    autoSnapshot = true,
+
     -- Test id -> reason. A skipped test is not run by itself; /cwtest run <id> still runs it.
     skip = {},
 

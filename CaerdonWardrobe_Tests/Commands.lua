@@ -30,6 +30,9 @@ function T.AfterLogin()
     T.ScanSightings()
     -- A rotation that this reload is a step of goes on (Rotation.lua).
     T.ResumeRotation()
+    -- What the bags show now against the last session, and the bank when it is opened
+    -- (Snapshot.lua). After the rotation has said whether a run is on: none is taken at a stop.
+    T.StartAutoSnapshots()
 end
 
 ------------------------------------------------------------------------------------------

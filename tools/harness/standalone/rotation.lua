@@ -809,6 +809,117 @@ realPrint("9. the window")
 T = session.T
 Slash("")
 Check(true, "the window opens")
+
+realPrint("10. a snapshot by itself every session, compared with the session before")
+do
+    local KEY = "Tester-Mockrealm"
+    local function Auto() return (session.T.db.snapshots[KEY] or {}).auto or { history = {} } end
+    local function Newest() local history = Auto().history return history[#history] or {} end
+    local function Filled()
+        local count = 0
+        for bag = 0, 5 do
+            for _ in pairs(world.bags[bag]) do count = count + 1 end
+        end
+        return count
+    end
+
+    -- Every session before this one took one: the records are there without a command.
+    Check(Auto().bags ~= nil and #Auto().bags.entries == Filled(), "the bags were recorded by themselves: "
+        .. tostring(Auto().bags and #Auto().bags.entries) .. " of " .. Filled())
+    Check(Auto().bags.part == "bags" and Auto().bags.bank == false, "as a record of the bags alone")
+    Check(#Auto().history > 0 and #Auto().history <= 12, "the comparisons are a short history: " .. #Auto().history)
+
+    -- Nothing changes over a reload.
+    Reload()
+    Check(Newest().part == "bags" and Newest().changedCount == 0 and Newest().same == Filled(),
+        "a reload with nothing changed: every item the same (" .. tostring(Newest().same) .. ")")
+    Check(not Said("drawn differently"), "and nothing is said about it")
+
+    -- The code decides differently after a reload: that is the change a session has to show.
+    local was = world.bags[0][1].status
+    world.bags[0][1].status = was == "sellable" and "collected" or "sellable"
+    local taken = Auto().bags.at
+    world.now = world.now + 60
+    Reload()
+    Check(Auto().bags.at > taken, "the next session takes the next record")
+    Check(Newest().changedCount == 1 and Newest().same == Filled() - 1, "one item is drawn differently: "
+        .. tostring(Newest().changedCount))
+    Check(Newest().changed[1] and tostring(Newest().changed[1].summary):find("status", 1, true) ~= nil,
+        "with what differs: " .. tostring(Newest().changed[1] and Newest().changed[1].summary))
+    Check(Said("1 of " .. Filled() .. " items in the bags are drawn differently than in the last session"),
+        "and it is said in chat")
+    Check(Newest().base.at == taken, "against the record of the session before")
+
+    -- The reload that saves that result takes the next record already: the finding stays.
+    Reload()
+    local history = Auto().history
+    Check(Newest().changedCount == 0 and history[#history - 1].changedCount == 1,
+        "the comparison before the newest still holds the change")
+    Check(not Said("drawn differently"), "and the unchanged session says nothing")
+
+    -- An item that came is listed, not judged.
+    Put(0, 3, 150, "own")
+    Reload()
+    Check(Newest().changedCount == 0 and #Newest().onlyInAfter == 1, "an item that came since is listed, not a change")
+    world.bags[0][3] = nil
+    Reload()
+    Check(Newest().changedCount == 0 and #Newest().onlyInBase == 1, "nor is one that went")
+
+    -- The bank, the first time it is opened in a session.
+    local function OpenBank()
+        session.core.features.Bank = { GetName = function() return "Bank" end,
+            GetStatusRuleName = function() return "Bank" end }
+        C_Bank.FetchPurchasedBankTabIDs = function(bankType) return bankType == 0 and { 6 } or {} end
+        FireEvent("BANKFRAME_OPENED")
+        Run(3)
+    end
+    SLOTS[6] = 3
+    world.bags[6] = {}
+    Put(6, 1, 201, "own", "BoE")
+    Put(6, 3, 202, "sellable")
+    Check(Auto().bank == nil, "no record of the bank while it was never opened")
+    OpenBank()
+    Check(Auto().bank ~= nil and #Auto().bank.entries == 2 and Auto().bank.part == "bank" and Auto().bank.bank == true,
+        "the bank is recorded when it is opened: " .. tostring(Auto().bank and #Auto().bank.entries))
+    Check(Auto().bank.containers[0] == nil and Auto().bank.containers[6] == 2, "as a record of the bank alone")
+    local firstBank, comparedLast = Auto().bank, Newest()
+    FireEvent("BANKFRAME_CLOSED")
+    FireEvent("BANKFRAME_OPENED")
+    Run(3)
+    Check(Auto().bank == firstBank and Newest() == comparedLast, "opening it again in the same session records nothing more")
+    world.bags[6][3].status = "auction"
+    Reload()
+    Check(Newest().part == "bags", "after a reload the bags are compared, the bank waits to be opened")
+    OpenBank()
+    Check(Newest().part == "bank" and Newest().changedCount == 1 and Newest().same == 1,
+        "then the bank against the last session's bank: " .. tostring(Newest().changedCount))
+    Check(Said("1 of 2 items in the bank are drawn differently"), "said in chat for the bank too")
+
+    -- Switched off by the plan.
+    taken = Auto().bags.at
+    local bankTaken, newest = Auto().bank.at, Newest()
+    world.now = world.now + 60
+    FireEvent("PLAYER_LOGOUT")
+    world.saved = CaerdonWardrobeTestsDB
+    Boot(true)
+    CaerdonWardrobeTestsPlan.autoSnapshot = false
+    Run(4)
+    OpenBank()
+    Check(Auto().bags.at == taken and Auto().bank.at == bankTaken and Newest() == newest,
+        "with the plan's switch off no record is taken and nothing compared")
+
+    -- A rotation run counts what each stop draws: nothing of the tests' own is drawn into it.
+    Reload()
+    taken = Auto().bags.at
+    world.now = world.now + 60
+    Slash("rotation start")
+    Reload()
+    Check(session.T.db.rotation.run ~= nil and Auto().bags.at == taken, "no record at a stop of a rotation run")
+    Slash("rotation abort")
+    Reload()
+    Check(session.T.db.rotation.run == nil and Auto().bags.at > taken, "and one again once the run is over")
+    Check(EnabledList() == ORIGINAL, "the addons are as before")
+end
 if os.getenv("MOCK_DUMP") then
     local function dump(value, indent)
         if type(value) == "table" then

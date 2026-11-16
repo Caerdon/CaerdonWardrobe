@@ -276,6 +276,40 @@ local function printSnapshots(db)
         elseif store.base then
             print("    nothing compared yet: /cwtest snapshot after the change")
         end
+
+        -- What every session recorded by itself, each against the session before it.
+        local auto = store.auto
+        if auto then
+            for _, part in ipairs({ "bags", "bank" }) do
+                local latest = auto[part]
+                if latest then
+                    print(("    by itself, %s: last recorded %s, %d items%s"):format(part, when(latest.at), #latest.entries,
+                        (latest.notDrawn or 0) > 0 and (", %d never drawn"):format(latest.notDrawn) or ""))
+                    printNeverDrawn(latest)
+                end
+            end
+            for _, entry in ipairs(auto.history or {}) do
+                local changed = entry.changedCount or #entry.changed
+                print(("      %s %s against %s: %d the same, %d changed, %d gone, %d new%s%s"):format(tostring(entry.part),
+                    when(entry.after.at), when(entry.base.at), entry.same, changed, #entry.onlyInBase, #entry.onlyInAfter,
+                    #entry.settingsChanged > 0 and (", %d settings differ"):format(#entry.settingsChanged) or "",
+                    not entry.addonsChanged and ", other addons unknown"
+                        or #entry.addonsChanged > 0 and (", %d other addons differ"):format(#entry.addonsChanged) or ""))
+                for _, change in ipairs(entry.changed) do
+                    print("          " .. plainText(change.link) .. ": " .. tostring(change.summary))
+                    if change.why then print("              binding result: " .. inline(change.why)) end
+                    if change.transmog then print("              transmog info:  " .. inline(change.transmog)) end
+                end
+                if changed > #entry.changed then
+                    print(("          and %d more"):format(changed - #entry.changed))
+                end
+                -- What else differs is only worth reading when something changed.
+                if changed > 0 then
+                    for _, line in ipairs(entry.settingsChanged) do print("          setting: " .. line) end
+                    for _, line in ipairs(entry.addonsChanged or {}) do print("          addon: " .. line) end
+                end
+            end
+        end
     end
 end
 

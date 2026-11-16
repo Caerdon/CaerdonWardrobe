@@ -1,7 +1,10 @@
 -- Snapshot and diff: what the addon decides and draws for everything in the bags and bank.
 --
--- Take one before a change to the addon's code and one after; the diff is every item whose
--- status, text or icon is no longer the same. This is the guard for refactoring.
+-- One from before a change to the addon's code and one from after; the diff is every item
+-- whose status, text or icon is no longer the same. This is the guard for refactoring. Every
+-- session takes one by itself and compares it with the last session's (at the end of this
+-- file); /cwtest snapshot base and /cwtest snapshot do the same on demand, against a base that
+-- stays until it is replaced.
 --
 -- Every item is sent through the addon's own queue and drawn on a hidden button that belongs
 -- to the tests, under a stand-in for the Bags or Bank feature. So the result does not depend
@@ -284,12 +287,15 @@ end
 
 local DRAW_TIMEOUT = 30
 
-local function ListContainers()
+-- part: "bags" or "bank" for one of the two; nil for the bags, and the bank while it is open.
+local function ListContainers(part)
     local list = {}
-    for bag = Enum.BagIndex.Backpack, Enum.BagIndex.ReagentBag do
-        list[#list + 1] = { id = bag, feature = "Bags" }
+    if part ~= "bank" then
+        for bag = Enum.BagIndex.Backpack, Enum.BagIndex.ReagentBag do
+            list[#list + 1] = { id = bag, feature = "Bags" }
+        end
     end
-    if T.IsOpen("bank") then
+    if part ~= "bags" and T.IsOpen("bank") then
         for _, bankType in ipairs({ Enum.BankType.Character, Enum.BankType.Account }) do
             -- A client without that kind of bank may refuse the question.
             local ok, tabIDs = pcall(C_Bank.FetchPurchasedBankTabIDs, bankType)
@@ -325,7 +331,7 @@ local function DescribeStuck(pending)
 end
 
 -- Inside a job. Returns the snapshot.
-local function Take(label)
+local function Take(label, part)
     local toon, client = T.GetToon(), T.GetClient()
     local snapshot = {
         label = label,
@@ -336,7 +342,8 @@ local function Take(label)
         build = client.build,
         subjectVersion = C_AddOns.GetAddOnMetadata(T.SUBJECT, "Version"),
         addons = T.NoteAddons(),
-        bank = T.IsOpen("bank") and true or false,
+        part = part,
+        bank = part ~= "bags" and T.IsOpen("bank") and true or false,
         config = T.Plain(CaerdonWardrobeConfig, 5),
         containers = {},
         entries = {},
@@ -344,7 +351,7 @@ local function Take(label)
 
     local waiting, used = 0, 0
     local pendingByEntry = {}
-    for _, container in ipairs(ListContainers()) do
+    for _, container in ipairs(ListContainers(part)) do
         local proxy = GetProxy(container.feature)
         local filled = 0
         for slot = 1, C_Container.GetContainerNumSlots(container.id) do
@@ -466,6 +473,101 @@ function T.TakeSnapshot(asBase)
         end
     end)
 end
+
+------------------------------------------------------------------------------------------
+-- By itself, once a session
+------------------------------------------------------------------------------------------
+
+-- A change is proven by what was drawn before it against what is drawn after, and the
+-- "before" cannot be asked for by hand: the game is often closed while the code is changed,
+-- and the next login already runs the new code. So every session records by itself what the
+-- bags show, and the bank the first time it is opened, and compares each with the same
+-- record of the session before. The last session is the base.
+--
+-- A reload is a session too, so a comparison is between two loads of the code. What each one
+-- found is kept as a short history: the reload that saves a result has taken the next record
+-- by the time anyone reads it.
+
+local AUTO_KEEP = 12      -- comparisons kept per toon
+local AUTO_CHANGES = 40   -- changed items kept per comparison
+local autoAllowed = false -- nothing is drawn by the tests before the login record is written
+local autoStarted = {}    -- part -> true once this session has asked for it
+
+local function AutoSnapshot(part)
+    if not autoAllowed or autoStarted[part] or T.GetPlan().autoSnapshot == false then
+        return
+    end
+    -- A rotation run counts what each stop draws, so the tests draw nothing of their own into it.
+    if T.db.rotation and T.db.rotation.run then
+        return
+    end
+    autoStarted[part] = true
+    T.Start("snapshot of the " .. part, function()
+        -- The window's own draws first: the bank draws everything when it opens.
+        if not T.WaitForIdle(0.5, 30) or (part == "bank" and not T.IsOpen("bank")) then
+            autoStarted[part] = nil
+            return
+        end
+        local snapshot = Take("session", part)
+        if part == "bank" and not T.IsOpen("bank") then
+            -- Closed while it was read: what was read is not the whole bank. Next time.
+            autoStarted[part] = nil
+            return
+        end
+        if #snapshot.entries == 0 then
+            return
+        end
+
+        local store = T.db.snapshots[snapshot.toon] or {}
+        T.db.snapshots[snapshot.toon] = store
+        store.auto = store.auto or { history = {} }
+        local previous = store.auto[part]
+        store.auto[part] = snapshot
+        if not previous then
+            return
+        end
+
+        local diff = T.DiffSnapshots(previous, snapshot)
+        diff.part = part
+        diff.items = #snapshot.entries
+        diff.notDrawn = snapshot.notDrawn
+        -- nil when the earlier session's set is no longer on record.
+        diff.addonsChanged = T.DiffAddonSets(T.GetAddonSet(previous.addons), T.GetAddonSet(snapshot.addons))
+        diff.changedCount = #diff.changed
+        for index = #diff.changed, AUTO_CHANGES + 1, -1 do
+            diff.changed[index] = nil
+        end
+        T.Push(store.auto.history, diff, AUTO_KEEP)
+
+        -- Said only when something is drawn differently: that is what a change must explain.
+        if diff.changedCount > 0 then
+            T.Print("|cffff4040%d of %d items in the %s are drawn differently than in the last session:|r",
+                diff.changedCount, diff.same + diff.changedCount, part)
+            for index = 1, math.min(#diff.changed, 6) do
+                local change = diff.changed[index]
+                print(("  %s: %s"):format(change.link, change.summary))
+            end
+            local settings, addons = #diff.settingsChanged, #(diff.addonsChanged or {})
+            if settings > 0 or addons > 0 then
+                T.Print("the addon's settings (%d values) or other addons (%d) differ too, which can be why.",
+                    settings, addons)
+            end
+        end
+    end)
+end
+
+-- Called once the login record is written (Commands.lua).
+function T.StartAutoSnapshots()
+    autoAllowed = true
+    AutoSnapshot("bags")
+    if T.IsOpen("bank") then
+        AutoSnapshot("bank")
+    end
+end
+
+T.RegisterEvent("BANKFRAME_OPENED", function()
+    AutoSnapshot("bank")
+end)
 
 ------------------------------------------------------------------------------------------
 -- Probing single items
