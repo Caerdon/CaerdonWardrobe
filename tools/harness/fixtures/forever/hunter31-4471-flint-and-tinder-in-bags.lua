@@ -1,5 +1,5 @@
 return {
-    at = 1794821009,
+    at = 1794821296,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|66:|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r"] = { { 2, n = 1 } },
@@ -203,7 +203,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 4471,
     link = "|cnIQ1:|Hitem:4471::::::::31:1485:::::::::|h[Flint and Tinder]|h|r",

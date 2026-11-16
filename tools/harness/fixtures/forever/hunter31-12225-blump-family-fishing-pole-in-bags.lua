@@ -1,5 +1,5 @@
 return {
-    at = 1794821009,
+    at = 1794821296,
     calls = {
         ["C_ArtifactUI.IsArtifactItem"] = { ["{5:bagID=0,9:slotIndex=14}"] = { { false, n = 1 } } },
         ["C_Container.GetContainerItemInfo"] = {
@@ -545,7 +545,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 12225,
     link = "|cnIQ1:|Hitem:12225::::::::31:1485::11:::::::|h[Blump Family Fishing Pole]|h|r",

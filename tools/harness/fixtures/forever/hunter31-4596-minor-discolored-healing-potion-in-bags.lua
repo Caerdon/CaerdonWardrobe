@@ -1,5 +1,5 @@
 return {
-    at = 1794821009,
+    at = 1794821296,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|11"] = {
@@ -193,7 +193,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 4596,
     link = "|cnIQ1:|Hitem:4596::::::::31:1485:::::::::|h[Minor Discolored Healing Potion]|h|r",

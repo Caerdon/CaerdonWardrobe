@@ -1,5 +1,5 @@
 return {
-    at = 1794821009,
+    at = 1794821296,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["1|6"] = {
@@ -176,7 +176,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 12347,
     link = "|cnIQ1:|Hitem:12347::::::::31:1485::11:::::::|h[Filled Cleansing Bowl]|h|r",

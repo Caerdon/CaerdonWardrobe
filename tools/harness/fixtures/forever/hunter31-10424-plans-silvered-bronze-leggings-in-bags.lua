@@ -1,5 +1,5 @@
 return {
-    at = 1794821009,
+    at = 1794821296,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["1|2"] = {
@@ -252,7 +252,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 10424,
     link = "|cnIQ2:|Hitem:10424::::::::31:1485:::::::::|h[Plans: Silvered Bronze Leggings]|h|r",

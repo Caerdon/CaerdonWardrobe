@@ -1,5 +1,5 @@
 return {
-    at = 1794821009,
+    at = 1794821296,
     calls = {
         ["C_ArtifactUI.IsArtifactItem"] = { ["{5:bagID=0,9:slotIndex=15}"] = { { false, n = 1 } } },
         ["C_Container.GetContainerItemInfo"] = {
@@ -455,7 +455,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 2944,
     link = "|cnIQ2:|Hitem:2944::::::::31:1485::11:::::::|h[Cursed Eye of Paleth]|h|r",

@@ -1,5 +1,5 @@
 return {
-    at = 1794821010,
+    at = 1794821297,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["4|1"] = {
@@ -167,7 +167,7 @@ return {
         Tooltip = { ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter31-20261116-092321",
+    environment = "env-hunter31-20261116-092816",
     format = 1,
     itemID = 2512,
     link = "|cnIQ1:|Hitem:2512::::::::31:1485:::::::::|h[Rough Arrow]|h|r",
