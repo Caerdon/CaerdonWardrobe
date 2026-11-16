@@ -174,14 +174,11 @@ function H.FixturesDir()
 end
 
 -- The globals a saved variables file sets.
+-- Parsed, not compiled: the test addon's file can hold more than a Lua chunk may
+-- (tools/savedvars.lua).
 function H.ReadSavedVariables(path)
-    local chunk, problem = loadfile(path)
-    if not chunk then
-        return nil, problem
-    end
-    local globals = {}
-    setfenv(chunk, globals)()
-    return globals
+    H.SavedVars = H.SavedVars or dofile(H.dir .. "/../savedvars.lua")
+    return H.SavedVars.Read(path)
 end
 
 -- Every fixture: { path, flavor, name }.

@@ -14,6 +14,8 @@
 -- This prints what the clients recorded. Whatever is listed here was seen in a client; what
 -- is missing was not run there.
 
+local SavedVars = dofile(((arg[0] or ""):gsub("\\", "/"):match("^(.*)/[^/]*$") or ".") .. "/savedvars.lua")
+
 local wowDir = os.getenv("CAERDON_WOW")
 local files, sections = {}, {}
 
@@ -936,16 +938,15 @@ end
 
 for _, file in ipairs(files) do
     print("== " .. file.label)
-    local env = {}
-    local chunk, err = loadfile(file.path)
-    if not chunk then
+    -- Parsed, not compiled: a toon with several hundred items makes a file Lua cannot load
+    -- as a chunk (tools/savedvars.lua).
+    local env, err = SavedVars.Read(file.path)
+    if not env then
         print("  cannot read " .. file.path .. ": " .. tostring(err))
     else
-        setfenv(chunk, env)
-        local ok, runError = pcall(chunk)
         local db = env.CaerdonWardrobeTestsDB
-        if not ok or type(db) ~= "table" then
-            print("  no results in " .. file.path .. (runError and (": " .. tostring(runError)) or ""))
+        if type(db) ~= "table" then
+            print("  no results in " .. file.path)
         else
             if wants("sessions") then printSessions(db) end
             if wants("contracts") or sections.detail then printContracts(db, sections.detail) end
