@@ -259,6 +259,7 @@ Other sources of `sellable`:
 
 - `RefreshItems` (cache wipe, generation bump, debounced feature refresh) runs on `TRANSMOG_COLLECTION_UPDATED`, `TRANSMOG_COLLECTION_SOURCE_ADDED`, `..._SOURCE_REMOVED`, `TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED`, and on equipment, equipment set and expansion changes.
 - The export's `[Transmog Collection Events]` section lists the last 25 such events with the refresh generation. Use it for "the appearance was learned but the icon did not change".
+- **A box's lock is read from its slot and not cached.** Whether a lockbox is still locked is a fact about one copy, and the tooltip of the bare link cannot know it, so `GetCaerdonStatus` reads the "Locked" line from the slot's own tooltip (`IsBagSlotLocked`, `C_TooltipInfo.GetBagItem`) and compares the text on every line: the line is not of a type the general tooltip scan reads, and its type need not be the same in both clients. `locked` and `openable` for an item with loot are left out of the per-link status cache, so a locked box and an opened one of the same item do not share a verdict. Seen on Forever: a locked box was drawn as `openable` before this. Not seen: a box unlocked while the bags are open (whether its button is drawn again without a refresh), retail.
 - A no-op `Refresh()` leaves the stale icon while the Debug Frame shows the right status. Still empty, untested: BaudBag, Inventorian, CargBags, Sorted.
 
 ## Bag Addon Integrations

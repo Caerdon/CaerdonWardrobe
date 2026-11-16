@@ -54,6 +54,27 @@ function CaerdonItem:InvalidateStatusCache()
     wipe(statusCache)
 end
 
+-- Whether the copy of an item in a bag slot is locked (a lockbox that has not been opened).
+-- The lock belongs to the copy, so it is read from the slot's own tooltip: the tooltip of the
+-- bare link cannot know whether this box has been unlocked. The text is compared on every
+-- line, because which line type carries it is not the same in every client build.
+-- Returns nil when the slot's tooltip cannot be read yet.
+local function IsBagSlotLocked(bag, slot)
+    local data = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
+    if not data or not data.lines then
+        return nil
+    end
+    for _, line in ipairs(data.lines) do
+        local text = line.leftText and tostring(line.leftText) or nil
+        if text == RETRIEVING_ITEM_INFO then
+            return nil
+        elseif text == LOCKED then
+            return true
+        end
+    end
+    return false
+end
+
 -- Reusable table for GetTooltipData output to avoid per-call allocation.
 -- Safe because GetTooltipData is only called synchronously within GetCaerdonStatus.
 local recycledTooltipData = {}
@@ -1943,6 +1964,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
+    -- Set when the status says whether this copy is locked: not cached, see below.
+    local isSlotLockState = false
+
     if self:HasItemLocationBankOrBags() then
         local bag, slot = itemLocation:GetBagAndSlot()
 
@@ -1973,11 +1997,16 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             if duration > 0 and not isEnabled then
                 mogStatus = "refundable" -- Can't open yet... show timer
             else
-                if bindingResult.isLocked then
+                local isLocked = IsBagSlotLocked(containerID, containerSlot)
+                if isLocked == nil then
+                    isLocked = bindingResult.isLocked
+                end
+                if isLocked then
                     mogStatus = "locked"
                 else
                     mogStatus = "openable"
                 end
+                isSlotLockState = true
             end
         elseif readable then
             mogStatus = "readable"
@@ -2035,7 +2064,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
-    if statusCacheKey and mogStatus ~= "canCombine" and mogStatus ~= "readyToCombine" then
+    -- The cache is per link, and a copy's lock is not: a locked box and an opened one of the same
+    -- item must not share a verdict, and a box that has just been unlocked must not keep its old one.
+    if statusCacheKey and mogStatus ~= "canCombine" and mogStatus ~= "readyToCombine" and
+        not (isSlotLockState and (mogStatus == "locked" or mogStatus == "openable")) then
         statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult}
     end
 
