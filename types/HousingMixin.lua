@@ -84,13 +84,11 @@ function CaerdonHousingMixin:GetHousingInfo()
         return nil
     end
 
+    -- The catalog as it is since 12.0.5: one entry per thing, whether the player has it or
+    -- not, with the totals over every variant of it (totalNumStored, totalNumPlaced). An entry
+    -- no longer says "owned" or "unowned"; its counts do.
     local catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem and
-        C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, true) or nil
-
-    -- Fallback: try without owned info to get at least static catalog data (firstAcquisitionBonus, etc.)
-    if not catalogEntryInfo and C_HousingCatalog.GetCatalogEntryInfoByItem then
-        catalogEntryInfo = C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink, false)
-    end
+        C_HousingCatalog.GetCatalogEntryInfoByItem(itemLink) or nil
 
     local ownedStored = 0
     local placedCount = 0
@@ -100,86 +98,34 @@ function CaerdonHousingMixin:GetHousingInfo()
     local firstAcquisitionBonus = 0
     local showQuantity = true
     local maxStack = 0
-    local entryType, entrySubtype, recordID
+    local entryType, recordID
+    local recordFromItem, usedRecordFallback
     local iconTexture, iconAtlas, sourceText
     local subClassID = item:GetItemSubTypeID()
     local itemID = item:GetItemID()
-    local entrySubtypeOwned = Enum and Enum.HousingCatalogEntrySubtype
     local isServiceItem = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.ServiceItem and
         subClassID == Enum.ItemHousingSubclass.ServiceItem
     local isDye = subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.Dye and
         subClassID == Enum.ItemHousingSubclass.Dye
 
-    local isOwnedSubtype = false
-
     if catalogEntryInfo then
-        ownedStored = catalogEntryInfo.quantity or 0
+        ownedStored = catalogEntryInfo.totalNumStored or 0
         remainingRedeemable = catalogEntryInfo.remainingRedeemable or 0
-        placedCount = catalogEntryInfo.numPlaced or 0
+        placedCount = catalogEntryInfo.totalNumPlaced or 0
         totalOwned = math.max(ownedStored, remainingRedeemable) + placedCount
         firstAcquisitionBonus = catalogEntryInfo.firstAcquisitionBonus or 0
-        showQuantity = catalogEntryInfo.showQuantity ~= false
+        showQuantity = (remainingRedeemable + ownedStored) > 0
         iconTexture = catalogEntryInfo.iconTexture
         iconAtlas = catalogEntryInfo.iconAtlas
         sourceText = catalogEntryInfo.sourceText
 
-        entryType = catalogEntryInfo.entryID and catalogEntryInfo.entryID.entryType
-        entrySubtype = catalogEntryInfo.entryID and catalogEntryInfo.entryID.entrySubtype
-        recordID = catalogEntryInfo.entryID and catalogEntryInfo.entryID.recordID
-
-        local ownedSubtype = Enum and Enum.HousingCatalogEntrySubtype
-        if ownedSubtype and entrySubtype then
-            if entrySubtype == ownedSubtype.OwnedModifiedStack or entrySubtype == ownedSubtype.OwnedUnmodifiedStack then
-                isOwnedSubtype = true
-            end
-        end
-    end
-
-    -- If base lookup returned unowned with zero counts, try explicit owned entryID variants with subtypeIdentifier=0.
-    if entryType and recordID and totalOwned == 0 and Enum and Enum.HousingCatalogEntrySubtype and C_HousingCatalog.GetCatalogEntryInfo then
-        local function TryOwnedEntry(ownedSubtype)
-            local entryID = {
-                entryType = entryType,
-                entrySubtype = ownedSubtype,
-                recordID = recordID,
-                subtypeIdentifier = 0
-            }
-            local info = C_HousingCatalog.GetCatalogEntryInfo(entryID)
-            if info then
-                local q = info.quantity or 0
-                local p = info.numPlaced or 0
-                local r = info.remainingRedeemable or 0
-                local total = math.max(q, r) + p
-                if total > 0 then
-                    return info, q, p, r
-                end
-            end
-        end
-
-        local ownedInfo, q, p, r = TryOwnedEntry(Enum.HousingCatalogEntrySubtype.OwnedUnmodifiedStack)
-        if not ownedInfo then
-            ownedInfo, q, p, r = TryOwnedEntry(Enum.HousingCatalogEntrySubtype.OwnedModifiedStack)
-        end
-
-        if ownedInfo then
-            catalogEntryInfo = ownedInfo
-            ownedStored = q
-            remainingRedeemable = r or remainingRedeemable
-            placedCount = p
-            totalOwned = math.max(ownedStored, remainingRedeemable) + placedCount
-            firstAcquisitionBonus = ownedInfo.firstAcquisitionBonus or firstAcquisitionBonus
-            showQuantity = ownedInfo.showQuantity ~= false
-            iconTexture = ownedInfo.iconTexture or iconTexture
-            iconAtlas = ownedInfo.iconAtlas or iconAtlas
-            sourceText = ownedInfo.sourceText or sourceText
-            entrySubtype = ownedInfo.entryID and ownedInfo.entryID.entrySubtype or
-                Enum.HousingCatalogEntrySubtype.OwnedUnmodifiedStack
-            isOwnedSubtype = true
-        end
+        entryType = catalogEntryInfo.entryType
+        recordID = catalogEntryInfo.recordID
+        recordFromItem = recordID
     end
 
     -- Fallback: try fetching by recordID when the item -> entry lookup doesn't return owned data yet.
-    if (not catalogEntryInfo or (totalOwned == 0 and not dyeColorID)) and C_HousingCatalog.GetCatalogEntryInfoByRecordID and itemID then
+    if (not catalogEntryInfo or totalOwned == 0) and C_HousingCatalog.GetCatalogEntryInfoByRecordID and itemID then
         local fallbackEntryType = Enum and Enum.HousingCatalogEntryType
         local guessEntryType = fallbackEntryType and fallbackEntryType.Decor or nil
         if subClassID and Enum and Enum.ItemHousingSubclass and Enum.ItemHousingSubclass.Room and subClassID == Enum.ItemHousingSubclass.Room then
@@ -187,29 +133,22 @@ function CaerdonHousingMixin:GetHousingInfo()
         end
 
         if guessEntryType then
-            local fallbackInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(guessEntryType, itemID, true)
+            local fallbackInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(guessEntryType, itemID)
             if fallbackInfo then
+                usedRecordFallback = true
                 catalogEntryInfo = fallbackInfo
-                ownedStored = fallbackInfo.quantity or 0
+                ownedStored = fallbackInfo.totalNumStored or 0
                 remainingRedeemable = fallbackInfo.remainingRedeemable or remainingRedeemable
-                placedCount = fallbackInfo.numPlaced or 0
+                placedCount = fallbackInfo.totalNumPlaced or 0
                 totalOwned = math.max(ownedStored, remainingRedeemable) + placedCount
                 firstAcquisitionBonus = fallbackInfo.firstAcquisitionBonus or 0
-                showQuantity = fallbackInfo.showQuantity ~= false
+                showQuantity = ((fallbackInfo.remainingRedeemable or 0) + ownedStored) > 0
                 iconTexture = fallbackInfo.iconTexture
                 iconAtlas = fallbackInfo.iconAtlas
                 sourceText = fallbackInfo.sourceText
 
-                entryType = fallbackInfo.entryID and fallbackInfo.entryID.entryType or guessEntryType
-                entrySubtype = fallbackInfo.entryID and fallbackInfo.entryID.entrySubtype
-                recordID = fallbackInfo.entryID and fallbackInfo.entryID.recordID or itemID
-
-                local ownedSubtype = Enum and Enum.HousingCatalogEntrySubtype
-                if ownedSubtype and entrySubtype then
-                    if entrySubtype == ownedSubtype.OwnedModifiedStack or entrySubtype == ownedSubtype.OwnedUnmodifiedStack then
-                        isOwnedSubtype = true
-                    end
-                end
+                entryType = fallbackInfo.entryType or guessEntryType
+                recordID = fallbackInfo.recordID or itemID
             end
         end
     end
@@ -217,8 +156,8 @@ function CaerdonHousingMixin:GetHousingInfo()
     local tooltipOwnedTotal
     local isPending
 
-    -- Service items and dyes currently don't surface catalog entry data and have empty tooltips, so skip the tooltip pass.
-    if not catalogEntryInfo and not isServiceItem and not dyeColorID then
+    -- Service items currently don't surface catalog entry data and have empty tooltips, so skip the tooltip pass.
+    if not catalogEntryInfo and not isServiceItem then
         -- print("catalogEntryInfo is nil: " .. itemLink)
         local tooltipCounts = ParseTooltipCounts(itemLink)
         if tooltipCounts then
@@ -233,12 +172,9 @@ function CaerdonHousingMixin:GetHousingInfo()
 
     if itemID then
         bagCount = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(itemID, true, true)) or bagCount
-        maxStack = (C_Item and C_Item.GetItemMaxStack and C_Item.GetItemMaxStack(itemID)) or maxStack
-        if maxStack == 0 then
-            local _, _, _, _, _, _, _, stackSize = C_Item.GetItemInfo(itemID)
-            if stackSize then
-                maxStack = stackSize
-            end
+        local _, _, _, _, _, _, _, stackSize = C_Item.GetItemInfo(itemID)
+        if stackSize then
+            maxStack = stackSize
         end
     end
 
@@ -257,11 +193,6 @@ function CaerdonHousingMixin:GetHousingInfo()
     if isServiceItem then
         totalOwned = totalOwned + bagCount
         ownedStored = ownedStored + bagCount
-    end
-
-    -- If the catalog marks this as an owned stack, ensure we don't treat it as unowned even if counts are zero (some service/decor items may be auto-stored).
-    if isOwnedSubtype then
-        totalOwned = math.max(totalOwned, 1)
     end
 
     local function SanitizeCount(value)
@@ -301,8 +232,7 @@ function CaerdonHousingMixin:GetHousingInfo()
     local hasTooltipCounts = tooltipOwnedTotal ~= nil
     isPending = IsHousingDataPending({
         hasCatalogEntry = catalogEntryInfo ~= nil,
-        hasTooltipCounts = hasTooltipCounts,
-        hasDyeInfo = dyeColorID ~= nil
+        hasTooltipCounts = hasTooltipCounts
     })
 
     if totalOwned > 0 then
@@ -330,7 +260,6 @@ function CaerdonHousingMixin:GetHousingInfo()
                 return {
                     entryInfo = catalogEntryInfo,
                     entryType = entryType,
-                    entrySubtype = entrySubtype,
                     recordID = recordID,
                     subClassID = subClassID,
                     maxStack = maxStack,
@@ -347,20 +276,14 @@ function CaerdonHousingMixin:GetHousingInfo()
                     iconTexture = iconTexture,
                     iconAtlas = iconAtlas,
                     sourceText = sourceText,
-                    dyeColorID = dyeColorID,
-                    isDyeOwned = isDyeOwned,
+                    recordFromItem = recordFromItem,
+                    usedRecordFallback = usedRecordFallback,
                     isPending = isPending
                 }
             end
 
             lastHousingWarmupRequest = now
             pendingRetryCounts[itemID or 0] = retries + 1
-
-            -- if CaerdonWardrobe and CaerdonWardrobe.WarmHousingData then
-            --     pcall(CaerdonWardrobe.WarmHousingData, CaerdonWardrobe, true)
-            -- elseif C_HousingCatalog and C_HousingCatalog.RequestHousingMarketInfoRefresh then
-            --     pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
-            -- end
 
             if C_Timer and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
                 local delay = math.min(1 + retries * 0.5, 3)
@@ -374,7 +297,6 @@ function CaerdonHousingMixin:GetHousingInfo()
     return {
         entryInfo = catalogEntryInfo,
         entryType = entryType,
-        entrySubtype = entrySubtype,
         recordID = recordID,
         subClassID = subClassID,
         maxStack = maxStack,
@@ -391,8 +313,8 @@ function CaerdonHousingMixin:GetHousingInfo()
         iconTexture = iconTexture,
         iconAtlas = iconAtlas,
         sourceText = sourceText,
-        dyeColorID = dyeColorID,
-        isDyeOwned = isDyeOwned,
+        recordFromItem = recordFromItem,
+        usedRecordFallback = usedRecordFallback,
         isPending = isPending
     }
 end

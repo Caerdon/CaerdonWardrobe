@@ -359,6 +359,16 @@ Other sources of `sellable`:
 - **Icon:** only in bags and bank (`displayInfo.auctionIcon`); elsewhere `auction` draws as `sellable` and `auctionGoods` draws nothing. `Auctioneer` atlas, else the gold coin.
 - **Settings:** `Icon.ShowAuctionValue`, `Icon.AuctionMinProfit`. **Export:** `[Auction Value]`. **In game:** untested.
 
+## Housing
+
+Retail only: `types/HousingMixin.lua` does nothing below interface 110207 or without `Enum.ItemClass.Housing`, and Forever has neither.
+
+- **The catalog since 12.0.5 has one entry per thing,** owned or not, with the totals over every variant of it: `totalNumStored`, `totalNumPlaced`, `remainingRedeemable`, beside `recordID` and `entryType`. An entry no longer comes in an "owned" and an "unowned" kind, and the lookups take no "try owned" argument. `Blizzard_Deprecated/Mainline/Deprecated_12_0_5.lua` describes the change and, while the CVar `loadDeprecationFallbacks` is on, wraps the catalog's functions to put the old fields back (`entryID`, `quantity`, `numPlaced`, `showQuantity`), with every entry called unowned. The addon reads none of those.
+- **Owned** is what is placed plus the larger of stored and still to redeem: the client reports the same copies under both. A copy in the bags is not owned decor (it has not been redeemed), except for a service item. The item's stack size caps the counts and is the limit at which another copy gets no icon.
+- **The lookup by record is a guess that was kept.** When the item's entry says nothing is owned, or there is none, the catalog is asked for a record whose ID is the item's ID, and an answer replaces the entry. Whether an item's ID is ever its record's ID is not known. The export's `[Housing]` section says which was used: "Record ID From Item" and "Found By Item ID As Record".
+- **Dyes get no icon,** and nothing is asked about a dye's color.
+- **Evidence:** offline, `scenarios/housing.lua` on hand-made entries in the new shape, and, once, the code from before the change under Blizzard's own wrapper against the changed code without it: the same answer for 1792 combinations of counts, item kinds and bag copies, each asked three times. Retail client (12.1.5.70783, a druid): the bank and bags show what they showed before for every housing item the catalog knows, and an unowned decor, an owned one at its stack limit and a dye export as the scenario has them; the lookup by record answered for none of the three.
+
 ## Refresh
 
 - `RefreshItems` (cache wipe, generation bump, debounced feature refresh) runs on `TRANSMOG_COLLECTION_UPDATED`, `TRANSMOG_COLLECTION_SOURCE_ADDED`, `..._SOURCE_REMOVED`, `TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED`, and on equipment, equipment set and expansion changes.

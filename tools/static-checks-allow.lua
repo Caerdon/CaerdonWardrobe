@@ -77,6 +77,10 @@ return {
     -- with the reason (the addon reads no field the wrapper adds, a fallback covers its
     -- removal). Without an entry such a name is a finding: move to the new API.
     deprecated = {
+        -- The housing catalog since 12.0.5. Blizzard's fallback wraps these two only to put the
+        -- old fields back on the answer (entryID, quantity, numPlaced, showQuantity).
+        ["C_HousingCatalog.GetCatalogEntryInfoByItem"] = "types/HousingMixin.lua reads only the new fields (recordID, entryType, totalNumStored, totalNumPlaced) and passes no second argument",
+        ["C_HousingCatalog.GetCatalogEntryInfoByRecordID"] = "as above, with no third argument",
     },
 
     -- Names one client has and the other lacks ("retail", "forever"), or that neither has
@@ -122,7 +126,6 @@ return {
         ["GetQuestGreenRange"] = { "neither", "`GetQuestGreenRange and GetQuestGreenRange() or <number>`" },
         ["IsAddOnLoaded"] = { "neither", "`or (IsAddOnLoaded and ...)` after C_AddOns.IsAddOnLoaded" },
         ["IsUsableSpell"] = { "neither", "`C_Spell.IsSpellUsable or IsUsableSpell`" },
-        ["LoadAddOn"] = { "neither", "`elseif LoadAddOn` after C_AddOns.LoadAddOn" },
         ["UIParentLoadAddOn"] = { "neither", "else branch after CollectionsJournal_LoadUI" },
     },
 }

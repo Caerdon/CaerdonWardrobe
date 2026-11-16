@@ -113,6 +113,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Tools, bags, recipes, food and drink | Profession Tools; Bags for the Bag Slots; Recipes This Toon Has No Use For; Outgrown Food and Drink |
 | Quest icon on non-quest items | Quest Value |
 | Auction icon | Auction Value |
+| Housing items (retail only) | Housing |
 | Stale icons, refresh events | Refresh |
 | Baganator, BetterBags | Bag Addon Integrations |
 | An integration that stopped drawing, hook points | Integration Report |

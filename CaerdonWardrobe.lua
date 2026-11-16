@@ -2285,9 +2285,6 @@ function CaerdonWardrobeMixin:OnUpdate(elapsed)
 end
 
 function CaerdonWardrobeMixin:PLAYER_ENTERING_WORLD()
-    if isHousingSupported then
-        self:WarmHousingData()
-    end
 end
 
 function CaerdonWardrobeMixin:PLAYER_LOGOUT()
@@ -2484,59 +2481,6 @@ end
 
 function CaerdonWardrobeMixin:NEW_PET_ADDED()
     self:RefreshItems()
-end
-
-function CaerdonWardrobeMixin:WarmHousingData(force)
-    if true then
-        return
-    end
-
-    if not isHousingSupported then
-        return
-    end
-
-    if self.hasWarmedHousing and not force then
-        return
-    end
-
-    if force then
-        local now = GetTime and GetTime() or 0
-        if now > 0 then
-            self.lastHousingWarmup = self.lastHousingWarmup or 0
-            if (now - self.lastHousingWarmup) < 2 then
-                return
-            end
-            self.lastHousingWarmup = now
-        end
-    end
-
-    -- Load lightweight housing event handler to ensure housing events are wired even outside the housing UI.
-    if C_AddOns and C_AddOns.LoadAddOn then
-        pcall(C_AddOns.LoadAddOn, "Blizzard_HousingEventHandler")
-    elseif LoadAddOn then
-        pcall(LoadAddOn, "Blizzard_HousingEventHandler")
-    end
-
-    if C_HousingCatalog then
-        local ownedOnly = not force
-        -- Trigger backend to populate storage/market info.
-        if C_HousingCatalog.RequestHousingMarketInfoRefresh then
-            pcall(C_HousingCatalog.RequestHousingMarketInfoRefresh)
-        end
-        if C_HousingCatalog.GetDecorTotalOwnedCount then
-            pcall(C_HousingCatalog.GetDecorTotalOwnedCount)
-        end
-        if C_HousingCatalog.SearchCatalogCategories then
-            pcall(C_HousingCatalog.SearchCatalogCategories,
-                { withOwnedEntriesOnly = ownedOnly, includeFeaturedCategory = false })
-        end
-        if C_HousingCatalog.SearchCatalogSubcategories then
-            pcall(C_HousingCatalog.SearchCatalogSubcategories,
-                { withOwnedEntriesOnly = ownedOnly, includeFeaturedCategory = false })
-        end
-    end
-
-    self.hasWarmedHousing = true
 end
 
 function CaerdonWardrobeMixin:HOUSING_STORAGE_ENTRY_UPDATED()
