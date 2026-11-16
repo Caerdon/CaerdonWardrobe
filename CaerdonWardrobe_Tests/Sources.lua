@@ -24,12 +24,24 @@ end
 local MAX_DRAWN = 3000
 
 local drawn, drawnCount = {}, 0 -- link -> { feature name -> draws }
+local tracedInDraw = {}         -- traced calls made since the last draw finished
 
 -- Called from the counting hook on ProcessItem (Journal.lua), so it stays cheap: one lookup
 -- for an item seen before.
 function T.NoteDrawn(item, featureName)
     local ok, link = pcall(item.GetItemLink, item)
     if not ok or type(link) ~= "string" then
+        link = nil
+    end
+    -- This runs when a draw has finished, so the traced calls waiting were made for this item.
+    if tracedInDraw[1] then
+        for index = #tracedInDraw, 1, -1 do
+            tracedInDraw[index].during = link or "(an item without a link)"
+            tracedInDraw[index].drawnBy = featureName
+            tracedInDraw[index] = nil
+        end
+    end
+    if not link then
         return
     end
     local features = drawn[link]
@@ -210,6 +222,19 @@ local function AppearanceOf(link, itemID)
     return appearanceID, sourceID
 end
 
+-- Inside a job. An item the collection has no entry for can still have a look: the addon
+-- finds it by trying the item on a model (types/EquipmentMixin.lua). The probe does not
+-- repeat that; it asks the addon, since the sources the addon walks are the question here.
+local function AppearanceByTryingOn(link, itemID)
+    if not C_Item.IsDressableItemByID(itemID) then
+        return nil
+    end
+    local item = T.LoadItem(link, 3)
+    local data = item and item:GetItemData()
+    local info = data and data.GetTransmogInfo and data:GetTransmogInfo()
+    return info and info.appearanceID or nil
+end
+
 local function FeatureList(features)
     local names = {}
     for _, name in ipairs(T.SortedKeys(features)) do
@@ -247,21 +272,29 @@ local function Probe()
 
     -- Their appearances.
     local appearances = {} -- appearance ID -> the items that have it
-    local looked, withAppearance, appearanceCount = 0, 0, 0
+    local looked, withAppearance, appearanceCount, byTryingOn = 0, 0, 0, 0
     for _, link in ipairs(T.SortedKeys(items)) do
         local itemID = ItemIDFromLink(link)
         if itemID then
             looked = looked + 1
             local appearanceID = AppearanceOf(link, itemID)
+            local triedOn = false
+            if not appearanceID then
+                appearanceID = AppearanceByTryingOn(link, itemID)
+                triedOn = appearanceID ~= nil
+            end
             if appearanceID then
                 withAppearance = withAppearance + 1
+                if triedOn then
+                    byTryingOn = byTryingOn + 1
+                end
                 local owners = appearances[appearanceID]
                 if not owners then
                     owners = {}
                     appearances[appearanceID] = owners
                     appearanceCount = appearanceCount + 1
                 end
-                owners[#owners + 1] = { link = link, itemID = itemID, drawnBy = items[link] }
+                owners[#owners + 1] = { link = link, itemID = itemID, drawnBy = items[link], triedOn = triedOn or nil }
             end
             if looked % 50 == 0 then
                 T.Yield()
@@ -269,6 +302,8 @@ local function Probe()
         end
     end
     record.itemsLooked, record.itemsWithAppearance, record.appearances = looked, withAppearance, appearanceCount
+    -- Items whose look the collection does not list and the addon found by trying them on.
+    record.itemsTriedOn = byTryingOn
 
     -- Every source of those appearances, by the item behind it.
     local sourceItems = {} -- item ID -> { sources = { source ID -> appearance ID }, owners }
@@ -467,6 +502,10 @@ local function OnItemCall(fn, first)
     }
     traceKeys[key] = entry
     calls[#calls + 1] = entry
+    -- Made while the addon draws an item: the draw's end names the item (T.NoteDrawn).
+    if stack:find("ProcessItem", 1, true) then
+        tracedInDraw[#tracedInDraw + 1] = entry
+    end
 end
 
 local function HookNamespace(namespaceName)

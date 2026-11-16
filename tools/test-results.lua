@@ -453,9 +453,9 @@ local function printSources(db)
     for _, toon in ipairs(sortedKeys(db.sources)) do
         local record = db.sources[toon]
         print(("  Appearance sources, %s (%s, build %s):"):format(toon, when(record.at), tostring(record.build)))
-        print(("    %s items looked at (drawn this session or equipped), %s with an appearance; %s appearances, %s sources from %s items")
-            :format(figure(record.itemsLooked), figure(record.itemsWithAppearance), figure(record.appearances),
-                figure(record.sources), figure(record.sourceItems)))
+        print(("    %s items looked at (drawn this session or equipped), %s with an appearance (%s of them found by trying the item on); %s appearances, %s sources from %s items")
+            :format(figure(record.itemsLooked), figure(record.itemsWithAppearance), figure(record.itemsTriedOn),
+                figure(record.appearances), figure(record.sources), figure(record.sourceItems)))
         local refused = record.refused
         if refused and refused.distinct > 0 then
             print(("    refused by the client before the probe (seconds after the tests' load): %s%s"):format(
@@ -480,8 +480,8 @@ local function printSources(db)
                 tostring(entry.itemID), tostring(entry.exists), tostring(entry.cached), figure(entry.refusedBefore),
                 entry.addonGaveUp and "stopped loading it" or "has not marked it as failed", table.concat(sources, ", ")))
             for _, owner in ipairs(entry.owners or {}) do
-                print(("          reached from %s (item %s), drawn by %s"):format(plainText(owner.link), tostring(owner.itemID),
-                    tostring(owner.drawnBy)))
+                print(("          reached from %s (item %s), drawn by %s%s"):format(plainText(owner.link), tostring(owner.itemID),
+                    tostring(owner.drawnBy), owner.triedOn and "; its look is not in the collection, the addon found it by trying the item on" or ""))
             end
             if (entry.ownerCount or 0) > #(entry.owners or {}) then
                 print(("          and %d more"):format(entry.ownerCount - #entry.owners))
@@ -551,8 +551,9 @@ local function printTraces(db)
             calls))
         for _, call in ipairs(traces.calls or {}) do
             if call.id == itemID then
-                print(("        x%d %s at %s s, called from: %s"):format(call.count, tostring(call.fn), figure(call.first),
-                    #(call.addons or {}) > 0 and table.concat(call.addons, " < ") or "(no addon on the stack)"))
+                print(("        x%d %s at %s s, called from: %s%s"):format(call.count, tostring(call.fn), figure(call.first),
+                    #(call.addons or {}) > 0 and table.concat(call.addons, " < ") or "(no addon on the stack)",
+                    call.during and (", while drawing %s for %s"):format(plainText(call.during), tostring(call.drawnBy)) or ""))
                 local shown = 0
                 for line in tostring(call.stack):gmatch("[^\n]+") do
                     if shown < 7 and not line:find("CaerdonWardrobe_Tests", 1, true) then
