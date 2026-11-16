@@ -318,6 +318,14 @@ local function QuestieHiddenReason(questID)
     return nil
 end
 
+-- What Questie's own policy says about one quest. With GetIndexedQuests below, this is all the
+-- judging code takes from data it cannot ask for one item at a time: Questie's module tables
+-- here, the index over every quest there. Both are methods so that a test can record what
+-- they answered for one item and hand it back (docs/dev-notes.md, Offline Harness).
+function CaerdonQuestItems:GetQuestieHiddenReason(questID)
+    return QuestieHiddenReason(questID)
+end
+
 -- Runs inside the build coroutine. Reads three fields for every quest.
 local function BuildIndex(lib, yieldIfNeeded)
     local Get = lib.Quest.Get
@@ -532,7 +540,7 @@ local GetItemCount = C_Item and C_Item.GetItemCount or GetItemCount
 -- Why a quest that is neither in the log nor completed will not be picked up, or nil when it
 -- still can be. Second value: the answer depends on bag contents and must not be cached.
 local function UpcomingBlocker(questID, verdict, Get)
-    local hiddenReason = QuestieHiddenReason(questID)
+    local hiddenReason = CaerdonQuestItems:GetQuestieHiddenReason(questID)
     if hiddenReason then
         return hiddenReason
     end
@@ -693,6 +701,16 @@ local function SortQuests(left, right)
     return left.questID < right.questID
 end
 
+-- The quests QuestieDB names for an item, from the index built over every quest: those that
+-- take it (questID -> role) and those it starts (questID -> true). nil for either when there
+-- are none, or while there is no index.
+function CaerdonQuestItems:GetIndexedQuests(itemID)
+    if not itemID then
+        return nil, nil
+    end
+    return provider.index and provider.index[itemID] or nil, provider.starters and provider.starters[itemID] or nil
+end
+
 -- Returns nil when no known quest takes the item. Otherwise:
 --   hasQuestValue  an unfinished quest that applies to this toon takes the item (honours the
 --                  "upcoming quests" setting)
@@ -705,8 +723,7 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
     EnsureProvider()
 
     local nameMatches = itemName and questLog.itemNames[itemName]
-    local indexed = itemID and provider.index and provider.index[itemID]
-    local started = itemID and provider.starters and provider.starters[itemID]
+    local indexed, started = self:GetIndexedQuests(itemID)
     if not nameMatches and not indexed and not started then
         return nil
     end
