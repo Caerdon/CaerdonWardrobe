@@ -7,7 +7,7 @@
 -- install folders. --file reads one saved variables file instead.
 --
 -- Sections (all of them when none is named): sessions, contracts, verdicts, snapshot,
--- timing, journal, probes, sources, search, traces, sightings, integrations, rotation, errors. "detail" adds
+-- timing, counters, journal, probes, sources, search, traces, sightings, integrations, rotation, errors. "detail" adds
 -- every contract's stored detail, and
 -- "contract:<id>" prints one contract in full.
 --
@@ -197,6 +197,14 @@ local function printContracts(db, withDetail)
             for _, name in ipairs(sortedKeys(events.counts)) do
                 print(("    %-36s %6d  %.2f"):format(name, events.counts[name], events.counts[name] / math.max(events.minutes, 0.01)))
             end
+            -- The core's own count of what caused each RefreshItems. It starts with the first
+            -- session that had counters, so its sum can be below the RefreshItems line above.
+            if events.triggers then
+                print("    RefreshItems by what caused it (an event, or the line that asked):")
+                for _, name in ipairs(sortedKeys(events.triggers)) do
+                    print(("      %-48s %6d  %.2f"):format(name, events.triggers[name], events.triggers[name] / math.max(events.minutes, 0.01)))
+                end
+            end
         end
     end
 end
@@ -338,6 +346,103 @@ local function describeRefused(items)
     return parts
 end
 
+-- The core's profile: one line per function, then the queue.
+local function printProfile(profile, indent, perRun)
+    if type(profile) ~= "table" then
+        return
+    end
+    local divide = perRun and perRun > 0 and perRun or 1
+    local unit = divide > 1 and " per refresh" or ""
+    print(indent .. ("function: calls%s, ms%s (own: without the listed functions it calls), ms per call, worst call, KB%s (own)")
+        :format(unit, unit, unit))
+    for _, entry in ipairs(profile.functions or {}) do
+        if (entry.calls or 0) > 0 then
+            print(indent .. ("  %-36s %7s  %9s (own %9s)  %7s each  worst %7s  %9s KB (own %9s)%s"):format(tostring(entry.label),
+                figure(entry.calls / divide), figure(entry.ms / divide), figure(entry.ownMs / divide),
+                figure(entry.ms / entry.calls), figure(entry.worstMs), figure(entry.kb / divide), figure(entry.ownKB / divide),
+                (entry.collected or 0) > 0 and ("  collector ran in " .. tostring(entry.collected)) or ""))
+        end
+    end
+    for _, name in ipairs(profile.missing or {}) do
+        print(indent .. "  NOT FOUND, so not counted: " .. tostring(name))
+    end
+    local wait = profile.queueWait
+    if wait then
+        print(indent .. ("wait in the queue: %s draws, mean %s ms, longest %s ms"):format(figure(wait.count), figure(wait.meanMs), figure(wait.worstMs)))
+    end
+    local drains = profile.drains
+    if drains then
+        print(indent .. ("drains of the queue: %s, %s passes, %s ms, longest pass %s ms, %s KB"):format(figure(drains.count),
+            figure(drains.passes), figure(drains.ms), figure(drains.worstPassMs), figure(drains.kb)))
+        for _, done in ipairs(drains.recent or {}) do
+            print(indent .. ("  at %s s: %s draws in %s s, %s passes, %s ms, longest pass %s ms, %s KB%s"):format(figure(done.at),
+                figure(done.draws), figure(done.seconds), figure(done.passes), figure(done.ms), figure(done.worstPassMs),
+                figure(done.kb), (done.collected or 0) > 0 and ("  collector ran in " .. tostring(done.collected) .. " passes") or ""))
+        end
+    end
+end
+
+-- The core's ledger: milestones, what the client was asked to load, refreshes by trigger.
+local function printLedger(ledger, indent)
+    if type(ledger) ~= "table" then
+        return
+    end
+    local parts = {}
+    for _, milestone in ipairs(ledger.milestones or {}) do
+        parts[#parts + 1] = ("%s %s"):format(tostring(milestone.name), figure(milestone.seconds))
+    end
+    print(indent .. "from the addon's first line (s): " .. (#parts > 0 and table.concat(parts, ", ") or "no milestone")
+        .. ("; read at %s"):format(figure(ledger.secondsSinceLoad)))
+    local refreshes = ledger.refreshes
+    if refreshes then
+        parts = {}
+        for _, name in ipairs(sortedKeys(refreshes.by)) do
+            parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.by[name])
+        end
+        print(indent .. ("full refreshes: %s%s"):format(figure(refreshes.total), #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+    end
+    local loads = ledger.itemLoads
+    if loads then
+        print(indent .. ("loads asked of the client: %s (%s loaded, %s failed, %s not answered), mean answer %s s, slowest %s s"):format(
+            figure(loads.asked), figure(loads.loaded), figure(loads.failed), #(loads.unanswered or {}),
+            figure(loads.meanSeconds), figure(loads.slowestSeconds)))
+        for _, by in ipairs(sortedKeys(loads.by)) do
+            local entry = loads.by[by]
+            print(indent .. ("  asked by %s: %s, failed %s"):format(tostring(by), figure(entry.asked), figure(entry.failed)))
+        end
+        for _, failure in ipairs(loads.failures or {}) do
+            print(indent .. ("  FAILED: %s %s x%s, first asked at %s s (%s) by %s, answered after %s s"):format(tostring(failure.kind),
+                tostring(failure.id), figure(failure.times), figure(failure.at), tostring(failure.phase),
+                tostring(failure.where or failure.by), figure(failure.after)))
+        end
+        for _, request in ipairs(loads.unanswered or {}) do
+            print(indent .. ("  not answered: %s %s, asked at %s s (%s) by %s, %s s before the reading"):format(tostring(request.kind),
+                tostring(request.id), figure(request.at), tostring(request.phase), tostring(request.where or request.by),
+                figure(request.waiting)))
+        end
+    end
+end
+
+local function printCounters(db)
+    if #(db.counters or {}) == 0 then
+        return
+    end
+    print("  The core's counters, as stored by /cwtest counters (newest last):")
+    for _, record in ipairs(db.counters) do
+        print(("    %s  [%s, %s, addon %s]"):format(when(record.at), tostring(record.toon), tostring(record.build),
+            tostring(record.subjectVersion)))
+        local report = record.report or {}
+        printLedger(report, "      ")
+        local profile = report.profile
+        if profile and profile.attached then
+            print(("      profile %s, figures since %s s:"):format(profile.on and "on" or "off", figure(profile.since)))
+            printProfile(profile, "        ")
+        else
+            print("      profile: never switched on")
+        end
+    end
+end
+
 local function printTiming(db)
     print("  Timing (addon time is the client profiler's, summed per frame):")
     local previous
@@ -389,12 +494,21 @@ local function printTiming(db)
                 figure(record.profilerAfter and record.profilerAfter.PeakTime),
                 figure(record.profilerAfter and record.profilerAfter.SessionAverageTime), share(record.profilerAfter, "SessionAverageTime"),
                 record.refreshItemsCalls ~= #record.runs and ("; " .. tostring(record.refreshItemsCalls) .. " refreshes happened during the " .. #record.runs .. " runs") or ""))
+            local counted = record.counted
+            if counted then
+                print(("        counted, %s more refreshes with the core's profile on (addon ms median %s against %s without, draws %s):")
+                    :format(figure(counted.runs), figure(counted.medianCpuMs), figure(record.medianCpuMs), figure(counted.medianDraws)))
+                printProfile(counted.profile, "          ", counted.runs)
+            end
         elseif record.kind == "idle" then
             print(("    %s  %-8s %ss  addon ms %s (%s per second, worst frame %s)  refreshes per minute %s  draws %s  memory KB %s  [%s, %s]")
                 :format(when(record.at), "idle", figure(record.seconds), figure(record.cpuMs), figure(record.cpuMsPerSecond),
                     figure(record.worstFrameMs), figure(record.refreshItemsPerMinute), figure(record.draws),
                     figure(record.memoryKB), tostring(record.toon), tostring(record.build)))
             print("        events: " .. inline(record.counts))
+            if record.refreshTriggers and next(record.refreshTriggers) then
+                print("        refreshes by what caused them: " .. inline(record.refreshTriggers))
+            end
         end
     end
     print("  Logins and reloads:")
@@ -410,6 +524,14 @@ local function printTiming(db)
             print(("        the client refused %d item%s by then (seconds after the tests' load; any addon may have asked): %s%s")
                 :format(refused.distinct, refused.distinct == 1 and "" or "s", table.concat(describeRefused(refused.items), ", "),
                     refused.distinct > #refused.items and ", ..." or ""))
+        end
+        printLedger(record.core, "        ")
+        if record.debugOn then
+            print("        Enable debug was on during this login: it adds work to every draw")
+        end
+        if record.profile then
+            print("        profiled from the tests' load (asked for with /cwtest counters login):")
+            printProfile(record.profile, "          ")
         end
     end
 end
@@ -792,6 +914,7 @@ for _, file in ipairs(files) do
             if wants("verdicts") then printVerdicts(db) end
             if wants("snapshot") then printSnapshots(db) end
             if wants("timing") then printTiming(db) end
+            if wants("counters") then printCounters(db) end
             if wants("journal") then printJournal(db) end
             if wants("probes") then printProbes(db) end
             if wants("sources") then printSources(db) end

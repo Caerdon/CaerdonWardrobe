@@ -176,6 +176,8 @@ function T.RunRefreshTiming(label, count)
             return
         end
         local record = BaseRecord("refresh", label)
+        -- Without the core's profile and without Enable debug, whatever they are set to.
+        local restore = T.MeasureUndisturbed()
         record.profilerBefore = T.ReadProfiler(T.SUBJECT)
         local refreshBefore = T.counters.refreshItems
         record.runs = {}
@@ -199,6 +201,10 @@ function T.RunRefreshTiming(label, count)
             record.mostDraws = math.max(record.mostDraws, run.draws)
         end
         record.medianMemoryKB, record.worstMemoryKB, record.memoryRunsUsed = T.Summarize(record.runs, "memoryKB", true)
+        -- The same refresh a few more times with the core's counters on: where the time and
+        -- the memory go. Not part of the figures above.
+        record.counted = T.CountRefreshes(MeasureRefresh, T.GetPlan().timing.countedRuns)
+        restore()
         T.Push(T.db.timing, record, 40)
         T.Print("%s x%d: %s draws per refresh, addon time median %s ms, worst %s ms; last icon after %s ms; memory +%s KB.",
             tostring(label), count, tostring(record.medianDraws or 0), tostring(record.medianCpuMs or "-"),
@@ -225,8 +231,10 @@ function T.RunIdleTiming(seconds)
     T.Start("timing", function()
         T.Print("idle for %d seconds: stand still, windows closed.", seconds)
         local record = BaseRecord("idle", "idle")
+        local restore = T.MeasureUndisturbed()
         record.profilerBefore = T.ReadProfiler(T.SUBJECT)
         local countsBefore = T.GetSessionCounts()
+        local triggersBefore = T.RefreshTriggers()
         local drawsBefore = T.counters.processItem
         local memoryBefore = AddonMemory()
         local cpu, frames, worstFrame = 0, 0, 0
@@ -254,6 +262,9 @@ function T.RunIdleTiming(seconds)
             record.counts[name] = count - (countsBefore[name] or 0)
         end
         record.refreshItemsPerMinute = Round(record.counts.RefreshItems / (elapsed / 60), 2)
+        -- What caused each full refresh, as the core names it.
+        record.refreshTriggers = T.DiffTriggers(triggersBefore, T.RefreshTriggers())
+        restore()
         T.Push(T.db.timing, record, 40)
         T.Print("idle %d s: addon time %s ms (%s ms per second), %d full refreshes, %d draws.", record.seconds,
             tostring(record.cpuMs), tostring(record.cpuMsPerSecond), record.counts.RefreshItems, record.draws)
@@ -269,7 +280,8 @@ end
 
 -- The tests load after the addon, so the addon's first line is out of reach from here: this
 -- records what can be seen from outside, from this addon's own load to the first time the
--- queue is empty after entering the world.
+-- queue is empty after entering the world. What the addon counted itself from its first line
+-- on is stored with it (`core`: milestones, loads asked of the client, refreshes by trigger).
 local loginRecorded = false
 
 T.RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloadingUi)
@@ -291,6 +303,10 @@ T.RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloading
         -- Items the client refused so far, whoever asked. `first` counts from the tests' load,
         -- as secondsFromLoadToWorld does.
         record.refusedItems = T.RefusedItems(30)
+        record.core = T.ReadLedger()
+        -- A login cannot be taken again without the setting, so the record says how it was.
+        record.debugOn = T.DebugIsOn() or nil
+        record.profile = T.TakeLoginProfile()
         T.Push(T.db.logins, record, 20)
         if T.AfterLogin then
             T.AfterLogin()

@@ -168,6 +168,7 @@ local HELP = {
     "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
     "/cwtest sightings - bag states (openable, locked, refundable, bound) checked when an item showed one",
     "/cwtest integrations - whether each integration found the places it hooks in the other addon",
+    "/cwtest counters [on | off | reset | login] - the core's own counters: print and store them; its profile on or off; profile the next login",
     "/cwtest rotation - the panel that takes every installed bag addon in turn, one per reload",
     "/cwtest rotation status | start [addon ...] | next | skip | check | abort - the same, typed",
     "/cwtest coverage - verdict tests per kind of toon",
@@ -263,6 +264,10 @@ end
 
 COMMANDS.integrations = function()
     T.PrintIntegrations()
+end
+
+COMMANDS.counters = function(rest)
+    T.CountersCommand(rest)
 end
 
 COMMANDS.rotation = function(rest)

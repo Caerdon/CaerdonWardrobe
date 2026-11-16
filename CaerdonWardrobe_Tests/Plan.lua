@@ -29,6 +29,7 @@ CaerdonWardrobeTestsPlan = {
 
     timing = {
         runs = 10,         -- forced refreshes per /cwtest timing <label>
+        countedRuns = 3,   -- more of them afterwards with the core's counters on; 0 for none
         idleSeconds = 180, -- /cwtest timing idle
     },
 

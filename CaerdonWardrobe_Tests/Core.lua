@@ -215,6 +215,8 @@ local function NewDB()
         addonSets = {}, -- key -> the other addons that were enabled, with their versions
         errors = {},    -- errors in the tests themselves
         pending = {},   -- what a reload was asked to prove
+        counters = {},  -- the core's own counters, as stored by /cwtest counters
+        switches = {},  -- what the tests changed for a while and have to put back
     }
 end
 
@@ -493,6 +495,13 @@ end
 ------------------------------------------------------------------------------------------
 -- The addon under test
 ------------------------------------------------------------------------------------------
+
+-- The core's counters wrap the functions they time, and the tests hook some of the same ones
+-- (Journal.lua). Wrapped here, before any hook, the hooks sit outside and their time is not
+-- counted. It switches nothing on (Counters.lua).
+if CaerdonCounters and CaerdonCounters.Attach then
+    CaerdonCounters:Attach()
+end
 
 -- Whether the addon has nothing queued. This reads the queue's own fields and is the one
 -- place the tests know how the queue is built: when the core can answer the question itself,

@@ -15,6 +15,7 @@ Contracts.lua
 Verdicts.lua
 VerdictCases.lua
 Journal.lua
+Counters.lua
 Snapshot.lua
 Sightings.lua
 Integrations.lua
