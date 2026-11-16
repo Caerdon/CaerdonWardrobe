@@ -1814,6 +1814,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             local isUpgrade = transmogInfo.isUpgrade
             if bindingResult.unusableItem then
                 transmogInfo.canEquipForPlayer = false
+                -- Said in its own field for the equal-level test here and in the drawing:
+                -- canEquipForPlayer is read there with canEquip as its fallback, which is true
+                -- for such a piece (the class can use it one day).
+                transmogInfo.unusableNow = true
                 if transmogInfo.hasMetRequirements then
                     isUpgrade = nil
                 end
@@ -1926,7 +1930,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 local identicalToEquipped = transmogInfo and transmogInfo.identicalToEquipped
                 local redundantForPlayer = transmogInfo and
                     (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped or identicalToEquipped)
-                local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
+                -- A piece the toon cannot wear now (red text: mail before the proficiency) is not
+                -- kept for its equal item level: by the time it can be worn it has been outgrown.
+                local canEquipEqualItem = transmogInfo and not transmogInfo.unusableNow and
+                    (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
                 local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
                 local protectEqualItemLevel = false
                 if sameLevelBehavior ~= "sellable" and transmogInfo and transmogInfo.equalItemLevelEquipped and

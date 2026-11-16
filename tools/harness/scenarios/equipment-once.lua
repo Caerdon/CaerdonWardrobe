@@ -45,6 +45,16 @@ return function(H, S)
             -- In the bag: two copies of a helm that equipment sets name, and one they do not.
             [920005] = Armor("Set Helm", "INVTYPE_HEAD", 20, { appearanceID = 5205, sourceID = 7205, collected = true }),
             [920006] = Armor("Spare Helm", "INVTYPE_HEAD", 20, { appearanceID = 5206, sourceID = 7206, collected = true }),
+            -- Two learned chest pieces that tie the worn one's level and do something else. The
+            -- toon can wear the first; the second is mail, which the client writes in red.
+            [920020] = Armor("Worn Vest", "INVTYPE_CHEST", 20, { appearanceID = 5220, sourceID = 7220, collected = true },
+                { tooltip = { { text = "+3 Stamina" } } }),
+            [920021] = Armor("Tied Vest", "INVTYPE_CHEST", 20, { appearanceID = 5221, sourceID = 7221, collected = true },
+                { tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "+3 Agility" } } }),
+            [920022] = Armor("Tied Hauberk", "INVTYPE_CHEST", 20, { appearanceID = 5222, sourceID = 7222, collected = true },
+                { subType = "Mail", subClassID = 3,
+                    tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "+3 Agility" },
+                        { text = "Mail", r = 1, g = 0.125, b = 0.125 } } }),
             -- A look with two more sources, whose items this client cannot load.
             [920010] = Armor("Shared Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7210 }),
             [920011] = Armor("Ghost Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7211 }),
@@ -52,7 +62,7 @@ return function(H, S)
         }
     end
 
-    local WORN = { [10] = 920002, [8] = 920004 }
+    local WORN = { [10] = 920002, [8] = 920004, [5] = 920020 }
     local BAG = { [1] = 920005, [2] = 920005, [3] = 920006 }
     -- Set 11 names both copies of the helm and a worn piece, set 12 one copy, set 13 has no
     -- locations to give.
@@ -457,6 +467,32 @@ return function(H, S)
         Equal(Count(debug, "C_Item.GetItemInfo", 920011), 0, "debug: and still not about the refused item's level")
         Equal(after and #(after.appearanceSources or {}), 3, "debug: the details still list every source")
         NoErrors(debug, "debug")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- An equal item level keeps a piece only if the toon can wear it now
+    --------------------------------------------------------------------------------------
+
+    do
+        local function Verdict(itemID)
+            local item = Load(world, itemID)
+            local ready, status, _, result, info = item:GetCaerdonStatus()
+            return ready and status or "<not ready>", result or {}, info or {}
+        end
+        local status, result, info = Verdict(920021)
+        Equal(info.equalItemLevelEquipped, true, "tie: the vest ties the worn one's level")
+        Equal(info.identicalToEquipped, false, "tie: and does something else")
+        Equal(result.unusableItem, false, "tie: nothing in its tooltip is red")
+        Equal(info.unusableNow, nil, "tie: so it is not marked as unwearable")
+        Equal(status, "collected", "tie: a piece the toon can wear is kept for its equal level")
+
+        status, result, info = Verdict(920022)
+        Equal(info.equalItemLevelEquipped, true, "tie: the hauberk ties it too")
+        Equal(info.hasMetRequirements, true, "tie: the toon has its level")
+        Equal(result.unusableItem, true, "tie: its armor type is written in red")
+        Equal(info.unusableNow, true, "tie: which the transmog info carries for the drawing")
+        Equal(status, "sellable", "tie: a piece the toon cannot wear now is not kept for its equal level")
+        NoErrors(world, "tie")
     end
 
     --------------------------------------------------------------------------------------

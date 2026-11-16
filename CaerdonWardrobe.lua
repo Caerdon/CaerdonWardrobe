@@ -1009,7 +1009,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local upgradeSlotAvailable = displayInfo and displayInfo.upgradeIcon.shouldShow and not isEquipmentSetItem and
         not isTabard
     local shouldShowUpgradeIcon = globalUpgradeEnabled and upgradeSlotAvailable
-    local canEquipForNeutral = transmogInfo and
+    -- unusableNow: the tooltip's red text says the toon cannot wear the piece now, so it gets no
+    -- equal-level icon (the status code sets it, and gives such a piece no protection either).
+    local canEquipForNeutral = transmogInfo and not transmogInfo.unusableNow and
         ((transmogInfo.canEquipForPlayer ~= nil and transmogInfo.canEquipForPlayer) or transmogInfo.canEquip)
 
     local alpha = 1
