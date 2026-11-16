@@ -484,6 +484,11 @@ local function EmptyTheAddonsCaches()
     if CaerdonAPI.InvalidateTalentTrees then
         CaerdonAPI:InvalidateTalentTrees()
     end
+    -- What a module keeps for the whole session because it never changes, which a refresh
+    -- rightly leaves alone. A replay starts without it, so a recorded run has to as well.
+    if CaerdonFoodDrink.ForgetClassifications then
+        CaerdonFoodDrink:ForgetClassifications()
+    end
 end
 
 -- Asked at the end of every recorded run whether the addon asked or not: who the toon is and

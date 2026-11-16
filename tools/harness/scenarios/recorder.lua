@@ -85,6 +85,14 @@ return function(H, S)
             -- Trade goods with a price at the auction house.
             [900007] = { name = "Thick Hide", quality = 1, level = 20, minLevel = 0, type = "Tradeskill",
                 subType = "Leather", stack = 20, price = 50, classID = 7, subClassID = 6 },
+            -- Two foods in the bags. The addon judges one against the other, and keeps what it
+            -- learned about each for the session.
+            [900008] = { name = "Tough Jerky", quality = 1, level = 5, minLevel = 5, type = "Consumable",
+                subType = "Food & Drink", stack = 20, price = 6, classID = 0, subClassID = 5,
+                tooltip = { { text = "Use: Restores 61 health over 18 sec. Must remain seated while eating.", type = 0 } } },
+            [900009] = { name = "Roasted Boar", quality = 1, level = 25, minLevel = 25, type = "Consumable",
+                subType = "Food & Drink", stack = 20, price = 100, classID = 0, subClassID = 5,
+                tooltip = { { text = "Use: Restores 874 health over 27 sec. Must remain seated while eating.", type = 0 } } },
             -- Named after the toon, so its link carries the toon's name into every question.
             [900003] = { name = "Zzyxa's Trophy", quality = 1, level = 1, minLevel = 0, type = "Miscellaneous",
                 subType = "Junk", stack = 1, price = 1, classID = 15, subClassID = 0 },
@@ -97,6 +105,21 @@ return function(H, S)
         local game = H.StockGame(TOON, items)
         -- The client names a realm in two ways: UnitName returns a shorter one beside the name.
         game:Set("UnitName", function() return TOON.name, "Farshort" end)
+
+        -- What the toon carries.
+        local bag = { 900008, 900009 }
+        game:Set("C_Container.GetContainerNumSlots", function(bagID) return bagID == 0 and #bag or 0 end)
+        game:Set("C_Container.GetContainerItemID", function(bagID, slot) return bagID == 0 and bag[slot] or nil end)
+        game:Set("C_Container.GetContainerItemLink", function(bagID, slot)
+            return bagID == 0 and bag[slot] and game.Link(bag[slot]) or nil
+        end)
+        game:Set("C_Container.GetContainerItemInfo", function(bagID, slot)
+            local id = bagID == 0 and bag[slot]
+            if id then
+                return { itemID = id, stackCount = 1, hyperlink = game.Link(id), isBound = false, quality = 1,
+                    iconFileID = 134400 }
+            end
+        end)
 
         -- Two other addons, as the addon reads them. An auction addon with a price, and a
         -- listing history that it hands to a function it is given. A gear addon whose table
@@ -203,7 +226,7 @@ return function(H, S)
 
     local untouched = game.names["C_Item.GetItemInfo"]
     T.RecordItems({ { itemID = 900001 }, { itemID = 900002 }, { itemID = 900003 }, { itemID = 123 },
-        { itemID = 900004 }, { itemID = 900005 }, { itemID = 900007 } })
+        { itemID = 900004 }, { itemID = 900005 }, { itemID = 900007 }, { itemID = 900008 } })
     Check(client:TickUntil(function() return not T.IsBusy() end, 60), "record: the job ends")
     Equal(#client.errors, 0, "record: no error reached the error handler")
     Equal(#T.db.errors, 0, "record: no error of the tests' own")
@@ -215,7 +238,16 @@ return function(H, S)
     end
 
     local list = T.db.recordings.list
-    Equal(#list, 6, "record: six recordings, and none for an item the game does not have")
+    Equal(#list, 7, "record: seven recordings, and none for an item the game does not have")
+    local jerky = list[7] or {}
+    Check(jerky.verdict and jerky.verdict.status == "sellable",
+        "record: food the toon has outgrown, with better food in the bags, is for selling ("
+            .. tostring(jerky.verdict and jerky.verdict.status) .. ")")
+    local asked = false
+    for key in pairs(jerky.calls and jerky.calls["C_Item.GetItemInfo"] or {}) do
+        asked = asked or key:find("item:900009:", 1, true) ~= nil
+    end
+    Check(asked, "record: the addon asked about the other food again, although it had learned it this session")
     local fang, vest, helm, gloves, hide = list[1] or {}, list[2] or {}, list[4] or {}, list[5] or {}, list[6] or {}
     Check(hide.verdict and hide.verdict.status == "auctionGoods",
         "record: trade goods worth more at auction say so (" .. tostring(hide.verdict and hide.verdict.status) .. ")")
@@ -301,12 +333,12 @@ return function(H, S)
     local log = {}
     local counts = H.Import(globals.CaerdonWardrobeTestsDB, { log = function(line) log[#log + 1] = line end,
         verbose = os.getenv("CAERDON_HARNESS_VERBOSE") ~= nil })
-    Equal(counts.written, 5, "import: five fixtures written (" .. table.concat(log, " | ") .. ")")
+    Equal(counts.written, 6, "import: six fixtures written (" .. table.concat(log, " | ") .. ")")
     Equal(counts.rejected, 0, "import: none rejected")
     Equal(counts.unusable, 1, "import: the item whose link holds the toon's name is refused")
 
     local fixtures = H.ListFixtures()
-    Equal(#fixtures, 5, "fixtures: five are listed")
+    Equal(#fixtures, 6, "fixtures: six are listed")
     local byItem = {}
     for _, fixture in ipairs(fixtures) do
         local text = H.ReadFile(fixture.path)
@@ -336,7 +368,7 @@ return function(H, S)
     -- Importing again changes nothing; a different recording of the same item needs --replace.
     do
         local again = H.Import(globals.CaerdonWardrobeTestsDB, { log = function() end })
-        Equal(again.same, 5, "import: a second import finds them as they are")
+        Equal(again.same, 6, "import: a second import finds them as they are")
         local changed = H.DeepCopy(globals.CaerdonWardrobeTestsDB)
         changed.recordings.list[2].note = "another take"
         local third = H.Import(changed, { log = function() end })
