@@ -728,7 +728,8 @@ end
 
 -- Bag states that were checked when an item showed one. A case nobody has carried an item for
 -- is listed as not seen: that is the coverage.
-local SIGHTING_CASES = { "openable", "locked", "readable", "refundable", "soulbound", "bindOnEquip", "accountBindType" }
+local SIGHTING_CASES = { "openable", "locked", "readable", "refundable", "soulbound", "bindOnEquip", "accountBindType",
+    "lootOnCooldown", "longCooldown" }
 
 local function printSightings(db)
     local sightings = db.sightings or {}
@@ -771,6 +772,9 @@ local function printSightings(db)
             end
             for index, line in ipairs(record.tooltip or {}) do
                 print(("          line %2d: %s"):format(index, inline(line)))
+            end
+            for index, line in ipairs(record.slotTooltip or {}) do
+                print(("          slot line %2d: %s"):format(index, inline(line)))
             end
         end
     end

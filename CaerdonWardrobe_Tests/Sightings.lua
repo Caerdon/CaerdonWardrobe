@@ -26,6 +26,8 @@ local BUSY_DELAY = 5          -- seconds before trying again while something els
 --   binding  "none": no binding text; "some": a binding text
 -- A case without expect is only recorded: something the notes still have a question about.
 -- slotState marks the states of one copy in one slot, which two copies of an item can differ in.
+local LONG_COOLDOWN_SECONDS = 24 * 60 * 60
+
 T.SightingCases = {
     {
         id = "openable",
@@ -73,6 +75,18 @@ T.SightingCases = {
         id = "accountBindType",
         rule = "bind type 7 (ToWoWAccount): does such an item exist, and what does its tooltip say",
         fits = function(facts) return facts.bindType == Enum.ItemBind.ToWoWAccount end,
+    },
+    -- The addon shows "openable" whatever the container's cooldown. These two record what a
+    -- client says about such an item, so what it should show can be decided from one.
+    {
+        id = "lootOnCooldown",
+        rule = "an item with loot that is on a cooldown: what the client reports and what the addon shows meanwhile",
+        fits = function(facts) return facts.hasLoot and (facts.cooldownSeconds or 0) > 0 end,
+    },
+    {
+        id = "longCooldown",
+        rule = "an item without loot on a cooldown of a day or more (an egg that hatches?): is the wait a cooldown at all",
+        fits = function(facts) return not facts.hasLoot and (facts.cooldownSeconds or 0) >= LONG_COOLDOWN_SECONDS end,
     },
 }
 
@@ -159,8 +173,14 @@ local function ReadSlot(bag, slot)
         local tooltip = ReadTooltip(C_TooltipInfo.GetBagItem(bag, slot))
         facts.lockedLine, facts.openableLine = tooltip.lockedLine, tooltip.openableLine
         facts.tooltipNotReady = tooltip.notReady and true or nil
-        local _, duration, enable = C_Container.GetContainerItemCooldown(bag, slot)
+    end
+    -- Kept for every item with loot, and for any other item only while a cooldown runs.
+    local start, duration, enable = C_Container.GetContainerItemCooldown(bag, slot)
+    if facts.hasLoot or (duration or 0) > 0 then
         facts.cooldownSeconds, facts.cooldownEnable = duration, enable
+        if (duration or 0) > 0 then
+            facts.cooldownStart = start
+        end
     end
     return facts, info.hyperlink
 end
@@ -273,6 +293,12 @@ local function Check(candidate)
     facts.linkBindingLine = linkTooltip.bindingLine
     if not case.expect then
         record.tooltip = T.Facts.TooltipLines(link)
+        -- The slot's own lines too: what is left of a wait belongs to the copy, not the link.
+        record.slotTooltip = {}
+        local slotData = C_TooltipInfo.GetBagItem(bag, slot)
+        for index, line in ipairs(slotData and slotData.lines or {}) do
+            record.slotTooltip[index] = T.Plain(line, 3)
+        end
     end
 
     -- The bare link first, the way a mail or loot window asks before the item reaches the bags.
