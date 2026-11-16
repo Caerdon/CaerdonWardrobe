@@ -599,6 +599,10 @@ local function printSightings(db)
                 tostring(record.binding), when(record.at), tostring(record.toon), tostring(record.bag),
                 tostring(record.slot), tostring(record.subjectVersion),
                 record.message and ("\n          " .. record.message) or ""))
+            if record.linkStatus ~= nil then
+                print(("          the bare link alone, asked first: status %s"):format(
+                    record.linkStatus == "" and "(none)" or tostring(record.linkStatus)))
+            end
             if record.result ~= "pass" or sections.sightings then
                 print("          facts:   " .. inline(record.facts or {}))
                 if record.why then print("          binding: " .. inline(record.why)) end

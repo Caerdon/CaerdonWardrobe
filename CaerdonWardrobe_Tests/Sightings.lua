@@ -275,6 +275,18 @@ local function Check(candidate)
         record.tooltip = T.Facts.TooltipLines(link)
     end
 
+    -- The bare link first, the way a mail or loot window asks before the item reaches the bags.
+    -- The addon keeps a verdict per link, and the slot's answer must not be the link's.
+    local linkItem = CaerdonItem:CreateFromItemLink(link)
+    local linkLoaded = false
+    linkItem:ContinueOnItemLoad(function() linkLoaded = true end)
+    if T.WaitUntil(function() return linkLoaded end, 10) then
+        local linkReady, linkStatus = T.GetVerdict(linkItem, nil, nil, 8)
+        if linkReady then
+            record.linkStatus = linkStatus or ""
+        end
+    end
+
     local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
     local loaded = false
     item:ContinueOnItemLoad(function() loaded = true end)
