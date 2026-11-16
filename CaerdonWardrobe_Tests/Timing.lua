@@ -165,6 +165,13 @@ function T.RunRefreshTiming(label, count)
         record.medianLastDrawMs, record.worstLastDrawMs = T.Summarize(record.runs, "lastDrawMs")
         record.medianFirstDrawMs = T.Summarize(record.runs, "firstDrawMs")
         record.medianDraws = T.Summarize(record.runs, "draws")
+        -- The same windows give the same number of draws every time. A run that drew more or
+        -- fewer had something else going on, and the record is not a clean measurement.
+        record.fewestDraws, record.mostDraws = record.runs[1].draws, record.runs[1].draws
+        for _, run in ipairs(record.runs) do
+            record.fewestDraws = math.min(record.fewestDraws, run.draws)
+            record.mostDraws = math.max(record.mostDraws, run.draws)
+        end
         record.medianMemoryKB, record.worstMemoryKB, record.memoryRunsUsed = T.Summarize(record.runs, "memoryKB", true)
         T.Push(T.db.timing, record, 40)
         T.Print("%s x%d: %s draws per refresh, addon time median %s ms, worst %s ms; last icon after %s ms; memory +%s KB.",
@@ -173,6 +180,9 @@ function T.RunRefreshTiming(label, count)
             tostring(record.medianMemoryKB or "-"))
         if (record.medianDraws or 0) == 0 then
             T.Print("nothing was drawn: no window the addon decorates was open.")
+        elseif record.fewestDraws ~= record.mostDraws then
+            T.Print("|cffffcc00the refreshes drew between %d and %d items, so something else was drawing too|r (a window opened, a page changed, an item moved). Run it again with nothing changing.",
+                record.fewestDraws, record.mostDraws)
         end
         if T.OnTestsFinished then
             T.OnTestsFinished()

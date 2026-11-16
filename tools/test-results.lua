@@ -309,6 +309,17 @@ local function printTiming(db)
                     figure(record.medianLastDrawMs),
                     figure(record.medianFirstDrawMs), figure(record.medianMemoryKB), tostring(record.toon),
                     tostring(record.build), tostring(record.subjectVersion)))
+            local fewest, most = record.fewestDraws, record.mostDraws
+            if not fewest then
+                for _, run in ipairs(record.runs) do
+                    fewest = math.min(fewest or run.draws, run.draws)
+                    most = math.max(most or run.draws, run.draws)
+                end
+            end
+            if fewest ~= most then
+                print(("        NOT A CLEAN RUN: the refreshes drew between %d and %d items, so something else was drawing too")
+                    :format(fewest, most))
+            end
             print(("        profiler after: recent %s ms (%s), peak %s ms, session %s ms (%s)%s"):format(
                 figure(record.profilerAfter and record.profilerAfter.RecentAverageTime), share(record.profilerAfter, "RecentAverageTime"),
                 figure(record.profilerAfter and record.profilerAfter.PeakTime),
