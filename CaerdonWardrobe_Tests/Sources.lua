@@ -5,10 +5,11 @@
 -- game mode that shares the look), and a question about one makes it ask the server again.
 -- The answer comes back as an event that other windows redraw on.
 --
--- Three parts: everything the addon drew this session, every item the client refused this
--- session, and the probe that puts the two together (/cwtest sources). The probe names the
--- refused item, its source and appearance, the drawn items that lead to it, and which of the
--- calls the addon makes on a source is the one that makes the client ask.
+-- Four parts: everything the addon drew this session, every item the client refused this
+-- session, the probe that puts the two together (/cwtest sources), and a trace of who calls
+-- the client about an item the plan names. The probe names the refused item, its source and
+-- appearance, the drawn items that lead to it, and which of the calls the addon makes on a
+-- source is the one that makes the client ask.
 
 local _, T = ...
 
@@ -399,3 +400,114 @@ function T.ProbeSources()
         end
     end)
 end
+
+------------------------------------------------------------------------------------------
+-- Who asks for an item
+------------------------------------------------------------------------------------------
+
+-- The refusal events do not say who asked. For the item IDs the plan names (traceItems),
+-- every function of C_Item and C_TooltipInfo is hooked, and a call that names one of those
+-- items is stored with its stack. Nothing has to be typed: the record is in the saved
+-- variables after the next reload.
+--
+-- A caller that took its own reference to a function before the tests loaded
+-- (local GetItemInfo = C_Item.GetItemInfo) is not seen. So an item that was refused with no
+-- call on record was asked for that way, or through another API.
+--
+-- The hooks add a little to every addon's item calls and cannot be taken off again, so they
+-- are only installed when the plan names an item: empty the list and reload to be rid of them.
+
+local MAX_TRACES = 60
+local traced -- item ID -> true
+local traceKeys = {}
+
+local function OnItemCall(fn, first)
+    if issecretvalue(first) then
+        return
+    end
+    local itemID
+    local kind = type(first)
+    if kind == "number" then
+        itemID = traced[first] and first
+    elseif kind == "string" then
+        local id = tonumber(first:match("item:(%d+)"))
+        itemID = id and traced[id] and id
+    end
+    if not itemID then
+        return
+    end
+
+    local stack = debugstack(3, 14, 6) or ""
+    local key = fn .. "\n" .. itemID .. "\n" .. stack
+    local entry = traceKeys[key]
+    if entry then
+        entry.count = entry.count + 1
+        return
+    end
+    local calls = T.db.traces.calls
+    if #calls >= MAX_TRACES then
+        T.db.traces.more = (T.db.traces.more or 0) + 1
+        return
+    end
+    -- The addons on the stack, innermost first: the first is the one that made the call.
+    local addons, seen = {}, {}
+    for name in stack:gmatch("AddOns/([^/%]]+)/") do
+        if not seen[name] and name ~= T.NAME then
+            seen[name] = true
+            addons[#addons + 1] = name
+        end
+    end
+    entry = {
+        id = itemID,
+        fn = fn,
+        count = 1,
+        first = Round(GetTime() - (T.loadedAt or GetTime())),
+        addons = addons,
+        stack = stack,
+    }
+    traceKeys[key] = entry
+    calls[#calls + 1] = entry
+end
+
+local function HookNamespace(namespaceName)
+    local namespace = _G[namespaceName]
+    if type(namespace) ~= "table" then
+        return 0
+    end
+    local names = {}
+    for name, value in pairs(namespace) do
+        if type(value) == "function" then
+            names[#names + 1] = name
+        end
+    end
+    for _, name in ipairs(names) do
+        local fn = namespaceName .. "." .. name
+        hooksecurefunc(namespace, name, function(first)
+            OnItemCall(fn, first)
+        end)
+    end
+    return #names
+end
+
+T.OnInit(function()
+    local ids = T.GetPlan().traceItems or {}
+    if #ids == 0 then
+        return
+    end
+    traced = {}
+    for _, itemID in ipairs(ids) do
+        traced[itemID] = true
+    end
+    T.db.traces = { started = GetServerTime(), ids = ids, calls = {} }
+    T.db.traces.hooked = HookNamespace("C_Item") + HookNamespace("C_TooltipInfo")
+end)
+
+-- Fires on logout and on a reload, just before the saved variables are written.
+T.RegisterEvent("PLAYER_LOGOUT", function()
+    if traced and T.db and T.db.traces then
+        local toon, client = T.GetToon(), T.GetClient()
+        T.db.traces.toon, T.db.traces.build, T.db.traces.flavor = toon.key, client.build, client.flavor
+        T.db.traces.seconds = Round(GetTime() - (T.loadedAt or GetTime()))
+        T.db.traces.refused = T.RefusedItems(60)
+    end
+end)

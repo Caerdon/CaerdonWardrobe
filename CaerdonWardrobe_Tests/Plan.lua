@@ -6,6 +6,7 @@
 --
 --     local plan = CaerdonWardrobeTestsPlan
 --     plan.probeItems = { 2969, 6550 }
+--     plan.traceItems = { 216679 }
 --     plan.skip["transmog.categoryAppearances"] = "slow on this toon"
 
 local _, T = ...
@@ -20,6 +21,11 @@ CaerdonWardrobeTestsPlan = {
     -- Item IDs to look up after login: the client's facts, the tooltip's lines and the
     -- addon's verdict for each go into the results (probes).
     probeItems = {},
+
+    -- Item IDs whose askers are wanted: every call of a C_Item or C_TooltipInfo function
+    -- that names one is recorded with its stack (Sources.lua). This hooks those functions for
+    -- the whole session, so leave it empty unless a question needs it.
+    traceItems = {},
 
     timing = {
         runs = 10,         -- forced refreshes per /cwtest timing <label>

@@ -7,7 +7,7 @@
 -- install folders. --file reads one saved variables file instead.
 --
 -- Sections (all of them when none is named): sessions, contracts, verdicts, snapshot,
--- timing, journal, probes, sources, search, errors. "detail" adds every contract's stored detail, and
+-- timing, journal, probes, sources, search, traces, errors. "detail" adds every contract's stored detail, and
 -- "contract:<id>" prints one contract in full.
 --
 -- This prints what the clients recorded. Whatever is listed here was seen in a client; what
@@ -530,6 +530,44 @@ local function printSearch(db)
     end
 end
 
+local function printTraces(db)
+    local traces = db.traces
+    if not traces or not traces.ids then
+        return
+    end
+    print(("  Who asked for items %s (%s, %s, build %s; %s functions hooked for %s s):"):format(inline(traces.ids),
+        tostring(traces.toon), when(traces.started), tostring(traces.build), figure(traces.hooked), figure(traces.seconds)))
+    local refusedBy = {}
+    for _, item in ipairs(traces.refused and traces.refused.items or {}) do refusedBy[item.id] = item end
+    for _, itemID in ipairs(traces.ids) do
+        local item = refusedBy[itemID]
+        local calls = 0
+        for _, call in ipairs(traces.calls or {}) do
+            if call.id == itemID then calls = calls + call.count end
+        end
+        print(("    item %s: %s; %d calls seen that name it"):format(tostring(itemID),
+            item and ("refused %d times (item info %d, load %d), first %s s after the tests' load"):format(
+                item.info + item.load + item.duringTests, item.info, item.load, figure(item.first)) or "not refused this session",
+            calls))
+        for _, call in ipairs(traces.calls or {}) do
+            if call.id == itemID then
+                print(("        x%d %s at %s s, called from: %s"):format(call.count, tostring(call.fn), figure(call.first),
+                    #(call.addons or {}) > 0 and table.concat(call.addons, " < ") or "(no addon on the stack)"))
+                local shown = 0
+                for line in tostring(call.stack):gmatch("[^\n]+") do
+                    if shown < 7 and not line:find("CaerdonWardrobe_Tests", 1, true) then
+                        shown = shown + 1
+                        print("            " .. line:sub(1, 150))
+                    end
+                end
+            end
+        end
+    end
+    if traces.more then
+        print(("    and %d more distinct calls than are kept"):format(traces.more))
+    end
+end
+
 local function printErrors(db)
     if #(db.errors or {}) == 0 then
         return
@@ -567,6 +605,7 @@ for _, file in ipairs(files) do
             if wants("probes") then printProbes(db) end
             if wants("sources") then printSources(db) end
             if wants("search") then printSearch(db) end
+            if wants("traces") then printTraces(db) end
             if wants("errors") then printErrors(db) end
         end
     end

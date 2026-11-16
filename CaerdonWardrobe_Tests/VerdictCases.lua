@@ -29,6 +29,14 @@ T.Verdict({
             pool = { 2969, 6550 },
             expect = { status = "own" },
         },
+        {
+            name = "rogue",
+            toon = { class = "ROGUE" },
+            -- Leather, bows, a mace and a sword, several above the level they were found at:
+            -- the level is no part of the shape.
+            pool = { 7690, 18323, 2824, 15366, 279868, 15445, 9802, 5192 },
+            expect = { status = "own" },
+        },
     },
     confirmed = "Forever, hunter, 2026-11: Spellbinder Vest 2969 and Soldier's Wristguards 6550",
 })
@@ -52,6 +60,14 @@ T.Verdict({
             name = "hunter",
             toon = { class = "HUNTER" },
             pool = { 5212 }, -- Blazing Wand
+            expect = { status = "other" },
+        },
+        {
+            name = "rogue",
+            toon = { class = "ROGUE" },
+            -- Staves, two-handed maces and axes, a polearm, a crossbow and fist weapons. Training
+            -- a weapon skill retires the items of that kind.
+            pool = { 215375, 15261, 13038, 1522, 2942, 6687, 273456, 18717 },
             expect = { status = "other" },
         },
     },
