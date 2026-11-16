@@ -3,3 +3,4 @@
 CLAUDE.local.md
 *.local.lua
 CaerdonWardrobe_Tests/StaticFacts.lua
+CaerdonWardrobe_Tests/ApiNames.lua

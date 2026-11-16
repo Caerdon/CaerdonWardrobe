@@ -3,9 +3,10 @@
 --   luajit tools/static-checks.lua [--builds DIR] [--verbose] [--emit-facts]
 --
 -- It reads the addon and the test addon (CaerdonWardrobe_Tests), which runs in the same
--- clients. --emit-facts writes what the check concluded to CaerdonWardrobe_Tests/StaticFacts.lua
--- (generated, not tracked), where the test addon compares it with the client; a run without
--- it reports that file when it is out of date.
+-- clients. --emit-facts writes two generated files into CaerdonWardrobe_Tests (not tracked):
+-- StaticFacts.lua, what the check concluded, which the test addon compares with the client,
+-- and ApiNames.lua, every name of the client the addon reads, which the test addon's recorder
+-- hooks and captures. A run without the option reports either file when it is out of date.
 --
 -- What it checks, for retail and for Forever separately:
 --   * every global the addon reads, every C_* function, namespace function and Enum value it
@@ -47,6 +48,7 @@ local emitFacts = false
 -- The addons to read, as folders below the repository's root. The first is the addon itself.
 local ADDON_ROOTS = { "", "CaerdonWardrobe_Tests/" }
 local FACTS_FILE = "CaerdonWardrobe_Tests/StaticFacts.lua"
+local NAMES_FILE = "CaerdonWardrobe_Tests/ApiNames.lua"
 
 do
     local i = 1
@@ -327,7 +329,12 @@ local function loadListings(client, dir)
             if namespace then client.namespaces[namespace] = true end
         end
     end
-    for _, list in ipairs(load("GlobalAPI.lua")()) do addNames(list) end
+    -- The client's own functions, apart from the ones Blizzard's Lua defines.
+    client.clientApi = {}
+    for _, list in ipairs(load("GlobalAPI.lua")()) do
+        addNames(list)
+        for _, name in ipairs(list) do client.clientApi[name] = true end
+    end
     for _, list in ipairs(load("FrameXML.lua")()) do addNames(list) end
 
     client.mixins = setOf(load("Mixins.lua")())
@@ -792,7 +799,7 @@ local function loadAddon()
             -- A "*.local.lua" file is one machine's own and is not tracked.
             if path:lower():match("%.local%.lua$") then return end
             -- Generated and not tracked: its absence is noted in the report.
-            if path == FACTS_FILE then return end
+            if path == FACTS_FILE or path == NAMES_FILE then return end
             fail("the addon loads " .. path .. ", which is missing")
         end
         if path:lower():match("%.xml$") then
@@ -1151,24 +1158,92 @@ local function factsText()
     return table.concat(out, "\n")
 end
 
-local factsMissing = false
-do
-    local text = factsText()
-    local path = addonDir .. "/" .. FACTS_FILE
+-- Every name of the client the addon itself reads, for the test addon's recorder: a global,
+-- or a field read off one by its full path. The kind says what the recorder may do with it:
+-- "api" is a function of the client's own (the GlobalAPI listing of either client), "other"
+-- belongs to another addon, "" is anything else (a string, a number, a frame, Blizzard's Lua).
+-- The addon's own names and Lua's are left out, and so is what only the test addon reads.
+local function namesText()
+    local function inAddon(placeList)
+        for _, place in ipairs(placeList) do
+            if place:sub(1, #ADDON_ROOTS[2]) ~= ADDON_ROOTS[2] then return true end
+        end
+        return false
+    end
+    local names = {}
+    local function add(name, placeList)
+        local root = name:match("^[^.]+")
+        if addon.ownNames[root] or _G[root] ~= nil or not inAddon(placeList) then return end
+        if allow.thirdParty[root] then
+            names[name] = "other"
+        elseif retail.clientApi[name] or forever.clientApi[name] then
+            names[name] = "api"
+        else
+            names[name] = ""
+        end
+    end
+    for name, placeList in pairs(addon.reads) do add(name, placeList) end
+    for name, placeList in pairs(addon.members) do add(name, placeList) end
+    -- A hook target is named in a string, so it is no read: hooksecurefunc("EquipPendingItem", ...).
+    for _, hook in ipairs(addon.hooks) do
+        add(hook.name or (hook.path .. "." .. hook.method), { hook.place })
+    end
+    -- A global string looked up by its name: _G[globalName], with the name a literal elsewhere.
+    for name, placeList in pairs(addon.literals) do
+        if retail.strings[name] or forever.strings[name] then add(name, placeList) end
+    end
+
+    -- The offline harness runs some of Blizzard's own Lua under the addon (Item.lua and the
+    -- like) instead of mocking it. What those files ask the client has to be recorded as well.
+    local baseFiles = dofile(scriptDir .. "/harness/blizzard-base.lua")
+    for _, flavor in ipairs(FLAVORS) do
+        for _, relative in ipairs(baseFiles) do
+            local text = readFile(buildsDir .. "/source/" .. flavor.key .. "/Interface/AddOns/" .. relative)
+            local chunk = text and loadstring(text, "@" .. relative)
+            if not chunk then fail("cannot read " .. relative .. " in the " .. flavor.key .. " source mirror") end
+            walkBytecode(chunk, function(kind, name)
+                if kind ~= "write" then add(name, { relative }) end
+            end)
+        end
+    end
+
+    local out = {
+        "-- Generated by `luajit tools/static-checks.lua --emit-facts`. Do not edit.",
+        "--",
+        "-- Every name of the client the addon reads: a global, or a field read off one. The",
+        "-- recorder (Recorder.lua) captures what each is in this client and hooks the functions.",
+        "-- \"api\" is a function of the client's own, \"other\" another addon's, \"\" anything else.",
+        "",
+        "local _, T = ...",
+        "",
+        "T.ApiNames = {",
+    }
+    for _, name in ipairs(sortedKeys(names)) do
+        out[#out + 1] = ("    [%q] = %q,"):format(name, names[name])
+    end
+    out[#out + 1] = "}"
+    out[#out + 1] = ""
+    return table.concat(out, "\n")
+end
+
+-- The generated files are compared as text. Neither is tracked, so a clone without one is
+-- not at fault; a stale one is, because the test addon would work from yesterday's code.
+local generatedMissing = {}
+for _, generated in ipairs({ { FACTS_FILE, factsText() }, { NAMES_FILE, namesText() } }) do
+    local file, text = generated[1], generated[2]
+    local path = addonDir .. "/" .. file
     if emitFacts then
         local handle = io.open(path, "wb")
         if not handle then fail("cannot write " .. path) end
         handle:write(text)
         handle:close()
     else
-        -- The file is not tracked, so a clone without it is not at fault; a stale one is,
-        -- because the test addon would compare the client with yesterday's conclusions.
         local existing = readFile(path)
         if existing == nil then
-            factsMissing = true
+            generatedMissing[#generatedMissing + 1] = file
         elseif existing ~= text then
             report("Generated files that are out of date",
-                ("%-52s run the check with --emit-facts"):format(FACTS_FILE))
+                ("%-52s run the check with --emit-facts"):format(file))
         end
     end
 end
@@ -1208,8 +1283,8 @@ end
 if #addon.notLoaded > 0 then
     print(("  %d tracked files the TOC never reaches: %s"):format(#addon.notLoaded, table.concat(addon.notLoaded, ", ")))
 end
-if factsMissing then
-    print(("  %s is not there: --emit-facts writes it, and the test addon's static.* contracts skip without it"):format(FACTS_FILE))
+for _, file in ipairs(generatedMissing) do
+    print(("  %s is not there: --emit-facts writes it, and what the test addon does with it is skipped without it"):format(file))
 end
 for _, client in ipairs(clients) do
     if #client.uncompiled > 0 or #client.missingFiles > 0 then
