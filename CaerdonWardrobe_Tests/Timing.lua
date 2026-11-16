@@ -89,6 +89,16 @@ local RUN_TIMEOUT = 30
 local MIN_RUN_SECONDS = 0.25 -- the addon's refresh starts its redraw 0.1 s after the call
 local SETTLE_SECONDS = 0.3
 
+-- What the game tooltip is showing for, or nil when it is hidden.
+local function TooltipOwner()
+    if not (GameTooltip and GameTooltip:IsShown()) then
+        return nil
+    end
+    local owner = GameTooltip:GetOwner()
+    local name = owner and owner.GetName and owner:GetName()
+    return type(name) == "string" and name or "(unnamed)"
+end
+
 -- Inside a job: one forced refresh, measured until the queue has drained.
 local function MeasureRefresh()
     local memoryBefore = AddonMemory()
@@ -97,7 +107,10 @@ local function MeasureRefresh()
     -- first draw came before the refresh's own 0.1 s delay could have been over.
     T.Yield()
     local drawsBefore = T.counters.processItem
-    local run = {}
+    local run = { byFeature = {}, events = {} }
+    -- A tooltip on screen is refreshed by the client and announces it with an event some
+    -- windows redraw on, so a resting mouse can change the run.
+    local tooltip = TooltipOwner()
     T.timingRun = run
     local started = T.Milliseconds()
     local startedAt = GetTime()
@@ -128,7 +141,20 @@ local function MeasureRefresh()
     end
     T.timingRun = nil
 
+    local byFeature, events
+    for name, entry in pairs(run.byFeature) do
+        byFeature = byFeature or {}
+        byFeature[name] = { draws = entry.draws, firstMs = Round(entry.first - started, 1), lastMs = Round(entry.last - started, 1) }
+    end
+    for event, entry in pairs(run.events) do
+        events = events or {}
+        events[event] = { count = entry.count, firstMs = Round(entry.first - started, 1) }
+    end
+
     return {
+        byFeature = byFeature,
+        events = events,
+        tooltip = tooltip,
         cpuMs = Round(cpu),
         frames = frames,
         worstFrameMs = Round(worstFrame),

@@ -219,16 +219,49 @@ T.OnInit(function()
     hooksecurefunc(CaerdonWardrobe, "RefreshItems", function()
         T.counters.refreshItems = T.counters.refreshItems + 1
     end)
-    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function()
+    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, _, _, feature)
         T.counters.processItem = T.counters.processItem + 1
         local run = T.timingRun
         if run then
             local now = T.Milliseconds()
             run.firstDraw = run.firstDraw or now
             run.lastDraw = now
+            -- Which window drew, and when: two refreshes that drew a different number of
+            -- items differ in one of these.
+            local ok, name = pcall(feature.GetName, feature)
+            name = ok and type(name) == "string" and name or "?"
+            local entry = run.byFeature[name]
+            if not entry then
+                entry = { draws = 0, first = now }
+                run.byFeature[name] = entry
+            end
+            entry.draws = entry.draws + 1
+            entry.last = now
         end
     end)
 end)
+
+-- Events a window redraws itself on. Counted only while a refresh is being timed, with the
+-- time of the first one.
+local WATCHED_IN_RUN = {
+    "TOOLTIP_DATA_UPDATE", "MERCHANT_UPDATE", "BAG_UPDATE", "BAG_UPDATE_DELAYED", "UNIT_INVENTORY_CHANGED",
+    "GET_ITEM_INFO_RECEIVED", "CURRENCY_DISPLAY_UPDATE", "HEIRLOOMS_UPDATED", "BANKFRAME_OPENED",
+    "PLAYERBANKSLOTS_CHANGED",
+}
+
+for _, event in ipairs(WATCHED_IN_RUN) do
+    T.RegisterEvent(event, function()
+        local run = T.timingRun
+        if run then
+            local entry = run.events[event]
+            if not entry then
+                entry = { count = 0, first = T.Milliseconds() }
+                run.events[event] = entry
+            end
+            entry.count = entry.count + 1
+        end
+    end)
+end
 
 -- Fires on logout and on a reload, just before the saved variables are written.
 T.RegisterEvent("PLAYER_LOGOUT", function()

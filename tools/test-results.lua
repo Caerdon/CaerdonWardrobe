@@ -316,9 +316,33 @@ local function printTiming(db)
                     most = math.max(most or run.draws, run.draws)
                 end
             end
+            if fewest == most and record.runs[1] and record.runs[1].byFeature then
+                local parts = {}
+                for _, name in ipairs(sortedKeys(record.runs[1].byFeature)) do
+                    parts[#parts + 1] = name .. " " .. record.runs[1].byFeature[name].draws
+                end
+                print("        drawn per refresh: " .. table.concat(parts, ", "))
+            end
             if fewest ~= most then
                 print(("        NOT A CLEAN RUN: the refreshes drew between %d and %d items, so something else was drawing too")
                     :format(fewest, most))
+                -- Per refresh: which window drew how much and from when, and which events came.
+                for index, run in ipairs(record.runs) do
+                    local parts = {}
+                    for _, name in ipairs(sortedKeys(run.byFeature or {})) do
+                        local entry = run.byFeature[name]
+                        parts[#parts + 1] = ("%s %d (%s-%s ms)"):format(name, entry.draws, figure(entry.firstMs), figure(entry.lastMs))
+                    end
+                    local events = {}
+                    for _, name in ipairs(sortedKeys(run.events or {})) do
+                        local entry = run.events[name]
+                        events[#events + 1] = ("%s x%d from %s ms"):format(name, entry.count, figure(entry.firstMs))
+                    end
+                    print(("          %2d: %d draws%s%s%s"):format(index, run.draws,
+                        #parts > 0 and (": " .. table.concat(parts, ", ")) or "",
+                        #events > 0 and ("; events: " .. table.concat(events, ", ")) or "",
+                        run.tooltip and ("; tooltip on " .. tostring(run.tooltip)) or ""))
+                end
             end
             print(("        profiler after: recent %s ms (%s), peak %s ms, session %s ms (%s)%s"):format(
                 figure(record.profilerAfter and record.profilerAfter.RecentAverageTime), share(record.profilerAfter, "RecentAverageTime"),
