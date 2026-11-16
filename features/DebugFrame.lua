@@ -1716,6 +1716,186 @@ function DebugFrameMixin:ShowGeometryExport()
     self:ShowCopyOutput(table.concat(lines, "\n"))
 end
 
+------------------------------------------------------------------------------------------
+-- The export's tooltip sections
+------------------------------------------------------------------------------------------
+
+-- Nothing documents what a tooltip line carries besides its texts, so the export prints every
+-- field of every line: that is how a field is found, and seen in both clients, before the
+-- item code relies on it.
+
+-- What a line's own row of the export already shows.
+local TOOLTIP_LINE_ROW_FIELDS = { type = true, leftText = true, rightText = true, leftColor = true, rightColor = true }
+local TOOLTIP_DATA_ROW_FIELDS = { lines = true }
+
+-- Fields whose number is an enum value: the export names it.
+local tooltipValueNames
+local function GetTooltipValueName(scope, field, value)
+    if not tooltipValueNames then
+        tooltipValueNames = { line = {}, data = {} }
+        local enums = {
+            line = {
+                type = Enum.TooltipDataLineType,
+                bonding = Enum.TooltipDataItemBinding,
+                requirementType = Enum.TooltipDataUsageRequirementType,
+            },
+            data = { type = Enum.TooltipDataType },
+        }
+        for enumScope, fields in pairs(enums) do
+            for enumField, enum in pairs(fields) do
+                local names = {}
+                for name, number in pairs(enum) do
+                    names[number] = name
+                end
+                tooltipValueNames[enumScope][enumField] = names
+            end
+        end
+    end
+    local names = tooltipValueNames[scope][field]
+    return names and names[value] or nil
+end
+
+local function SortedTooltipKeys(source, skip)
+    local keys = {}
+    for key, value in pairs(source) do
+        if not (skip and skip[key]) and type(value) ~= "function" then
+            keys[#keys + 1] = key
+        end
+    end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    return keys
+end
+
+local function FormatTooltipValue(value, depth)
+    if type(value) ~= "table" then
+        return tostring(value)
+    end
+    if depth <= 0 then
+        return "{...}"
+    end
+    local parts = {}
+    for _, key in ipairs(SortedTooltipKeys(value)) do
+        parts[#parts + 1] = tostring(key) .. "=" .. FormatTooltipValue(value[key], depth - 1)
+    end
+    return "{" .. table.concat(parts, ", ") .. "}"
+end
+
+-- "key=value, key=value (EnumName)" for every field of source that skip does not name.
+local function FormatTooltipFields(source, skip, scope)
+    local parts = {}
+    for _, key in ipairs(SortedTooltipKeys(source, skip)) do
+        local value = source[key]
+        local text = tostring(key) .. "=" .. FormatTooltipValue(value, 2)
+        local name = GetTooltipValueName(scope, key, value)
+        if name then
+            text = text .. " (" .. name .. ")"
+        end
+        parts[#parts + 1] = text
+    end
+    return table.concat(parts, ", ")
+end
+
+-- The lines of one tooltip as rows of the export: each line's type, colors and texts, and
+-- below it every other field the line carries.
+local function BuildTooltipLineRows(data)
+    local rows = {}
+    for index, line in ipairs(data.lines or {}) do
+        local lineType = line.type
+        local typeName = GetTooltipValueName("line", "type", lineType)
+        local prefix = format("[%d] type=%s", index, tostring(lineType))
+        if typeName then
+            prefix = prefix .. " (" .. typeName .. ")"
+        end
+        local leftText = line.leftText and tostring(line.leftText) or ""
+        local rightText = line.rightText and tostring(line.rightText) or ""
+        -- Both colors, so a red (unmet requirement) line can be told in the export: the armor
+        -- and weapon proficiency red sits in the right column of the EquipSlot line.
+        if line.leftColor and line.leftColor.GenerateHexColor then
+            prefix = prefix .. " color=" .. line.leftColor:GenerateHexColor()
+        end
+        if rightText ~= "" and line.rightColor and line.rightColor.GenerateHexColor then
+            prefix = prefix .. " rcolor=" .. line.rightColor:GenerateHexColor()
+        end
+        if rightText ~= "" then
+            rows[#rows + 1] = { indent = 1, text = format("%s  L: %s  |  R: %s", prefix, leftText, rightText) }
+        else
+            rows[#rows + 1] = { indent = 1, text = format("%s  L: %s", prefix, leftText) }
+        end
+        local fields = FormatTooltipFields(line, TOOLTIP_LINE_ROW_FIELDS, "line")
+        if fields ~= "" then
+            rows[#rows + 1] = { indent = 3, text = fields }
+        end
+    end
+    return rows
+end
+
+local function TooltipLineRowsMatch(rows, otherRows)
+    if #rows ~= #otherRows then
+        return false
+    end
+    for index, row in ipairs(rows) do
+        if row.text ~= otherRows[index].text then
+            return false
+        end
+    end
+    return true
+end
+
+-- The tooltip sections of the export as rows ({ indent, text }; an empty text is a blank row).
+-- An item in a bag or equipment slot has two tooltips: the slot's, which knows that copy
+-- (bound, locked, durability), and the bare link's, which is the one the status is computed
+-- from. The link's lines are printed only where they differ from the slot's.
+function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation)
+    local rows = {}
+    if not C_TooltipInfo then
+        return rows
+    end
+
+    local function addSection(title, asked, data, sameAsRows)
+        rows[#rows + 1] = { indent = 0, text = "" }
+        rows[#rows + 1] = { indent = 0, text = title }
+        rows[#rows + 1] = { indent = 1, text = "Asked: " .. asked }
+        if type(data) ~= "table" then
+            rows[#rows + 1] = { indent = 1, text = "Answer: " .. tostring(data) }
+            return nil
+        end
+        rows[#rows + 1] = { indent = 1, text = "Data: " .. FormatTooltipFields(data, TOOLTIP_DATA_ROW_FIELDS, "data") }
+        local lineRows = BuildTooltipLineRows(data)
+        if sameAsRows and TooltipLineRowsMatch(lineRows, sameAsRows) then
+            rows[#rows + 1] = { indent = 1, text = format("Lines: %d, each the same as the slot's", #(data.lines or {})) }
+        else
+            for _, row in ipairs(lineRows) do
+                rows[#rows + 1] = row
+            end
+        end
+        return lineRows
+    end
+
+    local slotData, slotAsked
+    if itemLocation and itemLocation:HasAnyLocation() then
+        if itemLocation:IsBagAndSlot() then
+            local bag, slot = itemLocation:GetBagAndSlot()
+            slotData = C_TooltipInfo.GetBagItem(bag, slot)
+            slotAsked = format("C_TooltipInfo.GetBagItem(%s, %s)", tostring(bag), tostring(slot))
+        elseif itemLocation:IsEquipmentSlot() then
+            local equipmentSlot = itemLocation:GetEquipmentSlot()
+            slotData = C_TooltipInfo.GetInventoryItem("player", equipmentSlot)
+            slotAsked = format("C_TooltipInfo.GetInventoryItem(\"player\", %s)", tostring(equipmentSlot))
+        end
+    end
+
+    local slotRows
+    if slotAsked then
+        slotRows = addSection("[Tooltip Lines (Raw)]", slotAsked, slotData)
+    end
+    if itemLink then
+        addSection(slotAsked and "[Tooltip Lines (Link)]" or "[Tooltip Lines (Raw)]",
+            "C_TooltipInfo.GetHyperlink(link), which the status is computed from", C_TooltipInfo.GetHyperlink(itemLink),
+            slotRows)
+    end
+    return rows
+end
+
 function DebugFrameMixin:BuildClipboardPayload(item)
     local lines = {}
 
@@ -2054,52 +2234,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
-    -- Raw tooltip line dump for troubleshooting and feature development
-    local tooltipData
-    if itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsBagAndSlot() then
-        local bag, slot = itemLocation:GetBagAndSlot()
-        tooltipData = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
-    elseif itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsEquipmentSlot() then
-        tooltipData = C_TooltipInfo and C_TooltipInfo.GetInventoryItem("player", itemLocation:GetEquipmentSlot())
-    elseif itemLink then
-        tooltipData = C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
-    end
-
-    if tooltipData and tooltipData.lines then
-        addLine(0, "")
-        addLine(0, "[Tooltip Lines (Raw)]")
-        for i, line in ipairs(tooltipData.lines) do
-            local lineType = line.type or "?"
-            local leftText = line.leftText or ""
-            local rightText = line.rightText or ""
-            local prefix = format("  [%d] type=%s", i, tostring(lineType))
-            -- Include both text colors so red (unmet requirement) lines are identifiable in the export;
-            -- armor/weapon proficiency red sits in the RIGHT column of the EquipSlot line.
-            if line.leftColor and line.leftColor.GenerateHexColor then
-                prefix = prefix .. " color=" .. line.leftColor:GenerateHexColor()
-            end
-            if rightText ~= "" and line.rightColor and line.rightColor.GenerateHexColor then
-                prefix = prefix .. " rcolor=" .. line.rightColor:GenerateHexColor()
-            end
-            -- UsageRequirement lines: which requirement (Enum.TooltipDataUsageRequirementType; 2 = Skill,
-            -- 5 = Level, 14 = NotAlreadyKnown) the client says this is.
-            if line.requirementType ~= nil then
-                prefix = prefix .. " req=" .. tostring(line.requirementType)
-            end
-            if rightText ~= "" then
-                addLine(0, format("%s  L: %s  |  R: %s", prefix, leftText, rightText))
-            else
-                addLine(0, format("%s  L: %s", prefix, leftText))
-            end
-            -- Dump all numeric/boolean fields on lines near item level for discovery
-            if lineType == 31 or lineType == 32 or leftText:find("[Ii]tem [Ll]evel") or leftText:find("PvP") then
-                for k, v in pairs(line) do
-                    if k ~= "type" and k ~= "leftText" and k ~= "rightText" and k ~= "leftColor" and k ~= "rightColor" then
-                        addKV(2, "field: " .. tostring(k), v)
-                    end
-                end
-            end
-        end
+    -- Every tooltip line with every field it carries, for troubleshooting and feature development.
+    for _, row in ipairs(self:GetTooltipReportRows(itemLink, itemLocation)) do
+        addLine(row.indent, row.text)
     end
 
     -- Which transmog collection events arrived this session and whether a refresh followed.
