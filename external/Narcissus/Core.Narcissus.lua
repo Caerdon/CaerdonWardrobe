@@ -13,6 +13,20 @@ function NarcissusMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Narcissus (the integration report; see FeatureMixin.lua).
+-- None of these exists at login: the set frame is found once Narcissus has put it into the
+-- dressing room, and the buttons are hooked one by one as they are first used. So each point
+-- is noted where the code attaches, and is "not reached" until that window has been opened.
+NarcissusMixin.integration = {
+    addon = addonName,
+    hookPoints = {
+        "TransmogSetFrame.SetItemSet", "TransmogSetFrame.LoadItem",
+        "SetItemButton.OnItemLoaded", "SetItemButton.ClearItem",
+        "NarciDressingRoomItemButtonMixin.SetItemSource", "SlotButton.SetItemSource",
+    },
+    optionalHookPoints = { "TransmogSetFrame.ClearContent" },
+}
+
 function NarcissusMixin:Init()
     dbg("Init called")
     self:TryHookNarcissus()
@@ -85,6 +99,9 @@ function NarcissusMixin:TryHookNarcissus()
 
     self.narcissusSetFrame = setFrame
     local feature = self
+    self:NoteHookPoint("TransmogSetFrame.SetItemSet", setFrame, "SetItemSet")
+    self:NoteHookPoint("TransmogSetFrame.LoadItem", setFrame, "LoadItem")
+    self:NoteHookPoint("TransmogSetFrame.ClearContent", setFrame, "ClearContent")
 
     -- Hook SetItemSet: when an ensemble is displayed, schedule a delayed refresh
     -- to catch buttons that load quickly. The LoadItem hook below handles the
@@ -148,6 +165,7 @@ function NarcissusMixin:TryHookNarcissusSlots()
     self.narcissusSlotButtons = self.narcissusSlotButtons or {}
     local feature = self
 
+    self:NoteHookPoint("NarciDressingRoomItemButtonMixin.SetItemSource", NarciDressingRoomItemButtonMixin, "SetItemSource")
     self.narcissusSlotsHooked = true
 
     local container = GetNarcissusSlotContainer()
@@ -173,6 +191,8 @@ function NarcissusMixin:PrepareNarcissusSetButton(button)
 
     button.caerdonNarcissusPrepared = true
     local feature = self
+    self:NoteHookPoint("SetItemButton.OnItemLoaded", button, "OnItemLoaded")
+    self:NoteHookPoint("SetItemButton.ClearItem", button, "ClearItem")
 
     -- Hook OnItemLoaded: fires after Narcissus sets the icon/name from
     -- ITEM_DATA_LOAD_RESULT. Deferred to the next frame because
@@ -249,6 +269,7 @@ function NarcissusMixin:PrepareNarcissusOutfitButton(button)
 
     button.caerdonNarcissusSlotPrepared = true
     local feature = self
+    self:NoteHookPoint("SlotButton.SetItemSource", button, "SetItemSource")
 
     hooksecurefunc(button, "SetItemSource", function(button)
         feature:UpdateNarcissusOutfitButton(button)

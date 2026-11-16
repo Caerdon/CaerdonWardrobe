@@ -10,8 +10,15 @@ end
 
 local isHooked = false
 
+-- Where this feature attaches to Angrier World Quests (the integration report; see FeatureMixin.lua).
+AngrierWorldQuestsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "QuestFrameModule.QuestLog_Update" },
+}
+
 function AngrierWorldQuestsMixin:Init()
 	local questFrame = AngrierWorldQuests:GetModule("QuestFrameModule")
+	self:NoteHookPoint("QuestFrameModule.QuestLog_Update", questFrame, "QuestLog_Update")
 	hooksecurefunc(questFrame, "QuestLog_Update", function(...) self:OnQuestLog_Update(...) end)
 end
 

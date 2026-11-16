@@ -19,6 +19,60 @@ function CaerdonWardrobeFeatureMixin:Init()
     error(format("Caerdon Wardrobe: Must provide Init implementation for %s", self:GetName()))
 end
 
+-- Hook points: where a feature attaches to another addon's code.
+--
+-- A feature that decorates another addon's frames declares the places it attaches to:
+--     SomeMixin.integration = {
+--         addon = "SomeAddon",                              -- as the client's addon list names it
+--         hookPoints = { "SomeAddon.Item.Update" },         -- the feature does not work without these
+--         optionalHookPoints = { "SomeAddon.Item.Flash" },  -- used when the addon has them
+--     }
+-- and reports each one just before it attaches, with the table and the key it is about to use:
+--     self:NoteHookPoint("SomeAddon.Item.Update", SomeAddon.Item, "Update")
+-- CaerdonIntegrations turns the two into one line per integration: found, missing, or not reached
+-- yet. The label is only a name to read; keep it the same in both places.
+
+local function ReadField(owner, key)
+    return owner[key]
+end
+
+local function CountHookPoint(feature, label, found)
+    local noted = feature.hookPointsNoted
+    if not noted then
+        noted = {}
+        feature.hookPointsNoted = noted
+    end
+    local entry = noted[label]
+    if not entry then
+        entry = { found = 0, missing = 0 }
+        noted[label] = entry
+    end
+    if found then
+        entry.found = entry.found + 1
+    else
+        entry.missing = entry.missing + 1
+    end
+end
+
+-- Returns whether owner[key] is a function. Never throws, whatever the other addon handed over
+-- (some namespaces raise an error when an unknown field is read), and changes nothing: the
+-- caller attaches exactly as it did before.
+function CaerdonWardrobeFeatureMixin:NoteHookPoint(label, owner, key)
+    local found = false
+    if type(owner) == "table" then
+        local ok, value = pcall(ReadField, owner, key)
+        found = ok and type(value) == "function"
+    end
+    CountHookPoint(self, label, found)
+    return found
+end
+
+-- For a place the other addon calls by itself (a callback it looks up by name): there is nothing
+-- to look for beforehand, so the call arriving is the evidence.
+function CaerdonWardrobeFeatureMixin:NoteHookCalled(label)
+    CountHookPoint(self, label, true)
+end
+
 function CaerdonWardrobeFeatureMixin:GetTooltipData(item, locationInfo)
     error(format("Caerdon Wardrobe: Must provide GetTooltipData implementation for %s", self:GetName()))
 end

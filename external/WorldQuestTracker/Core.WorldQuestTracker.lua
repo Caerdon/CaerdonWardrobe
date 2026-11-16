@@ -9,7 +9,15 @@ function WorldQuestTrackerMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to World Quest Tracker (the integration report; see FeatureMixin.lua).
+WorldQuestTrackerMixin.integration = {
+    addon = addonName,
+    hookPoints = { "WorldQuestTrackerAddon.UpdateSquareWidget", "WorldQuestTrackerAddon.SetupWorldQuestButton" },
+}
+
 function WorldQuestTrackerMixin:Init()
+    self:NoteHookPoint("WorldQuestTrackerAddon.UpdateSquareWidget", WorldQuestTracker, "UpdateSquareWidget")
+    self:NoteHookPoint("WorldQuestTrackerAddon.SetupWorldQuestButton", WorldQuestTracker, "SetupWorldQuestButton")
     hooksecurefunc(WorldQuestTracker, "UpdateSquareWidget", function(...) self:OnUpdateWorldWidget(...) end)
     hooksecurefunc(WorldQuestTracker, "SetupWorldQuestButton", function(...) self:OnSetupWorldQuestButton(...) end)
 end

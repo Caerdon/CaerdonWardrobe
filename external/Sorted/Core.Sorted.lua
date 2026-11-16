@@ -15,8 +15,16 @@ function SortedMixin:GetLayoutNote()
     return "Sorted: the icon is centered in a column of its own and keeps its size."
 end
 
+-- Where this feature attaches to Sorted (the integration report; see FeatureMixin.lua).
+SortedMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Sorted:AddItemColumn", "Sorted:AddSortMethod" },
+}
+
 function SortedMixin:Init()
     local Sorted = LibStub("Sorted.")
+    self:NoteHookPoint("Sorted:AddItemColumn", Sorted, "AddItemColumn")
+    self:NoteHookPoint("Sorted:AddSortMethod", Sorted, "AddSortMethod")
     local statusProminentSize
 
     -- Adds a new column that displays Caerdon Wardrobe's icon

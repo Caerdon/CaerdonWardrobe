@@ -8,8 +8,15 @@ function ZygorMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Zygor (the integration report; see FeatureMixin.lua).
+ZygorMixin.integration = {
+    addon = addonName,
+    hookPoints = { "ZygorGuidesViewer.WorldQuests.QueueDetailsLoad" },
+}
+
 function ZygorMixin:Init()
     self.WorldQuests = ZygorGuidesViewer.WorldQuests
+    self:NoteHookPoint("ZygorGuidesViewer.WorldQuests.QueueDetailsLoad", self.WorldQuests, "QueueDetailsLoad")
     hooksecurefunc(self.WorldQuests, 'QueueDetailsLoad', function(...) self:RefreshButtons(...) end)
 end
 

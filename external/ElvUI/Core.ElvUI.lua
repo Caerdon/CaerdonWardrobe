@@ -8,8 +8,15 @@ function ElvUIMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to ElvUI (the integration report; see FeatureMixin.lua).
+ElvUIMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Bags.UpdateSlot" },
+}
+
 function ElvUIMixin:Init()
     self.ElvUIBags = ElvUI[1]:GetModule("Bags")
+    self:NoteHookPoint("Bags.UpdateSlot", self.ElvUIBags, "UpdateSlot")
     hooksecurefunc(self.ElvUIBags, "UpdateSlot", function(...) self:OnUpdateSlot(...) end)
 end
 

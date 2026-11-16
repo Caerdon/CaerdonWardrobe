@@ -55,10 +55,11 @@ end
 
 -- Baganator freezes its ItemButton mixin tables, so we hook SetItemDetails on
 -- each button instance rather than on the shared mixin.
-local function HookBaganatorButton(itemButton)
+local function HookBaganatorButton(feature, itemButton)
     if not itemButton or itemButton.caerdonSetItemDetailsHooked then
         return
     end
+    feature:NoteHookPoint("ItemButton.SetItemDetails", itemButton, "SetItemDetails")
     if type(itemButton.SetItemDetails) ~= "function" then
         return
     end
@@ -245,13 +246,22 @@ function BaganatorMixin:OnButtonDrawn(itemButton, item)
     end
 end
 
+-- Where this feature attaches to Baganator (the integration report; see FeatureMixin.lua).
+-- The item buttons are hooked one by one as Baganator creates them, so that point is reached
+-- when a bag is first shown.
+BaganatorMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Baganator.API.RegisterCornerWidget", "ItemButton.SetItemDetails" },
+}
+
 function BaganatorMixin:Init()
     local function Register(label, part, regionName, defaultPosition)
+        self:NoteHookPoint("Baganator.API.RegisterCornerWidget", Baganator.API, "RegisterCornerWidget")
         Baganator.API.RegisterCornerWidget(label, WIDGETS[part], function(region, details)
             local itemButton = region.caerdonItemButton or region:GetParent():GetParent()
             return self:Ask(itemButton, details, part)
         end, function(itemButton)
-            HookBaganatorButton(itemButton)
+            HookBaganatorButton(self, itemButton)
             -- With no item, this only creates the overlay and its parts ahead of time.
             CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
             local caerdonButton = CaerdonWardrobe:GetCaerdonButton(itemButton)

@@ -21,12 +21,21 @@ function VenturePlanMixin:GetLayoutNote()
     return "Venture Plan: the icon and the text keep their own places and sizes on a reward."
 end
 
+-- Where this feature attaches to Venture Plan (the integration report; see FeatureMixin.lua).
+-- Venture Plan looks the global VPEX_OnUIObjectCreated up by name and calls it for every widget
+-- it creates, so there is nothing to find beforehand: its call for a reward frame is the evidence.
+VenturePlanMixin.integration = {
+	addon = addonName,
+	hookPoints = { "VPEX_OnUIObjectCreated for a reward frame" },
+}
+
 function VenturePlanMixin:Init()
 	local function OnSetReward(...)
 		self:UpdateButton(...)
 	end
 	hookOrAssign(_G, "VPEX_OnUIObjectCreated", function(objectType, widget)
 		if objectType == "RewardFrame" or objectType == "InlineRewardFrame" then
+			self:NoteHookCalled("VPEX_OnUIObjectCreated for a reward frame")
 			hookOrAssign(widget, "OnSetReward", OnSetReward)
 		end
 	end)

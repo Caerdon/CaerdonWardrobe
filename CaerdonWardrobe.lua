@@ -2246,6 +2246,8 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
         for name, instance in pairs(availableFeatures) do
             registeredFeatures[name] = instance
             local instanceEvents = instance:Init(self)
+            -- Read by the integration report: an Init that raised an error never gets here.
+            instance.initFinished = true
             if instanceEvents then
                 for i = 1, #instanceEvents do
                     local eventName = instanceEvents[i]

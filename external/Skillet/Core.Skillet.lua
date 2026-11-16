@@ -10,7 +10,14 @@ end
 
 local isHooked = false
 
+-- Where this feature attaches to Skillet (the integration report; see FeatureMixin.lua).
+SkilletMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Skillet:AddPreButtonShowCallback" },
+}
+
 function SkilletMixin:Init()
+    self:NoteHookPoint("Skillet:AddPreButtonShowCallback", Skillet, "AddPreButtonShowCallback")
     Skillet:AddPreButtonShowCallback(self.UpdateButton)
 end
 

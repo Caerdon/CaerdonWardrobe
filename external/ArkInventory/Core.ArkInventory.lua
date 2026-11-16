@@ -8,7 +8,14 @@ function ArkInventoryMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to ArkInventory (the integration report; see FeatureMixin.lua).
+ArkInventoryMixin.integration = {
+	addon = addonName,
+	hookPoints = { "ArkInventory.API.ItemFrameUpdated" },
+}
+
 function ArkInventoryMixin:Init()
+	self:NoteHookPoint("ArkInventory.API.ItemFrameUpdated", ArkInventory.API, "ItemFrameUpdated")
 	hooksecurefunc(ArkInventory.API, "ItemFrameUpdated", function(...) self:OnFrameItemUpdate(...) end)
 end
 

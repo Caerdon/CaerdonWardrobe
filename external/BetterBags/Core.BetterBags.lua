@@ -58,9 +58,19 @@ function BetterBagsMixin:UpdateBagItem(bagItem)
     CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
 end
 
+-- Where this feature attaches to BetterBags (the integration report; see FeatureMixin.lua).
+-- A message is a name BetterBags sends: that the registration exists does not prove the message
+-- is still sent, only a draw does.
+BetterBagsMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Events:RegisterMessage item/Updated", "Events:RegisterMessage item/Clearing" },
+}
+
 function BetterBagsMixin:Init()
     local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
     local events = BetterBags:GetModule("Events")
+    self:NoteHookPoint("Events:RegisterMessage item/Updated", events, "RegisterMessage")
+    self:NoteHookPoint("Events:RegisterMessage item/Clearing", events, "RegisterMessage")
     events:RegisterMessage('item/Updated', function (_, bagItem)
         trackedBagItems[bagItem] = true
         self:UpdateBagItem(bagItem)
@@ -187,6 +197,7 @@ function BetterBagsVendorMixin:TrackVendorButton(vendorButton)
     trackedVendorButtons[vendorButton] = true
 
     for _, methodName in ipairs(VENDOR_BUTTON_DRAW_METHODS) do
+        self:NoteHookPoint("NextVendorButton." .. methodName, vendorButton, methodName)
         local original = vendorButton[methodName]
         if type(original) == "function" then
             vendorButton[methodName] = function(drawnButton, ...)
@@ -201,9 +212,20 @@ function BetterBagsVendorMixin:TrackVendorButton(vendorButton)
     end
 end
 
+-- The buttons' draw methods are wrapped one button at a time, so those points are reached when
+-- BetterBags' vendor window first shows an item.
+BetterBagsVendorMixin.integration = {
+    addon = addonName,
+    hookPoints = {
+        "Events:RegisterMessage vendor/NewButton",
+        "NextVendorButton.SetBuy", "NextVendorButton.SetBuyback", "NextVendorButton.SetRepair", "NextVendorButton.Release",
+    },
+}
+
 function BetterBagsVendorMixin:Init()
     local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
     local events = BetterBags:GetModule("Events")
+    self:NoteHookPoint("Events:RegisterMessage vendor/NewButton", events, "RegisterMessage")
 
     -- Sent once for each button, before its first draw.
     events:RegisterMessage('vendor/NewButton', function(_, vendorButton)
@@ -319,9 +341,15 @@ function BetterBagsGuildBankMixin:UpdateGuildButton(guildButton)
     end
 end
 
+BetterBagsGuildBankMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Events:RegisterMessage guild/Updated" },
+}
+
 function BetterBagsGuildBankMixin:Init()
     local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
     local events = BetterBags:GetModule("Events")
+    self:NoteHookPoint("Events:RegisterMessage guild/Updated", events, "RegisterMessage")
 
     -- Sent after every draw of a button, for an item and for a free slot. A released button is
     -- hidden and sends nothing; its next draw is announced again.

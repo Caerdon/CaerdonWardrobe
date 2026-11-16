@@ -2137,6 +2137,22 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Whether each bag addon or other integration found the functions it hooks in that addon's
+    -- current version. Session-wide, not about this item: an integration that stopped drawing
+    -- after the other addon updated shows here as "missing".
+    if CaerdonIntegrations and CaerdonIntegrations.GetReportLines then
+        addLine(0, "")
+        addLine(0, "[Integrations]")
+        local ok, integrationLines = pcall(CaerdonIntegrations.GetReportLines, CaerdonIntegrations)
+        if ok then
+            for _, integrationLine in ipairs(integrationLines) do
+                addLine(integrationLine.indent, integrationLine.text)
+            end
+        else
+            addKV(1, "Report failed", tostring(integrationLines))
+        end
+    end
+
     addLine(0, "")
     addLine(0, "[Caerdon]")
     local identifiedType = item:GetCaerdonItemType()

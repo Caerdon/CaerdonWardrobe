@@ -8,7 +8,14 @@ function BaudBagMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to BaudBag (the integration report; see FeatureMixin.lua).
+BaudBagMixin.integration = {
+    addon = addonName,
+    hookPoints = { "BaudBag.ItemSlot_Updated" },
+}
+
 function BaudBagMixin:Init()
+    self:NoteHookPoint("BaudBag.ItemSlot_Updated", BaudBag, "ItemSlot_Updated")
     hooksecurefunc(BaudBag, "ItemSlot_Updated", function(...) self:ItemSlotUpdated(...) end)
 end
 

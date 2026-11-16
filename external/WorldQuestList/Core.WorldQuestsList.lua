@@ -8,8 +8,16 @@ function WorldQuestsListMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to World Quests List (the integration report; see FeatureMixin.lua).
+-- The hook itself is on Blizzard's map pin; the buttons are then read from the addon's frame.
+WorldQuestsListMixin.integration = {
+    addon = addonName,
+    hookPoints = { "WorldMap_WorldQuestPinMixin.RefreshVisuals" },
+}
+
 function WorldQuestsListMixin:Init()
     self.WorldQuestList = _G["WorldQuestList"]
+    self:NoteHookPoint("WorldMap_WorldQuestPinMixin.RefreshVisuals", WorldMap_WorldQuestPinMixin, "RefreshVisuals")
     -- hooksecurefunc(self.WorldQuestList, 'UpdateList', function(...) self:RefreshButtons(...) end)
 
     hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (...)

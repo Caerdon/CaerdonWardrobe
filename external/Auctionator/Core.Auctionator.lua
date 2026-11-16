@@ -8,7 +8,14 @@ function AuctionatorMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Auctionator (the integration report; see FeatureMixin.lua).
+AuctionatorMixin.integration = {
+  addon = addonName,
+  hookPoints = { "AuctionatorGroupsViewItemMixin.SetItemInfo" },
+}
+
 function AuctionatorMixin:Init()
+  self:NoteHookPoint("AuctionatorGroupsViewItemMixin.SetItemInfo", AuctionatorGroupsViewItemMixin, "SetItemInfo")
   hooksecurefunc(AuctionatorGroupsViewItemMixin, "SetItemInfo", function(...) self:OnSetItemInfo(...) end)
 end
 

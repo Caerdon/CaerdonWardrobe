@@ -8,13 +8,23 @@ function InventorianMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Inventorian (the integration report; see FeatureMixin.lua).
+-- The two containers exist once Inventorian has enabled the module made here.
+InventorianMixin.integration = {
+	addon = addonName,
+	hookPoints = { "Inventorian:NewModule", "bag.itemContainer.UpdateSlot", "bank.itemContainer.UpdateSlot" },
+}
+
 function InventorianMixin:Init()
 	self.Inventorian = LibStub('AceAddon-3.0'):GetAddon('Inventorian')
+	self:NoteHookPoint("Inventorian:NewModule", self.Inventorian, "NewModule")
 	self.mod = self.Inventorian:NewModule("CaerdonWardrobeInventorianUpdate")
 	self.mod.uiName = L["Caerdon Wardrobe Inventorian"]
 	self.mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
 
 	self.mod.OnEnable = function(mod)
+		self:NoteHookPoint("bag.itemContainer.UpdateSlot", self.Inventorian.bag.itemContainer, "UpdateSlot")
+		self:NoteHookPoint("bank.itemContainer.UpdateSlot", self.Inventorian.bank.itemContainer, "UpdateSlot")
 		hooksecurefunc(self.Inventorian.bag.itemContainer, "UpdateSlot", function(...) self:UpdateBagSlot(...) end)
 		hooksecurefunc(self.Inventorian.bank.itemContainer, "UpdateSlot", function(...) self:UpdateBankSlot(...) end)
 	end

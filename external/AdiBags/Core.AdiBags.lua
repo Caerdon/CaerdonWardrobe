@@ -8,13 +8,21 @@ function AdiBagsMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to AdiBags (the integration report; see FeatureMixin.lua).
+AdiBagsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "AdiBags:NewModule", "module:RegisterMessage AdiBags_UpdateButton" },
+}
+
 function AdiBagsMixin:Init()
 	local AdiBags = LibStub('AceAddon-3.0'):GetAddon('AdiBags')
+	self:NoteHookPoint("AdiBags:NewModule", AdiBags, "NewModule")
 	self.mod = AdiBags:NewModule("CaerdonWardrobeAdiBagsUpdate", "ABEvent-1.0")
 	self.mod.uiName = L["Caerdon Wardrobe"]
 	self.mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
 
 	self.mod.OnEnable = function(mod)
+		self:NoteHookPoint("module:RegisterMessage AdiBags_UpdateButton", mod, "RegisterMessage")
 		mod:RegisterMessage('AdiBags_UpdateButton', 'UpdateButton')
 	end
 

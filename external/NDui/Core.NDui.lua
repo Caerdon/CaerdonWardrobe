@@ -14,6 +14,12 @@ function NDuiMixin:GetName()
 	return addonName
 end
 
+-- Where this feature attaches to NDui (the integration report; see FeatureMixin.lua).
+NDuiMixin.integration = {
+	addon = addonName,
+	hookPoints = { "cargBags NDui_Backpack.UpdateSlot" },
+}
+
 function NDuiMixin:Init()
 	return {"PLAYER_LOGIN"}
 end
@@ -21,6 +27,7 @@ end
 function NDuiMixin:PLAYER_LOGIN()
 	-- The implementation only exists if NDui's Bags module is enabled.
 	local impl = cargBags:GetImplementation("NDui_Backpack")
+	self:NoteHookPoint("cargBags NDui_Backpack.UpdateSlot", impl, "UpdateSlot")
 	if impl then
 		hooksecurefunc(impl, "UpdateSlot", function(...) self:UpdateSlot(...) end)
 	end

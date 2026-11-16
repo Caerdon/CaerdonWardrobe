@@ -5,7 +5,14 @@ function BagnonMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Bagnon (the integration report; see FeatureMixin.lua).
+BagnonMixin.integration = {
+	addon = addonName,
+	hookPoints = { "Bagnon.Item.Update" },
+}
+
 function BagnonMixin:Init()
+	self:NoteHookPoint("Bagnon.Item.Update", Bagnon.Item, "Update")
 	hooksecurefunc(Bagnon.Item, "Update", function(...) self:OnUpdateSlot(...) end)
 end
 

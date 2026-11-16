@@ -160,8 +160,18 @@ function DialogueUIMixin:OnUpgradeArrowShown(button)
     end
 end
 
+-- Where this feature attaches to Dialogue UI (the integration report; see FeatureMixin.lua).
+DialogueUIMixin.integration = {
+    addon = addonName,
+    hookPoints = { "DUIDialogItemButtonMixin.SetItem", "DUIDialogItemButtonMixin.OnRelease" },
+    optionalHookPoints = { "DUIDialogItemButtonMixin.ShowUpgradeIcon" },
+}
+
 function DialogueUIMixin:Init()
     local buttonMixin = DUIDialogItemButtonMixin
+    self:NoteHookPoint("DUIDialogItemButtonMixin.SetItem", buttonMixin, "SetItem")
+    self:NoteHookPoint("DUIDialogItemButtonMixin.OnRelease", buttonMixin, "OnRelease")
+    self:NoteHookPoint("DUIDialogItemButtonMixin.ShowUpgradeIcon", buttonMixin, "ShowUpgradeIcon")
     if type(buttonMixin) ~= "table" or type(buttonMixin.SetItem) ~= "function" or
         type(buttonMixin.OnRelease) ~= "function" then
         return

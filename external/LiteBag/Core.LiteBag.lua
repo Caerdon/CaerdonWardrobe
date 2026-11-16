@@ -8,7 +8,15 @@ function LiteBagMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to LiteBag (the integration report; see FeatureMixin.lua).
+LiteBagMixin.integration = {
+    addon = addonName,
+    hookPoints = { "LiteBag_RegisterHook LiteBagItemButton_Update", "LiteBag_AddPluginEvent" },
+}
+
 function LiteBagMixin:Init()
+    self:NoteHookPoint("LiteBag_RegisterHook LiteBagItemButton_Update", _G, "LiteBag_RegisterHook")
+    self:NoteHookPoint("LiteBag_AddPluginEvent", _G, "LiteBag_AddPluginEvent")
     LiteBag_RegisterHook('LiteBagItemButton_Update', function(...) self:UpdateButton(...) end)
     LiteBag_AddPluginEvent('TRANSMOG_COLLECTION_UPDATED')
 end

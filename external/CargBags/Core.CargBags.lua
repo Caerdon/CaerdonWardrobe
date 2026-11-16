@@ -9,8 +9,15 @@ function CargBagsMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to cargBags Nivaya (the integration report; see FeatureMixin.lua).
+CargBagsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "cargBags Nivaya.UpdateSlot" },
+}
+
 function CargBagsMixin:Init()
 	local cbNivaya = cargBags:GetImplementation("Nivaya")
+	self:NoteHookPoint("cargBags Nivaya.UpdateSlot", cbNivaya, "UpdateSlot")
 	hooksecurefunc(cbNivaya, "UpdateSlot", function(...) self:UpdateSlot(...) end)
 end
 
