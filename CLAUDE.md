@@ -40,8 +40,8 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `CaerdonCounters.lua`: loaded first. Login milestones, loads asked of the client and full refreshes by trigger, always; time and memory per function while its profile is switched on, which the test addon does (the export's `[Counters]` section).
 - `config/`: `Config.lua` (defaults, migrations, the main page, `/caerdon`, the one-time message dialog), `Icons.lua` and `Display.lua` (the two settings pages), `ConfigPanel.lua` (layout helpers), `LayoutEditor.lua` (`/caerdonlayout`).
 - `features/DebugFrame.lua`: the Debug Frame and its **Copy Details** export (`/cdebug`). `CaerdonButtonGeometry.lua`: the export's button measurements.
-- `tools/`: development scripts, not packaged. `static-checks.lua` with its allowlist `static-checks-allow.lua`; `test-results.lua` prints what the test addon saved in each client.
-- `CaerdonWardrobe_Tests/`: the test addon, a second addon for development that runs in both clients and is not packaged (`/cwtest`): client contracts, verdict tests, snapshot and diff, timing, a journal of what was learned, bag states checked when an item shows one, a record per integration, a rotation through the installed bag addons (`/cwtest rotation`).
+- `tools/`: development scripts, not packaged. `static-checks.lua` with its allowlist `static-checks-allow.lua`; `test-results.lua` prints what the test addon saved in each client; `harness/` runs the addon's real item code under LuaJIT in a mocked client (`luajit tools/harness/run.lua`): scenarios against a hand-made game, and fixtures, which are a client's recorded answers replayed.
+- `CaerdonWardrobe_Tests/`: the test addon, a second addon for development that runs in both clients and is not packaged (`/cwtest`): client contracts, verdict tests, snapshot and diff, timing, a journal of what was learned, bag states checked when an item shows one, a record per integration, a rotation through the installed bag addons (`/cwtest rotation`), a recorder of the client's answers behind one verdict for the harness (`/cwtest record`).
 
 ### Status order in `GetCaerdonStatus`
 
@@ -78,9 +78,9 @@ The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for 
 - **Do not change `LoadSources`' `#waitingForItems == 0` check** or remove the once-guard in `ContinueWithCancelOnItemLoad` (notes: LoadSources).
 - **Settings:** an option only where the choice is real. One block per icon on the Icons page; no per-window toggle by reflex; no on / off switches in the layout editor. A new setting needs a default in `GetDefaultConfig`, a nil-migration in `config/Config.lua` and one option on a page.
 - **Placement:** a window opts in to the standard icon size with `GetSlotStatusSize`. Do not replace a hand-tuned value for a window that has not been measured, and do not judge a button's shape from its numbers alone.
-- **Tests:** the modules can be run offline under LuaJIT with a mocked client. That checks logic, not the client; say which of the two a claim rests on. What the test addon recorded was seen in a client: read it with `luajit tools/test-results.lua` after the author has reloaded. A change that should leave every icon as it was is proven by its snapshot diff (notes: Test Addon).
+- **Tests:** `luajit tools/harness/run.lua` runs the item code offline under LuaJIT in a mocked client; run it before calling a change to that code done. That checks logic, not the client; say which of the two a claim rests on. A fixture that comes out `stale` asks for a new recording, not for an edit of the fixture (notes: Offline Harness). What the test addon recorded was seen in a client: read it with `luajit tools/test-results.lua` after the author has reloaded. A change that should leave every icon as it was is proven by its snapshot diff (notes: Test Addon).
 - **The test addon's code runs in the client's Lua 5.1:** no `pcall` or `xpcall` around code that waits (use `T.Protected`), and `%s` only for strings and numbers.
-- **Static check:** `luajit tools/static-checks.lua` reports every name the addon or the test addon uses that one client or neither has, and every global written that is not on the allowlist. Run it before calling a change done and after a client patch. A new flavor-specific name needs an allowlist entry naming its guard, and a change to those names needs `--emit-facts` (notes: Static Check).
+- **Static check:** `luajit tools/static-checks.lua` reports every name the addon or the test addon uses that one client or neither has, and every global written that is not on the allowlist. Run it before calling a change done and after a client patch. A new flavor-specific name needs an allowlist entry naming its guard, and a change to the names the addon uses needs `--emit-facts`, which also rewrites the list the recorder hooks (notes: Static Check).
 
 ## WoW Forever Essentials
 
@@ -102,6 +102,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Getting Blizzard's code or listings for either flavor | Client Sources |
 | Checking names against both clients, the allowlist | Static Check |
 | The test addon, `/cwtest`, reading its results | Test Addon |
+| Running the item code offline, recording an item, fixtures | Offline Harness |
 | What a draw or a refresh costs, who asked the client for an item | Counters |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | Ensembles | Ensembles |
