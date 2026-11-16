@@ -485,13 +485,36 @@ local function readBlizzardLua(client, path, text)
         client.uncompiled[#client.uncompiled + 1] = path
         return
     end
+    -- Blizzard_Deprecated holds the old names of changed APIs, as Lua. They are there while
+    -- the CVar loadDeprecationFallbacks is on and until Blizzard deletes the file, so a name
+    -- that file defines or wraps is noted apart.
+    local deprecatedFile = path:find("/Blizzard_Deprecated/", 1, true) ~= nil
+    local globalsRead = {}
     walkBytecode(chunk, function(kind, name)
         if kind == "read" then
             client.reads[name] = true
+            globalsRead[name] = true
         elseif kind == "write" then
             client.writes[name] = true
+            if deprecatedFile then client.deprecated[name] = path end
         end
     end)
+    if deprecatedFile then
+        -- Fields the file sets on a global: "function C_X.Name(", "C_X.Name = ...",
+        -- "Enum.Name = { Value = 0, ... }". A local's field is not a global's.
+        local function field(owner, name)
+            if globalsRead[owner] then client.deprecated[owner .. "." .. name] = path end
+        end
+        for owner, name in text:gmatch("function%s+([%w_]+)[:%.]([%w_]+)%s*%(") do field(owner, name) end
+        for owner, name in text:gmatch("%f[%w_]([%w_]+)%.([%w_]+)%s*=%f[^=]") do field(owner, name) end
+        for owner, name, body in text:gmatch("%f[%w_]([%w_]+)%.([%w_]+)%s*=%s*(%b{})") do
+            if owner == "Enum" or owner == "Constants" then
+                for value in body:gmatch("([%w_]+)%s*=%f[^=]") do
+                    client.deprecated[owner .. "." .. name .. "." .. value] = path
+                end
+            end
+        end
+    end
     -- Who defines which method: "function Owner:Name(", "function Owner.Name(", "Owner.Name = function".
     local function define(owner, name)
         client.members[owner .. "." .. name] = true
@@ -523,7 +546,7 @@ local function loadClient(flavor)
     local client = {
         key = flavor.key,
         reads = {}, writes = {}, xmlNames = {}, templateChildren = {}, xmlSources = {},
-        members = {}, methodOwners = {}, parents = {},
+        members = {}, methodOwners = {}, parents = {}, deprecated = {},
         uncompiled = {}, missingFiles = {}, skippedAddons = {}, loadedAddons = {}, luaFiles = 0, addons = 0,
     }
 
@@ -860,7 +883,7 @@ end
 
 -- What the check concluded, for the test addon to compare with the client (--emit-facts):
 -- names and events that are not in both clients, and every hook target with its state.
-local staticFacts = { names = {}, events = {}, hooks = {} }
+local staticFacts = { names = {}, events = {}, hooks = {}, deprecated = {} }
 
 -- inRetail / inForever: whether each client has the name. Both true is the normal case.
 -- factKind files the conclusion under staticFacts.
@@ -935,10 +958,10 @@ do
     local function enumValue(client, path)
         local value = client.enumEnv
         for part in path:gmatch("[^.]+") do
-            if type(value) ~= "table" then return false end
+            if type(value) ~= "table" then return client.deprecated[path] ~= nil end
             value = value[part]
         end
-        return value ~= nil
+        return value ~= nil or client.deprecated[path] ~= nil
     end
     for _, name in ipairs(sortedKeys(addon.members)) do
         local root, first, deeper = name:match("^([^.]+)%.([^.]+)(.*)$")
@@ -958,7 +981,8 @@ do
                 return (client.api[name] or definesMethod(client, root, first)) and true or false
             end
             if root:match("^C_") then
-                compare(functions, name, retail.api[name] or false, forever.api[name] or false, where, "names")
+                compare(functions, name, (retail.api[name] or retail.deprecated[name]) and true or false,
+                    (forever.api[name] or forever.deprecated[name]) and true or false, where, "names")
             elseif has(retail) or has(forever) then
                 compare(functions, name, has(retail), has(forever), where, "names")
             elseif retail.namespaces[root] or forever.namespaces[root] then
@@ -1019,9 +1043,42 @@ do
     end
 end
 
--- 6. Allowlist entries nothing needed.
+-- 6. Names that come from Blizzard's deprecation fallbacks.
+do
+    local section = "Names Blizzard's deprecation fallbacks define or wrap (there while the CVar loadDeprecationFallbacks is on, until Blizzard deletes them)"
+    local used = {}
+    for name, list in pairs(addon.reads) do used[name] = list end
+    for name, list in pairs(addon.members) do used[name] = list end
+    for _, hook in ipairs(addon.hooks) do
+        if hook.name then used[hook.name] = used[hook.name] or { hook.place } end
+    end
+    for _, name in ipairs(sortedKeys(used)) do
+        local inRetail, inForever = retail.deprecated[name], forever.deprecated[name]
+        -- A value of a deprecated enum is not a second finding.
+        local parent = name:match("^(.*)%.[^.]+$")
+        local parentToo = parent and (retail.deprecated[parent] or forever.deprecated[parent])
+        if (inRetail or inForever) and not parentToo then
+            local state = (inRetail and inForever) and "both" or inRetail and "retail" or "forever"
+            staticFacts.deprecated[name] = state
+            if allow.deprecated[name] then
+                allowUsed["deprecated:" .. name] = true
+                allowedCount = allowedCount + 1
+            else
+                report(section, ("%-52s %-8s %s   (%s)"):format(name, state, places(used[name]),
+                    (inRetail or inForever):match("[^/]+$")))
+            end
+        end
+    end
+end
+
+-- 7. Allowlist entries nothing needed.
 do
     local section = "Allowlist entries that no longer apply"
+    for _, name in ipairs(sortedKeys(allow.deprecated)) do
+        if not allowUsed["deprecated:" .. name] then
+            report(section, ("%-52s deprecated: no deprecation fallback defines it, or the addon no longer names it"):format(name))
+        end
+    end
     for _, name in ipairs(sortedKeys(allow.clientSpecific)) do
         if not allowUsed[name] then
             report(section, ("%-52s clientSpecific: both clients have it, or the addon no longer names it"):format(name))
@@ -1082,6 +1139,8 @@ local function factsText()
     end
     map("names", "Names the addon uses that one client lacks, or both: name -> the client that has it.",
         staticFacts.names)
+    map("deprecated", "Names the addon uses that a deprecation fallback defines or wraps: name -> the clients whose fallbacks do.",
+        staticFacts.deprecated)
     map("events", "Events the addon uses that one client lacks, or both.", staticFacts.events)
     map("hooks", "Literal hooksecurefunc targets on Blizzard names: target -> the clients that have it.",
         staticFacts.hooks)

@@ -74,6 +74,12 @@ return {
         YELLOW_FONT_COLOR_CODE = "color table",
     },
 
+    -- Names that Blizzard_Deprecated defines or wraps, which the addon may keep using: each
+    -- with the reason (the addon reads no field the wrapper adds, a fallback covers its
+    -- removal). Without an entry such a name is a finding: move to the new API.
+    deprecated = {
+    },
+
     -- Names one client has and the other lacks ("retail", "forever"), or that neither has
     -- any more ("neither"), each with the guard that keeps the code off the missing one.
     clientSpecific = {

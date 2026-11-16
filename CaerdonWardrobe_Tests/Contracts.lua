@@ -184,7 +184,7 @@ end
 
 T.Contract({
     id = "static.names",
-    version = 1,
+    version = 2,
     title = "Names the static check calls missing from this client are missing",
     run = function(c)
         if not T.StaticFacts then
@@ -216,6 +216,16 @@ T.Contract({
         c:Note("existsAgainstPrediction", unexpected)
         c:Note("createdByOtherAddons", fromAddons)
         c:Note("absentButExpected", absent)
+        -- Names Blizzard's deprecation fallbacks define or wrap: there while the CVar is on.
+        -- Listed, not judged.
+        local fallbacks = { cvar = C_CVar.GetCVar("loadDeprecationFallbacks"), present = {}, absent = {} }
+        for name in pairs(T.StaticFacts.deprecated or {}) do
+            local list = Lookup(name) ~= nil and fallbacks.present or fallbacks.absent
+            list[#list + 1] = name
+        end
+        table.sort(fallbacks.present)
+        table.sort(fallbacks.absent)
+        c:Note("deprecationFallbacks", fallbacks)
         c:Check(#unexpected == 0, "%d names exist here although the static check calls them missing: %s",
             #unexpected, Join(unexpected))
     end,
