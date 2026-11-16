@@ -310,6 +310,107 @@ T.Verdict({
     confirmed = false,
 })
 
+-- The other three cases of a look known from another item, by who can learn this source and
+-- who can use the known one (the two tests above are "this toon, from a source it can use").
+
+T.Verdict({
+    id = "retail.appearance.knownLookUnusable",
+    version = 1,
+    title = "A source this toon can collect, of a look known only from a source it cannot use, is a look to learn",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        sourceValid = true,
+        useError = false,
+        playerCanCollect = true,
+        lookKnownUsable = false,
+        lookKnownUnusable = true,
+        levelMet = true,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = WOWUNIT_ITEMS,
+            expect = { status = "own" },
+        },
+    },
+    confirmed = false,
+})
+
+T.Verdict({
+    id = "retail.appearance.otherToonKnownLook",
+    version = 1,
+    title = "A source only another toon can collect, of a look known from a source this toon cannot use, is a second source for the collection",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        playerCanCollect = false,
+        accountCanCollect = true,
+        lookKnownUnusable = true,
+        sameLookShown = true,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = WOWUNIT_ITEMS,
+            expect = { status = "otherPlus" },
+        },
+    },
+    confirmed = false,
+})
+
+T.Verdict({
+    id = "retail.appearance.otherToonKnownLookHidden",
+    version = 1,
+    title = "With looks known from another item not shown, such a source is nothing to learn",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        playerCanCollect = false,
+        accountCanCollect = true,
+        lookKnownUnusable = true,
+        sameLookShown = false,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = WOWUNIT_ITEMS,
+            expect = { notStatus = LEARN },
+        },
+    },
+    confirmed = false,
+})
+
+T.Verdict({
+    id = "retail.appearance.otherToonKnownLookUsable",
+    version = 1,
+    title = "A source only another toon can collect, of a look known only from a source this toon can use, is still a look to learn for the collection",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        playerCanCollect = false,
+        accountCanCollect = true,
+        lookKnownUsable = true,
+        lookKnownUnusable = false,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = WOWUNIT_ITEMS,
+            expect = { status = "other" },
+        },
+    },
+    confirmed = false,
+})
+
 T.Verdict({
     id = "retail.appearance.collected",
     version = 1,

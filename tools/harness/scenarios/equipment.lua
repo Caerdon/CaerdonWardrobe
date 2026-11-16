@@ -47,6 +47,25 @@ return function(H, S)
             -- Something that is no equipment at all.
             [910007] = { name = "Cracked Fang", quality = 0, level = 5, minLevel = 0, type = "Miscellaneous",
                 subType = "Junk", stack = 20, price = 12, classID = 15, subClassID = 0 },
+            -- A look known from another item, by who can learn this source and who can use the
+            -- known one (the gloves above are the first of four cases).
+            -- This toon learns it; the look is known only from a source it cannot use.
+            [910010] = Armor("Odd Bracers", "INVTYPE_WRIST", { appearanceID = 5110, sourceID = 7110 }),
+            [910011] = Armor("Alien Bracers", "INVTYPE_WRIST", { appearanceID = 5110, sourceID = 7111, collected = true, valid = false }),
+            -- Another toon learns it; known from a source this toon cannot use. This toon could
+            -- wear the belt, and could not wear the shield.
+            [910012] = Armor("Shared Belt", "INVTYPE_WAIST",
+                { appearanceID = 5112, sourceID = 7112, canCollect = false, account = true }),
+            [910013] = Armor("Alien Belt", "INVTYPE_WAIST", { appearanceID = 5112, sourceID = 7113, collected = true, valid = false }),
+            [910014] = Armor("Far Shield", "INVTYPE_SHIELD",
+                { appearanceID = 5114, sourceID = 7114, valid = false, canCollect = false, account = true },
+                { subType = "Shields", subClassID = 6 }),
+            [910015] = Armor("Alien Shield", "INVTYPE_SHIELD", { appearanceID = 5114, sourceID = 7115, collected = true, valid = false },
+                { subType = "Shields", subClassID = 6 }),
+            -- Another toon learns it; known only from a source this toon can use.
+            [910016] = Armor("Lent Cloak", "INVTYPE_CLOAK",
+                { appearanceID = 5116, sourceID = 7116, valid = false, canCollect = false, account = true }),
+            [910017] = Armor("Own Cloak", "INVTYPE_CLOAK", { appearanceID = 5116, sourceID = 7117, collected = true }),
             -- Bound to the account (Enum.ItemBind.ToWoWAccount).
             [910008] = { name = "Family Crest", quality = 7, level = 1, minLevel = 0, type = "Miscellaneous",
                 subType = "Other", stack = 1, price = 0, classID = 15, subClassID = 4, bindType = 7 },
@@ -240,6 +259,39 @@ return function(H, S)
         Check(not LEARN[status], "completion: with the setting off the status names nothing to learn ("
             .. tostring(status) .. ")")
     end
+    -- The other three cases of a known look. What the transmog info says of each is the same
+    -- with either setting; with the setting off a Plus case shows nothing to learn.
+    local KNOWN_LOOKS = {
+        { id = 910010, label = "this toon's, known from a source it cannot use",
+            needs = true, other = false, completionist = false, canEquip = true, off = "own", on = "own" },
+        { id = 910012, label = "another toon's, known from a source this toon cannot use, wearable here",
+            needs = false, other = true, completionist = true, canEquip = true, on = "otherPlus" },
+        { id = 910014, label = "another toon's, known from a source this toon cannot use, not wearable here",
+            needs = false, other = true, completionist = true, canEquip = false, on = "otherPlus" },
+        { id = 910016, label = "another toon's, known only from a source this toon can use",
+            needs = false, other = true, completionist = false, off = "other", on = "other" },
+    }
+    local function CheckKnownLooks(which, settingOn)
+        for _, case in ipairs(KNOWN_LOOKS) do
+            local item = Load(which, case.id)
+            local info = item and item:GetItemData():GetTransmogInfo() or {}
+            Equal(info.needsItem, case.needs, "known look, " .. case.label .. ": needed by this toon")
+            Equal(info.otherNeedsItem, case.other, "known look, " .. case.label .. ": needed by another")
+            Equal(info.isCompletionistItem, case.completionist, "known look, " .. case.label .. ": counts as known")
+            if case.canEquip ~= nil then
+                Equal(info.canEquip, case.canEquip, "known look, " .. case.label .. ": whether the toon can use it")
+            end
+            local status = item and Status(which, item)
+            local want = settingOn and case.on or case.off
+            if want then
+                Equal(status, want, "known look, " .. case.label .. ": the status with the setting " .. (settingOn and "on" or "off"))
+            else
+                Check(not LEARN[status], "known look, " .. case.label .. ": with the setting off nothing to learn is shown ("
+                    .. tostring(status) .. ")")
+            end
+        end
+    end
+    CheckKnownLooks(client, false)
     NoErrors(client, "new install")
 
     --------------------------------------------------------------------------------------
@@ -260,6 +312,7 @@ return function(H, S)
         end
         local shirt = Load(shown, 910001)
         Equal(shirt and (Status(shown, shirt)), "own", "completion: a new look is own with either setting")
+        CheckKnownLooks(shown, true)
         NoErrors(shown, "setting on, after")
     end
 

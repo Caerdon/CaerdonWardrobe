@@ -241,6 +241,22 @@ Ensembles teach **sources**, not appearances. Check `sourceInfo.isCollected`; do
 - **Vendor gray-out:** never fade `own`, `ownPlus`, `other`, `otherPlus`, `lowSkill`, `lowSkillPlus`, `otherNoLoot`.
 - **Open question:** ensemble 241380 taught a Monk-only source (78758, `useErrorType` 7) to a Druid, so error 7 may only block equipping and `otherNoLoot` may be too strict. Test: ensemble 139167 (Paladin-only item 144275) on a level 45+ non-Paladin plate wearer.
 
+## Known Looks
+
+A piece whose look is already known from another item is a second source, not a new look. Which status it gets depends on who can learn this source and on who can use the source that is known (`CaerdonItemMixin:GetCaerdonStatus`, the equipment branch; `isCompletionistItem` on the transmog info). The Plus statuses are drawn only with "same look, different item" on; with it off such a piece shows nothing to learn.
+
+| Who can learn this source | The look is known from | Status |
+|---|---|---|
+| this toon | a source this toon can use | `ownPlus` |
+| this toon | only a source this toon cannot use | `own`: learning it is what makes the look usable here |
+| another toon | a source this toon cannot use | `otherPlus`, whether or not this toon could wear the piece |
+| another toon | only a source this toon can use | `other`: nothing says the other toon has the look |
+
+- The third row used to depend on whether this toon could wear the piece: a shield on a mage read `other` whatever was known, and with the setting off as well (author decision, 2026-11-16).
+- The addon cannot ask which toon would learn a source or what that toon can use. "Known from a source this toon cannot use" stands in for "the toon it is for has the look"; where that is not known the piece stays a look to learn, because hiding a new look is the worse mistake.
+- On Forever most uncollected pieces do not come this way (the collect APIs say no for them): see Transmog on Forever, whose flags call any collected source of the look a known look.
+- Evidence: offline, a case per row with the setting off and on (`scenarios/equipment.lua`). In a client: the retail verdict tests `retail.appearance.knownLook`, `knownLookUnusable`, `otherToonKnownLook`, `otherToonKnownLookHidden`, `otherToonKnownLookUsable`; only the first has had a case.
+
 ## Upgrades
 
 `CaerdonEquipmentMixin:GetTransmogInfo()` carries the upgrade verdict and its inputs.

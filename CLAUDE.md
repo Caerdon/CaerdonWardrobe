@@ -108,6 +108,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | What a draw or a refresh costs, who asked the client for an item | Counters |
 | What a tooltip line carries, the export's tooltip sections | Tooltip Lines in the Export |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
+| A look known from another item, the Plus statuses | Known Looks |
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |
 | What is and is not `sellable` | Sellable Rules |

@@ -1874,17 +1874,16 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                         end
                     end
                 elseif transmogInfo.otherNeedsItem then
-                    if transmogInfo.canEquip then
-                        if not transmogInfo.isCompletionistItem then
-                            mogStatus = "other"
-                        else
-                            if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-                                mogStatus = "otherPlus"
-                            end
-                        end
-                    else
-                        -- Can't equip but other characters need it (e.g., cross-class ensemble)
+                    -- Another toon can learn it. isCompletionistItem here: the look is already
+                    -- known from a source this toon cannot use, which is the best sign there is
+                    -- that the toon who would learn this one has the look. That makes it a Plus
+                    -- whether or not this toon could wear the piece (a shield on a mage used to
+                    -- read "other" whatever was known). Known only from a source this toon can
+                    -- use, it stays "other": the other toon may well not have the look.
+                    if not transmogInfo.isCompletionistItem then
                         mogStatus = "other"
+                    elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                        mogStatus = "otherPlus"
                     end
                 elseif learnableLaterStatus then
                     mogStatus = learnableLaterStatus
