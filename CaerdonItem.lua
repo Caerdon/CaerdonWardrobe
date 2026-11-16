@@ -50,8 +50,10 @@ local bindTextTable = {
 -- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state)
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
+local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
 function CaerdonItem:InvalidateStatusCache()
     wipe(statusCache)
+    wipe(copySpellCache)
 end
 
 -- Whether the copy of an item in a bag slot is locked (a lockbox that has not been opened).
@@ -1419,6 +1421,134 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
     }
 end
 
+-- What an item's use spell says about combining, which follows from the link: false for an item
+-- with no such spell. Kept until the status cache is wiped (copySpellCache, at the top).
+local function GetCopySpellFacts(itemLink)
+    local facts = copySpellCache[itemLink]
+    if facts == nil then
+        facts = false
+        local spellName, spellID = C_Item.GetItemSpell(itemLink)
+        if spellID then
+            if spellID == 433080 or spellID == 439058 then -- Breaking Down / Attuning Stone Wing (if in bags)
+                -- TODO: Better to figure out a way to identify spells that create currency if possible
+                facts = { spellID = spellID, makesCurrency = true }
+            else
+                local spellDescription = C_Spell.GetSpellDescription(spellID) or ""
+                -- local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
+                local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
+                local isArrangeDescription = string.find(spellDescription, L["^Arrange %d+"]) ~= nil
+                if isCombineDescription or isArrangeDescription then
+                    facts = {
+                        spellID = spellID,
+                        combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0)),
+                    }
+                end
+            end
+        end
+        copySpellCache[itemLink] = facts
+    end
+    return facts
+end
+
+-- The part of the status that belongs to one copy of an item in its bag slot: something to
+-- open, locked, readable, refundable, or a stack that can be combined. GetCaerdonStatus keeps
+-- its verdict per link, and none of this follows from the link, so it is added here, after the
+-- cache lookup, on every call. Otherwise a verdict first asked for outside the bags (the mail,
+-- a loot window, a vendor) would stand for the copy in the bags, and two copies in different
+-- states would share one.
+function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
+    if not self:HasItemLocationBankOrBags() then
+        return mogStatus
+    end
+
+    local itemLocation = self:GetItemLocation()
+
+    local bag, slot = itemLocation:GetBagAndSlot()
+
+    local containerID = bag
+    local containerSlot = slot
+
+    local texture, itemCount, locked, quality, readable, lootable
+    if C_Container and C_Container.GetContainerItemInfo then
+        local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
+        if containerItemInfo then
+            itemCount = containerItemInfo.stackCount
+            locked = containerItemInfo.isLocked
+            quality = containerItemInfo.quality
+            readable = containerItemInfo.isReadable
+            lootable = containerItemInfo.hasLoot
+        end
+    else
+        texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
+    end
+
+    if lootable then
+        local startTime, duration, isEnabled
+        if C_Container and C_Container.GetContainerItemCooldown then
+            startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
+        else
+            startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
+        end
+        if duration > 0 and not isEnabled then
+            mogStatus = "refundable" -- Can't open yet... show timer
+        else
+            local isLocked = IsBagSlotLocked(containerID, containerSlot)
+            if isLocked == nil then
+                isLocked = bindingResult.isLocked
+            end
+            if isLocked then
+                mogStatus = "locked"
+            else
+                mogStatus = "openable"
+            end
+        end
+    elseif readable then
+        mogStatus = "readable"
+    else
+        local isEquipped = false
+        local money, itemCount, refundSec, currencyCount, hasEnchants
+        if C_Container and C_Container.GetContainerItemPurchaseInfo then
+            local info = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+            money = info and info.money
+            itemCount = info and info.itemCount
+            refundSec = info and info.refundSeconds
+            currencyCount = info and info.currencyCount
+            hasEnchants = info and info.hasEnchants
+        else
+            money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot,
+                isEquipped)
+        end
+        if refundSec then
+            mogStatus = "refundable"
+        end
+    end
+
+    -- TODO: C_Item.GetItemLearnTransmogSet
+
+    local spellFacts = GetCopySpellFacts(self:GetItemLink())
+    if spellFacts then
+        if spellFacts.makesCurrency then
+            mogStatus = "own"
+        else
+            local CheckUsable = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
+            local currentStackCount = C_Item.GetStackCount(itemLocation)
+            local combineCount = spellFacts.combineCount
+            if combineCount > 1 then
+                mogStatus = "canCombine"
+                if combineCount <= currentStackCount then
+                    mogStatus = "readyToCombine"
+                end
+            elseif CheckUsable(spellFacts.spellID) then
+                mogStatus = "readyToCombine"
+            else
+                mogStatus = "canCombine"
+            end
+        end
+    end
+
+    return mogStatus
+end
+
 function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need to remove feature/locationInfo but keeping it for now in case refactor to GetHyperlink causes any issues - also need to remove the GetTooltipData calls
     local itemLink = self:GetItemLink()
     if not itemLink then
@@ -1441,7 +1571,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
         local cached = statusCache[statusCacheKey]
         if cached then
-            return cached[1], cached[2], cached[3], cached[4]
+            return cached[1], self:GetCopyStatus(cached[2], cached[4]), cached[3], cached[4]
         end
     end
 
@@ -1964,114 +2094,13 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
-    -- Set when the status says whether this copy is locked: not cached, see below.
-    local isSlotLockState = false
-
-    if self:HasItemLocationBankOrBags() then
-        local bag, slot = itemLocation:GetBagAndSlot()
-
-        local containerID = bag
-        local containerSlot = slot
-
-        local texture, itemCount, locked, quality, readable, lootable
-        if C_Container and C_Container.GetContainerItemInfo then
-            local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
-            if containerItemInfo then
-                itemCount = containerItemInfo.stackCount
-                locked = containerItemInfo.isLocked
-                quality = containerItemInfo.quality
-                readable = containerItemInfo.isReadable
-                lootable = containerItemInfo.hasLoot
-            end
-        else
-            texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
-        end
-
-        if lootable then
-            local startTime, duration, isEnabled
-            if C_Container and C_Container.GetContainerItemCooldown then
-                startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
-            else
-                startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
-            end
-            if duration > 0 and not isEnabled then
-                mogStatus = "refundable" -- Can't open yet... show timer
-            else
-                local isLocked = IsBagSlotLocked(containerID, containerSlot)
-                if isLocked == nil then
-                    isLocked = bindingResult.isLocked
-                end
-                if isLocked then
-                    mogStatus = "locked"
-                else
-                    mogStatus = "openable"
-                end
-                isSlotLockState = true
-            end
-        elseif readable then
-            mogStatus = "readable"
-        else
-            local isEquipped = false
-            local money, itemCount, refundSec, currencyCount, hasEnchants
-            if C_Container and C_Container.GetContainerItemPurchaseInfo then
-                local info = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
-                money = info and info.money
-                itemCount = info and info.itemCount
-                refundSec = info and info.refundSeconds
-                currencyCount = info and info.currencyCount
-                hasEnchants = info and info.hasEnchants
-            else
-                money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot,
-                    isEquipped)
-            end
-            if refundSec then
-                mogStatus = "refundable"
-            end
-        end
-    end
-
-    -- TODO: C_Item.GetItemLearnTransmogSet
-
-    local spellName, spellID = C_Item.GetItemSpell(self:GetItemLink())
-    if spellID then
-        local spellDescription
-        spellDescription = C_Spell.GetSpellDescription(spellID) or ""
-        -- local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
-        local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
-        local isArrangeDescription = string.find(spellDescription, L["^Arrange %d+"]) ~= nil
-        local CheckUsable = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
-        -- if isCollectDescription and CheckUsable(spellID) then
-        -- 	mogStatus = "own"
-        -- elseif
-        if self:HasItemLocationBankOrBags() then
-            if (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
-                -- TODO: Better to figure out a way to identify spells that create currency if possible
-                mogStatus = "own"
-            elseif isCombineDescription or isArrangeDescription then -- and mogStatus == "" then
-                local currentStackCount = C_Item.GetStackCount(itemLocation)
-                local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0))
-                if combineCount > 1 then
-                    mogStatus = "canCombine"
-                    if combineCount <= currentStackCount then
-                        mogStatus = "readyToCombine"
-                    end
-                elseif CheckUsable(spellID) then
-                    mogStatus = "readyToCombine"
-                else
-                    mogStatus = "canCombine"
-                end
-            end
-        end
-    end
-
-    -- The cache is per link, and a copy's lock is not: a locked box and an opened one of the same
-    -- item must not share a verdict, and a box that has just been unlocked must not keep its old one.
-    if statusCacheKey and mogStatus ~= "canCombine" and mogStatus ~= "readyToCombine" and
-        not (isSlotLockState and (mogStatus == "locked" or mogStatus == "openable")) then
+    -- Everything up to here follows from the link and the toon, and is kept per link. What
+    -- belongs to this copy in its bag slot is added after the lookup (GetCopyStatus).
+    if statusCacheKey then
         statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult}
     end
 
-    return isReady, mogStatus, bindingStatus, bindingResult
+    return isReady, self:GetCopyStatus(mogStatus, bindingResult), bindingStatus, bindingResult
 end
 
 function CaerdonItemMixin:GetItemData()

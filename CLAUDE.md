@@ -57,7 +57,7 @@ Each later step only replaces the statuses listed, so a learnable look or an upg
 9. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`.
 10. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
-The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for stackable items) until `RefreshItems`. `locked` and `openable` are not cached, like the combine statuses: the lock belongs to one copy and is read from its slot (notes: Refresh).
+The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for stackable items) until `RefreshItems`. Step 10 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
 
 ## Rules
 
