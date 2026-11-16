@@ -104,6 +104,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | The test addon, `/cwtest`, reading its results | Test Addon |
 | Running the item code offline, recording an item, fixtures | Offline Harness |
 | What a draw or a refresh costs, who asked the client for an item | Counters |
+| What a tooltip line carries, the export's tooltip sections | Tooltip Lines in the Export |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |

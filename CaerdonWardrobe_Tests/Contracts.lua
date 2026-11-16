@@ -651,6 +651,277 @@ T.Contract({
     end,
 })
 
+-- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
+-- of the client's answer has its row, and every field of the line is on it. An item in a bag
+-- has two tooltips, the slot's and the bare link's, which is the one the addon computes the
+-- status from; where the two differ, the line types that differ are collected with a few
+-- examples each. That list is what the addon cannot know about a copy from its link.
+
+local EXPORT_ROW_FIELDS = { type = true, leftText = true, rightText = true, leftColor = true, rightColor = true }
+local EXPORT_EXAMPLE_LENGTH = 200
+local EXPORT_EXAMPLES = 6
+
+-- Keeps an example unless one like it is there: two lines that differ in their numbers only
+-- (a cooldown, a price) are one kind of line.
+local function AddExportExample(list, example)
+    local shape = example:gsub("%d+", "#")
+    for _, known in ipairs(list) do
+        local knownShape = known:gsub("%d+", "#")
+        if knownShape == shape then
+            return
+        end
+    end
+    if #list < EXPORT_EXAMPLES then
+        list[#list + 1] = example
+    end
+end
+
+-- The export's rows as sections: { title, info = { row text }, lines = { { row, fields } } }.
+-- A line's row loses its "[3] " so that a line can be found again where the count differs.
+local function ExportSections(rows)
+    local sections, current = {}, nil
+    for _, row in ipairs(rows) do
+        local text = row.text
+        if row.indent == 0 and text:sub(1, 1) == "[" then
+            current = { title = text, info = {}, lines = {} }
+            sections[#sections + 1] = current
+        elseif current and row.indent == 1 and text:find("^%[%d+%] ") then
+            current.lines[#current.lines + 1] = { row = (text:gsub("^%[%d+%] ", "")), fields = "" }
+        elseif current and row.indent == 3 and #current.lines > 0 then
+            current.lines[#current.lines].fields = text
+        elseif current and row.indent == 1 then
+            current.info[#current.info + 1] = text
+        end
+    end
+    return sections
+end
+
+-- Whether a section's lines are the client's lines, one row each with every field.
+local function CheckExportLines(c, what, section, data)
+    local lines = type(data) == "table" and data.lines or {}
+    if not c:Check(#section.lines == #lines, "%s: %d rows for %d tooltip lines", what, #section.lines, #lines) then
+        return
+    end
+    for index, line in ipairs(lines) do
+        local shown = section.lines[index]
+        local leftText = line.leftText
+        if type(leftText) == "string" and leftText ~= "" then
+            c:Check(shown.row:find(leftText, 1, true) ~= nil, "%s: line %d does not show its text", what, index)
+        end
+        for key, value in pairs(line) do
+            if not EXPORT_ROW_FIELDS[key] and type(value) ~= "function" then
+                c:Check((", " .. shown.fields):find(", " .. tostring(key) .. "=", 1, true) ~= nil,
+                    "%s: line %d (type %s) does not show its field %s", what, index, tostring(line.type), tostring(key))
+            end
+        end
+    end
+end
+
+-- Counts the lines one section has and the other lacks, by line type, into differs.
+local function NoteExportDifferences(differs, section, other, side)
+    local has = {}
+    for _, line in ipairs(other.lines) do
+        has[line.row .. "\n" .. line.fields] = true
+    end
+    for _, line in ipairs(section.lines) do
+        if not has[line.row .. "\n" .. line.fields] then
+            local lineType = line.row:match("^type=%S+ %b()") or line.row:match("^type=%S+") or "?"
+            local entry = differs[lineType]
+            if not entry then
+                entry = { slotOnly = 0, linkOnly = 0, slotExamples = {}, linkExamples = {} }
+                differs[lineType] = entry
+            end
+            entry[side .. "Only"] = entry[side .. "Only"] + 1
+            local example = line.row .. (line.fields ~= "" and ("  {" .. line.fields .. "}") or "")
+            AddExportExample(entry[side .. "Examples"], example:sub(1, EXPORT_EXAMPLE_LENGTH))
+        end
+    end
+end
+
+local function MergeExportLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "linkSame", "linkDiffers" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.sample = old.sample or new.sample
+    merged.differs = merged.differs or {}
+    for lineType, entry in pairs(new.differs or {}) do
+        local target = merged.differs[lineType]
+        if not target then
+            merged.differs[lineType] = entry
+        else
+            target.slotOnly = (target.slotOnly or 0) + (entry.slotOnly or 0)
+            target.linkOnly = (target.linkOnly or 0) + (entry.linkOnly or 0)
+            for _, side in ipairs({ "slotExamples", "linkExamples" }) do
+                target[side] = target[side] or {}
+                for _, example in ipairs(entry[side] or {}) do
+                    AddExportExample(target[side], example)
+                end
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "export.tooltipLines",
+    version = 2,
+    title = "The export shows every tooltip line of a bag item with every field, for the slot and for the link",
+    accumulate = true,
+    merge = MergeExportLines,
+    run = function(c)
+        local feature = CaerdonWardrobe and CaerdonWardrobe.GetFeature and CaerdonWardrobe:GetFeature("DebugFrame")
+        if not feature or type(feature.GetTooltipReportRows) ~= "function" then
+            return "skip", "the addon's Debug Frame has no GetTooltipReportRows"
+        end
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local items, linkSame, linkDiffers, differs, sample = 0, 0, 0, {}, nil
+        for index, where in ipairs(slots) do
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                items = items + 1
+                local what = ("bag %d slot %d"):format(where.bag, where.slot)
+                local rows = feature:GetTooltipReportRows(link, ItemLocation:CreateFromBagAndSlot(where.bag, where.slot))
+                local sections = ExportSections(rows)
+                local slotSection, linkSection = sections[1], sections[2]
+                if c:Check(#sections == 2 and slotSection.title == "[Tooltip Lines (Raw)]"
+                        and linkSection.title == "[Tooltip Lines (Link)]", "%s: %d sections, expected the slot's and the link's",
+                        what, #sections) then
+                    CheckExportLines(c, what .. ", slot", slotSection, C_TooltipInfo.GetBagItem(where.bag, where.slot))
+                    local linkData = C_TooltipInfo.GetHyperlink(link)
+                    local same = false
+                    for _, text in ipairs(linkSection.info) do
+                        same = same or text:find("^Lines: %d+, each the same") ~= nil
+                    end
+                    if same then
+                        linkSame = linkSame + 1
+                        c:Check(#linkSection.lines == 0, "%s: the link's lines are called the same and printed as well", what)
+                    else
+                        linkDiffers = linkDiffers + 1
+                        CheckExportLines(c, what .. ", link", linkSection, linkData)
+                        NoteExportDifferences(differs, slotSection, linkSection, "slot")
+                        NoteExportDifferences(differs, linkSection, slotSection, "link")
+                    end
+                    if not sample or (not same and not sample.differs) then
+                        local texts = {}
+                        for rowIndex, row in ipairs(rows) do
+                            texts[rowIndex] = string.rep("  ", row.indent) .. row.text
+                        end
+                        sample = { link = link, differs = not same, rows = texts }
+                    end
+                end
+            end
+            if index % 10 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", items)
+        c:Note("linkSame", linkSame)
+        c:Note("linkDiffers", linkDiffers)
+        c:Note("differs", differs)
+        c:Note("sample", sample)
+    end,
+})
+
+-- Whether what C_TooltipInfo answers is the game's alone. Other addons write on tooltips, and
+-- the addon decides statuses from tooltip lines, so a line of theirs must never be among the
+-- lines it reads. They have three ways in, and each is tried here:
+--   * adding a line to a tooltip frame while it is filled (what nearly all of them do): the
+--     test does exactly that on a frame of its own and looks for its line in the data;
+--   * changing the table the frame hands to their callback: the test changes a table it got
+--     and asks again;
+--   * replacing a C_TooltipInfo function: a function that is not the client's own is named.
+
+local MARKER_TEXT = "CaerdonWardrobe_Tests: a line an addon added"
+local MARKER_TOOLTIP = "CaerdonWardrobeTestsMarkerTooltip"
+local markerTooltip, markerArmed
+
+local function HasMarker(data)
+    for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+        if not issecretvalue(line.leftText) and line.leftText == MARKER_TEXT then
+            return true
+        end
+    end
+    return false
+end
+
+T.Contract({
+    id = "tooltip.gameOnly",
+    version = 1,
+    title = "Tooltip data holds the game's lines only: nothing an addon adds to a tooltip reaches it",
+    run = function(c)
+        if InCombatLockdown() then
+            return "skip", "out of combat only"
+        end
+        local slots = FilledBagSlots(1)
+        if #slots == 0 then
+            return "skip", "needs an item in the bags"
+        end
+        local bag, slot = slots[1].bag, slots[1].slot
+
+        -- A function an addon assigned is not secure, and the client says whose it is.
+        local replaced, functions = {}, 0
+        for name, value in pairs(C_TooltipInfo) do
+            if type(value) == "function" then
+                functions = functions + 1
+                local isSecure, taintedBy = issecurevariable(C_TooltipInfo, name)
+                if not isSecure then
+                    replaced[#replaced + 1] = ("%s (%s)"):format(tostring(name), tostring(taintedBy))
+                end
+            end
+        end
+        c:Note("functions", functions)
+        c:Note("replaced", replaced)
+        c:Check(#replaced == 0, "%d C_TooltipInfo functions are not the client's own: %s", #replaced, Join(replaced))
+
+        -- A line added to a frame, the way an addon adds one.
+        if not markerTooltip then
+            markerTooltip = CreateFrame("GameTooltip", MARKER_TOOLTIP, UIParent, "GameTooltipTemplate")
+            TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip)
+                if markerArmed and tooltip == markerTooltip then
+                    tooltip:AddLine(MARKER_TEXT)
+                end
+            end)
+        end
+        markerArmed = true
+        markerTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+        markerTooltip:SetBagItem(bag, slot)
+        markerArmed = false
+        local frameLines, onFrame = markerTooltip:NumLines() or 0, false
+        for index = 1, frameLines do
+            local fontString = _G[MARKER_TOOLTIP .. "TextLeft" .. index]
+            local text = fontString and fontString:GetText()
+            if not issecretvalue(text) and text == MARKER_TEXT then
+                onFrame = true
+            end
+        end
+        markerTooltip:Hide()
+
+        local data = C_TooltipInfo.GetBagItem(bag, slot)
+        if not c:Check(type(data) == "table" and type(data.lines) == "table", "the slot's tooltip data is a %s", type(data)) then
+            return
+        end
+        c:Note("frameLines", frameLines)
+        c:Note("dataLines", #data.lines)
+        c:Check(onFrame, "the line added to the tooltip frame is not on it (%d lines), so the test shows nothing", frameLines)
+        c:Check(not HasMarker(data), "a line an addon added to a tooltip frame is in the data of C_TooltipInfo.GetBagItem")
+        local link = C_Container.GetContainerItemLink(bag, slot)
+        if link then
+            c:Check(not HasMarker(C_TooltipInfo.GetHyperlink(link)),
+                "a line an addon added to a tooltip frame is in the data of C_TooltipInfo.GetHyperlink")
+        end
+
+        -- A table that was handed out and changed.
+        data.lines[#data.lines + 1] = { type = 0, leftText = MARKER_TEXT }
+        local again = C_TooltipInfo.GetBagItem(bag, slot)
+        c:Check(again ~= data, "two calls for one slot return the same table, so a change by anyone is seen by everyone")
+        c:Check(not HasMarker(again), "a line written into one answer's table is in the next answer")
+    end,
+})
+
 ------------------------------------------------------------------------------------------
 -- Secret values
 ------------------------------------------------------------------------------------------
