@@ -469,6 +469,109 @@ T.Contract({
 })
 
 ------------------------------------------------------------------------------------------
+-- One known item, build after build
+------------------------------------------------------------------------------------------
+
+-- The WoWUnit tests the addon used to ship began with a "data change canary": everything the
+-- client says about one plain item, Brawler's Harness, so that a patch which changes what
+-- the client hands out is noticed. This is that canary. It reads what does not depend on the
+-- toon or the collection and compares it with the reading of the build before, so it needs no
+-- expected values and holds for either client. The old test's values (retail, 2020) are kept
+-- for the reader: where today's reading differs from them is noted, not judged.
+
+local CANARY_ITEM = 6125
+local CANARY_ID, CANARY_VERSION = "canary.knownItem", 1
+
+local CANARY_2020 = {
+    name = "Brawler's Harness", quality = 2, minLevel = 0, equipLoc = "INVTYPE_BODY", classID = 4, subClassID = 0,
+    bindType = 2, expansionID = 0, craftingReagent = false, appearanceID = 1979, sourceID = 2260,
+    ["source.visualID"] = 1979, ["source.itemID"] = 6125, ["source.categoryID"] = 5, ["source.invType"] = 5,
+    ["source.itemModID"] = 0, ["source.name"] = "Brawler's Harness", ["source.quality"] = 2,
+    ["source.isHideVisual"] = false,
+}
+-- The fields GetSourceInfo had then, for a source nobody had collected.
+local CANARY_2020_SOURCE_KEYS = "categoryID, invType, isCollected, isHideVisual, itemID, itemModID, name, quality, "
+    .. "sourceID, visualID"
+
+-- The same contract's reading from the newest other build the results still hold.
+local function EarlierReading(id, version)
+    local current = T.GetClient().build
+    local found, foundBuild
+    for build, results in pairs(T.db.contracts) do
+        local stored = results[id]
+        if build ~= current and stored and stored.v == version and type(stored.detail) == "table"
+            and type(stored.detail.reading) == "table" and (not found or stored.at > found.at) then
+            found, foundBuild = stored, build
+        end
+    end
+    return found and found.detail.reading, foundBuild
+end
+
+T.Contract({
+    id = CANARY_ID,
+    version = CANARY_VERSION,
+    title = "What the client says about one plain item is what it said in the build before",
+    run = function(c)
+        local item, why = T.LoadItem(CANARY_ITEM)
+        if not item then
+            return "skip", why
+        end
+        local link = item:GetItemLink()
+        local values = { C_Item.GetItemInfo(link) }
+        local reading = {
+            name = values[1], quality = values[3], minLevel = values[5], maxStack = values[8], equipLoc = values[9],
+            classID = values[12], subClassID = values[13], bindType = values[14], expansionID = values[15],
+            craftingReagent = values[17],
+        }
+        local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(link)
+        reading.appearanceID, reading.sourceID = appearanceID or false, sourceID or false
+
+        local source = sourceID and C_TransmogCollection.GetSourceInfo(sourceID)
+        if type(source) == "table" then
+            for _, key in ipairs({ "visualID", "itemID", "categoryID", "invType", "itemModID", "name", "quality",
+                "isHideVisual" }) do
+                local value = source[key]
+                if value == nil then
+                    value = false
+                end
+                reading["source." .. key] = T.Plain(value)
+            end
+            -- Which fields a source has depends on the toon and the collection as well (a use
+            -- error, a source type), so the list is kept to be read and is no part of the
+            -- comparison.
+            local keys = table.concat(T.SortedKeys(source), ", ")
+            c:Note("sourceKeys", keys)
+            c:Note("sourceKeysAsIn2020", keys == CANARY_2020_SOURCE_KEYS)
+            c:Note("source", T.Facts.Scalars(source))
+            c:Note("lookSources", #(appearanceID and C_TransmogCollection.GetAllAppearanceSources(appearanceID) or {}))
+        end
+        reading = T.Plain(reading)
+        c:Note("reading", reading)
+        c:Note("link", link)
+
+        local unlike2020 = {}
+        for _, key in ipairs(T.SortedKeys(CANARY_2020)) do
+            if reading[key] ~= CANARY_2020[key] then
+                unlike2020[#unlike2020 + 1] = ("%s is %s, was %s"):format(key, tostring(reading[key]),
+                    tostring(CANARY_2020[key]))
+            end
+        end
+        c:Note("unlikeTheOldTest", unlike2020)
+
+        local earlier, earlierBuild = EarlierReading(CANARY_ID, CANARY_VERSION)
+        if not earlier then
+            return "info", "a first reading: the next build is compared with it"
+        end
+        c:Note("comparedWith", earlierBuild)
+        local changed = T.Facts.Diff(earlier, reading)
+        for _, key in ipairs(T.SortedKeys(changed or {})) do
+            c:Check(false, "since build %s, %s went from %s to %s", earlierBuild, key, tostring(changed[key].before),
+                tostring(changed[key].after))
+        end
+    end,
+})
+
+------------------------------------------------------------------------------------------
 -- Tooltip lines
 ------------------------------------------------------------------------------------------
 

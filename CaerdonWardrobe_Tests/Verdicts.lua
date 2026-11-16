@@ -14,17 +14,44 @@ local _, T = ...
 
 -- def: id, version, title, facts ("appearance", "toy", "mount" or nil), shape, pool, and
 --   kinds  a list of { name, toon = { class, race, faction, minLevel, maxLevel },
---          expect = { status, binding }, pool (optional, instead of the test's) }
+--          expect = { status, notStatus, binding }, pool (optional, instead of the test's) }
 --   confirmed  where and when the expectation was seen in game, or false
 --   flavor     "retail" or "forever"
+-- expect.status is the one status the item must have. expect.notStatus is a list of statuses
+-- it must not have, for a shape whose rule is "nothing to learn": what such an item shows
+-- instead (collected, sellable, an upgrade, an auction price) is other rules' business.
 function T.Verdict(def)
     assert(type(def.shape) == "table" and type(def.kinds) == "table", "a verdict test needs a shape and kinds")
+    for _, kind in ipairs(def.kinds) do
+        assert(type(kind.expect) == "table" and (kind.expect.status ~= nil or type(kind.expect.notStatus) == "table"),
+            "a kind of toon needs an expected status, or a list of statuses that are wrong")
+    end
     return T.RegisterVerdict(def)
 end
 
 ------------------------------------------------------------------------------------------
 -- Judging (no client calls)
 ------------------------------------------------------------------------------------------
+
+-- An expectation in words.
+function T.DescribeExpectation(expect)
+    if expect.status ~= nil then
+        return tostring(expect.status)
+    end
+    return "none of " .. table.concat(expect.notStatus, ", ")
+end
+
+local function StatusMeets(status, expect)
+    if expect.status ~= nil then
+        return status == expect.status
+    end
+    for _, wrong in ipairs(expect.notStatus) do
+        if status == wrong then
+            return false
+        end
+    end
+    return true
+end
 
 -- What one pool item amounts to in this run.
 --   facts, misses   the item's facts and where they miss the shape (nil: it fits)
@@ -57,7 +84,7 @@ function T.JudgeCase(facts, misses, verdict, expect, prior, version)
     end
 
     case.status, case.binding = verdict.status, verdict.binding
-    local matches = verdict.status == expect.status
+    local matches = StatusMeets(verdict.status, expect)
         and (expect.binding == nil or expect.binding == verdict.binding)
     if matches then
         case.result = "pass"
@@ -65,7 +92,7 @@ function T.JudgeCase(facts, misses, verdict, expect, prior, version)
     end
 
     case.result = "fail"
-    case.note = ("expected %s, got %s"):format(tostring(expect.status), tostring(verdict.status))
+    case.note = ("expected %s, got %s"):format(T.DescribeExpectation(expect), tostring(verdict.status))
     if expect.binding ~= nil and expect.binding ~= verdict.binding then
         case.note = case.note .. (" (binding %s, expected %s)"):format(tostring(verdict.binding),
             tostring(expect.binding))

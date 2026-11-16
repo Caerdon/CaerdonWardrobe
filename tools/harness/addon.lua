@@ -10,7 +10,7 @@
 local H = ...
 
 -- Folders of the addon that the item side does not need.
-H.ITEM_SIDE_SKIP = { "^libs/", "^config/", "^features/", "^external/", "^tests/", "^localization/" }
+H.ITEM_SIDE_SKIP = { "^libs/", "^config/", "^features/", "^external/", "^localization/" }
 
 -- Blizzard's Lua that the item side runs on (see the file for why it is a list of its own).
 H.BLIZZARD_BASE = dofile(H.dir .. "/blizzard-base.lua")

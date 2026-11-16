@@ -87,12 +87,4 @@
 	<Script file="types\QuestMixin.lua" />
 	<Script file="types\RecipeMixin.lua" />
 	<Script file="types\ToyMixin.lua" />
-
-	<Script file="tests\CaerdonItemTests.lua" />
-	<Script file="tests\ClothTests.lua" />
-	<Script file="tests\LeatherTests.lua" />
-	<Script file="tests\MailTests.lua" />
-	<Script file="tests\PlateTests.lua" />
-	<Script file="tests\WeaponTests.lua" />
-	<Script file="tests\SharedTests.lua" />
 </Ui>

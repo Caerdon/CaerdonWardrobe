@@ -191,7 +191,7 @@ local function Search(wanted)
     for _, test in ipairs(tests) do
         local expected = {}
         for _, kind in ipairs(test.def.kinds) do
-            expected[kind.expect.status] = true
+            expected[T.DescribeExpectation(kind.expect)] = true
         end
         record.tests[test.def.id] = {
             shape = test.def.shape,

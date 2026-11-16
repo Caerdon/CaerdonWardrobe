@@ -29,12 +29,14 @@ function Facts.Scalars(source)
     return copy
 end
 
--- What every kind of item has. toonLevel is here because a level-up changes verdicts.
+-- What every kind of item has. toonLevel is here because a level-up changes verdicts, and
+-- levelMet because a shape can only ask for a value, not for "at least".
 function Facts.Item(item)
     local link, itemID = item:GetItemLink(), item:GetItemID()
     local name, _, quality, itemLevel, minLevel, _, _, maxStack, equipLoc, _, sellPrice, classID, subClassID,
     bindType, expansionID = C_Item.GetItemInfo(link)
     return {
+        levelMet = (minLevel or 0) <= UnitLevel("player"),
         itemID = itemID,
         name = name,
         quality = quality,
@@ -78,17 +80,35 @@ function Facts.Appearance(item, facts)
     facts.accountCollectReady = Bool(accountReady)
     facts.accountCanCollect = Bool(accountCanCollect)
 
-    -- The look is known from another item.
+    -- The look is known from another item. Which toon that other item is for matters to the
+    -- verdict, so the collected other sources are told apart: one this toon can use
+    -- (lookKnownUsable), one it cannot (lookKnownUnusable). Both can be true.
     facts.lookKnownElsewhere = false
+    facts.lookKnownUsable = false
+    facts.lookKnownUnusable = false
     if appearanceID then
         for _, otherSource in ipairs(C_TransmogCollection.GetAllAppearanceSources(appearanceID) or {}) do
-            if otherSource ~= sourceID
-                and C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(otherSource) then
-                facts.lookKnownElsewhere = true
-                break
+            if otherSource ~= sourceID then
+                if C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance(otherSource) then
+                    facts.lookKnownElsewhere = true
+                end
+                local other = C_TransmogCollection.GetSourceInfo(otherSource)
+                if other and other.isCollected then
+                    if other.isValidSourceForPlayer then
+                        facts.lookKnownUsable = true
+                    else
+                        facts.lookKnownUnusable = true
+                    end
+                end
             end
         end
     end
+
+    -- The one setting a status of this kind hangs on: whether a look known from another item
+    -- is shown as learnable at all (ownPlus, otherPlus). It is the player's choice, an input
+    -- like the toon's level, and a shape that expects a Plus status has to ask for it.
+    local shown = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowLearnable
+    facts.sameLookShown = Bool(shown and shown.SameLookDifferentItem)
     return facts
 end
 

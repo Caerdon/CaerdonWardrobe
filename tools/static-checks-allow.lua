@@ -55,7 +55,6 @@ return {
         Skillet = "Skillet",
         VWQL = "World Quests List",
         WQT_REWARDTYPE = "World Quest Tracker",
-        WoWUnit = "WoWUnit",
         WorldQuestList = "World Quests List",
         WorldQuestTrackerAddon = "World Quest Tracker",
         ZygorGuidesViewer = "Zygor Guides Viewer",
