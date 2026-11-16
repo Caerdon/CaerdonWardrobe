@@ -289,6 +289,7 @@ local function ListContainers()
     end
     return list
 end
+T.ListContainers = ListContainers
 
 -- Why an item was never drawn: how far it got on the way to a draw.
 local function DescribeStuck(pending)

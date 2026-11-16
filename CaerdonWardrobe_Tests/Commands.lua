@@ -22,6 +22,9 @@ function T.AfterLogin()
     if plan.autoRun then
         T.RunTests({ quiet = true })
     end
+    T.CheckIntegrations()
+    -- From here on the bags are read whenever they change (Sightings.lua).
+    T.ScanSightings()
 end
 
 ------------------------------------------------------------------------------------------
@@ -59,6 +62,15 @@ local function StatusText()
         lines[#lines + 1] = "Snapshot: no base yet"
     end
 
+    local seen, disagree = 0, 0
+    local sightingRows = T.GetSightingRows()
+    for _, row in ipairs(sightingRows) do
+        seen = seen + (row.items > 0 and 1 or 0)
+        disagree = disagree + row.mismatch
+    end
+    lines[#lines + 1] = ("Bag states: %d of %d seen%s"):format(seen, #sightingRows,
+        disagree > 0 and (", |cffff4040%d items disagree|r"):format(disagree) or "")
+
     local last = T.db.timing[#T.db.timing]
     if last then
         lines[#lines + 1] = ("Last timing: %s, addon time %s ms"):format(tostring(last.label),
@@ -84,7 +96,7 @@ end
 
 local function CreateWindow()
     window = CreateFrame("Frame", "CaerdonWardrobeTestsWindow", UIParent, "BasicFrameTemplateWithInset")
-    window:SetSize(428, 330)
+    window:SetSize(428, 346)
     window:SetPoint("CENTER")
     window:SetFrameStrata("DIALOG")
     window:SetMovable(true)
@@ -146,6 +158,8 @@ local HELP = {
     "/cwtest probe <item ID> ... - record everything about some items",
     "/cwtest sources - appearance sources of what was drawn this session whose item the client does not have",
     "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
+    "/cwtest sightings - bag states (openable, locked, refundable, bound) checked when an item showed one",
+    "/cwtest integrations - whether each integration found the places it hooks in the other addon",
     "/cwtest coverage - verdict tests per kind of toon",
     "/cwtest journal [count] - the last things this account learned",
     "/cwtest reload [timer] - save the results by reloading",
@@ -230,6 +244,15 @@ end
 
 COMMANDS.search = function(rest)
     T.SearchPoolItems(tonumber(rest))
+end
+
+COMMANDS.sightings = function()
+    T.PrintSightings()
+    T.ScanSightings()
+end
+
+COMMANDS.integrations = function()
+    T.PrintIntegrations()
 end
 
 COMMANDS.coverage = PrintCoverage

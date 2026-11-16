@@ -7,7 +7,8 @@
 -- install folders. --file reads one saved variables file instead.
 --
 -- Sections (all of them when none is named): sessions, contracts, verdicts, snapshot,
--- timing, journal, probes, sources, search, traces, errors. "detail" adds every contract's stored detail, and
+-- timing, journal, probes, sources, search, traces, sightings, integrations, errors. "detail" adds
+-- every contract's stored detail, and
 -- "contract:<id>" prints one contract in full.
 --
 -- This prints what the clients recorded. Whatever is listed here was seen in a client; what
@@ -137,7 +138,7 @@ local function block(value, indent)
 end
 
 local function plainText(text)
-    return (tostring(text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"))
+    return (tostring(text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|cn[^:|]*:", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"))
 end
 
 local function figure(value)
@@ -569,6 +570,103 @@ local function printTraces(db)
     end
 end
 
+-- Bag states that were checked when an item showed one. A case nobody has carried an item for
+-- is listed as not seen: that is the coverage.
+local SIGHTING_CASES = { "openable", "locked", "readable", "refundable", "soulbound", "bindOnEquip", "accountBindType" }
+
+local function printSightings(db)
+    local sightings = db.sightings or {}
+    print("  Bag states (checked when an item showed one):")
+    local listed = {}
+    local function printCase(case)
+        listed[case] = true
+        local records = sightings[case] or {}
+        local keys = sortedKeys(records)
+        if #keys == 0 then
+            print(("    %-16s not seen yet"):format(case))
+            return
+        end
+        local counts = {}
+        for _, key in ipairs(keys) do
+            counts[records[key].result] = (counts[records[key].result] or 0) + 1
+        end
+        print(("    %-16s %d items: %s"):format(case, #keys, inline(counts)))
+        table.sort(keys, function(a, b) return (records[a].at or 0) > (records[b].at or 0) end)
+        for _, key in ipairs(keys) do
+            local record = records[key]
+            print(("      %-8s %s  status %s, binding %s  (%s, %s, bag %s slot %s, addon %s)%s"):format(
+                tostring(record.result), plainText(record.link or key), tostring(record.status),
+                tostring(record.binding), when(record.at), tostring(record.toon), tostring(record.bag),
+                tostring(record.slot), tostring(record.subjectVersion),
+                record.message and ("\n          " .. record.message) or ""))
+            if record.result ~= "pass" or sections.sightings then
+                print("          facts:   " .. inline(record.facts or {}))
+                if record.why then print("          binding: " .. inline(record.why)) end
+            end
+            if record.previous then
+                print(("          before:  %s, status %s, binding %s (%s, addon %s)"):format(
+                    tostring(record.previous.result), tostring(record.previous.status),
+                    tostring(record.previous.binding), when(record.previous.at),
+                    tostring(record.previous.subjectVersion)))
+            end
+            for index, line in ipairs(record.tooltip or {}) do
+                print(("          line %2d: %s"):format(index, inline(line)))
+            end
+        end
+    end
+    for _, case in ipairs(SIGHTING_CASES) do
+        printCase(case)
+    end
+    for _, case in ipairs(sortedKeys(sightings)) do
+        if not listed[case] then
+            printCase(case)
+        end
+    end
+end
+
+-- Per integration and version of the other addon: whether its hook points were found, over
+-- every session recorded with that version.
+local function printIntegrations(db)
+    local integrations = db.integrations or {}
+    local features = sortedKeys(integrations)
+    if #features == 0 then
+        print("  Integrations: none recorded (a record is written at the end of a session)")
+        return
+    end
+    print("  Integrations (hook points over the sessions recorded per version of the other addon):")
+    for _, feature in ipairs(features) do
+        local versions = integrations[feature]
+        local keys = sortedKeys(versions)
+        table.sort(keys, function(a, b) return (versions[a].at or 0) > (versions[b].at or 0) end)
+        for _, version in ipairs(keys) do
+            local record = versions[version]
+            local found, needed = 0, 0
+            for _, label in ipairs(sortedKeys(record.points)) do
+                local point = record.points[label]
+                if not point.optional and not point.undeclared then
+                    needed = needed + 1
+                    if point.found > 0 then found = found + 1 end
+                end
+            end
+            print(("    %-8s %s (%s %s): %d of %d hook points found, %d draws in %d sessions  (last %s, %s, addon %s)"):format(
+                tostring(record.verdict), feature, tostring(record.addon), tostring(version), found, needed,
+                record.draws or 0, record.sessions or 0, when(record.at), tostring(record.toon),
+                tostring(record.subjectVersion)))
+            if not record.initFinished then
+                print("        its Init did not finish in the last session")
+            end
+            for _, label in ipairs(sortedKeys(record.points)) do
+                local point = record.points[label]
+                if point.found == 0 or point.undeclared or sections.integrations then
+                    print(("        %s%s%s: found in %d sessions, missing in %d, not reached in %d"):format(label,
+                        point.optional and " (optional)" or "", point.undeclared and " (not declared)" or "",
+                        point.found, point.missing, point.notReached))
+                end
+            end
+        end
+    end
+end
+
 local function printErrors(db)
     if #(db.errors or {}) == 0 then
         return
@@ -607,6 +705,8 @@ for _, file in ipairs(files) do
             if wants("sources") then printSources(db) end
             if wants("search") then printSearch(db) end
             if wants("traces") then printTraces(db) end
+            if wants("sightings") then printSightings(db) end
+            if wants("integrations") then printIntegrations(db) end
             if wants("errors") then printErrors(db) end
         end
     end

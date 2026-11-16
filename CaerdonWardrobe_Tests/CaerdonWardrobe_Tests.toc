@@ -16,6 +16,8 @@ Verdicts.lua
 VerdictCases.lua
 Journal.lua
 Snapshot.lua
+Sightings.lua
+Integrations.lua
 Sources.lua
 Search.lua
 Timing.lua

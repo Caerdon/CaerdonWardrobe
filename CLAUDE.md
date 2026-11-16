@@ -36,10 +36,11 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
 - Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`).
+- `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
 - `config/`: `Config.lua` (defaults, migrations, the main page, `/caerdon`, the one-time message dialog), `Icons.lua` and `Display.lua` (the two settings pages), `ConfigPanel.lua` (layout helpers), `LayoutEditor.lua` (`/caerdonlayout`).
 - `features/DebugFrame.lua`: the Debug Frame and its **Copy Details** export (`/cdebug`). `CaerdonButtonGeometry.lua`: the export's button measurements.
 - `tools/`: development scripts, not packaged. `static-checks.lua` with its allowlist `static-checks-allow.lua`; `test-results.lua` prints what the test addon saved in each client.
-- `CaerdonWardrobe_Tests/`: the test addon, a second addon for development that runs in both clients and is not packaged (`/cwtest`): client contracts, verdict tests, snapshot and diff, timing, a journal of what was learned.
+- `CaerdonWardrobe_Tests/`: the test addon, a second addon for development that runs in both clients and is not packaged (`/cwtest`): client contracts, verdict tests, snapshot and diff, timing, a journal of what was learned, bag states checked when an item shows one, a record per integration.
 
 ### Status order in `GetCaerdonStatus`
 
@@ -66,6 +67,7 @@ The result is cached by item link (plus `|B` when soulbound and `|n<owned>` for 
 - **Legacy globals:** many undocumented ones still exist on Forever, but confirm each by finding a call in Blizzard's camelot-loaded Lua. Never call `GetSpecialization`, `GetSpecializationInfo` or `GetSpecializationInfoByID` directly; use the `CaerdonAPI` wrappers.
 - **Investigating an item:** extend the Copy Details export instead of adding prints. Keep additions structured and readable.
 - **New item signals** go through the item's data mixin or a signal module with a `CaerdonItemMixin` entry point, never ad-hoc API calls in feature files.
+- **An integration declares its hook points and notes each one** (`Mixin.integration`, `self:NoteHookPoint(label, owner, key)` on the line before it attaches). That is how a user's export says the other addon changed (notes: Integration Report).
 - **Never write into `options`.** It belongs to the caller and is usually shared between buttons. Per-button state goes in `buttonState` or on the overlay's regions.
 - **Every feature's `Refresh()` must re-run `UpdateButton`** for the buttons it decorated. `RefreshItems` only wipes caches.
 - **Features call `ContinueOnItemLoad` before `UpdateButton`**, so `customDataLoaded` is true.
@@ -107,6 +109,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Auction icon | Auction Value |
 | Stale icons, refresh events | Refresh |
 | Baganator, BetterBags | Bag Addon Integrations |
+| An integration that stopped drawing, hook points | Integration Report |
 | Quest rewards in the Dialogue UI addon | Dialogue UI |
 | Icon size, clipping, measuring a window | Icon Size and Placement |
 | Settings pages, layout settings | Settings |

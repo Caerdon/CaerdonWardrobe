@@ -197,7 +197,7 @@ local COUNTED = {
     "PLAYER_EQUIPMENT_CHANGED", "QUEST_TURNED_IN", "TRANSMOG_COLLECTION_SOURCE_ADDED", "NEW_RECIPE_LEARNED",
 }
 
-T.counters = { refreshItems = 0, processItem = 0 }
+T.counters = { refreshItems = 0, processItem = 0, byFeature = {} }
 local sessionCounts = {}
 
 for _, event in ipairs(COUNTED) do
@@ -223,6 +223,8 @@ T.OnInit(function()
         T.counters.processItem = T.counters.processItem + 1
         local ok, name = pcall(feature.GetName, feature)
         name = ok and type(name) == "string" and name or "?"
+        -- Draws per feature: for an integration, the proof that its hooks deliver.
+        T.counters.byFeature[name] = (T.counters.byFeature[name] or 0) + 1
         -- Every item drawn this session, for the probe of appearance sources (Sources.lua).
         T.NoteDrawn(item, name)
         local run = T.timingRun
