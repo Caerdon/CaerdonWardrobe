@@ -51,6 +51,7 @@ local bindTextTable = {
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
 local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
+local copySpellLoads = {} -- spell ID -> "asked" or "answered": its data was asked for this session
 function CaerdonItem:InvalidateStatusCache()
     wipe(statusCache)
     wipe(copySpellCache)
@@ -1425,6 +1426,35 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
     }
 end
 
+-- A use spell whose text the client has not loaded reads as an empty description, which is the
+-- answer for a spell with nothing to combine. Kept, that answer left the item without its icon
+-- until something else refreshed (retail client: after a login the combine icon was missing on
+-- whichever bank items' spells had not been loaded, and there after a reload). So such an
+-- answer is not kept: the spell's data is asked for, once a session, and the items are drawn
+-- again when it is here. True while the answer is still on its way.
+local function IsCopySpellLoading(spellID)
+    if C_Spell.IsSpellDataCached(spellID) then
+        return false
+    end
+    local state = copySpellLoads[spellID]
+    if state == nil then
+        copySpellLoads[spellID] = "asked"
+        CaerdonSpellEventListener:AddCallback(spellID, function()
+            copySpellLoads[spellID] = "answered"
+            -- Only for a text that came: many use spells have none (a recipe's).
+            if (C_Spell.GetSpellDescription(spellID) or "") ~= "" then
+                CaerdonWardrobe:RefreshItems()
+            end
+        end, function()
+            -- The client has no data for it: the empty description is the answer after all.
+            copySpellLoads[spellID] = "answered"
+        end)
+        -- The client may have answered from inside the call.
+        state = copySpellLoads[spellID]
+    end
+    return state == "asked"
+end
+
 -- What an item's use spell says about combining, which follows from the link: false for an item
 -- with no such spell. Kept until the status cache is wiped (copySpellCache, at the top).
 local function GetCopySpellFacts(itemLink)
@@ -1438,6 +1468,9 @@ local function GetCopySpellFacts(itemLink)
                 facts = { spellID = spellID, makesCurrency = true }
             else
                 local spellDescription = C_Spell.GetSpellDescription(spellID) or ""
+                if spellDescription == "" and IsCopySpellLoading(spellID) then
+                    return false
+                end
                 -- local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
                 local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
                 local isArrangeDescription = string.find(spellDescription, L["^Arrange %d+"]) ~= nil
