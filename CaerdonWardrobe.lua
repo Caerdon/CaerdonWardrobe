@@ -20,6 +20,13 @@ local availableFeatures = {}
 local registeredFeatures = {}
 local eventFeatureHandlers = {} -- event name -> list of {instance, handler}
 
+-- One failure must not take its neighbours with it: a feature's Init, Refresh and event
+-- handlers and the draw of each item run through this. The error still goes to the game's
+-- error handler, so it is reported like any other. Returns false when the call raised one.
+local function Contained(func, ...)
+    return xpcall(func, geterrorhandler(), ...)
+end
+
 CaerdonWardrobeMixin = {}
 
 local buttonState = setmetatable({}, { __mode = "k" })
@@ -1943,7 +1950,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         -- For a feature that has to know when its button was drawn and what is on it (Baganator
         -- decides per corner which widget shows). An error there must not stop the other items.
         if feature and feature.OnButtonDrawn then
-            xpcall(feature.OnButtonDrawn, geterrorhandler(), feature, button, item, locationInfo, options)
+            Contained(feature.OnButtonDrawn, feature, button, item, locationInfo, options)
         end
 
         -- Debug only: remember what was drawn where, for the export's [Button Geometry] section.
@@ -2100,6 +2107,16 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
     end
 end
 
+-- The draw of one queued item. An error in it used to end the queue's coroutine, and every
+-- item still in that batch was then never drawn. Now it costs this button its icon (none is
+-- better than a stale one) and the rest go on.
+function CaerdonWardrobeMixin:ProcessQueuedItem(button, item, feature, locationInfo, options)
+    if not Contained(self.ProcessItem, self, button, item, feature, locationInfo, options) then
+        Counters:Unwound()
+        Contained(self.ClearButton, self, button)
+    end
+end
+
 function CaerdonWardrobeMixin:ProcessItem_Coroutine()
     -- Always reset processQueue so stale ContinuableContainer callbacks from a
     -- previous coroutine don't block this one.  Those callbacks can set
@@ -2132,13 +2149,13 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 
             if feature:IsSameItem(button, item, locationInfo) and self:GetButtonLocationKey(button) == locationKey then
                 if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-                    self:ProcessItem(button, item, feature, locationInfo, options)
+                    self:ProcessQueuedItem(button, item, feature, locationInfo, options)
                     itemsProcessedThisFrame = itemsProcessedThisFrame + 1
                 else
                     -- Check if item is already cached to process immediately
                     if item:IsItemDataCached() then
                         if self:GetButtonLocationKey(button) == locationKey then
-                            self:ProcessItem(button, item, feature, locationInfo, options)
+                            self:ProcessQueuedItem(button, item, feature, locationInfo, options)
                             itemsProcessedThisFrame = itemsProcessedThisFrame + 1
                         else
                             self:ClearButton(button)
@@ -2218,7 +2235,7 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
     if handlers then
         for i = 1, #handlers do
             local entry = handlers[i]
-            entry.handler(entry.instance, ...)
+            Contained(entry.handler, entry.instance, ...)
         end
     end
 
@@ -2283,10 +2300,11 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
         local name, instance
         for name, instance in pairs(availableFeatures) do
             registeredFeatures[name] = instance
-            local instanceEvents = instance:Init(self)
-            -- Read by the integration report: an Init that raised an error never gets here.
-            instance.initFinished = true
-            if instanceEvents then
+            local finished, instanceEvents = Contained(instance.Init, instance, self)
+            -- Read by the integration report: false for an Init that raised an error. Such a
+            -- feature gets no events; the features after it start as usual.
+            instance.initFinished = finished
+            if finished and instanceEvents then
                 for i = 1, #instanceEvents do
                     local eventName = instanceEvents[i]
                     self:RegisterEvent(eventName)
@@ -2339,7 +2357,7 @@ function CaerdonWardrobeMixin:RefreshItems()
     self.refreshTimer = C_Timer.NewTimer(0.1, function()
         local name, instance
         for name, instance in pairs(registeredFeatures) do
-            instance:Refresh()
+            Contained(instance.Refresh, instance)
         end
     end, 1)
 end

@@ -248,7 +248,8 @@ end
 local statusCache
 local Session = {}
 
--- options: debug (Enable debug as saved), dropEquipmentSets (a probe target that is gone)
+-- options: debug (Enable debug as saved), dropEquipmentSets (a probe target that is gone),
+-- features (mixins registered beside the bags)
 local function StartSession(options)
     InstallClient()
     statusCache = {}
@@ -309,7 +310,13 @@ local function StartSession(options)
         end
     end
     function CaerdonItemMixin:GetBindingStatus() Spend(0.5, 1) end
-    function CaerdonItemMixin:GetCopyStatus(status) Spend(0.25) return status end
+    function CaerdonItemMixin:GetCopyStatus(status)
+        Spend(0.25)
+        if self.raisesInCopy then
+            error("the copy's state raised an error")
+        end
+        return status
+    end
     CaerdonEquipmentMixin = {}
     function CaerdonEquipmentMixin:GetTransmogInfo()
         Spend(3, 20)
@@ -353,6 +360,9 @@ local function StartSession(options)
     function BagsMixin:GetDisplayInfoInternal() Spend(0.25, 3) return {} end
     function BagsMixin:Refresh() end
     CaerdonWardrobe:RegisterFeature(BagsMixin)
+    for _, mixin in ipairs(options.features or {}) do
+        CaerdonWardrobe:RegisterFeature(mixin)
+    end
 
     CaerdonWardrobeConfig = { Debug = { Enabled = options.debug and true or false }, Icon = {} }
     Fire("ADDON_LOADED", "CaerdonWardrobe")
@@ -684,19 +694,52 @@ do
     Equal(report.profile.drains.collected, 1, "collector: and the pass")
     Check(Function(report, "GetTransmogInfo").kb == 50, "collector: the calls beside it still count")
 
-    -- An error inside a wrapped function: raised as before, and counting goes on.
+    -- An error inside a wrapped function: the queue hands it to the error handler and goes
+    -- on, and so does the counting.
     CaerdonCounters:Reset()
     Session.buttons = {}
     AskFor({ NewItem(3004, { raises = true }) })
     local ok = realPcall(Tick, 8)
-    Check(not ok, "error: the queue raises it as before")
-    CaerdonWardrobe.processItemCoroutine = nil
+    Check(ok, "error: the queue does not raise it")
+    Equal(#errors, 1, "error: it went to the error handler")
+    Check(tostring(errors[1]):find("the status code raised an error", 1, true) ~= nil, "error: with its message")
+    errors = {}
     Session.buttons = {}
     AskFor({ NewItem(3005) })
     Tick(8)
     report = CaerdonCounters:GetReport()
     Near(Function(report, "ProcessItem").ms, 14.25, "error: the next draw is timed right")
     Near(Function(report, "ProcessItem").ownMs, 0, "error: with nothing left over from the failed call")
+
+    -- An error after the call had said how it ended (a cache hit whose copy raises): what the
+    -- queue does about a caught error must take that mark away too, or the next call at the
+    -- same depth is filed under it. Asked directly, since in the queue another wrapped call
+    -- usually comes between and uses the mark up.
+    CaerdonCounters:Reset()
+    Equal(statusCache[3005], "own", "mark: the item's status is in the cache (control)")
+    local failing = NewItem(3005, { raisesInCopy = true })
+    Check(not realPcall(failing.GetCaerdonStatus, failing), "mark: the cache hit raises (control)")
+    CaerdonCounters:Unwound()
+    local fresh = NewItem(3007)
+    fresh:GetCaerdonStatus()
+    report = CaerdonCounters:GetReport()
+    Equal(Function(report, "GetCaerdonStatus (computed)").calls, 1, "mark: the next computed status is counted as computed")
+    Equal(Function(report, "GetCaerdonStatus (cache hit)").calls, 0, "mark: and not as the failed call's cache hit")
+
+    -- And the queue does that: the same item on the same button, computed anew after the
+    -- failed cache hit, with no other wrapped call at that depth in between.
+    CaerdonCounters:Reset()
+    Session.buttons = {}
+    AskFor({ NewItem(3005, { raisesInCopy = true }) })
+    Tick(8)
+    Equal(#errors, 1, "mark, queue: the failed cache hit went to the error handler")
+    errors = {}
+    statusCache = {}
+    AskFor({ NewItem(3005) })
+    Tick(8)
+    report = CaerdonCounters:GetReport()
+    Equal(Function(report, "GetCaerdonStatus (computed)").calls, 1, "mark, queue: the next computed status is counted as computed")
+    Equal(Function(report, "GetCaerdonStatus (cache hit)").calls, 0, "mark, queue: and not as a cache hit")
 
     -- Switched off: the figures stay, nothing is added.
     CaerdonCounters:SetProfile(false)
@@ -881,6 +924,122 @@ do
         local file = assert(io.open(DUMP, "wb"))
         file:write("CaerdonWardrobeTestsDB = " .. Serialize(T.db, "") .. "\n")
         file:close()
+    end
+end
+
+------------------------------------------------------------------------------------------
+-- 6. Containment: one failure leaves its neighbours working
+------------------------------------------------------------------------------------------
+
+do
+    local inits, heard, refreshed = {}, {}, {}
+    local function Feature(name, fields)
+        local mixin = {}
+        function mixin:GetName() return name end
+        function mixin:Init()
+            inits[name] = (inits[name] or 0) + 1
+            return { "CONTAINMENT_TEST" }
+        end
+        function mixin:CONTAINMENT_TEST(value)
+            heard[name] = value
+        end
+        function mixin:Refresh() refreshed[name] = (refreshed[name] or 0) + 1 end
+        function mixin:GetDisplayInfoInternal() return {} end
+        for key, value in pairs(fields or {}) do mixin[key] = value end
+        return mixin
+    end
+    local good = { "GoodA", "GoodB", "GoodC", "GoodD", "GoodE", "GoodF" }
+    local features = {
+        Feature("BrokenInit", { Init = function() error("the Init of BrokenInit raised an error") end }),
+        Feature("BrokenRefresh", { Refresh = function() error("the Refresh of BrokenRefresh raised an error") end }),
+        Feature("BrokenHandler", { CONTAINMENT_TEST = function() error("the handler of BrokenHandler raised an error") end }),
+    }
+    for _, name in ipairs(good) do features[#features + 1] = Feature(name) end
+
+    local function Reached(message)
+        for _, text in ipairs(errors) do
+            if text:find(message, 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+
+    -- A feature's Init raises while the addon starts.
+    local started, startError = realPcall(StartSession, { debug = false, features = features })
+    Check(started, "containment: the addon starts although one feature's Init raises (" .. tostring(startError) .. ")")
+    if started then
+        Equal(#errors, 1, "containment, Init: one error went to the error handler")
+        Check(Reached("the Init of BrokenInit raised an error"), "containment, Init: with its message")
+        Check(CaerdonWardrobe:GetFeature("BrokenInit").initFinished == false, "containment, Init: the report can tell which one it was")
+        for _, name in ipairs(good) do
+            Check(inits[name] == 1 and CaerdonWardrobe:GetFeature(name).initFinished == true,
+                "containment, Init: " .. name .. " started")
+        end
+        Check(CaerdonWardrobe:GetFeature("Bags").initFinished == true, "containment, Init: so did the bags")
+        Check(CaerdonWardrobe.events.CONTAINMENT_TEST == true, "containment, Init: the others' event is registered")
+
+        -- A feature's event handler raises.
+        errors = {}
+        local fired = realPcall(Fire, "CONTAINMENT_TEST", 7)
+        Check(fired, "containment, event: the event does not raise")
+        Equal(#errors, 1, "containment, event: one error went to the error handler")
+        Check(Reached("the handler of BrokenHandler raised an error"), "containment, event: with its message")
+        for _, name in ipairs(good) do
+            Equal(heard[name], 7, "containment, event: " .. name .. " heard it")
+        end
+        Check(heard.BrokenInit == nil, "containment, event: a feature whose Init raised gets no events")
+
+        -- A feature's Refresh raises.
+        errors = {}
+        CaerdonWardrobe:RefreshItems()
+        local ticked = realPcall(Tick, 3)
+        Check(ticked, "containment, refresh: the refresh does not raise")
+        Equal(#errors, 1, "containment, refresh: one error went to the error handler")
+        Check(Reached("the Refresh of BrokenRefresh raised an error"), "containment, refresh: with its message")
+        for _, name in ipairs(good) do
+            Equal(refreshed[name], 1, "containment, refresh: " .. name .. " was refreshed")
+        end
+
+        -- One item of a batch raises while it is drawn: the others are drawn, the queue lives.
+        errors = {}
+        local drawn, clearedButtons = {}, {}
+        local setStatus, clearButton = CaerdonWardrobe.SetItemButtonStatus, CaerdonWardrobe.ClearButton
+        function CaerdonWardrobe:SetItemButtonStatus(button, item, feature, locationInfo, drawOptions, status, ...)
+            if item and status ~= "waiting" then
+                drawn[item.id] = (drawn[item.id] or 0) + 1
+            end
+            return setStatus(self, button, item, feature, locationInfo, drawOptions, status, ...)
+        end
+        function CaerdonWardrobe:ClearButton(button)
+            clearedButtons[button] = (clearedButtons[button] or 0) + 1
+            return clearButton(self, button)
+        end
+        local batch = {}
+        for index = 1, 9 do
+            batch[index] = NewItem(6000 + index, { raises = (index == 2 or index == 5 or index == 9) })
+        end
+        Session.buttons = {}
+        AskFor(batch)
+        for _, button in pairs(Session.buttons) do clearedButtons[button] = nil end
+        local drained = realPcall(Tick, 8)
+        Check(drained, "containment, draw: the queue does not raise")
+        Equal(#errors, 3, "containment, draw: each failed item's error went to the error handler")
+        for index = 1, 9 do
+            if batch[index].raises then
+                Check(drawn[6000 + index] == nil, "containment, draw: failed item " .. index .. " drew nothing")
+                Equal(clearedButtons[Session.buttons[index]], 1, "containment, draw: and its button was cleared")
+            else
+                Equal(drawn[6000 + index], 1, "containment, draw: item " .. index .. " was drawn")
+                Check(clearedButtons[Session.buttons[index]] == nil, "containment, draw: and its button left alone")
+            end
+        end
+        errors = {}
+        Session.buttons = {}
+        AskFor({ NewItem(6100) })
+        Tick(8)
+        Equal(drawn[6100], 1, "containment, draw: the queue draws the next request")
+        Equal(#errors, 0, "containment, draw: with no error")
     end
 end
 

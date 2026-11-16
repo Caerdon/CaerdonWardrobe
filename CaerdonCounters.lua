@@ -336,6 +336,14 @@ function Counters:Mark(outcome)
     end
 end
 
+-- The queue caught an error in a draw: the wrapped calls it unwound through left their
+-- entries behind, and the next draw of the same pass starts from none again. A mark such a
+-- call had set goes too, or the next call at its depth would be filed under it.
+function Counters:Unwound()
+    depth = 0
+    wipe(outcomes)
+end
+
 local function Wrap(owner, key, counter)
     local original = owner[key]
     owner[key] = function(...)
