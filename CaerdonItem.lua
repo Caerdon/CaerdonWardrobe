@@ -236,7 +236,7 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
         error("Usage: ContinueOnLoad(callbackFunction)", 2);
     end
 
-    function ProcessTheItem()
+    local function ProcessTheItem()
         -- TODO: Update things and delay callback if needed for tooltip data
         -- Make sure any dependent data is loaded
         local itemData = self:GetItemData()
@@ -253,7 +253,7 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
         end
     end
 
-    function FailTheItem()
+    local function FailTheItem()
         self.customDataLoaded = false
         -- TODO: Should I provide an errorCallback in this case?
         if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("ITEM LOAD FAILED: " .. self:GetItemID()) end
@@ -599,6 +599,8 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
             binding = CaerdonItemBind.BindOnUse
         elseif bindType == 4 then -- Quest
             binding = CaerdonItemBind.QuestItem
+        elseif bindType == 7 then -- Enum.ItemBind.ToWoWAccount
+            binding = CaerdonItemBind.BindOnAccount
         elseif bindType == 8 then -- BoA, apparently
             -- TODO: This was working... and then seemingly not... keep an eye out.
             binding = CaerdonItemBind.BindOnAccount
@@ -651,7 +653,7 @@ function CaerdonItemMixin:GetIsCraftingReagent() -- requires item data to be loa
     end
 end
 
-function IsUnhandledType(typeID, subTypeID)
+local function IsUnhandledType(typeID, subTypeID)
     return typeID == Enum.ItemClass.Container or
         typeID == Enum.ItemClass.Gem or
         typeID == Enum.ItemClass.Reagent or
@@ -856,7 +858,9 @@ function CaerdonItemMixin:GetTooltipData(data)
                             -- local isUsable = C_Spell.IsSpellUsable(spellID)
                             -- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
                             local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
-                            if recipeInfo.learned then
+                            if not recipeInfo then
+                                -- The client knows no recipe for this spell: nothing to add here.
+                            elseif recipeInfo.learned then
                                 tooltipData.canLearn = false
                                 -- print(self:GetItemLink() .. " already learned")
                             else
@@ -1468,39 +1472,27 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     local containerID = bag
     local containerSlot = slot
 
-    local texture, itemCount, locked, quality, readable, lootable
-    if C_Container and C_Container.GetContainerItemInfo then
-        local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
-        if containerItemInfo then
-            itemCount = containerItemInfo.stackCount
-            locked = containerItemInfo.isLocked
-            quality = containerItemInfo.quality
-            readable = containerItemInfo.isReadable
-            lootable = containerItemInfo.hasLoot
-        end
-    else
-        texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
+    local itemCount, locked, quality, readable, lootable
+    local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
+    if containerItemInfo then
+        itemCount = containerItemInfo.stackCount
+        locked = containerItemInfo.isLocked
+        quality = containerItemInfo.quality
+        readable = containerItemInfo.isReadable
+        lootable = containerItemInfo.hasLoot
     end
 
     if lootable then
-        local startTime, duration, isEnabled
-        if C_Container and C_Container.GetContainerItemCooldown then
-            startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
-        else
-            startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
+        -- A cooldown on the container is not looked at: the client draws its own spiral on the
+        -- button. (A test for one stood here since 2018 and could never be true.)
+        local isLocked = IsBagSlotLocked(containerID, containerSlot)
+        if isLocked == nil then
+            isLocked = bindingResult.isLocked
         end
-        if duration > 0 and not isEnabled then
-            mogStatus = "refundable" -- Can't open yet... show timer
+        if isLocked then
+            mogStatus = "locked"
         else
-            local isLocked = IsBagSlotLocked(containerID, containerSlot)
-            if isLocked == nil then
-                isLocked = bindingResult.isLocked
-            end
-            if isLocked then
-                mogStatus = "locked"
-            else
-                mogStatus = "openable"
-            end
+            mogStatus = "openable"
         end
     elseif readable then
         mogStatus = "readable"
@@ -1587,9 +1579,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     local tooltipData = self:GetTooltipData(data)
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
-        isReady = false
         if CaerdonCounters.on then CaerdonCounters:Mark("tooltip not ready") end
-        return isReady -- Don't cache: result will change once tooltip data loads
+        return false -- Don't cache: result will change once tooltip data loads
     end
 
     local itemID = self:GetItemID()

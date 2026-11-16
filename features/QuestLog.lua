@@ -108,8 +108,7 @@ function QuestLogMixin:OnQuestInfoDisplay(template, parentFrame)
         local i = 1
         for i = 1, #elementsTable, 3 do
             -- Check for various reward-related functions
-            if elementsTable[i] == QuestInfo_ShowRewards or
-                elementsTable[i] == QuestInfo_ShowAccountCompletedNotice then
+            if elementsTable[i] == QuestInfo_ShowRewards then
                 self:OnQuestInfoShowRewards()
                 return
             end

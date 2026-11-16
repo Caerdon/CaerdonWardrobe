@@ -1144,7 +1144,7 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
     local continuableContainer = ContinuableContainer:Create();
     local cancelFunc = function() end;
 
-    function ProcessTheItem(itemID)
+    local function ProcessTheItem(itemID)
         waitingForItems[itemID] = nil
         if not next(waitingForItems) then
             callbackFunction()
@@ -1155,7 +1155,7 @@ function CaerdonEquipmentMixin:LoadSources(callbackFunction)
         return CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled
     end
 
-    function FailTheItem(itemID)
+    local function FailTheItem(itemID)
         local failedSourceID = waitingForItems[itemID]
         waitingForItems[itemID] = nil
         -- Remember the failure for the session so later refreshes don't re-request
@@ -1414,7 +1414,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 local transmogInfo = CaerdonWardrobe.dressUp:GetItemTransmogInfo(slotID)
                 if transmogInfo then
                     sourceID = transmogInfo.appearanceID -- I don't know why, but it is.
-                    if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
+                    if sourceID and sourceID ~= Constants.Transmog.NoTransmogID then
                         local appearanceSourceInfo = CaerdonAPI and CaerdonAPI.GetAppearanceSourceInfo and
                             CaerdonAPI:GetAppearanceSourceInfo(sourceID)
                         if appearanceSourceInfo and appearanceSourceInfo.appearanceID then
@@ -1438,7 +1438,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         hasMetRequirements = false
     end
 
-    if sourceID and sourceID ~= NO_TRANSMOG_SOURCE_ID then
+    if sourceID and sourceID ~= Constants.Transmog.NoTransmogID then
         isTransmog = true
 
         local hasItemData
@@ -1568,23 +1568,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                     end
                 end
 
-                if currentSourceFound then
-                    -- Ignore the other source if this item is lower level than what we know
-                    -- TODO: Find an item to add to tests
-                    -- local includeLevelDifferences = CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem and CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentLevel
-
-                    local itemMinLevel = item:GetMinLevel()
-                    if lowestLevelFound ~= nil and itemMinLevel ~= nil and itemMinLevel < lowestLevelFound and includeLevelDifferences then
-                        -- This logic accounts for the changes to transmog that allow lower-level players to wear transmog up to a certain level.
-                        -- This changes "completionist" slightly in that you will no longer collect every single level difference of an appearance as it's no longer needed.
-                        -- Supposedly just need to check if lower than level 10 now. TODO: Verify
-                        -- if (lowestLevelFound > 9 and itemMinLevel <= 9) or (lowestLevelFound > 48 and itemMinLevel <= 48) or (lowestLevelFound > 60 and itemMinLevel <= 60) then
-                        if lowestLevelFound > 9 and itemMinLevel <= 9 then
-                            currentSourceFound = false
-                        end
-                    end
-                end
-
                 if not currentSourceFound then
                     if canCollect and isValidSourceForPlayer then
                         needsItem = true
@@ -1623,7 +1606,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     else
         -- No source ID for some reason - last resort effort but assume another toon needs it.
         local itemLocation = item:GetItemLocation()
-        needItem = false
+        needsItem = false
         local itemInfoName = C_Item.GetItemInfo(item:GetItemLink())
         if itemInfoName then
             otherNeedsItem = not C_TransmogCollection.PlayerHasTransmogByItemInfo(itemInfoName)
@@ -1831,7 +1814,6 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             appearanceInfo = appearanceInfo,
             sourceInfo = sourceInfo,
             appearanceSources = appearanceSources,
-            itemTypeData = itemTypeData,
             currentSourceFound = currentSourceFound,
             otherSourceFound = otherSourceFound,
             otherSourceFoundForPlayer = otherSourceFoundForPlayer,

@@ -96,8 +96,7 @@ function WorldQuestTrackerMixin:OnSetupWorldQuestButton(widget, questData)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         CaerdonWardrobe:UpdateButton(widget, item, self, {
             locationKey = format("questbutton-%s-index%d", widget:GetName(), itemID),
-            reward = rewardInfo,
-            questID = questId
+            questID = questID
         }, options)
     else
         CaerdonWardrobe:ClearButton(widget)
@@ -127,8 +126,7 @@ function WorldQuestTrackerMixin:OnUpdateWorldWidget(widget, questData, bIsUsingT
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         CaerdonWardrobe:UpdateButton(widget, item, self, {
             locationKey = format("widget-%s-index%d", widget:GetName(), itemID),
-            reward = rewardInfo,
-            questID = questId
+            questID = questID
         }, options)
     else
         CaerdonWardrobe:ClearButton(widget)

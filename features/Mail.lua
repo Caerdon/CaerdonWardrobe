@@ -115,7 +115,7 @@ function MailMixin:OnInboxFrameUpdate()
     for i = 1, INBOXITEMS_TO_DISPLAY do
         local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
 
-        button = _G["MailItem" .. i .. "Button"];
+        local button = _G["MailItem" .. i .. "Button"];
         if (index <= numItems) then
             -- Setup mail item
             local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink =

@@ -115,8 +115,6 @@ return {
         -- the current API or for the name itself, so it is never reached; deleting the
         -- fallback deletes the entry.
         ["GetAddOnMetadata"] = { "neither", "`elseif GetAddOnMetadata` after C_AddOns.GetAddOnMetadata" },
-        ["GetContainerItemCooldown"] = { "neither", "else branch after C_Container.GetContainerItemCooldown" },
-        ["GetContainerItemInfo"] = { "neither", "else branch after C_Container.GetContainerItemInfo" },
         ["GetContainerItemPurchaseInfo"] = { "neither", "else branch after C_Container.GetContainerItemPurchaseInfo" },
         ["GetContainerNumSlots"] = { "neither", "else branch after C_Container.GetContainerNumSlots" },
         ["GetItemCount"] = { "neither", "`C_Item.GetItemCount or GetItemCount`; the result is tested before the call" },

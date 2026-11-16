@@ -105,7 +105,7 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 
 	local function doUpdate()
 		CaerdonWardrobe:UpdateButton(button, item, self, {
-			locationKey = format("allAuctions%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0)),
+			locationKey = format("allAuctions%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix),
 			itemKey = itemKey
 		},
 		{
@@ -266,9 +266,7 @@ function AuctionMixin:GetTooltipData(item, locationInfo)
 end
 
 function AuctionMixin:Refresh()
-	if AuctionFrame and AuctionFrame:IsShown() then
-		-- TODO: Could refresh here but probably don't need to?
-	end
+	-- TODO: Could refresh here but probably don't need to?
 end
 
 function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)

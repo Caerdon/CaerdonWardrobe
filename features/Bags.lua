@@ -63,14 +63,9 @@ end
 function BagsMixin:OnUpdateSearchResults(frame)
     for i, button in frame:EnumerateValidItems() do
         local isFiltered
-
-        if C_Container and C_Container.GetContainerItemInfo then
-            local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
-            if itemInfo then
-                isFiltered = itemInfo.isFiltered
-            end
-        else
-            _, _, _, _, _, _, _, isFiltered = GetContainerItemInfo(button:GetBagID(), button:GetID())
+        local itemInfo = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
+        if itemInfo then
+            isFiltered = itemInfo.isFiltered
         end
 
         CaerdonWardrobe:SetItemButtonMogStatusFilter(button, isFiltered)

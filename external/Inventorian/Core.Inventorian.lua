@@ -35,8 +35,6 @@ function InventorianMixin:GetTooltipData(item, locationInfo)
 		if not item:IsItemEmpty() then
 			return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 		end
-	elseif locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
 		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end

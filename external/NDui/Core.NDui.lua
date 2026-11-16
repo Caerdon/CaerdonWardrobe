@@ -34,11 +34,7 @@ function NDuiMixin:PLAYER_LOGIN()
 end
 
 function NDuiMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
-		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function NDuiMixin:Refresh()

@@ -60,11 +60,7 @@ function MerchantMixin:GetTrackedBagIDs()
         table.insert(bagIDs, bagIndex)
     end
 
-    if REAGENTBAG_CONTAINER then
-        table.insert(bagIDs, REAGENTBAG_CONTAINER)
-    elseif Enum and Enum.BagIndex and Enum.BagIndex.Reagentbag then
-        table.insert(bagIDs, Enum.BagIndex.Reagentbag)
-    end
+    table.insert(bagIDs, Enum.BagIndex.ReagentBag)
 
     return bagIDs
 end

@@ -24,8 +24,6 @@ function BaudBagMixin:GetTooltipData(item, locationInfo)
         if not item:IsItemEmpty() then
             return C_TooltipInfo.GetHyperlink(item:GetItemLink())
         end
-    elseif locationInfo.bag == BANK_CONTAINER then
-        return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
     else
         return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
     end
@@ -46,6 +44,7 @@ end
 
 function BaudBagMixin:ProcessItem(bag, slot, button)
     if bag and slot then
+        local options = {}
         if BaudBag.Cache:UsesCache(bag) then
             local bagCache = BaudBag.Cache:GetBagCache(bag)
             local slotCache = bagCache[slot]
@@ -59,9 +58,6 @@ function BaudBagMixin:ProcessItem(bag, slot, button)
                 CaerdonWardrobe:ClearButton(button)
             end
         else
-            local options = {
-            }
-
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
             CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
         end

@@ -14,7 +14,6 @@ local requests, cleared, cancelled, registered
 local function Reset() requests, cleared, cancelled = {}, 0, 0 end
 
 format = string.format
-BANK_CONTAINER = -1
 hooksecurefunc = function(owner, key, hook)
     local original = owner[key]
     owner[key] = function(...) original(...) hook(...) end

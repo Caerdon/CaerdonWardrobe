@@ -47,6 +47,9 @@ return function(H, S)
             -- Something that is no equipment at all.
             [910007] = { name = "Cracked Fang", quality = 0, level = 5, minLevel = 0, type = "Miscellaneous",
                 subType = "Junk", stack = 20, price = 12, classID = 15, subClassID = 0 },
+            -- Bound to the account (Enum.ItemBind.ToWoWAccount).
+            [910008] = { name = "Family Crest", quality = 7, level = 1, minLevel = 0, type = "Miscellaneous",
+                subType = "Other", stack = 1, price = 0, classID = 15, subClassID = 4, bindType = 7 },
         }
     end
 
@@ -145,6 +148,9 @@ return function(H, S)
         local fang = Load(client, 910007)
         Check(fang ~= nil and fang:GetEquipLocation() == nil, "getters: no equip location for what is not worn")
         Check(fang ~= nil and fang:GetBinding() == env.CaerdonItemBind.None, "getters: bind type 0 is no binding")
+        local crest = Load(client, 910008)
+        Check(crest ~= nil and crest:GetBinding() == env.CaerdonItemBind.BindOnAccount,
+            "getters: bind type 7 is bound to the account")
         Check(fang ~= nil and fang:GetItemData() == nil or fang:GetItemData().GetTransmogInfo == nil,
             "getters: junk has no transmog info")
     end

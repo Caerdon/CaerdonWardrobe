@@ -1824,6 +1824,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
     local caerdonType = item:GetCaerdonItemType()
     local itemData = item:GetItemData()
 
+    local isReady
     isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
     if not isReady then
         -- Tooltip data shows "Retrieving item information". Instead of

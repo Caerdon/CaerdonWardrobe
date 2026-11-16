@@ -25,8 +25,6 @@ function ElvUIMixin:GetTooltipData(item, locationInfo)
         if not item:IsItemEmpty() then
             return C_TooltipInfo.GetHyperlink(item:GetItemLink())
         end
-    elseif locationInfo.bag == BANK_CONTAINER then
-        return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
     else
         return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
     end
@@ -51,7 +49,7 @@ function ElvUIMixin:OnUpdateSlot(ee, frame, bagID, slotID)
     local bagType = frame.Bags[bagID].type
 
     -- local uiScale = ElvUI[1].global.general.UIScale
-    local isBank = bagID == BANK_CONTAINER or (bagID > NUM_BAG_SLOTS)
+    local isBank = bagID > NUM_BAG_SLOTS
     local iconSize = ((isBank and self.ElvUIBags.db.bankSize) or (self.ElvUIBags.db.bagSize)) * 0.5
     local bindingScale = iconSize / 17 -- made things look decent at size 34 so use that as base
 

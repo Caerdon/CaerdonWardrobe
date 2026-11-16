@@ -144,7 +144,7 @@ function SortedMixin:Init()
                 end, 1)
             end)
         else
-            local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
+            local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus()
             itemData.caerdonStatus = mogStatus
         end
     end
@@ -154,11 +154,7 @@ end
 function SortedMixin:GetTooltipData(item, locationInfo)
     local Sorted = LibStub("Sorted.")
     if Sorted.IsPlayingCharacterSelected() then
-        if locationInfo.bag == BANK_CONTAINER then
-            return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-        else
-            return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-        end
+        return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
     else
         return C_TooltipInfo.GetHyperlink(item:GetItemLink())
     end

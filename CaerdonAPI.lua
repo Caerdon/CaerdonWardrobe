@@ -363,25 +363,22 @@ end
 local function GetTooltipFrames(focus)
     local frames = {}
 
-    if not focus and type(GetMouseFocus) == "function" then
-        focus = GetMouseFocus()
-    end
-    if not focus and type(GetMouseFoci) == "function" then
+    if not focus then
         local foci = GetMouseFoci()
         if foci and #foci > 0 then
             focus = foci[1]
         end
     end
 
+    -- No name in this list may be missing in a client: a nil ends the list for ipairs, and
+    -- with two names neither client has in it, it used to end before GameTooltip.
     local tooltipCandidates = {
         ItemRefTooltip,
         ItemRefShoppingTooltip1,
         ItemRefShoppingTooltip2,
-        ItemRefShoppingTooltip3,
         GameTooltip,
         ShoppingTooltip1,
         ShoppingTooltip2,
-        ShoppingTooltip3,
     }
 
     local tooltipLookup = {}
@@ -781,7 +778,7 @@ StaticPopupDialogs.CopyLinkPopup = {
     text = "Item Link String",
 	button1 = OKAY,
     OnAccept = function(self)
-        local linkText = self.editBox:GetText()
+        local linkText = self:GetEditBox():GetText()
         local selectedLink = gsub(linkText, "\124\124", "\124")
         print(selectedLink)
     end,
@@ -942,10 +939,7 @@ function CaerdonAPIMixin:GetHoveredItemContext()
     self:InitTooltipTracking()
 
     local focus = nil
-    if type(GetMouseFocus) == "function" then
-        focus = GetMouseFocus()
-    end
-    if not focus and type(GetMouseFoci) == "function" then
+    do
         local foci = GetMouseFoci()
         if foci and #foci > 0 then
             focus = foci[1]
@@ -1292,8 +1286,9 @@ function CaerdonAPIMixin:CopyLink(itemLink)
     if not itemLink then return end
 
     local dialog = StaticPopup_Show("CopyLinkPopup")
-    dialog.editBox:SetText(gsub(itemLink, "\124", "\124\124"))
-    dialog.editBox:HighlightText()
+    local editBox = dialog:GetEditBox()
+    editBox:SetText(gsub(itemLink, "\124", "\124\124"))
+    editBox:HighlightText()
 end
 
 function CaerdonAPIMixin:GetAppearanceSourceInfo(sourceID)

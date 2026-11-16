@@ -345,7 +345,7 @@ local function FindSkillLine(toonProfessions, skillName)
 end
 
 -- Function to check if a recipe is known based on previously gathered data
-function GetRecipe(item)
+local function GetRecipe(item)
     -- print(item:GetItemLink())
     local recipeName = GetRecipeNameFromItem(item)
 

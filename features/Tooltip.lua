@@ -287,6 +287,7 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         local itemID, itemLevel, itemSuffix, requiredLevel = unpack(tooltipInfo.getterArgs)
         local itemKey = { itemID = itemID, itemLevel = itemLevel, itemSuffix = itemSuffix, requiredLevel = requiredLevel }
         local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(itemKey)
+        local item
         if itemKeyInfo and itemKeyInfo.battlePetLink then
             item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
         else
@@ -329,14 +330,8 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
             local item = CaerdonItem:CreateFromItemLink(itemLink)
             Tooltip:ProcessTooltip(tooltip, item)
         end
-    elseif tooltipInfo.getterName == "GetRecipeReagentItem" then
-        local recipeSpellID, dataSlotIndex = unpack(tooltipInfo.getterArgs)
-        local itemLink = C_TradeSkillUI.GetRecipeFixedReagentItemLink and
-            C_TradeSkillUI.GetRecipeFixedReagentItemLink(recipeSpellID, dataSlotIndex)
-        if itemLink then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
-            Tooltip:ProcessTooltip(tooltip, item)
-        end
+    -- "GetRecipeReagentItem" (a reagent slot of a recipe): neither client has a function that
+    -- gives the reagent's link from the recipe and the slot, so such a tooltip gets no line.
     elseif tooltipInfo.getterName == "GetRecipeResultItem" then
         local recipeID, craftingReagents, recraftItemGUID, recipeLevel, overrideQualityID = unpack(tooltipInfo
             .getterArgs)
@@ -381,9 +376,8 @@ function TooltipMixin:OnProcessInfo(tooltip, tooltipInfo)
         end
 
         if questID then
-            local name, texture, amount, currencyID, quality = GetQuestLogRewardCurrencyInfo(currencyIndex, questID,
-                itemType == "choice")
-            local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID)
+            local currencyInfo = C_QuestLog.GetQuestRewardCurrencyInfo(questID, currencyIndex, itemType == "choice")
+            local itemLink = currencyInfo and C_CurrencyInfo.GetCurrencyLink(currencyInfo.currencyID)
             if itemLink then
                 local item = CaerdonItem:CreateFromItemLink(itemLink)
                 Tooltip:ProcessTooltip(tooltip, item)
@@ -438,87 +432,93 @@ function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLo
     end
 end
 
-function TooltipMixin:OnTooltipSetItem(tooltip)
-    if not tooltip.caerdonProcessing then
-        tooltip.caerdonProcessing = true
-        local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
-        if itemLink and itemName then
-            --         local id = string.match(itemLink, "item:(%d*)")
-            --         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
-            --             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
-            --             for i = 1, 8 do
-            --                 if GetMouseFocus().reagentIndex == i then
-            --                     itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
-            --                     break
-            --                 end
-            --             end
-            --         end
+local function ShowItemTooltip(tooltip)
+    local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
+    if itemLink and itemName then
+        --         local id = string.match(itemLink, "item:(%d*)")
+        --         if (id == "" or id == "0") and TradeSkillFrame ~= nil and TradeSkillFrame:IsVisible() and GetMouseFocus().reagentIndex then
+        --             local selectedRecipe = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
+        --             for i = 1, 8 do
+        --                 if GetMouseFocus().reagentIndex == i then
+        --                     itemLink = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipe, i)
+        --                     break
+        --                 end
+        --             end
+        --         end
 
-            if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
-                tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
-            end
+        if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
+            tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
+        end
 
-            -- For ensembles with uncollected variants, hide the "Already known" text
-            -- Check if this is an ensemble (consumable with transmog set)
-            if tooltipItem:GetCaerdonItemType() == CaerdonItemType.Consumable then
-                local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
-                if transmogSetID then
-                    -- Check directly if ensemble has uncollected sources
-                    -- Don't rely on GetConsumableInfo as item data may not be fully loaded yet
-                    local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
-                    local hasUncollected = false
+        -- For ensembles with uncollected variants, hide the "Already known" text
+        -- Check if this is an ensemble (consumable with transmog set)
+        if tooltipItem:GetCaerdonItemType() == CaerdonItemType.Consumable then
+            local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
+            if transmogSetID then
+                -- Check directly if ensemble has uncollected sources
+                -- Don't rely on GetConsumableInfo as item data may not be fully loaded yet
+                local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
+                local hasUncollected = false
 
-                    if transmogSetInfo then
-                        -- Check if set is not fully collected
-                        if not transmogSetInfo.collected then
-                            hasUncollected = true
-                        else
-                            -- Even if set shows as "collected", check sources for uncollected variants
-                            local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
-                            if sourceIDs then
-                                for _, sourceID in ipairs(sourceIDs) do
-                                    local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
-                                    if sourceInfo and not sourceInfo.isCollected then
-                                        hasUncollected = true
-                                        break
-                                    end
+                if transmogSetInfo then
+                    -- Check if set is not fully collected
+                    if not transmogSetInfo.collected then
+                        hasUncollected = true
+                    else
+                        -- Even if set shows as "collected", check sources for uncollected variants
+                        local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
+                        if sourceIDs then
+                            for _, sourceID in ipairs(sourceIDs) do
+                                local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                                if sourceInfo and not sourceInfo.isCollected then
+                                    hasUncollected = true
+                                    break
                                 end
                             end
                         end
                     end
+                end
 
-                    if hasUncollected then
-                        -- Hide "Already known" line for ensembles with uncollected items
-                        for i = 1, tooltip:NumLines() do
-                            local line = _G[tooltip:GetName() .. "TextLeft" .. i]
-                            if line and tostring(line:GetText()) == ITEM_SPELL_KNOWN then
-                                line:SetText("")
-                                line:Hide()
-                                break
-                            end
+                if hasUncollected then
+                    -- Hide "Already known" line for ensembles with uncollected items
+                    for i = 1, tooltip:NumLines() do
+                        local line = _G[tooltip:GetName() .. "TextLeft" .. i]
+                        if line and tostring(line:GetText()) == ITEM_SPELL_KNOWN then
+                            line:SetText("")
+                            line:Hide()
+                            break
                         end
                     end
                 end
             end
-
-            -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
-            -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
-            local tooltipData = tooltip:GetPrimaryTooltipData()
-            local shownItem = tooltipItem
-            if tooltipData.id ~= tooltipItem:GetItemID() then
-                shownItem = CaerdonItem:CreateFromItemID(tooltipData.id)
-                -- Tooltip:ProcessTooltip(tooltip, tooltipItem, true)
-            end
-
-            -- Reported rather than raised: an error here would leave caerdonProcessing set
-            -- and silence every later tooltip.
-            xpcall(function() Tooltip:AddRecipeLearners(tooltip, shownItem) end, geterrorhandler())
-
-            Tooltip:ProcessTooltip(tooltip, shownItem, false)
         end
 
-        tooltip.caerdonProcessing = false
+        -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
+        -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
+        local tooltipData = tooltip:GetPrimaryTooltipData()
+        local shownItem = tooltipItem
+        if tooltipData.id ~= tooltipItem:GetItemID() then
+            shownItem = CaerdonItem:CreateFromItemID(tooltipData.id)
+            -- Tooltip:ProcessTooltip(tooltip, tooltipItem, true)
+        end
+
+        -- Reported rather than raised, so the item's own lines below are still added.
+        xpcall(function() Tooltip:AddRecipeLearners(tooltip, shownItem) end, geterrorhandler())
+
+        Tooltip:ProcessTooltip(tooltip, shownItem, false)
     end
+end
+
+function TooltipMixin:OnTooltipSetItem(tooltip)
+    if tooltip.caerdonProcessing then
+        return
+    end
+
+    -- Reported rather than raised: an error anywhere in there would leave caerdonProcessing
+    -- set and silence every later tooltip.
+    tooltip.caerdonProcessing = true
+    xpcall(ShowItemTooltip, geterrorhandler(), tooltip)
+    tooltip.caerdonProcessing = false
 end
 
 -- Whether the tooltip carries the client's "Already known" line.
@@ -683,7 +683,7 @@ function TooltipMixin:ProcessTooltip(tooltip, item, isEmbedded)
         cancelFuncs[tooltip] = nil
     end
 
-    function continueLoad()
+    local function continueLoad()
         GameTooltip_AddBlankLineToTooltip(tooltip);
         GameTooltip_AddColoredLine(tooltip, "Caerdon Wardrobe " .. (isEmbedded and "Associated Item" or ""),
             LIGHTBLUE_FONT_COLOR);

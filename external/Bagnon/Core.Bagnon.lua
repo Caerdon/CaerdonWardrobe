@@ -23,8 +23,6 @@ function BagnonMixin:GetTooltipData(item, locationInfo)
 		end
 	elseif not item:HasItemLocationBankOrBags() then
 		return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
-	elseif locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
 		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end

@@ -451,9 +451,7 @@ local function GetEncounterJournalLinkForSource(sourceInfo)
         sourceID = sourceInfo.sourceID
     }
 
-    if not Enum.TransmogSourceType then
-        diag.note = "EnumMissing"
-    elseif sourceInfo.sourceType ~= Enum.TransmogSourceType.BossDrop then
+    if sourceInfo.sourceType ~= Enum.TransmogSource.JournalEncounter then
         diag.note = "NonBossDrop"
     end
 
@@ -861,7 +859,7 @@ function DebugFrameMixin:Init()
     -- Set up drag and drop
     self.itemButton:SetScript("OnDragStart", function(button)
         if self.currentItem then
-            PickupItem(self.currentItem)
+            C_Item.PickupItem(self.currentItem)
         end
     end)
 
@@ -4126,9 +4124,9 @@ function DebugFrameMixin:AcquireAppearanceItemFrame(frameTable, container, prefi
         end)
         frame.itemButton:SetScript("OnDragStart", function(button)
             if button.itemLink then
-                PickupItem(button.itemLink)
+                C_Item.PickupItem(button.itemLink)
             elseif button.itemID then
-                PickupItem(button.itemID)
+                C_Item.PickupItem(button.itemID)
             end
         end)
 
@@ -4254,13 +4252,7 @@ function DebugFrameMixin:AcquireAppearanceItemFrame(frameTable, container, prefi
                 return
             end
 
-            local foci = GetMouseFoci and GetMouseFoci() or {}
-            if #foci == 0 then
-                local focus = GetMouseFocus()
-                if focus then
-                    table.insert(foci, focus)
-                end
-            end
+            local foci = GetMouseFoci() or {}
 
             for _, focus in ipairs(foci) do
                 if focus == selfFrame.itemButton or focus == selfFrame.itemNameButton or focus == selfFrame.expandButton then
@@ -5671,7 +5663,7 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
         frame.itemButton:SetScript("OnDragStart", function(self)
             if self.itemLink then
                 -- Put the item on the cursor using the same method as the main debug frame
-                PickupItem(self.itemLink)
+                C_Item.PickupItem(self.itemLink)
             end
         end)
 
