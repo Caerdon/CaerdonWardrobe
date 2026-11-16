@@ -206,6 +206,8 @@ local function NewDB()
         timing = {},    -- timing runs
         logins = {},    -- what each login and reload cost
         probes = {},    -- toon -> item ID -> what the client and the addon say about it
+        sources = {},   -- toon -> appearance sources whose item the client does not have
+        search = {},    -- toon -> items found for the verdict tests' pools
         addonSets = {}, -- key -> the other addons that were enabled, with their versions
         errors = {},    -- errors in the tests themselves
         pending = {},   -- what a reload was asked to prove

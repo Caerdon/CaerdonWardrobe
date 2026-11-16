@@ -219,8 +219,12 @@ T.OnInit(function()
     hooksecurefunc(CaerdonWardrobe, "RefreshItems", function()
         T.counters.refreshItems = T.counters.refreshItems + 1
     end)
-    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, _, _, feature)
+    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, _, item, feature)
         T.counters.processItem = T.counters.processItem + 1
+        local ok, name = pcall(feature.GetName, feature)
+        name = ok and type(name) == "string" and name or "?"
+        -- Every item drawn this session, for the probe of appearance sources (Sources.lua).
+        T.NoteDrawn(item, name)
         local run = T.timingRun
         if run then
             local now = T.Milliseconds()
@@ -228,8 +232,6 @@ T.OnInit(function()
             run.lastDraw = now
             -- Which window drew, and when: two refreshes that drew a different number of
             -- items differ in one of these.
-            local ok, name = pcall(feature.GetName, feature)
-            name = ok and type(name) == "string" and name or "?"
             local entry = run.byFeature[name]
             if not entry then
                 entry = { draws = 0, first = now }

@@ -7,7 +7,7 @@
 -- install folders. --file reads one saved variables file instead.
 --
 -- Sections (all of them when none is named): sessions, contracts, verdicts, snapshot,
--- timing, journal, probes, errors. "detail" adds every contract's stored detail, and
+-- timing, journal, probes, sources, search, errors. "detail" adds every contract's stored detail, and
 -- "contract:<id>" prints one contract in full.
 --
 -- This prints what the clients recorded. Whatever is listed here was seen in a client; what
@@ -217,6 +217,16 @@ local function printVerdicts(db)
     end
 end
 
+-- The items of a snapshot that were never drawn, with how far each got.
+local function printNeverDrawn(snapshot)
+    for _, entry in ipairs(snapshot.entries) do
+        if entry.note then
+            print(("        never drawn: %s (item %s, container %s slot %s)%s"):format(plainText(entry.link), tostring(entry.itemID),
+                tostring(entry.bag), tostring(entry.slot), entry.stuck and (": " .. inline(entry.stuck)) or ""))
+        end
+    end
+end
+
 local function printSnapshots(db)
     for _, toon in ipairs(sortedKeys(db.snapshots)) do
         local store = db.snapshots[toon]
@@ -225,11 +235,13 @@ local function printSnapshots(db)
             print(("    base   %s  %d items%s, bank %s, addon %s, build %s"):format(when(store.base.at),
                 #store.base.entries, (store.base.notDrawn or 0) > 0 and (", %d never drawn"):format(store.base.notDrawn) or "",
                 store.base.bank and "included" or "not open", tostring(store.base.subjectVersion), tostring(store.base.build)))
+            printNeverDrawn(store.base)
         end
         if store.last then
             print(("    latest %s  %d items%s, bank %s"):format(when(store.last.at), #store.last.entries,
                 (store.last.notDrawn or 0) > 0 and (", %d never drawn"):format(store.last.notDrawn) or "",
                 store.last.bank and "included" or "not open"))
+            printNeverDrawn(store.last)
         end
         local diff = store.diff
         if diff then
@@ -314,6 +326,17 @@ local function describeEvents(run)
     return events
 end
 
+-- Refused items as "216679 x4 at 12.3 s": how often the client said no, and when first.
+local function describeRefused(items)
+    local parts = {}
+    for _, item in ipairs(items or {}) do
+        local times = (item.info or 0) + (item.load or 0)
+        parts[#parts + 1] = ("%s x%d at %s s%s"):format(tostring(item.id), times, figure(item.first),
+            (item.duringTests or 0) > 0 and (" (+%d while a test was asking)"):format(item.duringTests) or "")
+    end
+    return parts
+end
+
 local function printTiming(db)
     print("  Timing (addon time is the client profiler's, summed per frame):")
     local previous
@@ -381,6 +404,12 @@ local function printTiming(db)
                 figure(record.refreshItemsCalls), figure(record.memoryKB),
                 figure(record.profiler and record.profiler.SessionAverageTime), share(record.profiler, "SessionAverageTime"),
                 figure(record.profiler and record.profiler.PeakTime), tostring(record.toon), tostring(record.build)))
+        local refused = record.refusedItems
+        if refused and refused.distinct > 0 then
+            print(("        the client refused %d item%s by then (seconds after the tests' load; any addon may have asked): %s%s")
+                :format(refused.distinct, refused.distinct == 1 and "" or "s", table.concat(describeRefused(refused.items), ", "),
+                    refused.distinct > #refused.items and ", ..." or ""))
+        end
     end
 end
 
@@ -415,6 +444,87 @@ local function printProbes(db)
             if probe.transmog then print("        transmog: " .. inline(probe.transmog)) end
             for index, line in ipairs(probe.tooltip or {}) do
                 print(("        line %2d:  %s"):format(index, inline(line)))
+            end
+        end
+    end
+end
+
+local function printSources(db)
+    for _, toon in ipairs(sortedKeys(db.sources)) do
+        local record = db.sources[toon]
+        print(("  Appearance sources, %s (%s, build %s):"):format(toon, when(record.at), tostring(record.build)))
+        print(("    %s items looked at (drawn this session or equipped), %s with an appearance; %s appearances, %s sources from %s items")
+            :format(figure(record.itemsLooked), figure(record.itemsWithAppearance), figure(record.appearances),
+                figure(record.sources), figure(record.sourceItems)))
+        local refused = record.refused
+        if refused and refused.distinct > 0 then
+            print(("    refused by the client before the probe (seconds after the tests' load): %s%s"):format(
+                table.concat(describeRefused(refused.items), ", "), refused.distinct > #refused.items and ", ..." or ""))
+        else
+            print("    the client had refused no item before the probe")
+        end
+        if #(record.unexplained or {}) > 0 then
+            print("    refused, and no drawn item's appearance leads there: " .. inline(record.unexplained))
+        end
+        if #(record.sourcesWithoutItem or {}) > 0 then
+            print("    sources without an item ID: " .. inline(record.sourcesWithoutItem))
+        end
+        print(("    source items the client has no data for: %s%s"):format(figure(record.missingCount),
+            (record.missingCount or 0) > #(record.missing or {}) and (", the first %d listed"):format(#record.missing) or ""))
+        for _, entry in ipairs(record.missing or {}) do
+            local sources = {}
+            for _, sourceID in ipairs(sortedKeys(entry.sources)) do
+                sources[#sources + 1] = ("%s of appearance %s"):format(tostring(sourceID), tostring(entry.sources[sourceID]))
+            end
+            print(("      item %s: exists %s, cached %s, refused %s times before, the addon %s; source %s"):format(
+                tostring(entry.itemID), tostring(entry.exists), tostring(entry.cached), figure(entry.refusedBefore),
+                entry.addonGaveUp and "stopped loading it" or "has not marked it as failed", table.concat(sources, ", ")))
+            for _, owner in ipairs(entry.owners or {}) do
+                print(("          reached from %s (item %s), drawn by %s"):format(plainText(owner.link), tostring(owner.itemID),
+                    tostring(owner.drawnBy)))
+            end
+            if (entry.ownerCount or 0) > #(entry.owners or {}) then
+                print(("          and %d more"):format(entry.ownerCount - #entry.owners))
+            end
+            for _, step in ipairs(entry.steps or {}) do
+                local events = {}
+                for _, name in ipairs(sortedKeys(step.events or {})) do
+                    local seen = step.events[name]
+                    events[#events + 1] = ("%s x%d (%s) after %s ms"):format(name, seen.count,
+                        seen.ok and "loaded" or "refused", figure(seen.afterMs))
+                end
+                print(("          %-36s returned %-28s %s%s"):format(step.call, plainText(step.returned),
+                    #events > 0 and ("then " .. table.concat(events, ", ")) or "no answer",
+                    ((step.draws or 0) > 0 or (step.refreshes or 0) > 0)
+                        and (" [the addon drew %d and refreshed %d meanwhile: not clean]"):format(step.draws, step.refreshes) or ""))
+            end
+            if entry.steps then
+                print(("          asked for by: %s; cached afterwards: %s"):format(
+                    #entry.askedBy > 0 and table.concat(entry.askedBy, ", ") or "none of the calls tried", tostring(entry.cachedAfter)))
+            end
+        end
+    end
+end
+
+local function printSearch(db)
+    for _, toon in ipairs(sortedKeys(db.search)) do
+        local record = db.search[toon]
+        print(("  Items found for the verdict tests, %s (%s; %s, build %s):"):format(toon, tostring(record.sig), when(record.at),
+            tostring(record.build)))
+        print(("    %s of %s appearances looked at, %s items asked for, %s did not load, %s s; stopped because: %s"):format(
+            figure(record.appearancesLooked), figure(record.appearancesKnown), figure(record.itemsAsked),
+            figure(record.itemsNotLoaded), figure(record.seconds), tostring(record.stoppedBy)))
+        for _, id in ipairs(sortedKeys(record.tests)) do
+            local test = record.tests[id]
+            print(("    %s: %d items; the test expects %s"):format(id, #test.found,
+                #test.expected > 0 and table.concat(test.expected, " / ") or "nothing yet (no kind of toon defined)"))
+            print("        shape: " .. inline(test.shape))
+            for _, found in ipairs(test.found) do
+                local facts = found.facts or {}
+                print(("        item %-7s %-34s addon says %-10s %s, class %s/%s, level %s, item level %s, bind %s, appearance %s, usable %s"):format(
+                    tostring(found.itemID), "[" .. tostring(facts.name) .. "]", tostring(found.status), tostring(facts.equipLoc),
+                    tostring(facts.classID), tostring(facts.subClassID), tostring(facts.minLevel), tostring(facts.itemLevel),
+                    tostring(facts.bindType), tostring(facts.appearanceID), tostring(facts.canUse)))
             end
         end
     end
@@ -455,6 +565,8 @@ for _, file in ipairs(files) do
             if wants("timing") then printTiming(db) end
             if wants("journal") then printJournal(db) end
             if wants("probes") then printProbes(db) end
+            if wants("sources") then printSources(db) end
+            if wants("search") then printSearch(db) end
             if wants("errors") then printErrors(db) end
         end
     end

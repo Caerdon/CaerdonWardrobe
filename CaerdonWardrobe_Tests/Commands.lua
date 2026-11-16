@@ -144,6 +144,8 @@ local HELP = {
     "/cwtest timing <label> [runs] - time forced refreshes with the windows that are open now",
     "/cwtest timing idle [seconds] - time standing still",
     "/cwtest probe <item ID> ... - record everything about some items",
+    "/cwtest sources - appearance sources of what was drawn this session whose item the client does not have",
+    "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
     "/cwtest coverage - verdict tests per kind of toon",
     "/cwtest journal [count] - the last things this account learned",
     "/cwtest reload [timer] - save the results by reloading",
@@ -220,6 +222,14 @@ COMMANDS.probe = function(rest)
     else
         T.ProbeItems(itemIDs)
     end
+end
+
+COMMANDS.sources = function()
+    T.ProbeSources()
+end
+
+COMMANDS.search = function(rest)
+    T.SearchPoolItems(tonumber(rest))
 end
 
 COMMANDS.coverage = PrintCoverage

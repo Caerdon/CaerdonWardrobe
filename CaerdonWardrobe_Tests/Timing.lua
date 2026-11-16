@@ -288,6 +288,9 @@ T.RegisterEvent("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReloading
         record.refreshItemsCalls = T.counters.refreshItems
         record.memoryKB = Round(AddonMemory(), 1)
         record.profiler = T.ReadProfiler(T.SUBJECT)
+        -- Items the client refused so far, whoever asked. `first` counts from the tests' load,
+        -- as secondsFromLoadToWorld does.
+        record.refusedItems = T.RefusedItems(30)
         T.Push(T.db.logins, record, 20)
         if T.AfterLogin then
             T.AfterLogin()

@@ -57,3 +57,54 @@ T.Verdict({
     },
     confirmed = false,
 })
+
+-- Retail: the collect APIs answer for the toon and for the account. The pools are filled
+-- from /cwtest search on a toon of the kind, since what fits depends on the class.
+
+T.Verdict({
+    id = "retail.appearance.learnable",
+    version = 1,
+    title = "A source this toon can collect, of a look the account does not have, is learnable",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        sourceValid = true,
+        useError = false,
+        playerCanCollect = true,
+        lookKnownElsewhere = false,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = {},
+            expect = { status = "own" },
+        },
+    },
+    confirmed = false,
+})
+
+T.Verdict({
+    id = "retail.appearance.noProficiency",
+    version = 1,
+    title = "A source the toon has no proficiency for is learnable for the collection only",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        sourceValid = false,
+        useError = 10, -- Enum.TransmogUseErrorType.ItemProficiency
+        accountCanCollect = true,
+        lookKnownElsewhere = false,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = { 5212 }, -- Blazing Wand
+            expect = { status = "other" },
+        },
+    },
+    confirmed = false,
+})

@@ -290,6 +290,28 @@ local function ListContainers()
     return list
 end
 
+-- Why an item was never drawn: how far it got on the way to a draw.
+local function DescribeStuck(pending)
+    local item = pending.item
+    local stuck = {
+        loadCalledBack = pending.loaded,     -- ContinueOnItemLoad came back
+        updateRequested = pending.requested, -- so UpdateButton was called
+        itemCached = item:IsItemCached() and true or false,
+        customDataLoaded = item.customDataLoaded and true or false,
+    }
+    local hasLink, link = pcall(item.GetItemLink, item)
+    stuck.hasLink = hasLink and link ~= nil
+    -- The addon's own answer now: not ready means the tooltip never became readable.
+    local ok, isReady, status = pcall(item.GetCaerdonStatus, item, pending.proxy, pending.locationInfo)
+    if ok then
+        stuck.statusReady = isReady and true or false
+        stuck.status = status
+    else
+        stuck.statusError = tostring(isReady)
+    end
+    return stuck
+end
+
 -- Inside a job. Returns the snapshot.
 local function Take(label)
     local toon, client = T.GetToon(), T.GetClient()
@@ -309,6 +331,7 @@ local function Take(label)
     }
 
     local waiting, used = 0, 0
+    local pendingByEntry = {}
     for _, container in ipairs(ListContainers()) do
         local proxy = GetProxy(container.feature)
         local filled = 0
@@ -345,11 +368,13 @@ local function Take(label)
                         entry.transmog = T.Facts.Scalars(data:GetTransmogInfo())
                     end
                 end
-                local requested = false
+                local pending = { item = item, proxy = proxy, locationInfo = locationInfo, loaded = false, requested = false }
+                pendingByEntry[entry] = pending
                 item:ContinueOnItemLoad(function()
+                    pending.loaded = true
                     -- The addon may call back twice (notes: LoadSources).
-                    if not requested and awaiting[button] then
-                        requested = true
+                    if not pending.requested and awaiting[button] then
+                        pending.requested = true
                         CaerdonWardrobe:UpdateButton(button, item, proxy, locationInfo, options)
                     end
                 end)
@@ -376,6 +401,7 @@ local function Take(label)
     for _, entry in ipairs(snapshot.entries) do
         if not entry.drawn then
             entry.note = "never drawn (item or tooltip not ready)"
+            entry.stuck = DescribeStuck(pendingByEntry[entry])
         end
     end
     return snapshot
