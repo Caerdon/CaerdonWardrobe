@@ -11,6 +11,9 @@ Core.lua
 Runner.lua
 Facts.lua
 StaticFacts.lua
+ApiNames.lua
+RecordKeys.lua
+Recorder.lua
 Contracts.lua
 Verdicts.lua
 VerdictCases.lua

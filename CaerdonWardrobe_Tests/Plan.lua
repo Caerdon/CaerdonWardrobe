@@ -7,6 +7,7 @@
 --     local plan = CaerdonWardrobeTestsPlan
 --     plan.probeItems = { 2969, 6550 }
 --     plan.traceItems = { 216679 }
+--     plan.recordItems = { 6219 }
 --     plan.skip["transmog.categoryAppearances"] = "slow on this toon"
 
 local _, T = ...
@@ -21,6 +22,11 @@ CaerdonWardrobeTestsPlan = {
     -- Item IDs to look up after login: the client's facts, the tooltip's lines and the
     -- addon's verdict for each go into the results (probes).
     probeItems = {},
+
+    -- Item IDs to record after login for the offline harness: the client's answers behind the
+    -- addon's verdict for each (Recorder.lua). This hooks every client function the addon
+    -- names for the whole session, so leave it empty unless recordings are wanted.
+    recordItems = {},
 
     -- Item IDs whose askers are wanted: every call of a C_Item or C_TooltipInfo function
     -- that names one is recorded with its stack (Sources.lua). This hooks those functions for

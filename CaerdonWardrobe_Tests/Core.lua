@@ -217,6 +217,7 @@ local function NewDB()
         pending = {},   -- what a reload was asked to prove
         counters = {},  -- the core's own counters, as stored by /cwtest counters
         switches = {},  -- what the tests changed for a while and have to put back
+        recordings = { list = {}, environments = {} }, -- the client's answers behind a verdict, for the offline harness
     }
 end
 

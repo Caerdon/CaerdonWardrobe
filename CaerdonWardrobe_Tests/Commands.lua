@@ -22,6 +22,9 @@ function T.AfterLogin()
     if plan.autoRun then
         T.RunTests({ quiet = true })
     end
+    if #plan.recordItems > 0 then
+        T.RecordPlanItems(plan.recordItems)
+    end
     T.CheckIntegrations()
     -- From here on the bags are read whenever they change (Sightings.lua).
     T.ScanSightings()
@@ -164,6 +167,7 @@ local HELP = {
     "/cwtest timing <label> [runs] - time forced refreshes with the windows that are open now",
     "/cwtest timing idle [seconds] - time standing still",
     "/cwtest probe <item ID> ... - record everything about some items",
+    "/cwtest record <item ID or link> ... | slot <bag> <slot> | bags | list | clear - record the client's answers behind a verdict, for the offline harness",
     "/cwtest sources - appearance sources of what was drawn this session whose item the client does not have",
     "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
     "/cwtest sightings - bag states (openable, locked, refundable, bound) checked when an item showed one",
@@ -247,6 +251,10 @@ COMMANDS.probe = function(rest)
     else
         T.ProbeItems(itemIDs)
     end
+end
+
+COMMANDS.record = function(rest)
+    T.RecordCommand(rest)
 end
 
 COMMANDS.sources = function()
