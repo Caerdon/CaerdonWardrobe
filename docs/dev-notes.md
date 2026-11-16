@@ -12,7 +12,15 @@ Keep entries short and factual. No session narration, quotes or test counts. "Of
 - **Not loaded:** Blizzard_EncounterJournal (standard / classic only), Blizzard_GarrisonUI, Blizzard_Housing*, Blizzard_ExpansionTrial. The EncounterJournal and Mission features wait for `ADDON_LOADED`, so they stay dormant.
 - **Mail:** `InboxFrame:Update()` and `OpenMailFrame:UpdateButtonPositions()` replace the retail globals; `SendMailFrame_Update` is still global. `features/Mail.lua` hooks whichever exists.
 - **Bank:** `CamelotBankPanelItemButtonMixin:Refresh()` calls through `BankPanelItemButtonMixin.Refresh(self)`, so the table hook still fires.
-- **Events:** `UPDATE_EXPANSION_LEVEL` is undocumented and registered via `pcall`. All other registered events exist in Forever's event documentation.
+- **Events:** `UPDATE_EXPANSION_LEVEL` is undocumented and registered via `pcall`. All other registered events exist in Forever's event documentation. In the client (1.60.1.70938) it registers without an error, as do the five talent events the core also registers through `pcall`.
+- **Seen in the client by the test addon (1.60.1.70938, 2026-11-15; one or two toons, so a fact about what was looked at):**
+  - Tooltip lines: the binding line (type 20) carries `bonding`; the slot line (21) `isValidInvSlot` and `isValidItemType`; a requirement line (43) `usable`, `requirementType` and `level`; use and equip effect lines (44, 45) `spellID`; the sell price line (11) `price`; the name line (22) `quality`. The tooltip data has `dataInstanceID`, `guid` and `id`.
+  - `C_PlayerInfo.CanUseItem` knows the classic armor proficiency: false for mail (Soldier's Wristguards 6550) on a level 29 hunter who meets its level.
+  - `C_TransmogCollection.GetCategoryAppearances` follows the wardrobe's filter, and "Not Collected" is off by default, which is why the wardrobe shows collected looks only. With it on, uncollected appearances are returned (Chest: 56 of 452 collected).
+  - No secret value in the item, container, tooltip or transmog answers out of combat.
+  - `ReloadUI()` called from an addon's click handler reloads the UI.
+  - `C_AddOnProfiler.IsEnabled()` is true with no setup.
+  - Items from later expansions: `C_Item.DoesItemExistByID` is true for one item each from The Burning Crusade to Legion, but their data never loads. The function proves nothing, and such items cannot stand in as test items.
 - **Specializations:** none. `GetSpecialization`, `GetSpecializationInfo` and `GetSpecializationInfoByID` do not exist (only `C_SpecializationInfo.*`, `GetLootSpecialization`, `GetSpecializationInfoForSpecID`). Use `CaerdonAPI:GetPlayerSpecializationIndex()`, `GetSpecializationInfo(index, ...)`, `GetSpecializationInfoByID(specID)`, `GetLootSpecializationID()`; they return nil without a spec system.
 - **Talent trees:** one trait tree per class in three groups. `CaerdonAPI:GetTalentTrees()` reads them as Blizzard's Camelot talent pane does: `C_SpecializationInfo.GetCombatConfigIDForSpecGroup(GetActiveSpecGroup())`, `C_Traits.GetConfigInfo(configID).treeIDs[1]`, `C_Traits.GetGroupDisplayInfoByTreeID` (names, order), `C_Traits.GetGroupCurrencyInfo` (`currencyInfos[1].spent`; a missing group is 0). `GetPrimaryTalentTree()` returns the leader, nil on a tie or with nothing spent. Retail has neither group function, which is the feature gate. Cached until `InvalidateTalentTrees()`; `CaerdonWardrobeMixin:OnTalentsChanged` (trait and talent events, coalesced over 0.5 s) refreshes only when the leading tree changed.
 - **API coverage (Forever 1.60.1 docs):** every documented API the addon uses exists; `TransmogUseErrorType` values match retail. Undocumented calls that Blizzard's camelot-loaded code also uses (toy, heirloom, pet journal, black market, merchant / loot / quest link getters) are safe. `C_TradeSkillUI.GetAllRecipeIDs` and `GetRecipeFixedReagentItemLink` are not referenced in Forever's UI code, so they are guarded.
@@ -33,6 +41,8 @@ Two public mirrors cover both flavors. The clones live outside the addon folder,
   - The API documentation folder lists a function for both flavors even when its Blizzard addon is not loaded on one (housing events exist in Forever's listing). Presence in a listing means the client knows the name, not that the feature works.
   - A Blizzard addon folder can hold several TOC files (per game family); read the one for the flavor before concluding what loads.
   - A tooltip line's fields (`bonding`, `isValidInvSlot`, ...) are not in the documentation for either flavor. Only an in-game dump shows which exist.
+  - The enum listing is not complete: `Enum.HousingCatalogEntrySubtype` exists in the Forever client although neither listing has it. "Missing from both listings" is a reason to ask the client, not a verdict.
+  - Other addons recreate removed globals (GearQuestForever defines `GetItemCount` and `GetItemFamily`), so a fallback to a legacy global can end up running another addon's function.
 - **After a client patch** run `update.sh`, then the static check (next section), then read `update.sh changes` for the Blizzard addons the features hook: the check proves a hooked name still exists, not that it is still called the same way.
 
 ## Static Check
@@ -77,7 +87,8 @@ Two public mirrors cover both flavors. The clones live outside the addon folder,
 - **Where the tests know the core's insides:** `T.CoreIsIdle` (the queue's fields), `ReadDrawn` in `Snapshot.lua` (the overlay's `mogStatus`, `bindsOnText`, `upgradeDeltaText`, `caerdonHasUpgradeBadge`), and the counting hooks on `RefreshItems` and `ProcessItem`. A refactor that renames one of these changes it there.
 - **Packaging:** the packager (BigWigsMods, `parse_ignore`) turns an `ignore` entry that is a folder into `<folder>/*`, and skips untracked files by itself. Read in its source; not yet checked in a released zip.
 - **Not built:** counters inside the core, checks that wait for a particular item (openable, locked, refundable), the per-integration hook probe and the bag addon rotation, an offline harness kept in the repository, a search for replacement pool items.
-- **In game:** nothing seen yet.
+- **The stopwatch is `GetTimePreciseSec`**, not `debugprofilestop`, which any addon can restart with `debugprofilestart`.
+- **In game (Forever, 2026-11-15):** the addon loads, the contracts run by themselves after login, the Save button's reload is recorded, and a snapshot base, forced refresh timings at the bank, bags and vendor and an idle timing were recorded on a second toon. Not seen yet: a snapshot comparison, a journal entry, a verdict test with a fitting item, anything on retail. The "first icon" and "last icon" times of those first timing runs were taken with the old stopwatch and came out shorter than the addon's own 0.1 s refresh delay allows, so they are not to be used.
 
 ## Transmog on Forever
 

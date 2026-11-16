@@ -21,6 +21,12 @@ T.SCHEMA = 1
 
 local PREFIX = "|cff33ccffCaerdon tests:|r "
 
+-- The stopwatch, in milliseconds. Not debugprofilestop(): any addon can restart that timer
+-- with debugprofilestart(), and a measurement that spans frames would then be wrong.
+function T.Milliseconds()
+    return GetTimePreciseSec() * 1000
+end
+
 function T.Print(message, ...)
     if select("#", ...) > 0 then
         message = message:format(...)

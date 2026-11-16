@@ -99,7 +99,7 @@ end
 
 local function RunContract(def)
     local context = setmetatable({ detail = {}, failures = {} }, Context)
-    local started = debugprofilestop()
+    local started = T.Milliseconds()
     -- On an error, status is the message and reason the stack.
     local ok, status, reason = T.Protected(def.run, context)
     local previous = StoredContract(def)
@@ -126,7 +126,7 @@ local function RunContract(def)
     else
         result = T.SetResult(def.id, status == "info" and "info" or "pass", detail, reason)
     end
-    result.ms = math.floor((debugprofilestop() - started) * 10 + 0.5) / 10
+    result.ms = math.floor((T.Milliseconds() - started) * 10 + 0.5) / 10
     return result
 end
 

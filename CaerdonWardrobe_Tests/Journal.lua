@@ -223,7 +223,7 @@ T.OnInit(function()
         T.counters.processItem = T.counters.processItem + 1
         local run = T.timingRun
         if run then
-            local now = debugprofilestop()
+            local now = T.Milliseconds()
             run.firstDraw = run.firstDraw or now
             run.lastDraw = now
         end

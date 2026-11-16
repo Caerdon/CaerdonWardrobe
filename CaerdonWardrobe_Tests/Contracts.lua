@@ -289,7 +289,7 @@ T.Contract({
 
 T.Contract({
     id = "static.addons",
-    version = 1,
+    version = 2,
     title = "The static check's list of Blizzard addons this client loads is right",
     run = function(c)
         if not T.StaticFacts then
@@ -316,7 +316,9 @@ T.Contract({
             local loadable, reason = Ask(C_AddOns.IsAddOnLoadable, name)
             local key = Ask(C_AddOns.DoesAddOnExist, name) and (loadable and "loadable" or tostring(reason))
                 or "unknown to the client"
-            reasons[key] = (reasons[key] or 0) + 1
+            -- By name: "loadable" for an addon the check says never loads is worth a look.
+            reasons[key] = reasons[key] or {}
+            table.insert(reasons[key], name)
         end
 
         -- Addons it says load here should at least be known to the client.
@@ -329,7 +331,7 @@ T.Contract({
 
         NoteStaticBuild(c)
         c:Note("loadedAgainstPrediction", loadedAnyway)
-        c:Note("notLoadedByReason", reasons)
+        c:Note("notLoadedByAnswer", reasons)
         c:Note("expectedButUnknown", unknown)
         c:Note("expected", #loads)
         c:Check(#loadedAnyway == 0, "loaded although the static check says this client never loads them: %s",

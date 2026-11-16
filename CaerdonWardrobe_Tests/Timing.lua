@@ -95,7 +95,7 @@ local function MeasureRefresh()
     local drawsBefore = T.counters.processItem
     local run = {}
     T.timingRun = run
-    local started = debugprofilestop()
+    local started = T.Milliseconds()
     local startedAt = GetTime()
     CaerdonWardrobe:RefreshItems()
 

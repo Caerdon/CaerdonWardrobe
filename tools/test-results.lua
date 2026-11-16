@@ -141,6 +141,9 @@ local function plainText(text)
 end
 
 local function figure(value)
+    if type(value) == "number" and value ~= math.floor(value) then
+        return (("%.3f"):format(value):gsub("0+$", ""):gsub("%.$", ""))
+    end
     return value == nil and "-" or tostring(value)
 end
 
@@ -172,7 +175,8 @@ local function printContracts(db, withDetail)
             -- request, and the result only arrives with the next reload or logout.
             local pending = db.pending and db.pending.reload
             local message = result.message and plainText(result.message) or ""
-            if pending and id == "reload." .. tostring(pending.how) then
+            local final = result.status == "pass" or result.status == "fail" or result.status == "info"
+            if pending and not final and id == "reload." .. tostring(pending.how) then
                 message = ("asked for at %s, and this file was written by that reload; the result comes with the next save")
                     :format(when(pending.at))
             end
