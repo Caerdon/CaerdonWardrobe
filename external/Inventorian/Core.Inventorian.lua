@@ -42,8 +42,23 @@ function InventorianMixin:GetTooltipData(item, locationInfo)
 	end
 end
 
+-- Inventorian only updates a slot when its content changes, which a newly learned appearance or
+-- a gear swap does not do, so a refresh draws every button its two windows hold again. A button
+-- knows its own bag and slot (Item.lua, Set).
 function InventorianMixin:Refresh()
-	-- TODO: Was missing
+	CaerdonWardrobeFeatureMixin:Refresh(self)
+
+	local inventorian = self.Inventorian
+	for _, window in ipairs({ inventorian and inventorian.bag, inventorian and inventorian.bank }) do
+		local items = window.itemContainer and window.itemContainer.items
+		if type(items) == "table" then
+			for _, button in pairs(items) do
+				if button.bag and button.slot then
+					self:UpdateSlot(button, button.bag, button.slot)
+				end
+			end
+		end
+	end
 end
 
 local function ToIndex(bag, slot)

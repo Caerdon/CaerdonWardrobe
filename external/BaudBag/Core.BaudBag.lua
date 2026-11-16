@@ -31,8 +31,17 @@ function BaudBagMixin:GetTooltipData(item, locationInfo)
     end
 end
 
+-- The item buttons BaudBag has had drawn, each with the slot it was last drawn for, so Refresh()
+-- can draw them again: BaudBag only reports a slot when its content changes, which a newly
+-- learned appearance or a gear swap does not do. Weak keys: BaudBag owns the buttons.
+local trackedButtons = setmetatable({}, { __mode = "k" })
+
 function BaudBagMixin:Refresh()
-    -- Can do something like BaudBag.Sets[bagSet.Id]:RebuildContainers() if needed
+    CaerdonWardrobeFeatureMixin:Refresh(self)
+
+    for button, where in pairs(trackedButtons) do
+        self:ProcessItem(where.bag, where.slot, button)
+    end
 end
 
 function BaudBagMixin:ProcessItem(bag, slot, button)
@@ -60,6 +69,14 @@ function BaudBagMixin:ProcessItem(bag, slot, button)
 end
 
 function BaudBagMixin:ItemSlotUpdated(bb, bagSet, containerId, subContainerId, slotId, button)
+    if button and subContainerId and slotId then
+        local where = trackedButtons[button]
+        if not where then
+            where = {}
+            trackedButtons[button] = where
+        end
+        where.bag, where.slot = subContainerId, slotId
+    end
     self:ProcessItem(subContainerId, slotId, button)
 end
 
