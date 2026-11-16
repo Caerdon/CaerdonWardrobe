@@ -1830,7 +1830,8 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         end
         if state and locationKey and retries <= NOT_READY_MAX_RETRIES then
             self.pendingTooltipRetries = self.pendingTooltipRetries or {}
-            self.pendingTooltipRetries[locationKey] = {
+            -- Per button, like the queue (see UpdateButton).
+            self.pendingTooltipRetries[button or locationKey] = {
                 button = button,
                 item = item,
                 feature = feature,
@@ -2067,12 +2068,16 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
             end
         end
 
-        self.waitingToProcess[locationKey] = {
+        -- One pending request per button, not per location. Two buttons of a feature can show
+        -- the same slot (BetterBags' food and drink bar beside its bag), and kept per location
+        -- the later request replaced the earlier one, whose button was then not drawn.
+        self.waitingToProcess[button or locationKey] = {
             button = button,
             item = item,
             feature = feature,
             locationInfo = locationInfo,
-            options = options
+            options = options,
+            locationKey = locationKey
         }
 
         -- Re-register OnUpdate if it was unregistered while idle
@@ -2094,25 +2099,26 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
 
     while true do
         local itemCount = 0
-        for locationKey, processInfo in pairs(self.waitingToProcess) do
+        for queueKey, processInfo in pairs(self.waitingToProcess) do
             -- Don't process item if the key is different than expected
-            if self:GetButtonLocationKey(processInfo.button) == locationKey then
+            if self:GetButtonLocationKey(processInfo.button) == processInfo.locationKey then
                 itemCount = itemCount + 1
-                self.processQueue[locationKey] = processInfo
+                self.processQueue[queueKey] = processInfo
             end
 
-            self.waitingToProcess[locationKey] = nil
+            self.waitingToProcess[queueKey] = nil
         end
 
         local itemsProcessedThisFrame = 0
         local maxItemsPerFrame = 20 -- Raised from 4; per-item cost is low with status/source caching
 
-        for locationKey, processInfo in pairs(self.processQueue) do
+        for queueKey, processInfo in pairs(self.processQueue) do
             local button = processInfo.button
             local item = processInfo.item
             local feature = processInfo.feature
             local locationInfo = processInfo.locationInfo
             local options = processInfo.options
+            local locationKey = processInfo.locationKey
 
             if feature:IsSameItem(button, item, locationInfo) and self:GetButtonLocationKey(button) == locationKey then
                 if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
@@ -2133,14 +2139,14 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
                             ContinuableContainer:Create();
                         self.featureProcessContinuables[feature]:AddContinuable(item);
                         self.featureProcessItems[feature] = self.featureProcessItems[feature] or {}
-                        self.featureProcessItems[feature][locationKey] = processInfo
+                        self.featureProcessItems[feature][queueKey] = processInfo
                     end
                 end
             else
                 self:ClearButton(button)
             end
 
-            self.processQueue[locationKey] = nil
+            self.processQueue[queueKey] = nil
 
             -- Yield after processing a few items to maintain frame rate
             if itemsProcessedThisFrame >= maxItemsPerFrame then
@@ -2156,8 +2162,11 @@ function CaerdonWardrobeMixin:ProcessItem_Coroutine()
                 -- Route through waitingToProcess so items are picked up even if
                 -- this callback fires after the current coroutine has exited.
                 if items then
-                    for locationKey, processInfo in pairs(items) do
-                        self.waitingToProcess[locationKey] = processInfo
+                    for queueKey, processInfo in pairs(items) do
+                        -- A newer request for the same button stands: this one is the older.
+                        if self.waitingToProcess[queueKey] == nil then
+                            self.waitingToProcess[queueKey] = processInfo
+                        end
                     end
                     self.featureProcessItems[feature] = nil
 
