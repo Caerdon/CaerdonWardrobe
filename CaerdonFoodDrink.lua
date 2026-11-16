@@ -162,6 +162,15 @@ function CaerdonFoodDrink:InvalidateCaches()
     carried = nil
 end
 
+-- Drops what was learned about each food and drink this session as well. Nothing in play
+-- calls it: a classification does not change, which is why a refresh keeps it. It is for a
+-- test that has to see the addon ask the client everything again (docs/dev-notes.md,
+-- Offline Harness).
+function CaerdonFoodDrink:ForgetClassifications()
+    wipe(classifications)
+    carried = nil
+end
+
 local function IsBetter(candidate, item)
     if candidate.requiredLevel ~= item.requiredLevel then
         return candidate.requiredLevel > item.requiredLevel
