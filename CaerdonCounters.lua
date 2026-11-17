@@ -467,6 +467,8 @@ function Counters:Attach()
     Probe("CaerdonAPI", CaerdonAPI, "OnTooltipItem")
     Probe("Tooltip", NS and NS.Tooltip, "OnTooltipSetItem")
     Probe("CaerdonAuctionValue", CaerdonAuctionValue, "OnBagsChanged")
+    -- What a run of quest events costs where it refreshes nothing: the answered quests judged again.
+    Probe("CaerdonQuestItems", CaerdonQuestItems, "CompareWithAnswers")
 
     -- Each feature holds its own copy of the display rules, made when it registered.
     local features = type(core) == "table" and core.GetRegisteredFeatures and core:GetRegisteredFeatures()

@@ -672,6 +672,11 @@ function T.RecordItems(requests, quiet)
             end
             T.Yield()
         end
+        -- A recording empties the addon's caches behind the icons on screen, and with them
+        -- what the quest module compares a quest event with. A refresh makes both anew.
+        if done > 0 and not InCombatLockdown() then
+            CaerdonWardrobe:RefreshItems()
+        end
         T.Print("%d of %d recorded (%d functions hooked until the next reload%s). /reload writes them to disk; "
             .. "then `luajit tools/harness/run.lua import`.", done, #requests, hookCount,
             refusedCount > 0 and (", %d the client would not let be hooked"):format(refusedCount) or "")

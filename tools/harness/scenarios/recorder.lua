@@ -225,9 +225,12 @@ return function(H, S)
     Equal(game.readAllQuests, 1, "quests: the addon read the quest database once to build its index")
 
     local untouched = game.names["C_Item.GetItemInfo"]
+    local generation = client.env.CaerdonWardrobe.refreshGeneration
     T.RecordItems({ { itemID = 900001 }, { itemID = 900002 }, { itemID = 900003 }, { itemID = 123 },
         { itemID = 900004 }, { itemID = 900005 }, { itemID = 900007 }, { itemID = 900008 } })
     Check(client:TickUntil(function() return not T.IsBusy() end, 60), "record: the job ends")
+    -- The caches were emptied behind the icons on screen; the job owes them one redraw.
+    Equal(client.env.CaerdonWardrobe.refreshGeneration, generation + 1, "record: the job ends in one full refresh")
     Equal(#client.errors, 0, "record: no error reached the error handler")
     Equal(#T.db.errors, 0, "record: no error of the tests' own")
     for _, message in ipairs(client.errors) do

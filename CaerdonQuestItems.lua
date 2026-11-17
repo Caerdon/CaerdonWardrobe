@@ -111,6 +111,10 @@ local provider = {
 
 -- questID -> verdict; dropped whenever the main frame refreshes.
 local verdicts = {}
+-- questID -> the verdict last handed out since then, the ones that are not kept included.
+-- The icons on screen were made from these, and a quest event is compared with them
+-- (CompareWithAnswers).
+local answered = {}
 local playerContext
 local questieModules
 local questieReadyHooked = false
@@ -121,23 +125,28 @@ local function HasBit(mask, flag)
     return mask % (flag * 2) >= flag
 end
 
-local function RequestRefresh()
+-- For what is always a change: the quest data has come, or the log's objectives have their
+-- names. A quest event is compared first and goes through the watch at the end of this file.
+local function RequestRefresh(reason, detail)
     if refreshTimer then
         return
     end
 
     refreshTimer = C_Timer.NewTimer(REFRESH_DELAY, function()
         refreshTimer = nil
-        -- RefreshItems calls InvalidateCaches below, so anything evaluated while this timer
-        -- was pending (a bag update racing the quest completion flag) is dropped again.
+        -- RefreshItems calls InvalidateCaches below, so anything judged while this timer
+        -- was pending is dropped again.
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-            CaerdonWardrobe:RefreshItems("quests")
+            CaerdonWardrobe:RefreshItems(reason, detail)
         end
     end)
 end
 
+-- Forgets the answers with the verdicts, so it goes with a redraw of every icon: RefreshItems
+-- calls it, and the callers in this file ask for a refresh.
 function CaerdonQuestItems:InvalidateCaches()
     wipe(verdicts)
+    wipe(answered)
     playerContext = nil
     questLog.dirty = true
 end
@@ -199,6 +208,11 @@ local function ScanQuestLog()
         end
     end
 
+    -- In the order of their IDs, so that a quest moving in the log is not a change.
+    for _, quests in pairs(itemNames) do
+        table.sort(quests)
+    end
+
     return itemNames, incomplete, questCount, objectiveCount
 end
 
@@ -225,19 +239,13 @@ local function EnsureQuestLog()
     questLog.lastScan = GetTime()
 end
 
-local function SameItemNames(left, right)
-    for name, quests in pairs(left) do
-        local other = right[name]
-        if not other or table.concat(quests, ",") ~= table.concat(other, ",") then
-            return false
-        end
+-- The log's item objectives as a flat reading (NS.Refresh:Difference): which quests name
+-- which item.
+local function AddNamesReading(itemNames, reading)
+    for name, quests in pairs(itemNames) do
+        reading["objective " .. name] = table.concat(quests, ",")
     end
-    for name in pairs(right) do
-        if not left[name] then
-            return false
-        end
-    end
-    return true
+    return reading
 end
 
 ----------------------------------------------------------------------------------------------
@@ -289,7 +297,7 @@ local function GetQuestieModules()
         if type(api) == "table" and type(api.RegisterOnReady) == "function" then
             pcall(api.RegisterOnReady, function()
                 CaerdonQuestItems:InvalidateCaches()
-                RequestRefresh()
+                RequestRefresh("quest data", "Questie is ready")
             end)
         end
     end
@@ -446,7 +454,7 @@ local function StartBuild(lib)
         provider.state = "ready"
 
         CaerdonQuestItems:InvalidateCaches()
-        RequestRefresh()
+        RequestRefresh("quest data", "the index is built")
     end
 
     -- Never inside the lookup that discovered the library
@@ -650,13 +658,10 @@ local function UpcomingBlocker(questID, verdict, Get)
     return nil
 end
 
-local function EvaluateQuest(questID)
-    local verdict = verdicts[questID]
-    if verdict then
-        return verdict
-    end
-
-    verdict = { questID = questID, eligible = false, isActive = false }
+-- One quest judged from the client and the quest data as they are now; nothing is kept.
+-- Second value: the answer depends on what is in the bags and must not be kept.
+local function JudgeQuest(questID)
+    local verdict = { questID = questID, eligible = false, isActive = false }
 
     local Get = provider.lib and provider.lib.Quest.Get
     local volatile = false
@@ -686,10 +691,61 @@ local function EvaluateQuest(questID)
         verdict.reason = "error: " .. tostring(failure)
     end
 
+    return verdict, volatile
+end
+
+local function EvaluateQuest(questID)
+    local verdict = verdicts[questID]
+    if verdict then
+        return verdict
+    end
+
+    local volatile
+    verdict, volatile = JudgeQuest(questID)
     if not volatile then
         verdicts[questID] = verdict
     end
+    answered[questID] = verdict
     return verdict
+end
+
+-- What a verdict means for an icon, which is all a quest event is compared on.
+local function StateOf(verdict)
+    return verdict.isActive and "in the log" or verdict.eligible and "upcoming" or "not wanted"
+end
+
+-- The check after a run of quest events (accepted, removed, turned in): what differs from
+-- what was answered since the caches were last dropped, in words, or nil.
+--
+-- Most quests take no item that is carried or shown, and their events change no icon. An
+-- icon follows from two things here: whether a quest it was asked about is in the log, still
+-- to come or neither, and which items the log's objectives name. Both are read again. Every
+-- answered quest is judged again, not only the quest of the event: that one can decide about
+-- others (the one before it in a chain, one it excludes, one offered only until it is done).
+function CaerdonQuestItems:CompareWithAnswers()
+    -- A new quest's objectives may have no text yet; QUEST_LOG_UPDATE tries again from zero.
+    questLog.rescanAttempts = 0
+
+    local before, after = {}, {}
+
+    -- A log that was not read since the caches were dropped has answered nothing.
+    if not questLog.dirty then
+        AddNamesReading(questLog.itemNames, before)
+        questLog.dirty = true
+        EnsureQuestLog()
+        AddNamesReading(questLog.itemNames, after)
+    end
+
+    for questID, answer in pairs(answered) do
+        local verdict, volatile = JudgeQuest(questID)
+        local key = "quest " .. questID
+        before[key], after[key] = StateOf(answer), StateOf(verdict)
+        -- Where nothing differs the new verdict stands in: its reason is the export's.
+        answered[questID] = verdict
+        verdicts[questID] = not volatile and verdict or nil
+    end
+
+    return NS.Refresh:Difference(before, after)
 end
 
 ----------------------------------------------------------------------------------------------
@@ -805,6 +861,11 @@ function CaerdonQuestItems:GetDebugState()
         professions = table.concat(professions, ", ")
     end
 
+    local answeredCount = 0
+    for _ in pairs(answered) do
+        answeredCount = answeredCount + 1
+    end
+
     return {
         -- nil professions: the client's skill lines were not recognised, so the check is off
         professions = professions,
@@ -831,6 +892,8 @@ function CaerdonQuestItems:GetDebugState()
         },
         upcomingLevelWindow = UPCOMING_LEVEL_WINDOW,
         trivialRange = player.trivialRange,
+        -- How many quests a quest event judges again (CompareWithAnswers).
+        answeredCount = answeredCount,
     }
 end
 
@@ -848,7 +911,7 @@ eventFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(3, EnsureProvider)
     elseif event == "QUEST_LOG_UPDATE" then
         -- Fires on every objective tick. The set of item objectives only changes with the
-        -- quests themselves (handled below), so this only matters until the log has loaded.
+        -- quests themselves (the watch below), so this only matters until the log has loaded.
         if not questLog.awaitingData and not questLog.incomplete then
             return
         end
@@ -864,27 +927,33 @@ eventFrame:SetScript("OnEvent", function(_, event)
         questLog.awaitingData = false
         questLog.lastRescanRequest = now
 
-        local previous = questLog.itemNames
+        local previous = AddNamesReading(questLog.itemNames, {})
         questLog.dirty = true
         EnsureQuestLog()
-        if not SameItemNames(previous, questLog.itemNames) then
-            RequestRefresh()
+        local what = NS.Refresh:Difference(previous, AddNamesReading(questLog.itemNames, {}))
+        if what then
+            RequestRefresh("quest log", what)
         end
-    else
-        -- QUEST_ACCEPTED, QUEST_REMOVED, QUEST_TURNED_IN, PLAYER_LEVEL_UP
-        questLog.rescanAttempts = 0
-        CaerdonQuestItems:InvalidateCaches()
-        RequestRefresh()
     end
 end)
 
 for _, event in ipairs({
     "PLAYER_ENTERING_WORLD",
     "QUEST_LOG_UPDATE",
-    "QUEST_ACCEPTED",
-    "QUEST_REMOVED",
-    "QUEST_TURNED_IN",
-    "PLAYER_LEVEL_UP",
 }) do
     pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
+
+-- A quest accepted, removed or turned in is compared before anything is refreshed
+-- (CompareWithAnswers). The events come in runs and the completion flags settle a moment
+-- after QUEST_TURNED_IN, so there is one check, when the run is over. Through the table, so
+-- that the counters' wrapper is the one called. A level gained refreshes by itself
+-- (CaerdonRefresh.lua), which drops what is kept here about the toon.
+NS.Refresh:Watch({
+    name = "quests",
+    events = { "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN" },
+    compare = function()
+        return CaerdonQuestItems:CompareWithAnswers()
+    end,
+    delay = REFRESH_DELAY,
+})

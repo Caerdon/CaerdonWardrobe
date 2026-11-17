@@ -2752,6 +2752,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
         addKV(1, "Questie Policy", questState.questie.loaded and
             ("loaded, ready=" .. tostring(questState.questie.isReady)) or "not loaded")
+        addKV(1, "Quests Answered Since The Last Refresh", questState.answeredCount)
 
         if questItemInfo and #questItemInfo.quests > 0 then
             addLine(1, "Quests:")
