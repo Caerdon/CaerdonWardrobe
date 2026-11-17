@@ -1066,6 +1066,15 @@ function DebugFrameMixin:Init()
                         if not slot and owner.slot then slot = owner.slot end
                     end
 
+                    -- The guess above fits a bag button only. Any other button with an ID
+                    -- passes it too: a vendor row's ID is its merchant index and its parent's
+                    -- ID is 0, which named a backpack slot. Keep the slot only when it holds
+                    -- the item the tooltip shows, else take the tooltip's link.
+                    if bag ~= nil and slot ~= nil and
+                        C_Container.GetContainerItemID(bag, slot) ~= C_Item.GetItemInfoInstant(link) then
+                        bag, slot = nil, nil
+                    end
+
                     if bag ~= nil and slot ~= nil then
                         self:SetCurrentItemFromBagAndSlot(bag, slot)
                     else
