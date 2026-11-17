@@ -297,6 +297,62 @@ do
 end
 
 ------------------------------------------------------------------------------------------
+print("Forever: a level gained, and a watch that compares by itself")
+------------------------------------------------------------------------------------------
+do
+    local watcher = Start("forever")
+    Check(frame.events.PLAYER_LEVEL_UP == true, "the level event is registered")
+    Fire("PLAYER_LEVEL_UP", 32)
+    Advance(0.4)
+    Equal(#refreshes, 0, "a level gained refreshes nothing before the client has had half a second")
+    Advance(0.2)
+    Equal(#refreshes, 1, "then once")
+    Equal(refreshes[1].reason, "level", "under the watch's name")
+    Equal(refreshes[1].detail, nil, "with nothing read")
+    Fire("PLAYER_LEVEL_UP", 33)
+    Advance(1)
+    Equal(#refreshes, 2, "every level is a change")
+
+    -- The owner keeps what the icons were made from and says what differs from it.
+    local calls, answer = 0, nil
+    watcher:Watch({
+        name = "own",
+        events = { "QUEST_ACCEPTED", "QUEST_REMOVED" },
+        compare = function()
+            calls = calls + 1
+            return answer
+        end,
+        delay = 0.5,
+    })
+    Fire("QUEST_ACCEPTED", 5)
+    Equal(calls, 0, "a watch with a delay and no leading check compares nothing as the run starts")
+    Advance(1)
+    Equal(calls, 1, "it compares once when the run is over")
+    Equal(#refreshes, 2, "and refreshes nothing when its owner finds no difference, the first time included")
+    answer = "quest 5: upcoming -> in the log"
+    Fire("QUEST_ACCEPTED", 5)
+    Advance(0.2)
+    Fire("QUEST_REMOVED", 6)
+    Advance(0.2)
+    Fire("QUEST_ACCEPTED", 7)
+    Advance(0.4)
+    Equal(calls, 1, "events closer together than the delay are one run")
+    Advance(0.2)
+    Equal(calls, 2, "compared once, half a second after its last event")
+    Equal(#refreshes, 3, "a difference refreshes")
+    Equal(refreshes[3].reason, "own", "under the watch's name")
+    Equal(refreshes[3].detail, "quest 5: upcoming -> in the log", "with the owner's words for what differs")
+    local own = Watched(watcher, "own")
+    Check(own.events == 4 and own.checks == 2 and own.changes == 1, "the report counts its events, its compares and its changes")
+
+    -- The owner's words are made the way a reading's are.
+    Equal(watcher:Difference({ a = 1, b = 2, d = "x" }, { a = 1, b = 3, c = true }), "b: 2 -> 3; c: new, true; d: gone, was x",
+        "two flat tables are compared key by key")
+    Equal(watcher:Difference({ a = 1 }, { a = 1 }), nil, "and the same tables are no difference")
+    Equal(#errors, 0, "nothing raised")
+end
+
+------------------------------------------------------------------------------------------
 print("Retail: skills without the skill list, housing")
 ------------------------------------------------------------------------------------------
 do

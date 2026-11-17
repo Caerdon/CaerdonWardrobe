@@ -12,6 +12,9 @@
 --
 -- read: a flat table of key = string, number or boolean. A watch without one takes every event
 --   for a change.
+-- compare: in place of read, for a watch whose owner keeps what the icons were made from
+--   itself: it returns what differs from that, in words (Refresh:Difference), or nil when
+--   nothing does. Such a watch has no first reading.
 -- delay: events closer together than this are one burst, checked once when it is over. Without
 --   a delay every event is checked as it comes.
 -- leading: a burst's first event is checked at once as well, for a client that already has the
@@ -61,12 +64,22 @@ local function Difference(before, after)
     return table.concat(parts, "; ")
 end
 
+-- For a watch that compares by itself, and for a module that names its own refresh.
+function Refresh:Difference(before, after)
+    return Difference(before, after)
+end
+
 -- Reads the watch's state and refreshes when it is not what the last check read.
 local function Check(watch)
     watch.checks = watch.checks + 1
 
     local what
-    if watch.read then
+    if watch.compare then
+        what = watch.compare()
+        if not what then
+            return
+        end
+    elseif watch.read then
         local reading = watch.read()
         local previous = watch.reading
         watch.reading = reading
@@ -118,6 +131,7 @@ function Refresh:Watch(spec)
     local watch = {
         name = spec.name,
         read = spec.read,
+        compare = spec.compare,
         delay = spec.delay,
         leading = spec.leading and true or false,
         events = 0,
@@ -229,6 +243,15 @@ Refresh:Watch({
     read = ReadPvp,
     delay = 0.5,
     leading = true,
+})
+
+-- Level. Always a change: level requirements, outgrown food and drink, the quests still to
+-- come, the auction floor. No reading, and half a second's wait for a client that still
+-- answers with the old level while it sends the event.
+Refresh:Watch({
+    name = "level",
+    events = { "PLAYER_LEVEL_UP" },
+    delay = 0.5,
 })
 
 -- Housing: the catalog is not always through with a change when its event comes, and one
