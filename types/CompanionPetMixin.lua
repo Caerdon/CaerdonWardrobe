@@ -7,8 +7,7 @@ function CaerdonCompanionPet:CreateFromCaerdonItem(caerdonItem)
         error("Usage: CaerdonCompanion:CreateFromCaerdonItem(caerdonItem)", 2)
     end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonCompanionPetMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonCompanionPetMixin, caerdonItem)
     return itemType
 end
 

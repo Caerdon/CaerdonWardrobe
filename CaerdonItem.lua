@@ -114,13 +114,17 @@ local function EnsureProfessionsFrameLoaded()
     end
 end
 
+-- An item finds its methods through its metatable: CaerdonItemMixin first, then Blizzard's
+-- ItemMixin. Every window makes a new item per button and request, and copying both mixins
+-- into each one (CreateFromMixins) was 76 fields a time. The lookup is live: a method added to
+-- or replaced on CaerdonItemMixin later (the signal modules' entry points, the counters'
+-- wrappers) is there for every item, made before or after. An item's own table holds only
+-- its data.
+setmetatable(CaerdonItemMixin, { __index = ItemMixin })
+local itemMetatable = { __index = CaerdonItemMixin }
+
 local function CreateItem()
-    local item = CreateFromMixins(
-        ItemMixin,
-        CaerdonItemMixin
-    )
-    item.customDataLoaded = false
-    return item
+    return setmetatable({ customDataLoaded = false }, itemMetatable)
 end
 
 --[[static]]

@@ -438,10 +438,10 @@ local function Probe(ownerName, owner, key, wrap, outcomeNames)
     install(owner, key, counter)
 end
 
--- Wraps the functions, once. Items and item data copy their methods when they are created, so
--- only those created afterwards are counted. The test addon calls this as it loads, before it
--- hooks the same functions, which keeps its hooks' time out of the figures and reaches every
--- item made from then on.
+-- Wraps the functions, once. Items and item data find their methods through their metatables,
+-- so a wrapper on the mixin counts every item, whenever it was made. The test addon calls this
+-- as it loads, before it hooks the same functions, which keeps its hooks' time out of the
+-- figures.
 function Counters:Attach()
     if attached then
         return

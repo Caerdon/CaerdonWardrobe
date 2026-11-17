@@ -1196,8 +1196,7 @@ function CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)
         error("Usage: CaerdonEquipment:CreateFromCaerdonItem(caerdonItem)", 2)
     end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonEquipmentMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonEquipmentMixin, caerdonItem)
     return itemType
 end
 

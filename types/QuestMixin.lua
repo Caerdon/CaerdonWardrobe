@@ -8,8 +8,7 @@ local version, build, date, tocversion = GetBuildInfo()
 		error("Usage: CaerdonQuest:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonQuestMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonQuestMixin, caerdonItem)
     return itemType
 end
 

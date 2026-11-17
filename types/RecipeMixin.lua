@@ -483,8 +483,7 @@ end
 		error("Usage: CaerdonRecipe:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonRecipeMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonRecipeMixin, caerdonItem)
 
     if caerdonItem.extraData and caerdonItem.extraData.recipeInfo then
         itemType.recipe = caerdonItem.extraData.recipeInfo

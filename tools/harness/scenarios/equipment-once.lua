@@ -192,8 +192,7 @@ return function(H, S)
         client:Tick(40)
         world.client, world.env = client, client.env
 
-        -- Every GetTransmogInfo from here on. Item data copies its methods when it is made,
-        -- so the count is put in before any item is.
+        -- Every GetTransmogInfo from here on.
         world.transmogInfos = 0
         local getTransmogInfo = client.env.CaerdonEquipmentMixin.GetTransmogInfo
         client.env.CaerdonEquipmentMixin.GetTransmogInfo = function(...)
