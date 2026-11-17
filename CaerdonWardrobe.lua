@@ -2311,8 +2311,16 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
             instance.initFinished = finished
             if finished and instanceEvents then
                 for i = 1, #instanceEvents do
-                    local eventName = instanceEvents[i]
-                    self:RegisterEvent(eventName)
+                    -- An event name, or { name, unit } for a unit event wanted for one unit only.
+                    local eventName, unit = instanceEvents[i], nil
+                    if type(eventName) == "table" then
+                        eventName, unit = eventName[1], eventName[2]
+                    end
+                    if unit then
+                        self:RegisterUnitEvent(eventName, unit)
+                    else
+                        self:RegisterEvent(eventName)
+                    end
                     if not eventFeatureHandlers[eventName] then
                         eventFeatureHandlers[eventName] = {}
                     end

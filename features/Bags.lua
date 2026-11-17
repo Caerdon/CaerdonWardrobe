@@ -4,6 +4,27 @@ function BagsMixin:GetName()
     return "Bags"
 end
 
+-- Every slot of an open bag is looked at on every bag update, to see whether its button has
+-- to be drawn again. One location serves all of those looks (it is only ever handed to the
+-- client's functions, never kept), and a slot's key is made once.
+local checkLocation = ItemLocation:CreateEmpty()
+local slotKeys = {}
+
+-- The key the core files a button of this feature under (GetRequestKey in CaerdonWardrobe.lua).
+local function SlotKey(bag, slot)
+    local keys = slotKeys[bag]
+    if not keys then
+        keys = {}
+        slotKeys[bag] = keys
+    end
+    local key = keys[slot]
+    if not key then
+        key = format("Bags-bag%d-slot%d", bag, slot)
+        keys[slot] = key
+    end
+    return key
+end
+
 function BagsMixin:Init()
     for i = 1, NUM_TOTAL_BAG_FRAMES + 1 do
         local frame = _G["ContainerFrame" .. i]
@@ -17,7 +38,8 @@ function BagsMixin:Init()
 
     EventRegistry:RegisterCallback("ContainerFrame.OpenBag", self.BagOpened, self)
 
-    return { "UNIT_SPELLCAST_SUCCEEDED" }
+    -- The toon's own casts only: asked for plainly, the event comes for every unit around.
+    return { { "UNIT_SPELLCAST_SUCCEEDED", "player" } }
 end
 
 function BagsMixin:BagOpened(frame, too)
@@ -89,9 +111,9 @@ function BagsMixin:OnUpdateItems(frame)
                 -- properly re-processed if it returns to this slot.
                 CaerdonWardrobe:ClearButtonState(button)
             elseif itemID == cachedID and itemID ~= nil then
-                local locationKey = format("Bags-bag%d-slot%d", bag, slot)
-                local stackCount = C_Item.GetStackCount(ItemLocation:CreateFromBagAndSlot(bag, slot))
-                if CaerdonWardrobe:GetButtonLocationKey(button) == locationKey
+                checkLocation:SetBagAndSlot(bag, slot)
+                local stackCount = C_Item.GetStackCount(checkLocation)
+                if CaerdonWardrobe:GetButtonLocationKey(button) == SlotKey(bag, slot)
                     and CaerdonWardrobe:GetButtonStackCount(button) == stackCount
                     and CaerdonWardrobe:GetButtonRefreshGeneration(button) == CaerdonWardrobe:GetRefreshGeneration() then
                     shouldUpdate = false
@@ -100,9 +122,9 @@ function BagsMixin:OnUpdateItems(frame)
         end
 
         if shouldUpdate then
-            local itemLocation = ItemLocation:CreateFromBagAndSlot(bag, slot)
-            if C_Item.DoesItemExist(itemLocation) then
-                CaerdonWardrobe:SetButtonStackCount(button, C_Item.GetStackCount(itemLocation))
+            checkLocation:SetBagAndSlot(bag, slot)
+            if C_Item.DoesItemExist(checkLocation) then
+                CaerdonWardrobe:SetButtonStackCount(button, C_Item.GetStackCount(checkLocation))
             end
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
             CaerdonWardrobe:UpdateButton(button, item, self, {

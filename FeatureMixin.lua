@@ -15,7 +15,8 @@ function CaerdonWardrobeFeatureMixin:GetStatusRuleName()
 end
 
 function CaerdonWardrobeFeatureMixin:Init()
-    -- init and return array of frame events you'd like to receive
+    -- init and return array of frame events you'd like to receive. An entry is an event's name,
+    -- or { name, unit } for a unit event that is only wanted for that unit.
     error(format("Caerdon Wardrobe: Must provide Init implementation for %s", self:GetName()))
 end
 
