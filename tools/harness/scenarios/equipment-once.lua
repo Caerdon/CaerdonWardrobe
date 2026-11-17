@@ -55,6 +55,10 @@ return function(H, S)
                 { subType = "Mail", subClassID = 3,
                     tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "+3 Agility" },
                         { text = "Mail", r = 1, g = 0.125, b = 0.125 } } }),
+            -- A crafted piece, worse than the worn boots: junk by its link alone, and kept in
+            -- its bag slot, where the client says it can be recrafted.
+            [920030] = Armor("Smith's Boots", "INVTYPE_FEET", 10, { appearanceID = 5230, sourceID = 7230, collected = true },
+                { crafter = "Player-1-0000ABCD" }),
             -- A look with two more sources, whose items this client cannot load.
             [920010] = Armor("Shared Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7210 }),
             [920011] = Armor("Ghost Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7211 }),
@@ -63,7 +67,7 @@ return function(H, S)
     end
 
     local WORN = { [10] = 920002, [8] = 920004, [5] = 920020 }
-    local BAG = { [1] = 920005, [2] = 920005, [3] = 920006 }
+    local BAG = { [1] = 920005, [2] = 920005, [3] = 920006, [4] = 920030 }
     -- Set 11 names both copies of the helm and a worn piece, set 12 one copy, set 13 has no
     -- locations to give.
     local SETS = {
@@ -121,6 +125,16 @@ return function(H, S)
         game:Set("C_Item.GetItemQuality", function(location) return Place(location) and items[Place(location)].quality end)
         game:Set("C_Item.GetItemName", function(location) return Place(location) and items[Place(location)].name end)
         game:Set("C_Item.IsBound", function() return false end)
+        -- Only a copy that lies somewhere has a GUID, and the client knows the recipe of the
+        -- crafted boots by it.
+        game:Set("C_Item.GetItemGUID", function(location)
+            if Place(location) and location:IsBagAndSlot() then
+                return "Item-1-0-00000000" .. select(2, location:GetBagAndSlot())
+            end
+        end)
+        game:Set("C_TradeSkillUI.GetOriginalCraftRecipeID", function(guid)
+            return guid == "Item-1-0-000000004" and 55501 or nil
+        end)
         -- world.levelInSlot: a bag slot whose copy has another level than its link says.
         game:Set("C_Item.GetCurrentItemLevel", function(location)
             local id = Place(location)
@@ -137,6 +151,14 @@ return function(H, S)
         game:Set("C_Container.GetContainerItemLink", function(bag, slot)
             return bag == 0 and BAG[slot] and game.Link(BAG[slot]) or nil
         end)
+        -- What a copy in a bag slot is asked beyond its link (locked, readable, refundable).
+        game:Set("C_Container.GetContainerItemInfo", function(bag, slot)
+            local id = bag == 0 and BAG[slot]
+            return id and { itemID = id, stackCount = 1, hyperlink = game.Link(id), isLocked = false, quality = 2,
+                isReadable = false, hasLoot = false } or nil
+        end)
+        game:Set("C_Container.GetContainerItemPurchaseInfo", function() return nil end)
+        game:Set("C_Item.GetStackCount", function() return 1 end)
         game:Set("C_TooltipInfo.GetInventoryItem", function(_, slot) return WORN[slot] and hyperlink(game.Link(WORN[slot])) end)
         game:Set("C_TooltipInfo.GetBagItem", function(bag, slot) return BAG[slot] and hyperlink(game.Link(BAG[slot])) end)
 
@@ -516,8 +538,12 @@ return function(H, S)
         -- A piece's transmog info for its bag slot and for its bare link.
         local kept = Run("equipment.keptInfo")
         Equal(kept.status, "pass", "contract: slot and link agree for every piece in the bag (" .. tostring(kept.message) .. ")")
-        Equal(kept.detail and kept.detail.pieces, 3, "contract: three pieces in the bag")
+        Equal(kept.detail and kept.detail.pieces, 4, "contract: four pieces in the bag")
         Equal(kept.detail and kept.detail.differing, 0, "contract: none differs")
+        Equal(kept.detail and kept.detail.apart, 1, "contract: the crafted boots' slot and link do not share an entry")
+        Equal(kept.detail and kept.detail.apartDiffering, 1, "contract: so what differs between them is noted and fails nothing")
+        Equal(kept.detail and kept.detail.apartFields and kept.detail.apartFields.isRecraftable, 1,
+            "contract: with the field")
 
         -- The copy in slot 3 is five levels above what its link says.
         third.levelInSlot = { [3] = 25 }
@@ -552,5 +578,63 @@ return function(H, S)
         rawset(env, "GetTime", getTime)
         rawset(env, "GetTimePreciseSec", getPrecise)
         NoErrors(third, "contracts")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- 8. A crafted piece is judged for where it lies
+    --------------------------------------------------------------------------------------
+
+    -- Whether a piece can be recrafted is asked of the copy, and a bare link (the mail, a
+    -- buyback row, a chat link) has none. It keeps a piece from being called junk, so the bag
+    -- copy and the bare link of one crafted piece get different verdicts, and neither may be
+    -- served the other's from the cache, whichever is asked first.
+    do
+        local fourth = Start(false)
+        local item = fourth.env.CaerdonItem
+        local link = fourth.game.Link(920030)
+        Check(link:find(":Player-1-0000ABCD:", 1, true) ~= nil, "crafted: its link names its maker")
+
+        local function Bare(itemLink) return Loaded(fourth, item:CreateFromItemLink(itemLink)) end
+        local function InSlot(slot) return Loaded(fourth, item:CreateFromBagAndSlot(0, slot)) end
+        local function Refresh()
+            fourth.env.CaerdonWardrobe:RefreshItems()
+            fourth.client:Tick(20)
+        end
+
+        Equal(Bare(link):GetItemData():GetTransmogInfo().isRecraftable, false, "crafted: the bare link cannot say it is recraftable")
+        Equal(InSlot(4):GetItemData():GetTransmogInfo().isRecraftable, true, "crafted: the copy in the bag can")
+
+        -- The link first, as when the piece was seen in the mail before it reached the bags.
+        Refresh()
+        local status, _, info = Status(fourth, Bare(link))
+        Equal(status, "sellable", "link first: by its link the piece is junk below the worn boots")
+        Equal(info and info.isRecraftable, false, "link first: with the link's transmog info")
+        status, _, info = Status(fourth, InSlot(4))
+        Equal(status, "collected", "link first: the copy in the bag is kept all the same")
+        Equal(info and info.isRecraftable, true, "link first: and is drawn with its own transmog info")
+
+        -- The bag first.
+        Refresh()
+        status = Status(fourth, InSlot(4))
+        Equal(status, "collected", "bag first: the copy in the bag is kept")
+        status = Status(fourth, Bare(link))
+        Equal(status, "sellable", "bag first: and the bare link is still junk")
+
+        -- Each of the two is still judged once per refresh.
+        local before = fourth.transmogInfos
+        Status(fourth, InSlot(4))
+        Status(fourth, Bare(link))
+        Equal(fourth.transmogInfos - before, 0, "crafted: both verdicts are kept until the next refresh")
+
+        -- A piece nobody crafted shares one entry between its slot and its link, as before.
+        Refresh()
+        before = fourth.transmogInfos
+        local spareLink = fourth.game.Link(920006)
+        Status(fourth, Bare(spareLink))
+        Status(fourth, InSlot(3))
+        Equal(fourth.transmogInfos - before, 1, "plain: a looted piece is judged once for its link and its slot")
+        Equal(InSlot(3):GetStatusCacheKey(), Bare(spareLink):GetStatusCacheKey(), "plain: under one key")
+        Check(InSlot(4):GetStatusCacheKey() ~= Bare(link):GetStatusCacheKey(), "crafted: under two")
+        NoErrors(fourth, "crafted")
     end
 end

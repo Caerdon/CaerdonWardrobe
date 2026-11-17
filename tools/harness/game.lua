@@ -109,7 +109,8 @@ function H.StockGame(toon, items)
     end
     local function Link(id)
         local item = items[id]
-        return ("|cffffffff|Hitem:%d::::::::%d:::::::::|h[%s]|h|r"):format(id, toon.level, item.name)
+        -- A crafted piece's link ends in its maker's GUID (item.crafter).
+        return ("|cffffffff|Hitem:%d::::::::%d::::::::%s:|h[%s]|h|r"):format(id, toon.level, item.crafter or "", item.name)
     end
     game.Link = Link
 

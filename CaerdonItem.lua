@@ -1581,6 +1581,50 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     return mogStatus
 end
 
+-- The key of an item's entry in the status cache: its link, and whatever else about this copy
+-- changes the verdict or the transmog info kept with it. Copies with one key are served one
+-- entry, whichever of them was judged first.
+local function StatusCacheKey(item, itemLink)
+    local key = item:IsSoulbound() and (itemLink .. "|B") or itemLink
+    -- Whether a piece can be recrafted is asked of the copy (its GUID), and that keeps it from
+    -- being called junk. A bare link has no copy to ask, so a crafted piece that lies somewhere
+    -- does not share an entry with its link (the mail, a buyback row, a chat link). A crafted
+    -- piece's link ends in its maker's GUID.
+    if itemLink:find(":Player-", 1, true) and item:IsItemInPlayersControl() then
+        key = key .. "|c"
+    end
+    -- A stackable item's auction verdict depends on how many are owned.
+    if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
+        local maxStack = select(8, C_Item.GetItemInfo(itemLink))
+        if maxStack and maxStack > 1 then
+            key = key .. "|n" .. CaerdonAuctionValue:GetOwnedQuantity(item:GetItemID())
+        end
+    end
+    -- What a window knows about this copy beyond its link and passes in (an auction row's
+    -- item level, the source a set or dressing room entry stands for) decides the transmog
+    -- info, so two rows that share a link do not share an entry.
+    local extraData = item.extraData
+    if extraData then
+        if extraData.appearanceSourceID then
+            key = key .. "|s" .. tostring(extraData.appearanceSourceID)
+        end
+        if extraData.overrideItemLevel then
+            key = key .. "|l" .. tostring(extraData.overrideItemLevel)
+        end
+    end
+    return key
+end
+
+-- nil for an item with no link and for a Pet Cage, which is judged anew every time. For the
+-- test addon, whose contract compares the copies that share an entry.
+function CaerdonItemMixin:GetStatusCacheKey()
+    local itemLink = self:GetItemLink()
+    if not itemLink or self:GetItemName() == L["Pet Cage"] then
+        return nil
+    end
+    return StatusCacheKey(self, itemLink)
+end
+
 -- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo. transmogInfo is what
 -- GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it is shared
 -- by every copy the cache entry stands for, so read it and do not ask the item data again.
@@ -1596,27 +1640,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     local isPetCage = self:GetItemName() == L["Pet Cage"]
     local statusCacheKey
     if not isPetCage then
-        local isBound = self:IsSoulbound()
-        statusCacheKey = isBound and (itemLink .. "|B") or itemLink
-        -- A stackable item's auction verdict depends on how many are owned.
-        if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
-            local maxStack = select(8, C_Item.GetItemInfo(itemLink))
-            if maxStack and maxStack > 1 then
-                statusCacheKey = statusCacheKey .. "|n" .. CaerdonAuctionValue:GetOwnedQuantity(self:GetItemID())
-            end
-        end
-        -- What a window knows about this copy beyond its link and passes in (an auction row's
-        -- item level, the source a set or dressing room entry stands for) decides the transmog
-        -- info, so two rows that share a link do not share an entry.
-        local extraData = self.extraData
-        if extraData then
-            if extraData.appearanceSourceID then
-                statusCacheKey = statusCacheKey .. "|s" .. tostring(extraData.appearanceSourceID)
-            end
-            if extraData.overrideItemLevel then
-                statusCacheKey = statusCacheKey .. "|l" .. tostring(extraData.overrideItemLevel)
-            end
-        end
+        statusCacheKey = StatusCacheKey(self, itemLink)
         local cached = statusCache[statusCacheKey]
         if cached then
             if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end

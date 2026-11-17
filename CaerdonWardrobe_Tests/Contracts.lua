@@ -123,12 +123,19 @@ T.Contract({
 -- as the info does not depend on where the copy lies: the slot gives the item level and the
 -- PVP floor through other calls than the link does. Both are computed here for every piece in
 -- the bags, and what differs is listed.
+--
+-- A piece whose slot and link have cache entries of their own shares nothing, so a field
+-- that differs there fails nothing: a soulbound copy is one, and so is a crafted piece
+-- (whether it can be recrafted is asked of the copy, and a retail client showed that field
+-- differing on every crafted piece in the bags). Those are compared all the same and what
+-- differs is noted (apartDiffering, apartFields): most pieces in a bag are soulbound, and
+-- their slots and links agreeing is the evidence for the few that do share.
 T.Contract({
     id = "equipment.keptInfo",
-    version = 1,
-    title = "A piece of equipment's transmog info is the same for its bag slot and for its bare link",
+    version = 3,
+    title = "A piece of equipment's transmog info is the same for its bag slot and for its bare link, where the two share a cache entry",
     run = function(c)
-        local pieces, differing, examples = 0, 0, {}
+        local pieces, differing, apart, apartDiffering, apartFields, examples = 0, 0, 0, 0, {}, {}
         for _, where in ipairs(FilledBagSlots()) do
             local link = C_Container.GetContainerItemLink(where.bag, where.slot)
             local linkItem = link and T.LoadItem(link, 5)
@@ -153,6 +160,19 @@ T.Contract({
                             fields[#fields + 1] = key
                         end
                     end
+                    -- An addon from before the key could be asked for keeps every piece per link.
+                    local shared = not slotItem.GetStatusCacheKey
+                        or slotItem:GetStatusCacheKey() == linkItem:GetStatusCacheKey()
+                    if not shared then
+                        apart = apart + 1
+                        if #fields > 0 then
+                            apartDiffering = apartDiffering + 1
+                            for _, key in ipairs(fields) do
+                                apartFields[key] = (apartFields[key] or 0) + 1
+                            end
+                        end
+                        fields = {}
+                    end
                     if #fields > 0 then
                         differing = differing + 1
                         table.sort(fields)
@@ -173,6 +193,9 @@ T.Contract({
         end
         c:Note("pieces", pieces)
         c:Note("differing", differing)
+        c:Note("apart", apart)
+        c:Note("apartDiffering", apartDiffering)
+        c:Note("apartFields", apartFields)
         c:Note("examples", examples)
         if pieces == 0 then
             return "skip", "needs a piece of equipment in the bags"
