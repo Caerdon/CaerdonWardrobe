@@ -201,11 +201,13 @@ return function(H, S)
         local refresh = core:match("function CaerdonWardrobeMixin:RefreshItems%([%w_, ]*%)(.-)\nend")
         local recorder = H.ReadFile(TESTS .. "/Recorder.lua")
         local count = 0
-        for call in (refresh or ""):gmatch("([%w_]+:Invalidate[%w_]*%(%))") do
+        -- RefreshItems tells some of them what changed; the recorder empties all of each.
+        for name in (refresh or ""):gmatch("([%w_]+:Invalidate[%w_]*)%([%w_]*%)") do
             count = count + 1
+            local call = name .. "()"
             Check(recorder:find(call, 1, true) ~= nil, "caches: the recorder empties " .. call .. " as RefreshItems does")
         end
-        Check(count >= 5, "caches: RefreshItems' list was found in CaerdonWardrobe.lua")
+        Check(count >= 7, "caches: RefreshItems' list was found in CaerdonWardrobe.lua")
     end
 
     --------------------------------------------------------------------------------------

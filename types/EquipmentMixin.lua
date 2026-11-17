@@ -572,7 +572,22 @@ function CaerdonEquipment:ForgetRefusedItems()
     wipe(sourceInfoCache)
 end
 
-function CaerdonEquipment:InvalidateCaches()
+-- changed: what the refresh is about (CaerdonWardrobe:RefreshItems), nil for anything.
+--
+-- "worn" (a piece put on or taken off, an equipment set, the PVP context): what is compared
+-- with the worn gear is read again, and what the client said about the sources of a look
+-- stands. A source's answer is about the collection and about what the toon is (class, race,
+-- faction, level, skills), none of which a change of clothes is. A piece that is learned by
+-- being put on sends a collection event, and that refresh keeps nothing. Unless the
+-- collection has changed since the caches were last emptied: then this one keeps nothing.
+function CaerdonEquipment:InvalidateCaches(changed)
+    cachedPvpContext = nil
+    equippedGearSnapshot = nil
+    equipmentSetIndex = nil
+    if changed == "worn" and not collectionChanged then
+        return
+    end
+
     if collectionChanged or not (next(refusedItems) or next(failedSourceItemLoads)) then
         wipe(sourceInfoCache)
     else
@@ -584,9 +599,6 @@ function CaerdonEquipment:InvalidateCaches()
     end
     collectionChanged = false
     wipe(appearanceSourcesCache)
-    cachedPvpContext = nil
-    equippedGearSnapshot = nil
-    equipmentSetIndex = nil
 end
 
 local function HasBetterOrEqualEquippedItem(candidate)

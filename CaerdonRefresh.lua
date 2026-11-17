@@ -15,13 +15,16 @@
 -- compare: in place of read, for a watch whose owner keeps what the icons were made from
 --   itself: it returns what differs from that, in words (Refresh:Difference), or nil when
 --   nothing does. Such a watch has no first reading.
+-- changed: what a change of the reading is about, for a refresh that need not ask for
+--   everything again (CaerdonWardrobe:RefreshItems). Without it anything may have changed.
 -- delay: events closer together than this are one burst, checked once when it is over. Without
 --   a delay every event is checked as it comes.
 -- leading: a burst's first event is checked at once as well, for a client that already has the
 --   new state when it sends the event; the check after the burst is for one that has not.
 --
 -- A watch's first reading has nothing to be compared with and counts as a change: what was
--- judged before it was judged from a state nobody read.
+-- judged before it was judged from a state nobody read. It is a refresh about everything,
+-- whatever the watch's `changed`: nothing says what differs from a state nobody read.
 local ADDON_NAME, NS = ...
 
 local Refresh = {}
@@ -74,6 +77,7 @@ local function Check(watch)
     watch.checks = watch.checks + 1
 
     local what
+    local changed = watch.changed
     if watch.compare then
         what = watch.compare()
         if not what then
@@ -85,6 +89,7 @@ local function Check(watch)
         watch.reading = reading
         if previous == nil then
             what = "first reading"
+            changed = nil
         else
             what = Difference(previous, reading)
             if not what then
@@ -95,7 +100,7 @@ local function Check(watch)
 
     watch.changes = watch.changes + 1
     if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-        CaerdonWardrobe:RefreshItems(watch.name, what)
+        CaerdonWardrobe:RefreshItems(watch.name, what, changed)
     end
 end
 
@@ -132,6 +137,7 @@ function Refresh:Watch(spec)
         name = spec.name,
         read = spec.read,
         compare = spec.compare,
+        changed = spec.changed,
         delay = spec.delay,
         leading = spec.leading and true or false,
         events = 0,
@@ -288,6 +294,8 @@ Refresh:Watch({
     name = "pvp",
     events = { { "PLAYER_FLAGS_CHANGED", "player" }, "PLAYER_ENTERING_WORLD" },
     read = ReadPvp,
+    -- Only how item levels are compared with the worn gear's follows from it.
+    changed = "worn",
     delay = 0.5,
     leading = true,
 })

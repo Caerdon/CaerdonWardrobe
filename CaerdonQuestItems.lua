@@ -144,7 +144,18 @@ end
 
 -- Forgets the answers with the verdicts, so it goes with a redraw of every icon: RefreshItems
 -- calls it, and the callers in this file ask for a refresh.
-function CaerdonQuestItems:InvalidateCaches()
+--
+-- changed: what the refresh is about (CaerdonWardrobe:RefreshItems), nil for anything. A quest
+-- is judged from the log, the completion flags, the quest data and the toon's level, race,
+-- class, faction and professions (JudgeQuest, UpcomingBlocker), and the log's objectives name
+-- items whatever is worn or learned. So a refresh about what is worn or about something
+-- learned keeps all of it: no quest is judged again and the log is not read again. The answers
+-- then hold quests of items that may not be drawn again, and a quest event judges those too:
+-- at worst a refresh nobody needed.
+function CaerdonQuestItems:InvalidateCaches(changed)
+    if changed == "worn" or changed == "collection" then
+        return
+    end
     wipe(verdicts)
     wipe(answered)
     playerContext = nil

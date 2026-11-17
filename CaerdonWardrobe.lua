@@ -2410,11 +2410,26 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
     end
 end
 
+-- What a refresh can be about (`changed`). Every verdict is made again whatever it is; what is
+-- kept is what a module holds behind its verdicts and can show does not follow from the thing
+-- that changed (docs/dev-notes.md, Refresh). Each module says what it keeps where it is told
+-- (its InvalidateCaches).
+--   "worn":       what the toon wears, its equipment sets, whether item levels count as PVP's
+--   "collection": something was learned: an appearance, a mount, a toy, a pet, a recipe
+local REFRESH_ABOUT = { worn = true, collection = true }
+-- Several refreshes put off by a fight that were not about the same thing.
+local ABOUT_EVERYTHING = "everything"
+
 -- Every verdict is thrown away and every window asked to draw again. `reason` is the refresh's
 -- name in the counters ("skills", "quests") and `detail` what changed, in words; without a
--- reason it is filed under the event the frame is handling, or the line that asked.
-function CaerdonWardrobeMixin:RefreshItems(reason, detail)
-    Counters:NoteRefresh(type(reason) == "string" and reason or nil, type(detail) == "string" and detail or nil)
+-- reason it is filed under the event the frame is handling, or the line that asked. `changed`
+-- is one of REFRESH_ABOUT's names, from a caller that knows nothing else has changed; without
+-- it anything may have, and nothing is kept.
+function CaerdonWardrobeMixin:RefreshItems(reason, detail, changed)
+    if not REFRESH_ABOUT[changed] then
+        changed = nil
+    end
+    Counters:NoteRefresh(type(reason) == "string" and reason or nil, type(detail) == "string" and detail or nil, changed)
 
     if self.refreshTimer then
         self.refreshTimer:Cancel()
@@ -2422,8 +2437,8 @@ function CaerdonWardrobeMixin:RefreshItems(reason, detail)
 
     -- Invalidate cached status results since game state has changed
     CaerdonItem:InvalidateStatusCache()
-    CaerdonEquipment:InvalidateCaches()
-    CaerdonQuestItems:InvalidateCaches()
+    CaerdonEquipment:InvalidateCaches(changed)
+    CaerdonQuestItems:InvalidateCaches(changed)
     CaerdonFoodDrink:InvalidateCaches()
     CaerdonProfessionTools:InvalidateCaches()
     CaerdonBagSlots:InvalidateCaches()
@@ -2435,7 +2450,10 @@ function CaerdonWardrobeMixin:RefreshItems(reason, detail)
     -- Blizzard's secure frame operations. The cache invalidation above
     -- still happens immediately so stale data is cleared.
     if InCombatLockdown() then
-        self.refreshPendingAfterCombat = true
+        -- What the refresh after the fight is about: what this one was, unless another that
+        -- was put off before it was about something else.
+        local pending, about = self.refreshPendingAfterCombat, changed or ABOUT_EVERYTHING
+        self.refreshPendingAfterCombat = (pending == nil or pending == about) and about or ABOUT_EVERYTHING
         return
     end
 
@@ -2470,7 +2488,7 @@ function CaerdonWardrobeMixin:OnEquipPendingItem()
     -- TODO: Bit of a hack... wait a bit and then update...
     --       Need to figure out a better way.  Otherwise,
     --		 you end up with BoE markers on things you've put on.
-    C_Timer.After(1, function() self:RefreshItems("equip pending") end)
+    C_Timer.After(1, function() self:RefreshItems("equip pending", nil, "worn") end)
 end
 
 -- Session log of the transmog collection events this frame received (oldest first).
@@ -2503,40 +2521,44 @@ end
 
 -- The four collection events also tell the equipment code that what is collected changed, so the
 -- refresh keeps nothing it was told about a source before (CaerdonEquipment:InvalidateCaches).
+-- Like every refresh about something learned, they leave the quest module what it holds.
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_UPDATED(...)
     LogTransmogEvent("TRANSMOG_COLLECTION_UPDATED", ...)
     CaerdonEquipment:NoteCollectionChanged()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_SOURCE_ADDED(...)
     LogTransmogEvent("TRANSMOG_COLLECTION_SOURCE_ADDED", ...)
     CaerdonEquipment:NoteCollectionChanged()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COLLECTION_SOURCE_REMOVED(...)
     LogTransmogEvent("TRANSMOG_COLLECTION_SOURCE_REMOVED", ...)
     CaerdonEquipment:NoteCollectionChanged()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
 function CaerdonWardrobeMixin:TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED(...)
     LogTransmogEvent("TRANSMOG_COSMETIC_COLLECTION_SOURCE_ADDED", ...)
     CaerdonEquipment:NoteCollectionChanged()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
+-- A piece put on or taken off, a set saved or changed: the worn gear and the sets are read
+-- again, and what the client said about the sources of a look stands. A piece that is learned
+-- by being put on sends a collection event of its own.
 function CaerdonWardrobeMixin:EQUIPMENT_SETS_CHANGED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "worn")
 end
 
 function CaerdonWardrobeMixin:PLAYER_EQUIPMENT_CHANGED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "worn")
 end
 
 function CaerdonWardrobeMixin:EQUIPMENT_SWAP_FINISHED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "worn")
 end
 
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
@@ -2545,25 +2567,26 @@ function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
 end
 
 function CaerdonWardrobeMixin:NEW_RECIPE_LEARNED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
 function CaerdonWardrobeMixin:PLAYER_REGEN_ENABLED()
     -- Combat ended: process any deferred refresh. The queue's passes go on by themselves.
-    if self.refreshPendingAfterCombat then
+    local pending = self.refreshPendingAfterCombat
+    if pending then
         self.refreshPendingAfterCombat = nil
-        self:RefreshItems("after combat")
+        self:RefreshItems("after combat", nil, pending ~= ABOUT_EVERYTHING and pending or nil)
     end
 end
 
 function CaerdonWardrobeMixin:NEW_MOUNT_ADDED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
 function CaerdonWardrobeMixin:NEW_TOY_ADDED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end
 
 function CaerdonWardrobeMixin:NEW_PET_ADDED()
-    self:RefreshItems()
+    self:RefreshItems(nil, nil, "collection")
 end

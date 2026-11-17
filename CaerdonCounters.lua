@@ -225,6 +225,7 @@ local RECENT_REFRESHES = 30
 
 local refreshes = { total = 0 }
 local refreshesBy = {}   -- trigger -> count
+local refreshesAbout = {} -- what a refresh said had changed ("worn", "collection") -> count
 local recentRefreshes = {}
 
 -- The event the addon's frame is handling, set by its OnEvent. A refresh asked for from inside
@@ -233,7 +234,8 @@ Counters.event = nil
 
 -- From RefreshItems, on every call. A caller that says why is filed under its reason (the
 -- watcher's "skills", a signal module's "bag slots"), with what changed when it says that too.
-function Counters:NoteRefresh(reason, detail)
+-- changed: what the refresh was about, when it was not about everything.
+function Counters:NoteRefresh(reason, detail, changed)
     local trigger = reason or self.event
     if not trigger then
         -- Above this function sits RefreshItems itself, then whoever called it.
@@ -242,7 +244,10 @@ function Counters:NoteRefresh(reason, detail)
     end
     refreshes.total = refreshes.total + 1
     refreshesBy[trigger] = (refreshesBy[trigger] or 0) + 1
-    recentRefreshes[#recentRefreshes + 1] = { at = Round(SinceLoad(), 2), trigger = trigger, detail = detail }
+    if changed then
+        refreshesAbout[changed] = (refreshesAbout[changed] or 0) + 1
+    end
+    recentRefreshes[#recentRefreshes + 1] = { at = Round(SinceLoad(), 2), trigger = trigger, detail = detail, about = changed }
     if #recentRefreshes > RECENT_REFRESHES then
         table.remove(recentRefreshes, 1)
     end
@@ -658,12 +663,15 @@ function Counters:GetReport()
     table.sort(itemLoads.unanswered, function(a, b) return a.at < b.at end)
     report.itemLoads = itemLoads
 
-    report.refreshes = { total = refreshes.total, by = {}, recent = {} }
+    report.refreshes = { total = refreshes.total, by = {}, about = {}, recent = {} }
     for trigger, count in pairs(refreshesBy) do
         report.refreshes.by[trigger] = count
     end
+    for changed, count in pairs(refreshesAbout) do
+        report.refreshes.about[changed] = count
+    end
     for index, entry in ipairs(recentRefreshes) do
-        report.refreshes.recent[index] = { at = entry.at, trigger = entry.trigger, detail = entry.detail }
+        report.refreshes.recent[index] = { at = entry.at, trigger = entry.trigger, detail = entry.detail, about = entry.about }
     end
     -- What the watcher compared before it refreshed (CaerdonRefresh.lua): events against changes.
     report.refreshes.watched = NS and NS.Refresh and NS.Refresh:GetReport() or {}
@@ -752,6 +760,14 @@ function Counters:GetReportLines()
     end
     add(1, ("Full refreshes: %d%s"):format(refreshReport.total,
         #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+    -- The ones that said what had changed, and so kept what does not follow from it.
+    parts = {}
+    for _, changed in ipairs(SortedByCount(refreshReport.about)) do
+        parts[#parts + 1] = ("%s %d"):format(changed, refreshReport.about[changed])
+    end
+    if #parts > 0 then
+        add(2, "of them about one thing only: " .. table.concat(parts, ", "))
+    end
     for _, watch in ipairs(refreshReport.watched) do
         add(2, ("watched %s: %d events, read %d times, %d changes%s"):format(watch.name, watch.events, watch.checks,
             watch.changes, watch.notRegistered and ("; this client has no " .. watch.notRegistered) or ""))
@@ -760,7 +776,8 @@ function Counters:GetReportLines()
     local RECENT_SHOWN = 8
     for index = math.max(1, #refreshReport.recent - RECENT_SHOWN + 1), #refreshReport.recent do
         local entry = refreshReport.recent[index]
-        add(2, ("at %s s: %s%s"):format(Figure(entry.at), entry.trigger, entry.detail and (" (" .. entry.detail .. ")") or ""))
+        add(2, ("at %s s: %s%s%s"):format(Figure(entry.at), entry.trigger, entry.detail and (" (" .. entry.detail .. ")") or "",
+            entry.about and (", about " .. entry.about) or ""))
     end
 
     local itemLoads = report.itemLoads
