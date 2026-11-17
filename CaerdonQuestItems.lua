@@ -326,7 +326,7 @@ function CaerdonQuestItems:GetQuestieHiddenReason(questID)
     return QuestieHiddenReason(questID)
 end
 
--- Runs inside the build coroutine. Reads three fields for every quest.
+-- Runs inside the build coroutine. Reads four fields for every quest.
 local function BuildIndex(lib, yieldIfNeeded)
     local Get = lib.Quest.Get
     local ids = lib.Quest.GetAllIds()
@@ -380,6 +380,11 @@ local function BuildIndex(lib, yieldIfNeeded)
                 Add(itemID, questID, "required")
             end
         end
+
+        -- The item the quest hands over when it is accepted, carried until it is turned in
+        -- (a letter, a kit, a cursed relic to take somewhere). Often neither an objective nor
+        -- a required item, so nothing above names it.
+        Add(Get(questID, "sourceItemId"), questID, "provided")
 
         -- { npcs, objects, items }
         local startedBy = Get(questID, "startedBy")
