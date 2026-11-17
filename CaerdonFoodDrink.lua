@@ -11,8 +11,17 @@
 --   buff:   food with an extra effect ("well fed") is only ever compared with other buff food.
 --   better: a higher required level, or the same required level and a larger restore amount.
 --
--- Hunters feed food to their pet, and a pet still eats food well below its own level, so for a
--- hunter food must also sit more than HUNTER_FOOD_LEVEL_GAP item levels below the toon's level.
+-- Hunters feed food to their pet. Where the client says what the pet eats (WoW Forever), the
+-- food kept for it is chosen from everything carried that it eats, raw meat included: the
+-- PET_FOOD_PIECES best pieces that fit in one or two kinds, a piece counting for the square
+-- of its item level. Two kinds at most, so that pet food does not fill the bags a few pieces
+-- at a time. By item level, because higher food is good for longer; squared, so that the level
+-- outweighs the count (counted plainly, ten pieces of level 14 beat four of level 30) while
+-- the count still decides between kinds of about one level. Food kept that way is never
+-- outdated, and any other food is judged as for another class.
+--
+-- Where the client cannot say (retail, or no pet seen yet this session), food must instead sit
+-- more than HUNTER_FOOD_LEVEL_GAP item levels below the toon's level to be outdated.
 --
 -- CaerdonItemMixin:GetFoodDrinkInfo() is the entry point for callers; the Debug Frame export
 -- prints the classification and the comparison ("[Food and Drink]").
@@ -22,13 +31,19 @@ local ADDON_NAME, NS = ...
 CaerdonFoodDrink = {}
 
 local HUNTER_FOOD_LEVEL_GAP = 20
+local PET_FOOD_PIECES = 20
 
 local FOOD_DRINK_SUBCLASS = Enum.ItemConsumableSubclass and Enum.ItemConsumableSubclass.Fooddrink or 5
 
 -- itemID -> classification (only stored once the tooltip gave a restore line)
 local classifications = {}
--- Carried food and drink: { items = { [itemID] = classification }, signature = "..." }
+-- Carried food and drink: { items = { [itemID] = classification }, signature = "...",
+-- petFood = nil or { candidates = { { itemID, count, level } }, kept = { [itemID] = true } } }
 local carried
+-- itemID -> true / false: what the client said the pet eats, asked while a pet was out. nil
+-- until one was. Kept while the pet is away (dismissed, dead, or the toon is mounted), so
+-- that its food is not marked for sale and unmarked again each time.
+local petEats
 
 local function LowerWord(globalName, fallback)
     local word = _G[globalName]
@@ -128,27 +143,126 @@ function CaerdonFoodDrink:Classify(itemID, itemLink)
     return classification
 end
 
+-- The client's pet functions, for a hunter on a client that has them; nil otherwise.
+local function PetFoodSource()
+    local petInfo = C_PetInfo
+    if not (petInfo and petInfo.CanPetEatItem and petInfo.GetPetFoodTypes) then
+        return nil
+    end
+    local _, classFile = UnitClass("player")
+    if classFile ~= "HUNTER" then
+        return nil
+    end
+    return petInfo
+end
+
+-- A pet that is out and has a diet. Without a diet the client has nothing to answer from, and
+-- "eats nothing" would be taken for an answer.
+local function PetIsOut(petInfo)
+    if not UnitExists("pet") then
+        return false
+    end
+    local diet = petInfo.GetPetFoodTypes()
+    return type(diet) == "table" and #diet > 0
+end
+
+-- What `first` and, after it, `second` give of the pieces worth carrying: each piece counts
+-- for the square of its item level, the higher kind first.
+local function PetFoodValue(first, second)
+    local taken = math.min(first.count, PET_FOOD_PIECES)
+    local value = taken * first.level * first.level
+    if second then
+        value = value + math.min(second.count, PET_FOOD_PIECES - taken) * second.level * second.level
+    end
+    return value
+end
+
+-- The one or two kinds to keep for the pet out of everything carried that it eats. One kind
+-- wins over two that give no more.
+local function ChoosePetFood(candidates)
+    table.sort(candidates, function(a, b)
+        if a.level ~= b.level then
+            return a.level > b.level
+        elseif a.count ~= b.count then
+            return a.count > b.count
+        end
+        return a.itemID < b.itemID
+    end)
+
+    local kept, best = {}, -1
+    for i, first in ipairs(candidates) do
+        local value = PetFoodValue(first)
+        if value > best then
+            best, kept = value, { [first.itemID] = true }
+        end
+        for j = i + 1, #candidates do
+            local second = candidates[j]
+            value = PetFoodValue(first, second)
+            if value > best then
+                best, kept = value, { [first.itemID] = true, [second.itemID] = true }
+            end
+        end
+    end
+    return kept
+end
+
 local function BuildCarried()
     local items = {}
     local parts = {}
+    local seen = {}
     local lastBag = NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
+
+    local petInfo = PetFoodSource()
+    local askPet = petInfo ~= nil and PetIsOut(petInfo)
+    if askPet then
+        petEats = petEats or {}
+    end
+    local candidates = {}
 
     for bag = 0, lastBag do
         local slots = C_Container.GetContainerNumSlots(bag) or 0
         for slot = 1, slots do
             local itemID = C_Container.GetContainerItemID(bag, slot)
-            if itemID and not items[itemID] and IsFoodDrinkItem(itemID) then
-                local classification = CaerdonFoodDrink:Classify(itemID, C_Container.GetContainerItemLink(bag, slot))
-                if classification then
-                    items[itemID] = classification
-                    parts[#parts + 1] = itemID
+            if itemID and not seen[itemID] then
+                seen[itemID] = true
+                if IsFoodDrinkItem(itemID) then
+                    local classification = CaerdonFoodDrink:Classify(itemID, C_Container.GetContainerItemLink(bag, slot))
+                    if classification then
+                        items[itemID] = classification
+                        parts[#parts + 1] = itemID
+                    end
+                end
+                if askPet then
+                    petEats[itemID] = petInfo.CanPetEatItem(itemID) and true or false
+                end
+                if petInfo and petEats and petEats[itemID] then
+                    local count = C_Item.GetItemCount(itemID) or 0
+                    candidates[#candidates + 1] = {
+                        itemID = itemID,
+                        count = count > 0 and count or 1,
+                        level = math.max(select(4, C_Item.GetItemInfo(itemID)) or 1, 1)
+                    }
                 end
             end
         end
     end
 
     table.sort(parts)
-    return { items = items, signature = table.concat(parts, ",") }
+    local signature = table.concat(parts, ",")
+
+    -- Known only once a pet has answered; until then the level gap decides.
+    local petFood
+    if petInfo and petEats then
+        petFood = { candidates = candidates, kept = ChoosePetFood(candidates) }
+        local keptIDs = {}
+        for itemID in pairs(petFood.kept) do
+            keptIDs[#keptIDs + 1] = itemID
+        end
+        table.sort(keptIDs)
+        signature = signature .. "|pet:" .. table.concat(keptIDs, ",")
+    end
+
+    return { items = items, signature = signature, petFood = petFood }
 end
 
 local function GetCarried()
@@ -169,6 +283,7 @@ end
 function CaerdonFoodDrink:ForgetClassifications()
     wipe(classifications)
     carried = nil
+    petEats = nil
 end
 
 local function IsBetter(candidate, item)
@@ -229,7 +344,17 @@ function CaerdonFoodDrink:GetItemInfo(itemID, itemLink)
     info.betterItem = better
 
     local _, classFile = UnitClass("player")
-    if classFile == "HUNTER" and item.kind == "food" then
+    local petFood = GetCarried().petFood
+    if classFile == "HUNTER" and item.kind == "food" and petFood then
+        if petFood.kept[itemID] then
+            info.reason = "better food carried, but this is kept for the pet"
+            return info
+        end
+        info.isOutdated = true
+        info.reason = petEats[itemID] and "better one carried, and the pet has better food" or
+            "better one carried, and the pet does not eat it"
+        return info
+    elseif classFile == "HUNTER" and item.kind == "food" then
         info.hunterLevelGap = HUNTER_FOOD_LEVEL_GAP
         if item.itemLevel >= playerLevel - HUNTER_FOOD_LEVEL_GAP then
             info.reason = string.format("better food carried, but a hunter's pet still eats this (item level %d, cut-off below %d)",
@@ -243,10 +368,67 @@ function CaerdonFoodDrink:GetItemInfo(itemID, itemLink)
     return info
 end
 
+-- Whether the item is one of the kinds kept for a hunter's pet (ChoosePetFood). Raw meat is no
+-- food to this module, so the ingredient rule asks before it calls one outgrown. False where
+-- nothing is known of a pet.
+function CaerdonFoodDrink:IsKeptForPet(itemID)
+    local petFood = GetCarried().petFood
+    return petFood ~= nil and petFood.kept[itemID] == true
+end
+
+-- What the client says about the hunter's pet and one item, for the export only: no verdict
+-- reads it. Asked for any item, since raw meat is a trade good and not food to the rule above.
+-- nil for another class and on a client without the pet food functions (retail).
+function CaerdonFoodDrink:GetPetFoodDebugState(itemID, itemLink)
+    local petInfo = C_PetInfo
+    if not (petInfo and petInfo.CanPetEatItem and petInfo.GetPetFoodTypes and petInfo.GetPetHappiness) then
+        return nil
+    end
+    local _, classFile = UnitClass("player")
+    if classFile ~= "HUNTER" then
+        return nil
+    end
+
+    local state = { hasPet = UnitExists("pet") and true or false }
+    if state.hasPet then
+        state.petName = UnitName("pet")
+        state.petLevel = UnitLevel("pet")
+    end
+    local diet = petInfo.GetPetFoodTypes()
+    state.diet = type(diet) == "table" and diet or {}
+    state.happiness, state.damagePercentage, state.loyaltyRate = petInfo.GetPetHappiness()
+    if itemID then
+        state.canEat = petInfo.CanPetEatItem(itemID)
+        local link = itemLink or itemID
+        state.itemLevel = select(4, C_Item.GetItemInfo(link))
+        if petEats then
+            state.remembered = petEats[itemID]
+        end
+    end
+
+    -- What the rule made of the bags: every kind the pet eats, the kept ones marked.
+    local petFood = GetCarried().petFood
+    state.judged = petFood ~= nil
+    if petFood then
+        state.pieces = PET_FOOD_PIECES
+        state.kept = itemID ~= nil and petFood.kept[itemID] == true
+        state.carried = {}
+        for _, candidate in ipairs(petFood.candidates) do
+            state.carried[#state.carried + 1] = string.format("%s%s x%d (item %d, level %d)",
+                petFood.kept[candidate.itemID] and "kept: " or "", tostring(C_Item.GetItemNameByID(candidate.itemID)),
+                candidate.count, candidate.itemID, candidate.level)
+        end
+    end
+    return state
+end
+
 -- Buying or looting a better stack changes the verdict for the stacks already in the bags, and
--- only the slot that changed is redrawn. Refresh everything when the carried set changes.
+-- only the slot that changed is redrawn. Refresh everything when the carried set changes. The
+-- kinds kept for the pet are part of that set: they change with the counts, and with the pet
+-- (another one, or the first one seen this session).
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
+eventFrame:RegisterUnitEvent("UNIT_PET", "player")
 eventFrame:SetScript("OnEvent", function()
     if not (CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowOutdatedFood) then
         return

@@ -122,6 +122,11 @@ return {
         ["C_SkillInfo.GetNumSkillLines"] = { "forever", "tested with the table in ReadSkills" },
         ["C_SkillInfo.GetSkillLineInfo"] = { "forever", "tested with the table in ReadSkills" },
 
+        -- Forever's hunter pets eat (classic happiness). Retail has none of the three.
+        ["C_PetInfo.CanPetEatItem"] = { "forever", "tested with the other two before the call in GetPetFoodDebugState" },
+        ["C_PetInfo.GetPetFoodTypes"] = { "forever", "tested with the other two before the call in GetPetFoodDebugState" },
+        ["C_PetInfo.GetPetHappiness"] = { "forever", "tested with the other two before the call in GetPetFoodDebugState" },
+
         -- Fallbacks for clients older than either supported one. Each sits behind a test for
         -- the current API or for the name itself, so it is never reached; deleting the
         -- fallback deletes the entry.

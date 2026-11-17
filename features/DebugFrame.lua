@@ -2817,6 +2817,49 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Pet food: what the client says a hunter's pet eats, for every item (raw meat is a trade
+    -- good). Nothing is judged from it yet.
+    if CaerdonFoodDrink and CaerdonFoodDrink.GetPetFoodDebugState then
+        local petFood = CaerdonFoodDrink:GetPetFoodDebugState(item:GetItemID(), item:GetItemLink())
+        if petFood then
+            addLine(0, "")
+            addLine(0, "[Pet Food]")
+            if petFood.hasPet then
+                addKV(1, "Pet", string.format("%s, level %s", tostring(petFood.petName), tostring(petFood.petLevel)))
+            else
+                addKV(1, "Pet", "none out (the answers below are the client's without one)")
+            end
+            addKV(1, "Diet", #petFood.diet > 0 and table.concat(petFood.diet, ", ") or "none")
+            if petFood.happiness ~= nil then
+                addKV(1, "Happiness", string.format("%s (damage %s%%, loyalty rate %s)", tostring(petFood.happiness),
+                    tostring(petFood.damagePercentage), tostring(petFood.loyaltyRate)))
+            else
+                addKV(1, "Happiness", "no answer")
+            end
+            addKV(1, "C_PetInfo.CanPetEatItem", petFood.canEat)
+            addKV(1, "Item Level", petFood.itemLevel)
+            if petFood.petLevel and petFood.itemLevel then
+                addKV(1, "Item Levels Below The Pet", petFood.petLevel - petFood.itemLevel)
+            end
+            addKV(1, "Remembered Answer", petFood.remembered == nil and "none" or petFood.remembered)
+            if petFood.judged then
+                addKV(1, "Rule", string.format("the best %d pieces in one or two kinds, a piece counting for the square of its item level",
+                    petFood.pieces))
+                addKV(1, "Kept For The Pet", petFood.kept)
+                if #petFood.carried > 0 then
+                    addLine(1, "Carried That The Pet Eats:")
+                    for _, line in ipairs(petFood.carried) do
+                        addLine(2, "- " .. line)
+                    end
+                else
+                    addLine(1, "Carried That The Pet Eats: nothing")
+                end
+            else
+                addKV(1, "Rule", "no pet has answered this session; the level gap decides")
+            end
+        end
+    end
+
     -- Profession tools: what counts as a tool for this toon and whether this item is one.
     if CaerdonProfessionTools and item.GetProfessionToolInfo then
         local toolState = CaerdonProfessionTools:GetDebugState()
