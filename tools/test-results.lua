@@ -180,6 +180,15 @@ local function printSessions(db)
             print(("        %.1f minutes, %d full refreshes of the addon's own (%.2f a minute)%s%s"):format(session.minutes,
                 own, own / minutes, forced > 0 and (", %d more forced by the tests"):format(forced) or "",
                 #parts > 0 and (": " .. table.concat(parts, ", ")) or ""))
+            -- The refreshes that said what had changed and kept the rest (the tests' forced
+            -- ones included; a record from before a refresh could say so has none).
+            parts = {}
+            for _, name in ipairs(sortedKeys(refreshes.about or {})) do
+                parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.about[name])
+            end
+            if #parts > 0 then
+                print("        of all refreshes, about one thing only: " .. table.concat(parts, ", "))
+            end
             for _, watch in ipairs(refreshes.watched or {}) do
                 print(("        watched %s: %s events, read %s times, %s changes%s"):format(tostring(watch.name),
                     figure(watch.events), figure(watch.checks), figure(watch.changes),
@@ -187,7 +196,8 @@ local function printSessions(db)
             end
             for _, entry in ipairs(refreshes.recent or {}) do
                 if entry.detail then
-                    print(("        at %s s: %s (%s)"):format(figure(entry.at), tostring(entry.trigger), tostring(entry.detail)))
+                    print(("        at %s s: %s (%s)%s"):format(figure(entry.at), tostring(entry.trigger), tostring(entry.detail),
+                        entry.about and (", about " .. tostring(entry.about)) or ""))
                 end
             end
             if session.counts then
@@ -517,6 +527,13 @@ local function printLedger(ledger, indent)
             parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.by[name])
         end
         print(indent .. ("full refreshes: %s%s"):format(figure(refreshes.total), #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+        parts = {}
+        for _, name in ipairs(sortedKeys(refreshes.about or {})) do
+            parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.about[name])
+        end
+        if #parts > 0 then
+            print(indent .. "  of them about one thing only: " .. table.concat(parts, ", "))
+        end
         -- The watcher: events that came against the changes it found (records from before it have none).
         for _, watch in ipairs(refreshes.watched or {}) do
             print(indent .. ("  watched %s: %s events, read %s times, %s changes%s"):format(tostring(watch.name),
@@ -526,7 +543,8 @@ local function printLedger(ledger, indent)
         -- What a refresh's caller said had changed, for the ones that said.
         for _, entry in ipairs(refreshes.recent or {}) do
             if entry.detail then
-                print(indent .. ("  at %s s: %s (%s)"):format(figure(entry.at), tostring(entry.trigger), tostring(entry.detail)))
+                print(indent .. ("  at %s s: %s (%s)%s"):format(figure(entry.at), tostring(entry.trigger), tostring(entry.detail),
+                    entry.about and (", about " .. tostring(entry.about)) or ""))
             end
         end
     end
@@ -580,7 +598,9 @@ local function printTiming(db)
         previous = record
         if record.kind == "refresh" then
             print(("    %s  %-8s %-10s x%d  draws %s  addon ms median %s worst %s, longest frame %s  last icon ms %s  first icon ms %s  memory KB %s  [%s, %s, addon %s]")
-                :format(when(record.at), "refresh", tostring(record.label), #record.runs, figure(record.medianDraws),
+                :format(when(record.at), "refresh",
+                    record.changed and (tostring(record.label) .. " [about " .. tostring(record.changed) .. "]") or tostring(record.label),
+                    #record.runs, figure(record.medianDraws),
                     figure(record.medianCpuMs), figure(record.worstCpuMs), figure(record.worstFrameMs),
                     figure(record.medianLastDrawMs),
                     figure(record.medianFirstDrawMs), figure(record.medianMemoryKB), tostring(record.toon),

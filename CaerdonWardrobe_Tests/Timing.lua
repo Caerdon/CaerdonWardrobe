@@ -201,8 +201,10 @@ local function PlainRun(run, started)
     return byFeature, events
 end
 
--- Inside a job: one forced refresh, measured until the queue has drained.
-local function MeasureRefresh()
+-- Inside a job: one forced refresh, measured until the queue has drained. changed: what the
+-- refresh says it is about ("worn", "collection"), as the core's own callers do; nil for a
+-- refresh about everything.
+local function MeasureRefresh(changed)
     local memoryBefore = AddonMemory()
     -- Start on a fresh frame. The memory reading takes a while and the client's timers may
     -- count from the start of the frame they are set in; measured in the same frame, the
@@ -216,7 +218,7 @@ local function MeasureRefresh()
     T.timingRun = run
     local started = T.Milliseconds()
     local startedAt = GetTime()
-    CaerdonWardrobe:RefreshItems()
+    CaerdonWardrobe:RefreshItems(nil, nil, changed)
 
     local cpu, frames, worstFrame = FollowRun(run, startedAt, MIN_RUN_SECONDS, 0)
     T.timingRun = nil
@@ -241,22 +243,34 @@ local function MeasureRefresh()
 end
 
 -- label: what is open ("bags", "bank", "vendor", ...). It only names the record; open the
--- windows before running it.
-function T.RunRefreshTiming(label, count)
+-- windows before running it. changed: what each refresh says it is about, for the cost of a
+-- refresh that keeps what does not follow from that; the same windows timed with and without
+-- it are the comparison.
+function T.RunRefreshTiming(label, count, changed)
     count = count or T.GetPlan().timing.runs
+    local function Measure()
+        return MeasureRefresh(changed)
+    end
     T.Start("timing", function()
         if not T.WaitForIdle(0.5, 20) then
             T.Print("the addon's queue did not go idle, so nothing was timed.")
             return
         end
         local record = BaseRecord("refresh", label)
+        record.changed = changed
         -- Without the core's profile and without Enable debug, whatever they are set to.
         local restore = T.MeasureUndisturbed()
+        -- The first refresh that says what changed still finds empty whatever the refresh
+        -- before it emptied, and fills it. One run that is not measured, so that every
+        -- measured one starts from what such a refresh keeps.
+        if changed then
+            MeasureRefresh(changed)
+        end
         record.profilerBefore = T.ReadProfiler(T.SUBJECT)
         local refreshBefore = T.counters.refreshItems
         record.runs = {}
         for index = 1, count do
-            record.runs[index] = MeasureRefresh()
+            record.runs[index] = Measure()
         end
         record.profilerAfter = T.ReadProfiler(T.SUBJECT)
         -- More than one call per run means something else refreshed the addon meanwhile.
@@ -277,11 +291,11 @@ function T.RunRefreshTiming(label, count)
         record.medianMemoryKB, record.worstMemoryKB, record.memoryRunsUsed = T.Summarize(record.runs, "memoryKB", true)
         -- The same refresh a few more times with the core's counters on: where the time and
         -- the memory go. Not part of the figures above.
-        record.counted = T.CountRefreshes(MeasureRefresh, T.GetPlan().timing.countedRuns)
+        record.counted = T.CountRefreshes(Measure, T.GetPlan().timing.countedRuns)
         restore()
         T.Push(T.db.timing, record, 40)
         T.Print("%s x%d: %s draws per refresh, addon time median %s ms, worst %s ms; last icon after %s ms; memory +%s KB.",
-            tostring(label), count, tostring(record.medianDraws or 0), tostring(record.medianCpuMs or "-"),
+            changed and (tostring(label) .. ", refreshes about " .. changed) or tostring(label), count, tostring(record.medianDraws or 0), tostring(record.medianCpuMs or "-"),
             tostring(record.worstCpuMs or "-"), tostring(record.medianLastDrawMs or "-"),
             tostring(record.medianMemoryKB or "-"))
         if (record.medianDraws or 0) == 0 then
