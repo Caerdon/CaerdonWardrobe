@@ -110,7 +110,19 @@ function CaerdonWardrobeConfigIcons:Register()
     end
     local otherToonLabelY = self:AddLabel("Show in:")
     self:AddAllNoneButtons(otherToonLabelY, self:AddCheckboxGrid(otherToonWindows))
-    self:AddCheckbox({ key = "showRecipesForOtherToons", text = "Recipes another of my toons can learn", tooltip = "Marks a recipe this toon already knows or cannot learn when another of your toons on this realm has the profession and has not learned it. That toon has to have opened its profession window once so its recipes are recorded. With this off, other toons are ignored and a recipe this toon knows shows as sellable.", configSection = "Icon", configValue = "ShowRecipesForOtherToons" })
+    ---------------------------------------------------------------------------------------------
+    self:AddIconHeader({
+        title = "For another toon to use",
+        description = "Something another of your toons on this realm has a use for and this one does not: mail it. Hover over it for the toon's name. Shown in the windows chosen above for \"Learning for another toon\". The other toon has to have opened its profession window once, so that its recipes are recorded.",
+        atlas = "ui-hud-minimap-mail-up",
+        texture = "Interface\\MailFrame\\Mail-Icon"
+    })
+    self:AddCheckbox({ key = "showRecipesForOtherToons", text = "Recipes they have not learned", tooltip = "Marks a recipe this toon already knows or cannot learn when another of your toons on this realm has the profession and has not learned it. With this off, other toons are ignored and a recipe this toon knows shows as sellable.", configSection = "Icon", configValue = "ShowRecipesForOtherToons" })
+    local sendIngredients = self:AddCheckbox({ key = "showIngredientsForOtherToons", text = "Ingredients this toon has no use for", tooltip = "Marks an ingredient that a recipe of another of your toons takes, when no recipe of this toon's still gives skill for it. Never on something soulbound, something a quest of this toon's takes, or food kept for a hunter's pet.", configSection = "Icon", configValue = "ShowIngredientsForOtherToons" })
+    self:AddDropdown({ key = "ingredientsForOtherToons", text = "That the other toon can:", configSection = "Icon", configValue = "IngredientsForOtherToons", width = 210 }, {
+        { title = "Skill up with",           value = "skill", tooltip = "Only when a recipe of that toon's still gives skill for it, a recipe it has not learned yet included." },
+        { title = "Use in a recipe it knows", value = "any",   tooltip = "Also when that toon knows a recipe that takes it, even one that no longer gives skill." }
+    }, { indent = 1, dependsOn = sendIngredients })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -162,6 +174,12 @@ function CaerdonWardrobeConfigIcons:Register()
         { title = "1 gold",                    value = "10000", tooltip = "Require 1 gold over vendoring." },
         { title = "5 gold",                    value = "50000", tooltip = "Require 5 gold over vendoring." }
     }, { indent = 1, dependsOn = showAuction })
+    self:AddDropdown({ key = "auctionTradeGoods", text = "On trade goods:", configSection = "Icon", configValue = "AuctionTradeGoods", width = 230 }, {
+        { title = "Any worth listing",              value = "all",         tooltip = "Every trade good with no other icon that is worth listing." },
+        { title = "Not ones I still skill up with", value = "skill",       tooltip = "Leaves out an ingredient while a recipe of this toon's that takes it still gives skill." },
+        { title = "Not ones my professions use",    value = "professions", tooltip = "Leaves out every ingredient a recipe of this toon's takes, gray or not." },
+        { title = "Never",                          value = "none",        tooltip = "No auction icon on trade goods. It still replaces the sellable icon where the auction house pays more." }
+    }, { indent = 1, dependsOn = showAuction })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -176,6 +194,7 @@ function CaerdonWardrobeConfigIcons:Register()
         { key = "sellableInGuildBank", text = "Guild bank", tooltip = "Show the icon on items in the guild bank.", configSection = "Icon", configSubsection = "ShowSellable", configValue = "GuildBank" },
     })
     self:AddCheckbox({ key = "showOutdatedFood", text = "Food and drink I have outgrown", tooltip = "Shows the sellable icon on food or drink when you carry a better one of the same kind that you can use. Your best food and best drink are never marked. Hunters keep food their pet still eats.", configSection = "Icon", configValue = "ShowOutdatedFood" })
+    self:AddCheckbox({ key = "showOutgrownIngredients", text = "Ingredients my recipes have outgrown", tooltip = "Shows the sellable icon on an ingredient when every recipe of this toon's that takes it has gone gray, the recipes it has not learned yet included. Each profession has to have been opened once so its recipes are recorded. Never on an ingredient no recipe of yours takes, one that another toon gets the mail icon for, or food kept for a hunter's pet.", configSection = "Icon", configValue = "ShowOutgrownIngredients" })
     self:AddCheckbox({ key = "showSpareBags", text = "Bags no bigger than the ones I have equipped", tooltip = "Shows the sellable icon on a bag when every bag slot it fits is filled and it would improve none of them. Never while such a slot is empty, and never when the comparison is unclear, such as a herb bag against a reagent bag. A quiver is only marked when you have one of its kind equipped that is at least as big.", configSection = "Icon", configValue = "ShowSpareBags" })
 
     ---------------------------------------------------------------------------------------------

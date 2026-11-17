@@ -275,7 +275,8 @@ function MerchantMixin:IsItemCollected(item)
 
         -- Don't gray out items with learnable status
         if mogStatus == "own" or mogStatus == "ownPlus" or mogStatus == "other" or mogStatus == "otherPlus"
-            or mogStatus == "lowSkill" or mogStatus == "lowSkillPlus" or mogStatus == "otherNoLoot" then
+            or mogStatus == "lowSkill" or mogStatus == "lowSkillPlus" or mogStatus == "otherNoLoot"
+            or mogStatus == "send" then
             return false
         end
 

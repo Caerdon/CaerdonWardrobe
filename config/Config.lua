@@ -262,6 +262,12 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == nil then
             CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons = NS:GetDefaultConfig().Icon.ShowRecipesForOtherToons
         end
+        for _, key in ipairs({ "ShowIngredientsForOtherToons", "IngredientsForOtherToons", "ShowOutgrownIngredients",
+            "AuctionTradeGoods" }) do
+            if CaerdonWardrobeConfig.Icon[key] == nil then
+                CaerdonWardrobeConfig.Icon[key] = NS:GetDefaultConfig().Icon[key]
+            end
+        end
         if CaerdonWardrobeConfig.Icon.ShowBagUpgrades == nil then
             CaerdonWardrobeConfig.Icon.ShowBagUpgrades = NS:GetDefaultConfig().Icon.ShowBagUpgrades
         end
@@ -361,6 +367,12 @@ function CaerdonWardrobeConfigMixin:OpenDebugFrame()
 end
 
 function NS:GetDefaultConfig()
+    -- The sell icon on an outgrown ingredient starts on where bag space is short (WoW Forever)
+    -- and off on retail, where a finished expansion's recipes are all gray and its reagents are
+    -- kept all the same. A starting value, not a code path: the rule is the same on both.
+    local outgrownIngredients = CaerdonAPI ~= nil and CaerdonAPI.IsForeverClient ~= nil and
+        CaerdonAPI:IsForeverClient() == true
+
     return {
         Version = 25,
         -- The last one-time chat message shown. A fresh install has nothing to catch up on.
@@ -434,6 +446,14 @@ function NS:GetDefaultConfig()
             ShowAuctionValue = true,
             ShowOutdatedFood = true,
             ShowRecipesForOtherToons = true,
+            -- Ingredients (CaerdonIngredients.lua): the mail icon on one another toon's recipes
+            -- take ("skill": that still give it skill; "any": that it knows at all), the sell
+            -- icon on one this toon's recipes have outgrown, and which trade goods the auction
+            -- icon leaves alone ("all" none, "skill", "professions", "none" every one).
+            ShowIngredientsForOtherToons = true,
+            IngredientsForOtherToons = "skill",
+            ShowOutgrownIngredients = outgrownIngredients,
+            AuctionTradeGoods = "skill",
             ShowBagUpgrades = true,
             ShowSpareBags = true,
             -- The Dialogue UI addon's quest rewards (external/DialogueUI).

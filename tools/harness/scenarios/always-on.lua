@@ -24,6 +24,10 @@ return function(H, S)
     end
     local MEAT, HIDE = 950001, 950002
     local ITEMS = { [MEAT] = Goods("Chunk of Test Meat"), [HIDE] = Goods("Scrap of Test Hide") }
+    -- Ammunition: no trade good and no crafting reagent to the client, and no vendor pays for it.
+    local ARROW = 950003
+    ITEMS[ARROW] = { name = "Test Arrow", quality = 1, level = 30, minLevel = 25, type = "Projectile", subType = "Arrow",
+        stack = 200, price = 0, classID = 6, subClassID = 2, equipLoc = "INVTYPE_AMMO" }
 
     -- At 3s apiece one is not worth the trip for a level 10 toon and two are.
     local PRICE = 300
@@ -181,6 +185,22 @@ return function(H, S)
     local grownKB = collectgarbage("count") - memoryBefore
     collectgarbage("restart")
     Check(grownKB < 50, ("tooltip: two thousand tooltips make no garbage (%.1f KB)"):format(grownKB))
+
+    --------------------------------------------------------------------------------------
+    -- Ammunition is not stock to list
+    --------------------------------------------------------------------------------------
+
+    -- A quiver full of arrows clears the auction module's profit bar by its count alone (a
+    -- Forever hunter's export: 2472 Razor Arrows, 48s). The auction icon is only for what is
+    -- to be sold and for trade goods, and arrows are neither, so they get none.
+    owned[ARROW] = 2000
+    local arrow = env.CaerdonItem:CreateFromItemID(ARROW)
+    local arrowLoaded = false
+    arrow:ContinueOnItemLoad(function() arrowLoaded = true end)
+    client:TickUntil(function() return arrowLoaded end, 10)
+    local arrowAuction = arrow:GetAuctionValueInfo()
+    Check(arrowAuction ~= nil and arrowAuction.shouldAuction == true, "ammunition: the auction module would list two thousand arrows")
+    Equal(Status(ARROW), "", "ammunition: and they get no auction icon all the same")
 
     Equal(#client.errors, 0, "end: no error reached the error handler")
     for _, message in ipairs(client.errors) do

@@ -271,8 +271,8 @@ local function StartSession(options)
     CaerdonItemType = { Equipment = "Equipment", Empty = "Empty" }
     CaerdonItem = { InvalidateStatusCache = function() statusCache = {} end }
     local invalidate = { InvalidateCaches = function() end, NoteCollectionChanged = function() end }
-    CaerdonEquipment, CaerdonFoodDrink, CaerdonProfessionTools, CaerdonBagSlots =
-        invalidate, invalidate, invalidate, invalidate
+    CaerdonEquipment, CaerdonFoodDrink, CaerdonProfessionTools, CaerdonBagSlots, CaerdonIngredients =
+        invalidate, invalidate, invalidate, invalidate, invalidate
     -- The quest module's check after a run of quest events is one of the profile's functions.
     CaerdonQuestItems = { InvalidateCaches = function() end, CompareWithAnswers = function() end }
     CaerdonWardrobeConfig = nil -- saved variables arrive after the files

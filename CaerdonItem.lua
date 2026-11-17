@@ -1231,6 +1231,95 @@ function CaerdonItemMixin:GetBagSlotInfo()
     return CaerdonBagSlots:GetItemInfo(itemID, self:GetItemLink())
 end
 
+-- An ingredient of a recipe, as recorded when the profession windows were open: this toon's
+-- recipes that take it and whether one still gives skill, and the other toons whose recipes
+-- do. nil when no recorded recipe takes it. See CaerdonIngredients:GetItemInfo for the fields.
+function CaerdonItemMixin:GetIngredientInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonIngredients:GetItemInfo(itemID)
+end
+
+-- What to do with an ingredient this toon has no use for. Returns the status that replaces an
+-- empty one, or nil, and the ingredient info where it was read:
+--   "send":     another toon of the realm has a recipe that takes it (which recipes count is
+--               the setting Icon.IngredientsForOtherToons: one that still gives it skill, or
+--               any it knows), and the item can be handed over.
+--   "sellable": this toon's own recipes take it, every one of them is gray, and a vendor pays.
+-- Only for an item that is a material and nothing else: a trade good, or what the client
+-- itself calls a crafting reagent. A recipe can take anything, and an item of another class
+-- has a use of its own that no recipe says anything about: a hunter's arrows are what an
+-- engineer's Explosive Arrow is made of (Razor Arrow 3030, class Projectile).
+-- Neither for an ingredient this toon still gets skill from, one a recipe of its own could
+-- not be read for, a profession tool, or food kept for a hunter's pet. And neither for one a
+-- quest takes, one in the log or one still to come: a quest comes before another toon. The
+-- quest module is asked itself, since "has quest value" in GetCaerdonStatus follows the quest
+-- icon's settings and this must hold with that icon switched off too.
+function CaerdonItemMixin:GetIngredientStatus()
+    local iconConfig = CaerdonWardrobeConfig.Icon
+    local showSend = iconConfig.ShowIngredientsForOtherToons == true
+    local showOutgrown = iconConfig.ShowOutgrownIngredients == true
+    if not (showSend or showOutgrown) then
+        return nil, nil
+    end
+    local info = self:GetIngredientInfo()
+    if not info then
+        return nil, nil
+    end
+    if info.hasUse or info.undecided > 0 then
+        return nil, info
+    end
+    local _, _, _, _, _, itemClassID = C_Item.GetItemInfoInstant(self:GetItemID())
+    if itemClassID ~= Enum.ItemClass.Tradegoods and not self:GetIsCraftingReagent() then
+        return nil, info
+    end
+    local questInfo = self:GetQuestItemInfo()
+    if questInfo and (questInfo.isActive or questInfo.isUpcoming) then
+        return nil, info
+    end
+    local itemID = self:GetItemID()
+    if self:GetProfessionToolInfo() ~= nil or CaerdonFoodDrink:IsKeptForPet(itemID) then
+        return nil, info
+    end
+
+    if showSend and not self:IsSoulbound() and self:GetBinding() ~= CaerdonItemBind.BindOnPickup then
+        local toons = iconConfig.IngredientsForOtherToons == "any" and info.usedBy or info.skillFor
+        if #toons > 0 then
+            return "send", info
+        end
+    end
+    if showOutgrown and info.isOutgrown then
+        local itemLink = self:GetItemLink()
+        local sellPrice = itemLink and select(11, C_Item.GetItemInfo(itemLink))
+        if sellPrice and sellPrice > 0 then
+            return "sellable", info
+        end
+    end
+    return nil, info
+end
+
+-- Whether the auction icon stays off a trade good because the toon keeps it as an ingredient
+-- (the setting Icon.AuctionTradeGoods):
+--   "all":         never: any trade good that pays is marked.
+--   "skill":       one a recipe of this toon's still gives skill for.
+--   "professions": one any recorded recipe of this toon's takes.
+--   "none":        every one: no trade good is marked for its price alone.
+function CaerdonItemMixin:IsIngredientKeptFromAuction()
+    local setting = CaerdonWardrobeConfig.Icon.AuctionTradeGoods
+    if setting == "none" then
+        return true
+    elseif setting ~= "skill" and setting ~= "professions" then
+        return false
+    end
+    local info = self:GetIngredientInfo()
+    if not info or #info.recipes == 0 then
+        return false
+    end
+    return setting == "professions" or info.hasUse or info.undecided > 0
+end
+
 -- Miscellaneous / Junk items that go in an equipment slot but do nothing there: no stats shown
 -- as an equip effect, no use, no appearance to learn. The trophy fish are the classic case
 -- (15 Pound Mud Snapper 6295, "Held In Off-hand", vendors for 15s). Not Equipment as far as the
@@ -1307,11 +1396,9 @@ end
 -- A recipe item this toon has no use for: it already knows the recipe (Pattern: Woolen Reagent
 -- Bag 253668 on a tailor who knows it) or cannot learn it. Returns the status that replaces
 -- "collected", or nil to leave it:
---   "other":     it can still be handed over and another toon on the realm has the profession
---                without the recipe in its recorded list (CaerdonRecipe:GetOtherToonRecipeInfo),
---                and no toon knows the recipe yet.
---   "otherPlus": the same, but this toon or another one already knows it. Known somewhere,
---                learnable elsewhere, which is what otherPlus means for appearances too.
+--   "send":      it can still be handed over and another toon on the realm has the profession
+--                without the recipe in its recorded list (CaerdonRecipe:GetOtherToonRecipeInfo):
+--                mail it. The same status an ingredient another toon can use gets.
 --   "sellable":  this toon knows it and nobody else wants it; needs a vendor price.
 -- For "sellable" only the client's own tooltip verdict counts as known; the name-based recipe
 -- lookup cannot tell recipe ranks that share a name apart, which is fine for hiding a star or
@@ -1327,11 +1414,7 @@ function CaerdonItemMixin:GetUnneededRecipeStatus(bindingResult)
         local otherToons = self:GetRecipeOtherToonInfo()
         if otherToons then
             if #otherToons.missing > 0 then
-                local knownBySomeone = alreadyKnown or otherToons.knownByPlayer
-                for _, toon in ipairs(otherToons.toons) do
-                    knownBySomeone = knownBySomeone or toon.knowsRecipe
-                end
-                return knownBySomeone and "otherPlus" or "other"
+                return "send"
             end
             if alreadyKnown and #otherToons.unknown > 0 then
                 -- A toon with the profession whose recipes were never recorded: it may need
@@ -2285,8 +2368,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         mogStatus = "sellable"
     end
 
-    -- Recipes this toon has no use for: one another toon can still learn gets the "other"
-    -- icon (green when some toon already knows it), a known one nobody wants is sold or listed.
+    -- Recipes this toon has no use for: one another toon can still learn gets the "send"
+    -- icon, a known one nobody wants is sold or listed.
     if mogStatus == "collected" then
         mogStatus = self:GetUnneededRecipeStatus(bindingResult) or mogStatus
     end
@@ -2300,10 +2383,17 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
+    -- Ingredients this toon has no use for: one another toon's recipes take is one to send,
+    -- one its own recipes have outgrown is sold or listed (docs/dev-notes.md, Ingredients).
+    if mogStatus == nil or mogStatus == "" then
+        mogStatus = self:GetIngredientStatus() or mogStatus
+    end
+
     -- Quest value only replaces the "nothing left to do with this" results, so a learnable
     -- appearance or an upgrade keeps its own icon while a sellable one stops looking like trash.
+    -- Something to send to another toon is replaced as well: this toon's quest comes first.
     if hasQuestValue and (not mogStatus or mogStatus == "" or mogStatus == "collected" or
-            mogStatus == "sellable" or mogStatus == "oldexpansion") then
+            mogStatus == "sellable" or mogStatus == "send" or mogStatus == "oldexpansion") then
         mogStatus = "quest"
     end
 
@@ -2313,9 +2403,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
         local isSellable = mogStatus == "sellable"
         -- A tool the toon's own recipes name (an enchanting rod) is not stock to list.
+        -- Nor is an ingredient the toon keeps for its own recipes.
         local isPlainTradeGood = (mogStatus == nil or mogStatus == "") and
             (itemClassID == Enum.ItemClass.Tradegoods or isCraftingReagent) and
-            self:GetProfessionToolInfo() == nil
+            self:GetProfessionToolInfo() == nil and not self:IsIngredientKeptFromAuction()
         if isSellable or isPlainTradeGood then
             local auctionInfo = self:GetAuctionValueInfo()
             if auctionInfo and auctionInfo.shouldAuction then

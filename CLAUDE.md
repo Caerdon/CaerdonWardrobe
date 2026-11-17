@@ -21,6 +21,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 |---|---|
 | `own` / `ownPlus` | Learnable by this toon (star). Plus (green): the look is already known from another item, or an ensemble with only a few pieces for this toon. Also a bag that belongs in a bag slot. |
 | `other` / `otherPlus` | This toon cannot use it, but it can be learned for the collection or by another toon. |
+| `send` | This toon has no use for it and another of the player's toons does: a recipe it can learn, an ingredient its recipes take (mail icon). |
 | `otherNoLoot` | Something to learn, but every remaining source needs another class, race or faction. |
 | `lowSkill` / `lowSkillPlus` | Learnable once a level or skill requirement is met. |
 | `upgrade` / `upgradeLowSkill` | Better gear than what is equipped. |
@@ -35,7 +36,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `CaerdonItem.lua`: `CaerdonItemMixin` with `GetCaerdonStatus`, the tooltip scan (`GetTooltipData`) and `GetBindingStatus`.
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
-- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`).
+- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take).
 - `CaerdonRefresh.lua`: the refresh watcher (`NS.Refresh:Watch`). An event that also comes when nothing changed (skill lines, the player's flags, reputation, quest events, housing) is compared before it refreshes: with the last reading, or by the module that owns it with what it answered (the quest module).
 - `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
 - `CaerdonCounters.lua`: loaded first. Login milestones, loads asked of the client and full refreshes by trigger, always; time and memory per function while its profile is switched on, which the test addon does (the export's `[Counters]` section).
@@ -53,13 +54,14 @@ Each later step only replaces the statuses listed, so a learnable look or an upg
 3. Equippable junk becomes `sellable` (replaces empty).
 4. Bags against the bag slots: `own` / `lowSkill` or `sellable` (replaces empty, `oldexpansion`).
 5. Consumables for another class become `sellable` (replaces empty, `collected`).
-6. Recipes this toon has no use for: `other` / `otherPlus` / `sellable` (replaces `collected`).
+6. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).
 7. Outgrown food and drink become `sellable` (replaces empty, `collected`).
-8. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `oldexpansion`).
-9. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`.
-10. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
+8. Ingredients this toon has no use for: `send` when another toon's recipes take it, `sellable` when its own have outgrown it (replaces empty).
+9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion`).
+10. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
+11. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
-The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` for a row whose window passed a source or an item level) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 10 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
+The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` for a row whose window passed a source or an item level) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 11 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
 
 ## Rules
 
@@ -119,6 +121,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |
 | What is and is not `sellable` | Sellable Rules |
 | Tools, bags, recipes, food and drink | Profession Tools; Bags for the Bag Slots; Recipes This Toon Has No Use For; Outgrown Food and Drink |
+| Trade goods a recipe takes, recipes recorded with their difficulty | Ingredients |
 | Quest icon on non-quest items | Quest Value |
 | Auction icon | Auction Value |
 | Housing items (retail only) | Housing |

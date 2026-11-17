@@ -61,6 +61,13 @@ local function EnsureVariables()
         CaerdonRecipeData[realmName][playerName].tools = {}
     end
 
+    -- What this toon's own recipes take and how hard each was when its profession window was
+    -- last open, by profession name (RecordRecipes below has the fields). Read by
+    -- CaerdonIngredients.
+    if not CaerdonRecipeData[realmName][playerName].recipes then
+        CaerdonRecipeData[realmName][playerName].recipes = {}
+    end
+
     PlayerRecipeData = CaerdonRecipeData[realmName][playerName]
 end
 
@@ -149,6 +156,122 @@ local function RecordRecipeTools(recipeIDs)
     end
 end
 
+-- The items a recipe takes: { [itemID] = quantity }, or nil when the client has no schematic
+-- for it right now. Only what the recipe cannot be made without: an optional slot (retail's
+-- modifying and finishing reagents) is left out. A slot that takes one of several items
+-- (retail's quality tiers) names each of them.
+local function ReadRecipeReagents(recipeID)
+    local ok, schematic = pcall(C_TradeSkillUI.GetRecipeSchematic, recipeID, false)
+    if not ok or type(schematic) ~= "table" or type(schematic.reagentSlotSchematics) ~= "table" then
+        return nil
+    end
+
+    local basic = Enum.CraftingReagentType and Enum.CraftingReagentType.Basic or 1
+    local reagents = {}
+    for _, slot in ipairs(schematic.reagentSlotSchematics) do
+        if type(slot) == "table" and type(slot.reagents) == "table" and
+            (slot.reagentType == basic or slot.required == true) then
+            for _, reagent in ipairs(slot.reagents) do
+                local itemID = type(reagent) == "table" and reagent.itemID
+                if type(itemID) == "number" and itemID > 0 then
+                    reagents[itemID] = slot.quantityRequired or 1
+                end
+            end
+        end
+    end
+    return reagents
+end
+
+-- professionName -> { recipes, schematics, ms }: what the last recording of this session read.
+-- For the export; not saved.
+local recordingStats = {}
+
+-- Saves what each recipe of the open profession takes and what the client says about it for
+-- this toon: whether it is learned and how hard it is (the colour of its name in the classic
+-- list; Enum.TradeskillRelativeDifficulty). The client only says that while the profession is
+-- open, so it is written down here with the rank it was said at.
+--
+--   PlayerRecipeData.recipes[professionName] = {
+--       skillLine = the base profession's skill line,
+--       rank, maxRank = the toon's rank when this was read, line = the skill line it is of,
+--       complete = the list held every recipe (not a filtered one),
+--       build = the client build the reagents were read in,
+--       recipes = { [recipeID] = { name, learned, difficulty, canSkillUp, skillUps,
+--                                  maxTrivialLevel, sourceType, reagents = { [itemID] = quantity } } } }
+--
+-- infos: recipeID -> the client's recipe info, as GatherRecipes read it.
+-- A recipe's reagents are read once per client build: they are the cost of this (a schematic
+-- per recipe), and only the client's data changes them.
+local function RecordRecipes(recipeIDs, infos, complete)
+    local baseInfo = TradeSkillCall("GetBaseProfessionInfo")
+    local professionName = baseInfo and (baseInfo.parentProfessionName or baseInfo.professionName)
+    if not professionName or professionName == "" then
+        return
+    end
+
+    local startedAt = debugprofilestop()
+    local build = select(2, GetBuildInfo())
+    local previous = PlayerRecipeData.recipes[professionName]
+    if type(previous) ~= "table" or type(previous.recipes) ~= "table" then
+        previous = nil
+    end
+    local before = previous and previous.recipes or {}
+    local sameBuild = previous ~= nil and previous.build == build
+    -- A filtered list says nothing about the recipes it leaves out, so those stay as they were.
+    local recipes = complete and {} or before
+
+    local count, schematics = 0, 0
+    for _, recipeID in ipairs(recipeIDs) do
+        local info = infos[recipeID]
+        if info then
+            local reagents = sameBuild and before[recipeID] and before[recipeID].reagents or nil
+            if not reagents then
+                reagents = ReadRecipeReagents(recipeID)
+                schematics = schematics + 1
+            end
+            recipes[recipeID] = {
+                name = info.name,
+                learned = info.learned == true,
+                difficulty = info.relativeDifficulty,
+                canSkillUp = info.canSkillUp == true,
+                skillUps = info.numSkillUps,
+                maxTrivialLevel = info.maxTrivialLevel,
+                sourceType = info.sourceType,
+                reagents = reagents,
+            }
+            count = count + 1
+        end
+    end
+
+    -- The rank the difficulties were said at: the open skill line's where the client has one
+    -- with a rank (on WoW Forever a secondary profession has no rank of its own, only its one
+    -- child line's), otherwise the base profession's.
+    local rank, maxRank, line = baseInfo.skillLevel, baseInfo.maxSkillLevel, baseInfo.professionName
+    local childInfo = TradeSkillCall("GetChildProfessionInfo")
+    if type(childInfo) == "table" and (childInfo.skillLevel or 0) > 0 then
+        rank, maxRank, line = childInfo.skillLevel, childInfo.maxSkillLevel, childInfo.professionName
+    end
+
+    PlayerRecipeData.recipes[professionName] = {
+        skillLine = baseInfo.parentProfessionID or baseInfo.professionID or (previous and previous.skillLine),
+        rank = rank,
+        maxRank = maxRank,
+        line = line,
+        complete = complete or (previous ~= nil and previous.complete == true),
+        build = build,
+        recipes = recipes,
+    }
+    recordingStats[professionName] = {
+        recipes = count,
+        schematics = schematics,
+        ms = debugprofilestop() - startedAt,
+    }
+
+    if CaerdonIngredients then
+        CaerdonIngredients:OnRecipesRecorded()
+    end
+end
+
 -- Function to gather known recipes when the player opens the profession window
 local function GatherRecipes()
     if not C_TradeSkillUI.IsTradeSkillReady() then
@@ -163,9 +286,11 @@ local function GatherRecipes()
     local isOwn = IsOwnTradeSkill()
 
     -- Store recipe info
+    local infos = {}
     for _, recipeID in ipairs(recipeIDs) do
         local recipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeID)
         if recipeInfo then
+            infos[recipeID] = recipeInfo
             CaerdonRecipeData.globalRecipeNameToID[recipeInfo.name] = recipeID
 
             if recipeInfo.learned and isOwn then
@@ -176,7 +301,8 @@ local function GatherRecipes()
 
     -- Remember that this profession's list is now complete, so other toons can tell "does not
     -- know the recipe" from "never looked" (CaerdonRecipe:GetOtherToonRecipeInfo).
-    if isOwn and #recipeIDs > 0 and (hasFullList or IsRecipeListUnfiltered()) then
+    local complete = #recipeIDs > 0 and (hasFullList or IsRecipeListUnfiltered())
+    if isOwn and complete then
         local baseInfo = TradeSkillCall("GetBaseProfessionInfo")
         local professionName = baseInfo and (baseInfo.parentProfessionName or baseInfo.professionName)
         if professionName and professionName ~= "" then
@@ -186,7 +312,37 @@ local function GatherRecipes()
 
     if isOwn then
         RecordRecipeTools(recipeIDs)
+        if #recipeIDs > 0 then
+            RecordRecipes(recipeIDs, infos, complete)
+        end
     end
+end
+
+-- What this toon's recipes take and how hard each was, as saved by RecordRecipes (nil before
+-- the saved variables are loaded).
+function CaerdonRecipe:GetRecordedRecipes()
+    return PlayerRecipeData and PlayerRecipeData.recipes
+end
+
+-- The same for every toon of this realm that has a recording, this one included:
+-- { [toon name] = its recipes table }.
+function CaerdonRecipe:GetRealmRecordedRecipes()
+    local found = {}
+    local realmRecipes = CaerdonRecipeData and CaerdonRecipeData[GetRealmName()]
+    if type(realmRecipes) == "table" then
+        for toonName, toonData in pairs(realmRecipes) do
+            if type(toonData) == "table" and type(toonData.recipes) == "table" then
+                found[toonName] = toonData.recipes
+            end
+        end
+    end
+    return found
+end
+
+-- What the last recording of each profession read this session, for the export:
+-- { [professionName] = { recipes, schematics, ms } }.
+function CaerdonRecipe:GetRecordingStats()
+    return recordingStats
 end
 
 -- The tools this toon's recipes ask for, as saved by RecordRecipeTools (nil before the saved
@@ -318,6 +474,16 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             CaerdonRecipeData.globalRecipeNameToID[recipeInfo.name] = recipeID
             PlayerRecipeData.knownRecipes[recipeInfo.name] = recipeID
         end
+        -- A recipe recorded as not learned is learned now. Its difficulty stays as it was said.
+        for _, entry in pairs(PlayerRecipeData.recipes) do
+            local recorded = type(entry) == "table" and type(entry.recipes) == "table" and entry.recipes[recipeID]
+            if recorded and not recorded.learned then
+                recorded.learned = true
+                if CaerdonIngredients then
+                    CaerdonIngredients:OnRecipesRecorded()
+                end
+            end
+        end
     elseif event == "SKILL_LINES_CHANGED" then
         -- print("Skill lines CHANGED")
         GatherAllProfessionData()
@@ -364,6 +530,20 @@ local function FindSkillLine(toonProfessions, skillName)
         end
     end
     return found
+end
+
+-- The rank saved for one of this toon's skill lines by name, nil when none is.
+function CaerdonRecipe:GetSavedRank(skillName)
+    local skillLine = FindSkillLine(PlayerProfessionData, skillName)
+    return skillLine and skillLine.skillLevel or nil
+end
+
+-- The same for another toon of this realm, as its last session left it. A profession it
+-- dropped reads 0.
+function CaerdonRecipe:GetToonRank(toonName, skillName)
+    local realmProfessions = CaerdonProfessionData and CaerdonProfessionData[GetRealmName()]
+    local skillLine = type(realmProfessions) == "table" and FindSkillLine(realmProfessions[toonName], skillName)
+    return skillLine and skillLine.skillLevel or nil
 end
 
 -- Function to check if a recipe is known based on previously gathered data

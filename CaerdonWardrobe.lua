@@ -1286,6 +1286,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
                 mogStatus:SetVertexColor(0.4, 1, 0)
             end
         end
+    elseif status == "send" then
+        -- Something for another toon of the player's: a recipe it can learn, an ingredient its
+        -- recipes take. Shown where the icon for another toon is. The envelope fills its square,
+        -- where a ring icon has a margin around the ring, so it is drawn at the smaller size the
+        -- auction icon has: at the full one it read as larger than the icons beside it.
+        if displayInfo and displayInfo.otherIcon.shouldShow then
+            if mogStatus.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ui-hud-minimap-mail-up") then
+                mogStatus:SetAtlas("ui-hud-minimap-mail-up", false)
+            else
+                mogStatus:SetTexture("Interface\\MailFrame\\Mail-Icon")
+            end
+        end
     elseif status == "otherNoLoot" or status == "otherPlusNoLoot" then
         if displayInfo and displayInfo.otherIcon.shouldShow then
             iconBackgroundAdjustment = 0
@@ -2527,6 +2539,7 @@ function CaerdonWardrobeMixin:RefreshItems(reason, detail, changed)
     CaerdonFoodDrink:InvalidateCaches()
     CaerdonProfessionTools:InvalidateCaches()
     CaerdonBagSlots:InvalidateCaches()
+    CaerdonIngredients:InvalidateCaches(changed)
     CaerdonAuctionValue:InvalidateCaches()
     self.refreshGeneration = self.refreshGeneration + 1
     self.lastRefreshTime = GetTime()

@@ -2891,6 +2891,82 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Ingredients: the recorded recipes that take the item, this toon's and other toons', and
+    -- what the rule makes of them. Printed for every item, since "no recipe takes it" is only
+    -- worth as much as the list of professions that were recorded.
+    if CaerdonIngredients and item.GetIngredientInfo then
+        local ingredientInfo = item:GetIngredientInfo()
+        local ingredientState = CaerdonIngredients:GetDebugState(item:GetItemID())
+
+        addLine(0, "")
+        addLine(0, "[Ingredients]")
+        addKV(1, "Rule", "a use while a recipe that takes it gives skill (the toon's rank is below the rank the recipe is gray from), learned or not")
+        addKV(1, "Show Ingredients For Other Toons", string.format("%s (%s)",
+            tostring(CaerdonWardrobeConfig.Icon.ShowIngredientsForOtherToons),
+            tostring(CaerdonWardrobeConfig.Icon.IngredientsForOtherToons)))
+        addKV(1, "Show Outgrown Ingredients", CaerdonWardrobeConfig.Icon.ShowOutgrownIngredients)
+        addKV(1, "Auction Icon On Trade Goods", CaerdonWardrobeConfig.Icon.AuctionTradeGoods)
+        if item.GetIngredientStatus then
+            -- As the status logic asks it. It only stands where nothing before it gave the
+            -- item a status, and a quest's item gets none (see [Quest Value]).
+            addKV(1, "Status From This Rule", (item:GetIngredientStatus()) or "none")
+            addKV(1, "Kept From The Auction Icon", item:IsIngredientKeptFromAuction())
+        end
+        if not ingredientInfo or #ingredientInfo.recipes == 0 then
+            addKV(1, "Has A Use", "no recorded recipe takes it")
+        elseif ingredientInfo.hasUse then
+            addKV(1, "Has A Use", true)
+        elseif ingredientInfo.undecided > 0 then
+            addKV(1, "Has A Use", string.format("not known (the client gave no difficulty for %d of its recipes)",
+                ingredientInfo.undecided))
+        else
+            addKV(1, "Has A Use", "false (every recipe that takes it is gray)")
+        end
+        if ingredientInfo and #ingredientInfo.recipes > 0 then
+            addLine(1, "Recipes That Take It:")
+            for _, recipe in ipairs(ingredientInfo.recipes) do
+                addLine(2, string.format("- %s: %s (recipe %d) x%d: %s", tostring(recipe.professionName),
+                    tostring(recipe.name), recipe.recipeID, recipe.quantity or 0, tostring(recipe.reading)))
+                addLine(3, string.format("recorded: difficulty %s, canSkillUp %s, numSkillUps %s, maxTrivialLevel %s, sourceType %s, said at rank %s; read %s",
+                    tostring(recipe.difficulty), tostring(recipe.canSkillUp), tostring(recipe.skillUps),
+                    tostring(recipe.maxTrivialLevel), tostring(recipe.sourceType), tostring(recipe.recordedRank),
+                    recipe.rankNow and ("by the rank now, " .. tostring(recipe.rankNow)) or "by the recorded colour"))
+                addLine(3, "client now: " .. tostring(ingredientState.clientNow[recipe.recipeID]))
+            end
+        end
+        if #ingredientState.recorded > 0 then
+            addLine(1, "Recorded Professions:")
+            for _, line in ipairs(ingredientState.recorded) do
+                addLine(2, "- " .. line)
+            end
+        else
+            addLine(1, "Recorded Professions: none")
+        end
+        if #ingredientState.notRecorded > 0 then
+            addKV(1, "Not Recorded (open the profession once)", table.concat(ingredientState.notRecorded, ", "))
+        end
+        if #ingredientState.dropped > 0 then
+            addKV(1, "Recorded But No Longer A Profession", table.concat(ingredientState.dropped, ", "))
+        end
+        if ingredientInfo and #ingredientInfo.others > 0 then
+            local function Names(toons)
+                local names = {}
+                for _, toon in ipairs(toons) do
+                    names[#names + 1] = string.format("%s (%s %s)", toon.name, toon.professionName, tostring(toon.rank))
+                end
+                return #names > 0 and table.concat(names, ", ") or "none"
+            end
+            addKV(1, "Gives Skill To", Names(ingredientInfo.skillFor))
+            addKV(1, "Used By", Names(ingredientInfo.usedBy))
+            addLine(1, "Other Toons' Recipes That Take It:")
+            for _, other in ipairs(ingredientInfo.others) do
+                addLine(2, string.format("- %s, %s (rank %s): %s (recipe %d) x%d: %s", tostring(other.toon),
+                    tostring(other.professionName), tostring(other.toonRank), tostring(other.name), other.recipeID,
+                    other.quantity or 0, tostring(other.reading)))
+            end
+        end
+    end
+
     -- Bags: what is in each bag slot right now, and, for a bag, how it compares with them.
     -- Printed for every item: which bags a slot accepts and what a bag holds is not documented,
     -- so the slots and the item's bag family are how that gets found out.

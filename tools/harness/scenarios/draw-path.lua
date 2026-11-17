@@ -635,7 +635,7 @@ return function(H, S)
         return item
     end
 
-    local STATUSES = { "own", "ownPlus", "other", "otherPlus", "otherNoLoot", "otherPlusNoLoot", "otherSpec",
+    local STATUSES = { "own", "ownPlus", "other", "otherPlus", "send", "otherNoLoot", "otherPlusNoLoot", "otherSpec",
         "otherSpecPlus", "lowSkill", "lowSkillPlus", "upgrade", "upgradeLowSkill", "upgradeNonEquipment", "sellable",
         "auction", "auctionGoods", "quest", "collected", "oldexpansion", "openable", "locked", "readable",
         "refundable", "canCombine", "readyToCombine", "needForProfession", "housingOwned", "waiting", "notAStatus" }

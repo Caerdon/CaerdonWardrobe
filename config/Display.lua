@@ -44,7 +44,7 @@ function CaerdonWardrobeConfigDisplay:Register()
     end
 
     self:AddSection("Tooltip")
-    self:AddCheckbox({ key = "showRecipeLearners", text = "Add who could learn a recipe to its tooltip", tooltip = "Adds a line to a recipe's tooltip naming your other toons on this realm that have the profession and have not learned it.", configSection = "Tooltip", configValue = "ShowRecipeLearners" })
+    self:AddCheckbox({ key = "showRecipeLearners", text = "Name the toon a recipe or an ingredient is for in its tooltip", tooltip = "Adds a line to the tooltip of a recipe naming your other toons on this realm that have the profession and have not learned it, and to the tooltip of an ingredient this toon has no use for naming the toons whose recipes take it.", configSection = "Tooltip", configValue = "ShowRecipeLearners" })
 
     self:AddSection("Debug")
     self:AddCheckbox({ key = "enableDebug", text = "Enable debug", tooltip = "Adds debugging details to item tooltips.", configSection = "Debug", configValue = "Enabled" })

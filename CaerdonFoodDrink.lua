@@ -430,7 +430,10 @@ local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterUnitEvent("UNIT_PET", "player")
 eventFrame:SetScript("OnEvent", function()
-    if not (CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowOutdatedFood) then
+    -- The ingredient rule reads the kinds kept for the pet as well (IsKeptForPet).
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    if not (iconConfig and (iconConfig.ShowOutdatedFood or iconConfig.ShowOutgrownIngredients or
+            iconConfig.ShowIngredientsForOtherToons)) then
         return
     end
     local previous = carried

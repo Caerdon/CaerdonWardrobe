@@ -91,9 +91,9 @@ function SortedMixin:Init()
                 return false
             elseif data2.caerdonStatus == "own" or data2.caerdonStatus == "ownPlus" then
                 return true
-            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" then
+            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" or data1.caerdonStatus == "send" then
                 return false
-            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" then
+            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" or data2.caerdonStatus == "send" then
                 return true
             else
                 return data1.caerdonStatus < data2.caerdonStatus
@@ -109,9 +109,9 @@ function SortedMixin:Init()
                 return true
             elseif data2.caerdonStatus == "own" or data2.caerdonStatus == "ownPlus" then
                 return false
-            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" then
+            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" or data1.caerdonStatus == "send" then
                 return true
-            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" then
+            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" or data2.caerdonStatus == "send" then
                 return false
             else
                 return data1.caerdonStatus > data2.caerdonStatus

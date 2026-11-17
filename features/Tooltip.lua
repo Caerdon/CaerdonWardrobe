@@ -504,6 +504,7 @@ local function ShowItemTooltip(tooltip)
 
         -- Reported rather than raised, so the item's own lines below are still added.
         xpcall(function() Tooltip:AddRecipeLearners(tooltip, shownItem) end, geterrorhandler())
+        xpcall(function() Tooltip:AddIngredientUsers(tooltip, shownItem) end, geterrorhandler())
 
         Tooltip:ProcessTooltip(tooltip, shownItem, false)
     end
@@ -544,7 +545,8 @@ end
 --          recipe this toon already knows, where it explains why there is no sellable icon;
 --          anywhere else it would nag on every recipe of that profession.
 -- The number is the toon's rank in the profession, to hold against the "Requires" line.
--- The only tooltip text the addon adds outside debug mode; Tooltip.ShowRecipeLearners turns it off.
+-- With AddIngredientUsers the only tooltip text the addon adds outside debug mode;
+-- Tooltip.ShowRecipeLearners turns both off.
 function TooltipMixin:AddRecipeLearners(tooltip, item)
     local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
     if tooltipConfig and tooltipConfig.ShowRecipeLearners == false then
@@ -574,6 +576,57 @@ function TooltipMixin:AddRecipeLearners(tooltip, item)
     if #otherToons.unknown > 0 and TooltipSaysAlreadyKnown(tooltip) then
         tooltip:AddLine(format(L["Recipes not recorded yet (open the profession on that toon): %s"],
             ListToons(otherToons.unknown)), 0.6, 0.6, 0.6, wrap)
+    end
+end
+
+-- An ingredient this toon has no use for: which of the player's other toons on this realm
+-- have a recipe that takes it, from their saved recordings (CaerdonIngredients). The names
+-- behind the mail icon, with each toon's rank as its last session left it.
+--   green: toons a recipe still gives skill for
+--   gray:  toons that know a recipe that takes it and get no skill from it, where the setting
+--          counts those (Icon.IngredientsForOtherToons "any")
+-- Only where the rule gives the mail icon (CaerdonItemMixin:GetIngredientStatus), so nothing
+-- while this toon has a use for the item itself. Tooltip.ShowRecipeLearners turns it off with
+-- the recipe lines.
+function TooltipMixin:AddIngredientUsers(tooltip, item)
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    if tooltipConfig and tooltipConfig.ShowRecipeLearners == false then
+        return
+    end
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    if not iconConfig or not item or item:IsItemEmpty() or not item.GetIngredientStatus then
+        return
+    end
+
+    local status, info = item:GetIngredientStatus()
+    if status ~= "send" or not info then
+        return
+    end
+
+    local function ListToons(toons, skip)
+        local parts = {}
+        for _, toon in ipairs(toons) do
+            local key = toon.name .. "\n" .. toon.professionName
+            if not (skip and skip[key]) then
+                table.insert(parts, format("%s (%s %s)", toon.name, toon.professionName, tostring(toon.rank)))
+            end
+        end
+        return table.concat(parts, ", ")
+    end
+
+    local wrap = true
+    local listed = {}
+    if #info.skillFor > 0 then
+        for _, toon in ipairs(info.skillFor) do
+            listed[toon.name .. "\n" .. toon.professionName] = true
+        end
+        tooltip:AddLine(format(L["Gives skill to: %s"], ListToons(info.skillFor)), 0.4, 1, 0, wrap)
+    end
+    if iconConfig.IngredientsForOtherToons == "any" then
+        local others = ListToons(info.usedBy, listed)
+        if others ~= "" then
+            tooltip:AddLine(format(L["Used in recipes of: %s"], others), 0.6, 0.6, 0.6, wrap)
+        end
     end
 end
 

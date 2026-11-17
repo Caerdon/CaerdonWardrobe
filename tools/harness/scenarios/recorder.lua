@@ -439,8 +439,8 @@ return function(H, S)
             local replayed = H.Replay(fangFixture.environment, fangFixture.recording)
             Equal(replayed.status, "quest", "seam: the quest verdict is reproduced")
             Equal(table.concat(replayed.provider.seams, ","),
-                "CaerdonQuestItems.GetIndexedQuests,CaerdonQuestItems.GetQuestieHiddenReason",
-                "seam: both of the quest module's read functions were answered from the recording")
+                "CaerdonQuestItems.GetIndexedQuests,CaerdonQuestItems.GetQuestieHiddenReason,CaerdonIngredients.GetRecordedUses",
+                "seam: the quest module's two read functions and the ingredient module's were answered from the recording")
             local enum = replayed.client.env.LibQuestieDB.Enum
             Check(enum.classKeys.HUNTER == 4 and enum.raceMaskById[3] == 4,
                 "seam: the quest database's tables of race and class flags are there as recorded")

@@ -182,6 +182,9 @@ Keys.ONCE_A_SESSION = {
 Keys.SEAMS = {
     "CaerdonQuestItems.GetIndexedQuests",
     "CaerdonQuestItems.GetQuestieHiddenReason",
+    -- What the saved recordings of every toon's recipes say about one item: saved variables,
+    -- which no recording of a client's answers holds.
+    "CaerdonIngredients.GetRecordedUses",
 }
 
 -- Functions that hand their answer to a function they are given, at once. The recorder asks
