@@ -106,17 +106,33 @@ function BetterBagsMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
+-- Only slots the client can describe right now are revisited. Free slots have nothing to
+-- show, and bank slots are unreadable away from the bank: re-running those would clear an
+-- icon that BetterBags will not ask us to draw again.
+local function CanRevisit(bagItem)
+    local bag, slot = GetBagAndSlot(bagItem)
+    return bag ~= nil and C_Container.GetContainerItemID(bag, slot) ~= nil
+end
+
 function BetterBagsMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
 
     for bagItem in pairs(trackedBagItems) do
-        local bag, slot = GetBagAndSlot(bagItem)
-        -- Only revisit slots the client can describe right now. Free slots have nothing to
-        -- show, and bank slots are unreadable away from the bank: re-running those would
-        -- clear an icon that BetterBags will not ask us to draw again.
-        if bag and C_Container.GetContainerItemID(bag, slot) then
+        -- A button that is not on screen (a closed bag, a collapsed section) keeps the icon it
+        -- has and is asked for when it comes on screen: BetterBags will not ask then, and
+        -- asked for here every full refresh cost the whole bag with nobody looking.
+        if CanRevisit(bagItem)
+            and not (bagItem.button and CaerdonWardrobe:AskWhenOnScreen(bagItem.button, self, bagItem)) then
             self:UpdateBagItem(bagItem)
         end
+    end
+end
+
+-- A button Refresh() left alone has come on screen. It may have been given back to BetterBags'
+-- pool or emptied since.
+function BetterBagsMixin:OnButtonOnScreen(bagItem)
+    if trackedBagItems[bagItem] and CanRevisit(bagItem) then
+        self:UpdateBagItem(bagItem)
     end
 end
 

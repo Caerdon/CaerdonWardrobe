@@ -401,6 +401,44 @@ function FrameMethods:GetAttribute(name) return State(self).attributes[name] end
 function FrameMethods:GetChildren() return unpack(State(self).children) end
 function FrameMethods:GetNumChildren() return #State(self).children end
 
+-- The frame and everything under it that is on screen. Nothing under a frame that is not on
+-- screen is, so the walk ends there.
+local function CollectOnScreen(frame, found)
+    if frame:IsVisible() then
+        found[frame] = true
+        found[#found + 1] = frame
+        for _, child in ipairs(State(frame).children) do
+            CollectOnScreen(child, found)
+        end
+    end
+    return found
+end
+
+-- Coming on screen and leaving it. In the client a frame's OnShow runs when it comes on
+-- screen, whether it was shown itself or a parent of it was, and OnHide when it leaves; a
+-- frame shown under a hidden parent gets neither. frame:Show() and frame:Hide() above only
+-- set the state, which is all the scenarios written before this needed. A scenario that
+-- depends on those scripts shows and hides through this. A script's error goes to the error
+-- handler and the others still run.
+function Client:SetFrameShown(frame, shown)
+    local before = CollectOnScreen(frame, {})
+    State(frame).shown = shown and true or false
+    local after = CollectOnScreen(frame, {})
+    local script, changed, unchanged = "OnShow", after, before
+    if not shown then
+        script, changed, unchanged = "OnHide", before, after
+    end
+    for _, each in ipairs(changed) do
+        local handler = not unchanged[each] and State(each).scripts[script]
+        if handler then
+            local ok, problem = pcall(handler, each)
+            if not ok then
+                self.errorHandler(problem)
+            end
+        end
+    end
+end
+
 local READS = { "^Get%u", "^Is%u", "^Has%u", "^Can%u", "^Does%u" }
 
 function Client:NewFrame(frameType, name, parent, template)

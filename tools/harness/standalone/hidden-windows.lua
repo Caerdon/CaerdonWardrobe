@@ -14,6 +14,26 @@ end
 
 local requests, cleared, cancelled, registered
 local function Reset() requests, cleared, cancelled = {}, 0, 0 end
+-- The stub core's side of a draw owed to a button that is not on screen.
+local hasOverlay, owed = {}, {}
+local function OwedCount()
+    local count = 0
+    for _ in pairs(owed) do count = count + 1 end
+    return count
+end
+-- What the client does when buttons come on screen: each overlay's OnShow, once.
+local function PayOwed()
+    local due = {}
+    for button, debt in pairs(owed) do
+        if button:IsVisible() then
+            due[#due + 1] = debt
+            owed[button] = nil
+        end
+    end
+    for _, debt in ipairs(due) do
+        debt.feature:OnButtonOnScreen(debt.context)
+    end
+end
 
 format = string.format
 wipe = function(t) for key in pairs(t) do t[key] = nil end return t end
@@ -57,8 +77,18 @@ CaerdonWardrobe = {
     GetSlotStatusSize = function() return 16 end,
     UpdateButton = function(_, button, item, feature, locationInfo)
         requests[#requests + 1] = { button = button, item = item, feature = feature, locationInfo = locationInfo }
+        hasOverlay[button], owed[button] = true, nil
     end,
     ClearButton = function() cleared = cleared + 1 end,
+    -- As the core's (scenarios/draw-path.lua has the real one): nothing is noted for a button
+    -- on screen or one never asked for, and a request settles what was owed.
+    AskWhenOnScreen = function(_, button, feature, context)
+        if not hasOverlay[button] or button:IsVisible() then
+            return false
+        end
+        owed[button] = { feature = feature, context = context }
+        return true
+    end,
     SetItemButtonMogStatusFilter = function() end,
 }
 local namespace = { L = setmetatable({}, { __index = function(_, key) return key end }) }
@@ -289,6 +319,91 @@ do
     Check(cleared == 1, "a card given back is cleared")
     feature:Refresh()
     Check(#requests == 2, "and no longer asked for: " .. #requests)
+end
+
+print("BetterBags bags")
+do
+    -- BetterBags does not draw an unchanged button again when its bag opens, so this window
+    -- cannot be skipped like the three above: a button that is not on screen is owed a draw.
+    local messages = {}
+    local events = { RegisterMessage = function(_, name, handler) messages[name] = handler end }
+    local addon = { GetModule = function(_, name) return name == "Events" and events or nil end }
+    LibStub = function() return { GetAddon = function() return addon end } end
+    -- Bag 0: slots 1 to 3 hold something, slot 4 is free.
+    local filled = { true, true, true, false }
+    C_Container.GetContainerItemID = function(bag, slot) return bag == 0 and filled[slot] and 100 + slot or nil end
+
+    local feature = Load("external/BetterBags/Core.BetterBags.lua").BetterBags
+    feature:Init()
+
+    local bagFrame = Frame()
+    local bagItems = {}
+    for slot = 1, 4 do
+        bagItems[slot] = { button = Frame(bagFrame), slotkey = "0_" .. slot }
+    end
+    local function Asked(...)
+        local wanted = {}
+        for _, slot in ipairs({ ... }) do wanted[bagItems[slot].button] = true end
+        local count = 0
+        for _, request in ipairs(requests) do
+            if not wanted[request.button] then return false end
+            count = count + 1
+        end
+        return count == select("#", ...)
+    end
+
+    Reset()
+    for slot = 1, 4 do
+        messages["item/Updated"](nil, bagItems[slot])
+    end
+    Check(#requests == 4, "open: every button BetterBags draws is asked for: " .. #requests)
+    Reset()
+    feature:Refresh()
+    Check(cancelled == 1 and Asked(1, 2, 3), "open: Refresh asks for the filled slots again: " .. #requests)
+    Check(OwedCount() == 0, "open: and nothing is owed")
+
+    -- The bag closes. A refresh leaves its buttons alone and owes each a draw, once.
+    bagFrame.shown = false
+    Reset()
+    feature:Refresh()
+    Check(cancelled == 1 and #requests == 0, "closed: Refresh asks for none of them: " .. #requests)
+    Check(OwedCount() == 3, "closed: the three filled slots are owed a draw: " .. OwedCount())
+    feature:Refresh()
+    Check(#requests == 0 and OwedCount() == 3, "closed: a second refresh owes them no more: " .. OwedCount())
+
+    -- An item that arrives while the bag is closed is drawn at once, as before.
+    filled[4] = true
+    Reset()
+    messages["item/Updated"](nil, bagItems[4])
+    Check(Asked(4), "closed: a button BetterBags draws is asked for whatever is on screen: " .. #requests)
+    feature:Refresh()
+    Check(OwedCount() == 4, "closed: after the next refresh it is owed one like the others: " .. OwedCount())
+
+    -- Before the bag opens again one button goes back to BetterBags' pool and one slot is
+    -- emptied. The bag opens: the rest are asked for.
+    messages["item/Clearing"](nil, bagItems[2])
+    filled[3] = false
+    Reset()
+    bagFrame.shown = true
+    PayOwed()
+    Check(Asked(1, 4), "opening: the buttons owed a draw are asked for, a pooled one and an emptied slot are not: " .. #requests)
+    Check(OwedCount() == 0, "opening: nothing is owed afterwards")
+    Reset()
+    PayOwed()
+    Check(#requests == 0, "opening: and nothing is asked for twice")
+    Reset()
+    feature:Refresh()
+    Check(Asked(1, 4), "open again: Refresh asks for what is on screen: " .. #requests)
+
+    -- A button hidden by itself in an open bag (a collapsed section) is owed one too.
+    bagItems[1].button.shown = false
+    Reset()
+    feature:Refresh()
+    Check(Asked(4) and OwedCount() == 1, "section: a hidden button of an open bag is left alone and owed: " .. #requests)
+    Reset()
+    bagItems[1].button.shown = true
+    PayOwed()
+    Check(Asked(1), "section: and asked for when it is shown: " .. #requests)
 end
 
 print(("%d checks, %d failed"):format(checks, failures))

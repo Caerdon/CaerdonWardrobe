@@ -431,6 +431,92 @@ return function(H, S)
         NoErrors(world, "load")
     end
 
+    do
+        local world = QueueWorld()
+        local core, client, feature = world.core, world.client, world.feature
+
+        -- A draw owed to a button that is not on screen (AskWhenOnScreen): the window is told
+        -- once when the button comes on screen. A bag with two buttons; the bag is what opens
+        -- and closes.
+        local came = {}
+        function feature:OnButtonOnScreen(context) came[#came + 1] = context end
+        local bag = client:NewFrame("Frame")
+        local button, other = client:NewFrame("Button", nil, bag), client:NewFrame("Button", nil, bag)
+        Check(core:AskWhenOnScreen(button, feature, "never asked") == false,
+            "owed: a button never asked for has no overlay to tell of its coming, so nothing is noted")
+        Ask(world, button, SlotItem(world, 3))
+        Ask(world, other, SlotItem(world, 4))
+        client:Tick(2)
+        local overlay = core:GetCaerdonButton(button)
+        Check(core:AskWhenOnScreen(button, feature, "on screen") == false, "owed: nothing is noted for a button on screen")
+        Check(overlay:GetScript("OnShow") == nil, "owed: and its overlay gets no script")
+
+        client:SetFrameShown(bag, false)
+        Check(not overlay:IsVisible(), "owed: with the bag closed the overlay is not on screen")
+        Check(core:AskWhenOnScreen(button, feature, "first") == true, "owed: a button of a closed bag is noted")
+        Check(core:AskWhenOnScreen(button, feature, "second") == true, "owed: and again at the next refresh")
+        Check(core:IsQueueIdle(), "owed: nothing is queued for it")
+        world.drawn = {}
+        client:Tick(3)
+        Equal(DrawCount(world), 0, "owed: and nothing is drawn while the bag is closed")
+        Equal(#came, 0, "owed: the window is not told yet")
+        client:SetFrameShown(bag, true)
+        Equal(#came, 1, "owed: the window is told once when the bag opens")
+        Equal(came[1], "second", "owed: with what it handed over last")
+        Check(overlay:GetScript("OnShow") == nil, "owed: the script is gone once it has run")
+        Check(core:GetCaerdonButton(other):GetScript("OnShow") == nil, "owed: a button nothing was owed to never had one")
+        client:SetFrameShown(bag, false)
+        client:SetFrameShown(bag, true)
+        Equal(#came, 1, "owed: opening the bag again tells nobody")
+
+        -- Asked for in between: the debt is settled, by a request or by a clear.
+        client:SetFrameShown(bag, false)
+        core:AskWhenOnScreen(button, feature, "third")
+        Ask(world, button, SlotItem(world, 3))
+        Check(overlay:GetScript("OnShow") == nil, "settled: a request for the button takes the script off")
+        client:SetFrameShown(bag, true)
+        Equal(#came, 1, "settled: and the window is not told when the bag opens")
+        client:Tick(2)
+        client:SetFrameShown(bag, false)
+        core:AskWhenOnScreen(button, feature, "fourth")
+        core:ClearButton(button)
+        client:SetFrameShown(bag, true)
+        Equal(#came, 1, "settled: nor after the button was cleared")
+
+        -- A button hidden by itself in an open bag (a collapsed section).
+        Ask(world, button, SlotItem(world, 3))
+        client:Tick(2)
+        client:SetFrameShown(button, false)
+        Check(core:AskWhenOnScreen(button, feature, "fifth") == true, "section: a hidden button of an open bag is noted")
+        Check(core:AskWhenOnScreen(other, feature, "other") == false, "section: its neighbour on screen is not")
+        client:SetFrameShown(button, true)
+        Equal(came[2], "fifth", "section: and the window is told when the button is shown")
+
+        -- The window asks from there, and the button is drawn a frame later.
+        function feature:OnButtonOnScreen(context) Ask(world, context.button, context.item) end
+        client:SetFrameShown(bag, false)
+        local fresh = SlotItem(world, 3)
+        core:AskWhenOnScreen(button, feature, { button = button, item = fresh })
+        world.drawn = {}
+        client:SetFrameShown(bag, true)
+        Equal(DrawCount(world), 0, "paid: nothing is drawn in the frame the bag opens in")
+        client:Tick(1)
+        local count, last = Draws(world, button)
+        Equal(count, 1, "paid: the button is drawn in the next")
+        Check(last and last.item == fresh, "paid: with the item the window asked for")
+        Equal((Draws(world, other)), 0, "paid: a button nothing was owed to is not drawn")
+        Check(overlay:GetScript("OnShow") == nil, "paid: and no script is left")
+        NoErrors(world, "owed")
+
+        -- An error in the window's hook is reported and the debt is gone with it.
+        function feature:OnButtonOnScreen() error("the window's hook raised an error") end
+        client:SetFrameShown(bag, false)
+        core:AskWhenOnScreen(button, feature, "sixth")
+        client:SetFrameShown(bag, true)
+        Equal(#client.errors, 1, "error: an error in the window's hook reaches the error handler")
+        Check(overlay:GetScript("OnShow") == nil, "error: and is not raised again at the next opening")
+    end
+
     --------------------------------------------------------------------------------------
     -- 3 and 4. The real drawing, written down
     --------------------------------------------------------------------------------------

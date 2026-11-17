@@ -2043,9 +2043,50 @@ function CaerdonWardrobeMixin:GetFeature(name)
     return registeredFeatures[name] or availableFeatures[name]
 end
 
+-- A draw owed to a button that is not on screen.
+--
+-- For a window that does not ask for its buttons again when it comes on screen (BetterBags'
+-- bags: an unchanged button is not drawn again when its bag opens). Such a window's Refresh()
+-- cannot simply skip what nobody sees, and asking for it anyway makes every full refresh cost
+-- the whole closed bag. So it hands the button over here: the icon drawn before stays, and
+-- feature:OnButtonOnScreen(context) is called once when the button next comes on screen, from
+-- where the feature asks for it. The overlay is a shown child of the button, so the client
+-- runs its OnShow whenever the button comes on screen, whichever parent was hidden.
+--
+-- A request or a clear for the button in between settles the debt. The script is only set
+-- while something is owed, so a window that opens with nothing owed runs no code here.
+local function SettleOwedDraw(caerdonButton)
+    caerdonButton.caerdonOwedTo, caerdonButton.caerdonOwedContext = nil, nil
+    caerdonButton:SetScript("OnShow", nil)
+end
+
+local function PayOwedDraw(caerdonButton)
+    local feature, context = caerdonButton.caerdonOwedTo, caerdonButton.caerdonOwedContext
+    SettleOwedDraw(caerdonButton)
+    if feature then
+        Contained(feature.OnButtonOnScreen, feature, context)
+    end
+end
+
+-- Returns false when nothing was noted, and the caller asks for the button as usual: it is on
+-- screen after all, or it has never been asked for and so has no overlay to tell of its coming.
+function CaerdonWardrobeMixin:AskWhenOnScreen(button, feature, context)
+    local caerdonButton = self:GetCaerdonButton(button)
+    if not caerdonButton or caerdonButton:IsVisible() then
+        return false
+    end
+    caerdonButton.caerdonOwedTo, caerdonButton.caerdonOwedContext = feature, context
+    caerdonButton:SetScript("OnShow", PayOwedDraw)
+    return true
+end
+
 function CaerdonWardrobeMixin:ClearButton(button)
     local caerdonButton = self:GetCaerdonButton(button)
     if caerdonButton then
+        if caerdonButton.caerdonOwedTo then
+            SettleOwedDraw(caerdonButton)
+        end
+
         -- Every list of requests is kept by button (see UpdateButton), so nothing is searched.
         self.waitingToProcess[button] = nil
         self.processQueue[button] = nil
@@ -2076,7 +2117,12 @@ function CaerdonWardrobeMixin:CancelPending(feature)
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
-    local _, createdNew = self:SetupCaerdonButton(button, item, feature, locationInfo, options)
+    local caerdonButton, createdNew = self:SetupCaerdonButton(button, item, feature, locationInfo, options)
+
+    -- Whatever was owed to the button (AskWhenOnScreen) is asked for now.
+    if caerdonButton and caerdonButton.caerdonOwedTo then
+        SettleOwedDraw(caerdonButton)
+    end
 
     -- A new request gets its own set of "not ready yet" retries; a retry keeps counting.
     local retryState = GetButtonState(button)
