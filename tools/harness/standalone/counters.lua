@@ -1020,6 +1020,13 @@ do
     -- The four of the refresh timing and one for each of the two open timings.
     Check(totals and totals.triggers and totals.triggers[forcedLabel] == 6,
         "tests: the triggers are added to the build's totals on logout")
+    -- The session's own record: the build's totals run over every version of the addon.
+    local session = T.db.sessions[#T.db.sessions]
+    Check(session and type(session.minutes) == "number" and session.minutes > 0, "tests: the session's record holds its minutes on logout")
+    Check(session and session.refreshes and session.refreshes.by[forcedLabel] == 6, "tests: and its refreshes by trigger")
+    Check(session and session.refreshes and session.refreshes.by.pvp == 1, "tests: the watcher's among them, by its name")
+    Check(session and session.refreshes and #session.refreshes.watched == 2 and session.refreshes.watched[2].name == "pvp"
+        and session.refreshes.watched[2].changes == 1, "tests: with what each watch saw")
     Equal(#T.db.errors, 0, "tests: no error of the tests' own")
     Equal(#errors, 0, "tests: no error reached the error handler")
 

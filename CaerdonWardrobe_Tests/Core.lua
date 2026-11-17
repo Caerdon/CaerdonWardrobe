@@ -387,7 +387,9 @@ T.RegisterEvent("PLAYER_LOGIN", function()
     T.loginTime = GetTime()
     NoteBuild()
     local client, toon = T.GetClient(), T.GetToon()
-    T.Push(T.db.sessions, {
+    -- Kept at hand: the session's own refresh figures are added to it on the way out
+    -- (Counters.lua).
+    T.session = {
         at = GetServerTime(),
         flavor = client.flavor,
         build = client.build,
@@ -398,7 +400,8 @@ T.RegisterEvent("PLAYER_LOGIN", function()
         subjectVersion = C_AddOns.GetAddOnMetadata(T.SUBJECT, "Version"),
         testsVersion = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version"),
         addons = T.NoteAddons(),
-    }, 20)
+    }
+    T.Push(T.db.sessions, T.session, 20)
     for _, fn in ipairs(logins) do
         xpcall(fn, geterrorhandler())
     end

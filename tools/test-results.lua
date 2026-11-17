@@ -163,6 +163,37 @@ local function printSessions(db)
         print(("    %s  %s %s  %s (%s)  addon %s"):format(when(session.at), tostring(session.flavor),
             tostring(session.build), tostring(session.toon), tostring(session.signature),
             tostring(session.subjectVersion)))
+        -- What the session's full refreshes were, written as it ended (a session that has not
+        -- ended, or one from before this was stored, has none).
+        local refreshes = session.refreshes
+        if refreshes and session.minutes then
+            local minutes = math.max(session.minutes, 0.01)
+            local forced, parts = 0, {}
+            for _, name in ipairs(sortedKeys(refreshes.by or {})) do
+                if tostring(name):find("^CaerdonWardrobe_Tests/") then
+                    forced = forced + refreshes.by[name]
+                else
+                    parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.by[name])
+                end
+            end
+            local own = (refreshes.total or 0) - forced
+            print(("        %.1f minutes, %d full refreshes of the addon's own (%.2f a minute)%s%s"):format(session.minutes,
+                own, own / minutes, forced > 0 and (", %d more forced by the tests"):format(forced) or "",
+                #parts > 0 and (": " .. table.concat(parts, ", ")) or ""))
+            for _, watch in ipairs(refreshes.watched or {}) do
+                print(("        watched %s: %s events, read %s times, %s changes%s"):format(tostring(watch.name),
+                    figure(watch.events), figure(watch.checks), figure(watch.changes),
+                    watch.notRegistered and ("; this client has no " .. tostring(watch.notRegistered)) or ""))
+            end
+            for _, entry in ipairs(refreshes.recent or {}) do
+                if entry.detail then
+                    print(("        at %s s: %s (%s)"):format(figure(entry.at), tostring(entry.trigger), tostring(entry.detail)))
+                end
+            end
+            if session.counts then
+                print("        events: " .. inline(session.counts))
+            end
+        end
     end
 end
 
@@ -486,6 +517,18 @@ local function printLedger(ledger, indent)
             parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.by[name])
         end
         print(indent .. ("full refreshes: %s%s"):format(figure(refreshes.total), #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+        -- The watcher: events that came against the changes it found (records from before it have none).
+        for _, watch in ipairs(refreshes.watched or {}) do
+            print(indent .. ("  watched %s: %s events, read %s times, %s changes%s"):format(tostring(watch.name),
+                figure(watch.events), figure(watch.checks), figure(watch.changes),
+                watch.notRegistered and ("; this client has no " .. tostring(watch.notRegistered)) or ""))
+        end
+        -- What a refresh's caller said had changed, for the ones that said.
+        for _, entry in ipairs(refreshes.recent or {}) do
+            if entry.detail then
+                print(indent .. ("  at %s s: %s (%s)"):format(figure(entry.at), tostring(entry.trigger), tostring(entry.detail)))
+            end
+        end
     end
     local loads = ledger.itemLoads
     if loads then

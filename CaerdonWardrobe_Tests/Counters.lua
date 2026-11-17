@@ -236,3 +236,17 @@ T.RegisterEvent("PLAYER_LOGOUT", function()
         totals.triggers[trigger] = (totals.triggers[trigger] or 0) + count
     end
 end)
+
+-- The same for this session alone, in its own record. The build's totals run over every
+-- version of the addon the build has seen; a session ran one, so two sessions can be compared
+-- across a change to what refreshes. With the core's whole refresh ledger: by trigger, what
+-- the watcher compared, and the newest refreshes with what their callers said had changed.
+T.RegisterEvent("PLAYER_LOGOUT", function()
+    local session, report = T.session, T.ReadCounters()
+    if not session or not report or not T.loginTime then
+        return
+    end
+    session.minutes = (GetTime() - T.loginTime) / 60
+    session.refreshes = report.refreshes
+    session.counts = T.GetSessionCounts and T.GetSessionCounts() or nil
+end)
