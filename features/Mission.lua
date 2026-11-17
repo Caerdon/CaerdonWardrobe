@@ -21,9 +21,6 @@ function MissionMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function MissionMixin:Refresh()
-end
-
 function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         bindingStatus = {

@@ -160,9 +160,6 @@ function SortedMixin:GetTooltipData(item, locationInfo)
     end
 end
 
-function SortedMixin:Refresh()
-end
-
 function SortedMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

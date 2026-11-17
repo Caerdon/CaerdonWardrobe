@@ -25,9 +25,6 @@ function SkilletMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function SkilletMixin:Refresh()
-end
-
 -- function SkilletMixin:IsSameItem(button, item, locationInfo)
 -- 	local isSame = button.questID == locationInfo.questID
 -- 	return isSame

@@ -23,9 +23,6 @@ function AuctionatorMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function AuctionatorMixin:Refresh()
-end
-
 function AuctionatorMixin:OnSetItemInfo(button)
   -- The default slot look, sized to the button (42 px in the bag list, 60 px for the item being
   -- sold). The bag list scrolls, so the icon moves inside if the list ever leaves it no room.

@@ -18,9 +18,6 @@ function BlackMarketMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function BlackMarketMixin:Refresh()
-end
-
 function BlackMarketMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

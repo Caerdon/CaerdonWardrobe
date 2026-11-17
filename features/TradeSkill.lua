@@ -83,9 +83,6 @@ function TradeSkillMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function TradeSkillMixin:Refresh()
-end
-
 function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

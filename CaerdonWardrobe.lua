@@ -43,6 +43,42 @@ local function GetButtonState(originalButton, create)
     return state
 end
 
+-- What each button was last asked to show: the request as UpdateButton got it, kept under the
+-- window that made it. A window with no Refresh() of its own is asked again from here after a
+-- full refresh (AskAgain). The record is the button's until it is cleared or another window
+-- asks for it; it holds no reference to the button. A window's buttons are weak keys, like
+-- buttonState's: the buttons are their windows'.
+local askedByFeature = {} -- [feature] = { [button] = { feature, item, locationInfo, options } }
+
+local function ForgetRequest(button)
+    local state = GetButtonState(button)
+    local asked = state and state.asked
+    if asked then
+        state.asked = nil
+        askedByFeature[asked.feature][button] = nil
+    end
+end
+
+local function RememberRequest(button, item, feature, locationInfo, options)
+    local state = GetButtonState(button, true)
+    local asked = state.asked
+    if asked and asked.feature ~= feature then
+        ForgetRequest(button)
+        asked = nil
+    end
+    if not asked then
+        asked = { feature = feature }
+        state.asked = asked
+        local ofFeature = askedByFeature[feature]
+        if not ofFeature then
+            ofFeature = setmetatable({}, { __mode = "k" })
+            askedByFeature[feature] = ofFeature
+        end
+        ofFeature[button] = asked
+    end
+    asked.item, asked.locationInfo, asked.options = item, locationInfo, options
+end
+
 function CaerdonWardrobeMixin:GetCaerdonButton(originalButton)
     local state = GetButtonState(originalButton)
     return state and state.caerdonButton
@@ -99,6 +135,7 @@ end
 function CaerdonWardrobeMixin:ClearButtonState(originalButton)
     local state = GetButtonState(originalButton)
     if state then
+        ForgetRequest(originalButton)
         state.locationKey = nil
         state.itemID = nil
         state.stackCount = nil
@@ -2077,6 +2114,8 @@ function CaerdonWardrobeMixin:ClearButton(button)
         if caerdonButton.caerdonOwedTo then
             SettleOwedDraw(caerdonButton)
         end
+        -- Nothing is shown on it now, so there is nothing to ask for again (AskAgain).
+        ForgetRequest(button)
 
         -- Every list of requests is kept by button (see UpdateButton), so nothing is searched.
         self.waitingToProcess[button] = nil
@@ -2087,6 +2126,49 @@ function CaerdonWardrobeMixin:ClearButton(button)
 
         self:SetItemButtonStatus(button)
         self:SetItemButtonBindType(button)
+    end
+end
+
+-- One button asked for again as it was last asked for, when that was `feature`'s doing.
+-- Returns whether it was.
+function CaerdonWardrobeMixin:AskAgainFor(button, feature)
+    local state = GetButtonState(button)
+    local asked = state and state.asked
+    if not asked or asked.feature ~= feature then
+        return false
+    end
+    self:UpdateButton(button, asked.item, feature, asked.locationInfo, asked.options)
+    return true
+end
+
+local function AskButtonAgain(self, button, feature)
+    if not self:AskWhenOnScreen(button, feature, button) then
+        self:AskAgainFor(button, feature)
+    end
+end
+
+-- The Refresh() of a window that has none of its own (CaerdonWardrobeFeatureMixin:Refresh):
+-- every button the window last asked for is asked for again, with the item, the place and the
+-- options it gave. A window asks for a button whenever what the button shows changes and
+-- clears it when it shows nothing, so what is remembered is what is on the button.
+--
+-- A button that is not on screen keeps its icon and is owed the draw for when it is
+-- (AskWhenOnScreen): a window that is shown again as it was need not ask for its buttons
+-- again, and the core cannot tell which do. One that does ask replaces the request before it
+-- is drawn, so that is still one draw.
+function CaerdonWardrobeMixin:AskAgain(feature)
+    local asked = askedByFeature[feature]
+    if not asked or next(asked) == nil then
+        return
+    end
+    -- A request can clear its button and remember it anew, which must not happen to a table
+    -- that is being walked.
+    local buttons = {}
+    for button in pairs(asked) do
+        buttons[#buttons + 1] = button
+    end
+    for index = 1, #buttons do
+        Contained(AskButtonAgain, self, buttons[index], feature)
     end
 end
 
@@ -2163,6 +2245,9 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
         end
         request.button, request.item, request.feature = button, item, feature
         request.locationInfo, request.options, request.locationKey = locationInfo, options, locationKey
+        if button then
+            RememberRequest(button, item, feature, locationInfo, options)
+        end
         if not milestones.firstRequest then
             Counters:Milestone("firstRequest")
         end

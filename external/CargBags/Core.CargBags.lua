@@ -25,10 +25,6 @@ function CargBagsMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
-function CargBagsMixin:Refresh()
-	-- TODO: This was missing
-end
-
 function CargBagsMixin:UpdateSlot(frame, bagID, slotID)
 	local button = frame:GetButton(bagID, slotID)
 	local options = {

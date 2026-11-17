@@ -265,10 +265,6 @@ function AuctionMixin:GetTooltipData(item, locationInfo)
 	end
 end
 
-function AuctionMixin:Refresh()
-	-- TODO: Could refresh here but probably don't need to?
-end
-
 function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

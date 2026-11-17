@@ -26,9 +26,6 @@ function AngrierWorldQuestsMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function AngrierWorldQuestsMixin:Refresh()
-end
-
 function AngrierWorldQuestsMixin:IsSameItem(button, item, locationInfo)
 	local isSame = button.questID == locationInfo.questID
 	return isSame

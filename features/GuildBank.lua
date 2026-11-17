@@ -18,9 +18,6 @@ function GuildBankMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
 
-function GuildBankMixin:Refresh()
-end
-
 function GuildBankMixin:GetDisplayInfo()
 	return {
 		bindingStatus = {

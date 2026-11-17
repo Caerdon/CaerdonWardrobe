@@ -39,9 +39,6 @@ function MailMixin:GetTooltipData(item, locationInfo)
     end
 end
 
-function MailMixin:Refresh()
-end
-
 function MailMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         bindingStatus = {

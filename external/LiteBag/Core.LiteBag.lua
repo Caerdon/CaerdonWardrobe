@@ -25,10 +25,6 @@ function LiteBagMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
-function LiteBagMixin:Refresh()
-	-- Handled via LiteBagPanel_AddUpdateEvent right now (for transmog at least)
-end
-
 function LiteBagMixin:UpdateButton(button)
 	local bag = button:GetParent():GetID()
 	local slot = button:GetID()

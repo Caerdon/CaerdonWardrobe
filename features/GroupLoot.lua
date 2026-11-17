@@ -15,9 +15,6 @@ function GroupLootMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetLootRollItem(locationInfo.index)
 end
 
-function GroupLootMixin:Refresh()
-end
-
 function GroupLootMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         otherIcon = {

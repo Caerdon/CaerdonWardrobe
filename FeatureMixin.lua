@@ -78,11 +78,26 @@ function CaerdonWardrobeFeatureMixin:GetTooltipData(item, locationInfo)
     error(format("Caerdon Wardrobe: Must provide GetTooltipData implementation for %s", self:GetName()))
 end
 
+-- Called after every full refresh (CaerdonWardrobe:RefreshItems), when every verdict has been
+-- thrown away: the window's buttons are to be asked for again.
+--
+-- A window that walks its own buttons has a Refresh() of its own and calls this one first with
+-- itself, CaerdonWardrobeFeatureMixin:Refresh(self), which drops its requests still waiting.
+-- A window with none inherits this, and the core asks again for every button the window last
+-- asked for (CaerdonWardrobe:AskAgain). So a Refresh() is written only where the default is
+-- not enough, and never left empty: an empty one keeps every icon as it was.
 function CaerdonWardrobeFeatureMixin:Refresh(feature)
-    -- Primarily used for global transmog refresh when appearances learned right now
     if feature then
         CaerdonWardrobe:CancelPending(feature)
+    elseif self ~= CaerdonWardrobeFeatureMixin then
+        CaerdonWardrobe:AskAgain(self)
     end
+end
+
+-- A button the default Refresh() left alone, because it was not on screen, has come on screen
+-- (CaerdonWardrobe:AskWhenOnScreen). A window that hands buttons over itself has its own.
+function CaerdonWardrobeFeatureMixin:OnButtonOnScreen(button)
+    CaerdonWardrobe:AskAgainFor(button, self)
 end
 
 function CaerdonWardrobeFeatureMixin:IsSameItem(button, item, locationInfo)

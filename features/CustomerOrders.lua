@@ -49,9 +49,6 @@ function CustomerOrdersMixin:GetTooltipData(item, locationInfo)
 	-- end
 end
 
-function CustomerOrdersMixin:Refresh()
-end
-
 function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

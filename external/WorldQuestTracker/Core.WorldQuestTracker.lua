@@ -26,9 +26,6 @@ function WorldQuestTrackerMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
-function WorldQuestTrackerMixin:Refresh()
-end
-
 function WorldQuestTrackerMixin:IsSameItem(button, item, locationInfo)
 	-- QuestId will be directly on world map pin but is on the grandparent for the quest log
 	local isSame = button.questId == locationInfo.questID or button:GetParent():GetParent().questId == locationInfo.questID
