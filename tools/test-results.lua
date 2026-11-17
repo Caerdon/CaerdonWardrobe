@@ -371,6 +371,56 @@ local function describeEvents(run)
     return events
 end
 
+-- One window's part of a timed refresh: its draws, and what was more or less than a draw
+-- (requests that were not drawn, requests for an empty slot, draws on a button nobody saw).
+-- A record from before these were counted has the draws only.
+local function describeFeature(name, entry, withTimes)
+    local text = ("%s %d"):format(name, entry.draws or 0)
+    if withTimes and entry.firstMs then
+        text = text .. (" (%s-%s ms)"):format(figure(entry.firstMs), figure(entry.lastMs))
+    end
+    local notes = {}
+    if entry.requests and entry.requests ~= entry.draws then
+        notes[#notes + 1] = ("%d requests%s"):format(entry.requests,
+            (entry.empty or 0) > 0 and (", %d of them for an empty slot"):format(entry.empty) or "")
+    end
+    if (entry.unseen or 0) > 0 then
+        notes[#notes + 1] = ("%d not on screen"):format(entry.unseen)
+    end
+    if #notes > 0 then
+        text = text .. " [" .. table.concat(notes, "; ") .. "]"
+    end
+    return text
+end
+
+-- The queue works by the frame, so the icon times of a refresh depend on the frame rate it
+-- ran at. Names the runs that had a much lower one than the best of the record (a client in
+-- the background runs at 30 frames a second). nil for a record without run lengths.
+local function describeFrameRates(runs)
+    local rates, best = {}, nil
+    for index, run in ipairs(runs) do
+        if run.frames and run.seconds and run.seconds > 0 then
+            rates[index] = run.frames / run.seconds
+            best = math.max(best or rates[index], rates[index])
+        end
+    end
+    if not best then
+        return nil
+    end
+    local slow, slowest = 0, nil
+    for _, rate in pairs(rates) do
+        if rate < best * 0.6 then
+            slow = slow + 1
+            slowest = math.min(slowest or rate, rate)
+        end
+    end
+    if slow == 0 then
+        return nil
+    end
+    return ("%d of %d refreshes ran at %d frames a second or little more, the best at %d: icon times are not comparable across them")
+        :format(slow, #runs, math.floor(slowest + 0.5), math.floor(best + 0.5))
+end
+
 -- Refused items as "216679 x4 at 12.3 s": how often the client said no, and when first.
 local function describeRefused(items)
     local parts = {}
@@ -502,7 +552,7 @@ local function printTiming(db)
             if fewest == most and record.runs[1] and record.runs[1].byFeature then
                 local parts = {}
                 for _, name in ipairs(sortedKeys(record.runs[1].byFeature)) do
-                    parts[#parts + 1] = name .. " " .. record.runs[1].byFeature[name].draws
+                    parts[#parts + 1] = describeFeature(name, record.runs[1].byFeature[name])
                 end
                 local events = describeEvents(record.runs[1])
                 print("        drawn per refresh: " .. table.concat(parts, ", ")
@@ -515,8 +565,7 @@ local function printTiming(db)
                 for index, run in ipairs(record.runs) do
                     local parts = {}
                     for _, name in ipairs(sortedKeys(run.byFeature or {})) do
-                        local entry = run.byFeature[name]
-                        parts[#parts + 1] = ("%s %d (%s-%s ms)"):format(name, entry.draws, figure(entry.firstMs), figure(entry.lastMs))
+                        parts[#parts + 1] = describeFeature(name, run.byFeature[name], true)
                     end
                     local events = describeEvents(run)
                     print(("          %2d: %d draws%s%s%s"):format(index, run.draws,
@@ -524,6 +573,10 @@ local function printTiming(db)
                         #events > 0 and ("; events: " .. table.concat(events, ", ")) or "",
                         run.tooltip and ("; tooltip on " .. tostring(run.tooltip)) or ""))
                 end
+            end
+            local frameRates = describeFrameRates(record.runs)
+            if frameRates then
+                print("        FRAME RATE: " .. frameRates)
             end
             print(("        profiler after: recent %s ms (%s), peak %s ms, session %s ms (%s)%s"):format(
                 figure(record.profilerAfter and record.profilerAfter.RecentAverageTime), share(record.profilerAfter, "RecentAverageTime"),

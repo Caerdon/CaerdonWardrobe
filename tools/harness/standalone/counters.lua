@@ -820,8 +820,17 @@ do
     Check(CaerdonCounters.on == false, "tests: and leaves the profile off")
     T.counters = { refreshItems = 0, processItem = 0 }
     hooksecurefunc(CaerdonWardrobe, "RefreshItems", function() T.counters.refreshItems = T.counters.refreshItems + 1 end)
-    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function()
+    -- The two hooks of the tests' Journal.lua, as far as a timing reads them.
+    hooksecurefunc(CaerdonWardrobe, "UpdateButton", function(_, _, item)
+        if T.NoteTimedRequest then
+            T.NoteTimedRequest("Bags", item == nil or item:IsItemEmpty())
+        end
+    end)
+    hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, button)
         T.counters.processItem = T.counters.processItem + 1
+        if T.NoteTimedDraw then
+            T.NoteTimedDraw("Bags", button)
+        end
         Spend(10)
     end)
     T.IsOpen = function() return false end
@@ -861,9 +870,16 @@ do
     -- both back.
     CaerdonCounters:SetProfile(true)
     local seen = {}
+    -- Four of the twelve buttons are where nobody sees them (a window parked under a hidden
+    -- parent), and the window also asks for a slot with nothing in it.
+    for index = 1, 12 do
+        Session.buttons[index].IsVisible = function() return index > 4 end
+    end
+    local emptySlot = {}
     Session.feature.Refresh = function()
         seen[#seen + 1] = { debug = CaerdonWardrobeConfig.Debug.Enabled, profile = CaerdonCounters.on }
         AskFor(items)
+        Ask(emptySlot, nil, Session.feature)
     end
     T.GetPlan().timing.countedRuns = 2
     T.RunRefreshTiming("bags", 2)
@@ -871,6 +887,15 @@ do
     local record = T.db.timing[1]
     Check(record ~= nil, "tests: a timing record was written")
     Equal(record and record.medianDraws, 12, "tests: twelve draws per refresh")
+    local window = record and record.runs[1].byFeature and record.runs[1].byFeature.Bags or {}
+    Equal(window.draws, 12, "tests: the window's draws in a timed refresh")
+    Equal(window.requests, 13, "tests: its requests, the one for the empty slot among them")
+    Equal(window.empty, 1, "tests: the request for an empty slot is named")
+    Equal(window.unseen, 4, "tests: the draws on buttons nobody sees are counted")
+    Check(window.firstMs ~= nil and window.lastMs ~= nil and window.lastMs >= window.firstMs,
+        "tests: with the times of its first and last draw")
+    Check(record and record.runs[1].seconds and record.runs[1].seconds > 0 and record.runs[1].frames > 0,
+        "tests: a run says how long it took and in how many frames")
     Equal(#seen, 4, "tests: four refreshes ran")
     Check(seen[1] and not seen[1].debug and not seen[1].profile and not seen[2].debug and not seen[2].profile,
         "tests: the measured refreshes ran without Enable debug and without the profile")

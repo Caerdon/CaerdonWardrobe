@@ -233,9 +233,11 @@ T.OnInit(function()
             T.counters.requests[name] = entry
         end
         entry.calls = entry.calls + 1
-        if item == nil or item:IsItemEmpty() then
+        local isEmpty = item == nil or item:IsItemEmpty()
+        if isEmpty then
             entry.empty = entry.empty + 1
         end
+        T.NoteTimedRequest(name, isEmpty)
     end)
     hooksecurefunc(CaerdonWardrobe, "ProcessItem", function(_, button, item, feature, locationInfo)
         T.counters.processItem = T.counters.processItem + 1
@@ -247,21 +249,8 @@ T.OnInit(function()
         T.NoteDrawn(item, name)
         -- Which button was drawn for which bag slot, for the bag button check (Rotation.lua).
         T.NoteBagButton(button, name, locationInfo)
-        local run = T.timingRun
-        if run then
-            local now = T.Milliseconds()
-            run.firstDraw = run.firstDraw or now
-            run.lastDraw = now
-            -- Which window drew, and when: two refreshes that drew a different number of
-            -- items differ in one of these.
-            local entry = run.byFeature[name]
-            if not entry then
-                entry = { draws = 0, first = now }
-                run.byFeature[name] = entry
-            end
-            entry.draws = entry.draws + 1
-            entry.last = now
-        end
+        -- Its part in a refresh that is being timed (Timing.lua).
+        T.NoteTimedDraw(name, button)
     end)
 end)
 

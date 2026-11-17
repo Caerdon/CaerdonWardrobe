@@ -478,6 +478,8 @@ local function Boot(isReload)
     end
     -- What the files left out here would have defined.
     T.NoteDrawn = function() end
+    T.NoteTimedRequest = function() end
+    T.NoteTimedDraw = function() end
     T.ScanSightings = function() end
     T.GetSightingRows = function() return {} end
     T.RefusedItems = function() return {} end

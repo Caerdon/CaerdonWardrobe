@@ -99,6 +99,55 @@ local function TooltipOwner()
     return type(name) == "string" and name or "(unnamed)"
 end
 
+-- One window's part of a refresh that is being timed.
+local function RunFeature(run, name)
+    local entry = run.byFeature[name]
+    if not entry then
+        entry = { draws = 0, requests = 0, empty = 0, unseen = 0 }
+        run.byFeature[name] = entry
+    end
+    return entry
+end
+
+-- A request for a button while a refresh is timed (the hook on UpdateButton, Journal.lua).
+-- Requests against draws say whether a window asks more often than it is drawn.
+function T.NoteTimedRequest(name, isEmpty)
+    local run = T.timingRun
+    if not run then
+        return
+    end
+    local entry = RunFeature(run, name)
+    entry.requests = entry.requests + 1
+    if isEmpty then
+        entry.empty = entry.empty + 1
+    end
+end
+
+-- A draw while a refresh is timed (the hook on ProcessItem). Which window drew, and when: two
+-- refreshes that drew a different number of items differ in one of these. A draw on a button
+-- nobody can see is counted too: a host addon that parks a window under a hidden parent
+-- leaves it shown, and its feature goes on drawing it.
+function T.NoteTimedDraw(name, button)
+    local run = T.timingRun
+    if not run then
+        return
+    end
+    local now = T.Milliseconds()
+    run.firstDraw = run.firstDraw or now
+    run.lastDraw = now
+    local entry = RunFeature(run, name)
+    entry.draws = entry.draws + 1
+    entry.first = entry.first or now
+    entry.last = now
+    if type(button) == "table" and type(button.IsVisible) == "function" then
+        -- Nothing waits in here, so a pcall is safe: a forbidden frame raises on any call.
+        local ok, visible = pcall(button.IsVisible, button)
+        if ok and not visible then
+            entry.unseen = entry.unseen + 1
+        end
+    end
+end
+
 -- Inside a job: one forced refresh, measured until the queue has drained.
 local function MeasureRefresh()
     local memoryBefore = AddonMemory()
@@ -144,7 +193,15 @@ local function MeasureRefresh()
     local byFeature, events
     for name, entry in pairs(run.byFeature) do
         byFeature = byFeature or {}
-        byFeature[name] = { draws = entry.draws, firstMs = Round(entry.first - started, 1), lastMs = Round(entry.last - started, 1) }
+        byFeature[name] = {
+            draws = entry.draws,
+            requests = entry.requests,
+            empty = entry.empty > 0 and entry.empty or nil,
+            unseen = entry.unseen > 0 and entry.unseen or nil,
+            -- A window can ask without being drawn (every request for an empty slot).
+            firstMs = entry.first and Round(entry.first - started, 1) or nil,
+            lastMs = entry.last and Round(entry.last - started, 1) or nil,
+        }
     end
     for event, entry in pairs(run.events) do
         events = events or {}
@@ -157,6 +214,9 @@ local function MeasureRefresh()
         tooltip = tooltip,
         cpuMs = Round(cpu),
         frames = frames,
+        -- With the frames, the frame rate of this run: the queue works by the frame, so a
+        -- run at 30 frames a second (a client in the background) has later icons.
+        seconds = Round(GetTime() - startedAt, 2),
         worstFrameMs = Round(worstFrame),
         draws = T.counters.processItem - drawsBefore,
         firstDrawMs = run.firstDraw and Round(run.firstDraw - started, 1) or nil,
