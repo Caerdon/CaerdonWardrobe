@@ -186,7 +186,7 @@ end
 -- The addon's core, as far as the tests touch it.
 local function NewCore()
     local core = {
-        waitingToProcess = {}, featureProcessItems = {}, pendingTooltipRetries = {},
+        waitingToProcess = {},
         refreshGeneration = 1, features = {}, overlays = setmetatable({}, { __mode = "k" }),
         generations = setmetatable({}, { __mode = "k" }), draws = 0,
     }
@@ -196,6 +196,7 @@ local function NewCore()
     function core:GetRefreshGeneration() return self.refreshGeneration end
     function core:GetButtonRefreshGeneration(button) return self.generations[button] end
     function core:ClearButtonState(button) self.generations[button] = nil end
+    function core:IsQueueIdle() return next(self.waitingToProcess) == nil end
     function core:ClearButton(button)
         local overlay = self.overlays[button]
         if overlay then overlay.has = {} end

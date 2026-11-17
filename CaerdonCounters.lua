@@ -479,9 +479,9 @@ end
 -- Profile: drains of the queue
 ------------------------------------------------------------------------------------------
 
--- A drain is one run of the queue's coroutine, from its first pass to the pass that finds
--- nothing left. Time and memory are taken around each pass, so the frames in between, which
--- belong to the rest of the client, are not in them.
+-- A drain is the queue at work, from the first pass after it was woken to the pass that
+-- leaves nothing to draw. Time and memory are taken around each pass, so the frames in
+-- between, which belong to the rest of the client, are not in them.
 local RECENT_DRAINS = 10
 
 local drains = { count = 0, passes = 0, seconds = 0, worstPass = 0, kb = 0, collected = 0 }

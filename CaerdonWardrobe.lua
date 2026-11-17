@@ -136,6 +136,7 @@ function CaerdonWardrobeMixin:OnLoad()
     -- })
 
     self.waitingToProcess = {}
+    self.processQueue = {}
     self.featureProcessContinuables = {}
     self.featureProcessItems = {}
     self.refreshGeneration = 0
@@ -681,6 +682,37 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
     end
 end
 
+-- A slot that a bag search has dimmed gets its icon dimmed with it. The bag's own code can put
+-- the search overlay on after the draw, in the same frame, so the overlay is looked at a frame
+-- later: by one timer for every button drawn in that frame, where each draw used to start a
+-- timer of its own. Only buttons that have a search overlay are noted.
+local searchDimPending = {}
+local searchDimScheduled = false
+
+local function RunSearchDimPass()
+    searchDimScheduled = false
+    for caerdonButton in pairs(searchDimPending) do
+        local mogStatus = caerdonButton.mogStatus
+        if mogStatus and caerdonButton.searchOverlay:IsShown() then
+            mogStatus.mogStatusBackground:SetAlpha(0.3)
+            mogStatus:SetAlpha(0.3)
+            if mogStatus.upgradeBadge then
+                mogStatus.upgradeBadge:SetAlpha(0.3)
+                mogStatus.upgradeBadgeRing:SetAlpha(0.3)
+            end
+        end
+    end
+    wipe(searchDimPending)
+end
+
+local function QueueSearchDim(caerdonButton)
+    searchDimPending[caerdonButton] = true
+    if not searchDimScheduled then
+        searchDimScheduled = true
+        C_Timer.After(0, RunSearchDimPass)
+    end
+end
+
 -- options.hostPlacesParts: the addon whose buttons these are anchors the status icon, the binding
 -- text and the level gain itself and decides which of them is visible (Baganator's corner
 -- widgets). The drawing code then only fills them and sets their size: it never anchors, shows
@@ -689,6 +721,83 @@ local function SetPartShown(caerdonButton, region, shown)
     if region and not (caerdonButton and caerdonButton.caerdonHostPlacesParts) then
         region:SetShown(shown)
     end
+end
+
+-- The helpers of SetItemButtonStatus. They are plain functions that are handed what they
+-- need: as functions made inside it they were four new closures for every draw.
+
+-- The store's category icons: a ring in the middle half of a 64 px texture. The crop is the
+-- ring's square, which also cuts the shadow around it off square (see roundStatusIcon).
+-- Returns true, for the caller's "this is a ring icon".
+local function SetRingIcon(mogStatus, texture)
+    mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
+    mogStatus:SetTexture(texture)
+    return true
+end
+
+local function ApplyUpgradeArrowColor(arrow, transmogInfo, allowMismatchedSpecUpgrades, defaultR, defaultG, defaultB)
+    if transmogInfo and transmogInfo.pawnOffTreeUpgrade then
+        -- Pawn only rates it higher for another talent tree's scale: same "usable but
+        -- off-spec" red as a loot spec mismatch. Hiding that scale in Pawn removes the arrow.
+        arrow:SetVertexColor(1, 0.35, 0.35)
+    elseif transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
+        arrow:SetVertexColor(1, 0.35, 0.35)
+    elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
+        arrow:SetVertexColor(1, 1, 0)
+    else
+        arrow:SetVertexColor(defaultR, defaultG, defaultB)
+    end
+end
+
+-- The level gain a piece's transmog info holds, when the setting and the window show one.
+local function GetShownLevelGain(transmogInfo, levelGainAllowed)
+    if not transmogInfo or not levelGainAllowed or not CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta then
+        return nil
+    end
+    local delta = transmogInfo.upgradeItemLevelDelta
+    if delta and delta > 0 then
+        return delta
+    end
+    return nil
+end
+
+-- Puts a gain ("+5") on the button, in this colour.
+local function ShowLevelGain(core, originalButton, caerdonButton, anchorFrame, gain, r, g, b)
+    local upgradeDeltaText = caerdonButton.upgradeDeltaText
+    caerdonButton.upgradeDeltaAnchor = anchorFrame
+    upgradeDeltaText:SetFormattedText("+%d", gain)
+    upgradeDeltaText:SetTextColor(r, g, b)
+    upgradeDeltaText:SetAlpha(1.0)
+    SetPartShown(caerdonButton, upgradeDeltaText, true)
+    core:UpdateUpgradeDeltaPosition(originalButton)
+end
+
+-- The upgrade icon: an arrow on a ring, with the level gain when there is one to show (gain).
+-- lowSkill: the toon's level is not there yet. Returns whether the gain went on the button.
+local function DrawUpgradeIcon(core, originalButton, caerdonButton, anchorFrame, lowSkill, transmogInfo,
+                               allowMismatchedSpecUpgrades, gain)
+    local mogStatus = caerdonButton.mogStatus
+    local mogStatusBackground = mogStatus.mogStatusBackground
+    mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
+    mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
+    if lowSkill then
+        mogStatusBackground:SetVertexColor(0.4, 1, 0)
+    else
+        mogStatusBackground:SetVertexColor(0, 1, 1)
+    end
+
+    mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
+    mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+    ApplyUpgradeArrowColor(mogStatus, transmogInfo, allowMismatchedSpecUpgrades, 0.4, 1, 0.2)
+    if not gain then
+        return false
+    end
+    if lowSkill then
+        ShowLevelGain(core, originalButton, caerdonButton, anchorFrame, gain, 0.9, 0.82, 0.1)
+    else
+        ShowLevelGain(core, originalButton, caerdonButton, anchorFrame, gain, 0.2, 1.0, 0.2)
+    end
+    return true
 end
 
 function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, locationInfo, options)
@@ -767,8 +876,10 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
     return button, createdNew
 end
 
+-- displayInfo: the feature's display rules when the caller already has them (ProcessItem asks
+-- once for both this and SetItemButtonBindType); asked for here otherwise.
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status,
-                                                  bindingStatus, transmogInfo)
+                                                  bindingStatus, transmogInfo, displayInfo)
     local caerdonButton = self:GetCaerdonButton(originalButton)
     if not caerdonButton then
         return
@@ -875,49 +986,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- end
 
     local upgradeDeltaShown = false
-    -- False once the feature's display info says so (displayInfo.levelGain), read further down.
-    local levelGainAllowed = true
-
-    local function ShowUpgradeDeltaText(r, g, b)
-        if not upgradeDeltaText or not transmogInfo or not levelGainAllowed or
-            not CaerdonWardrobeConfig.Icon.ShowUpgradeLevelDelta then
-            return
-        end
-
-        local delta = transmogInfo.upgradeItemLevelDelta
-        if not delta or delta <= 0 then
-            return
-        end
-
-        if caerdonButton then
-            caerdonButton.upgradeDeltaAnchor = deltaAnchorFrame
-        end
-        upgradeDeltaText:SetFormattedText("+%d", delta)
-        if r then
-            upgradeDeltaText:SetTextColor(r, g, b)
-        else
-            upgradeDeltaText:SetTextColor(0.2, 1.0, 0.2)
-        end
-        upgradeDeltaText:SetAlpha(1.0)
-        SetPartShown(caerdonButton, upgradeDeltaText, true)
-        self:UpdateUpgradeDeltaPosition(originalButton)
-        upgradeDeltaShown = true
-    end
-
-    local function ApplyUpgradeArrowColor(defaultR, defaultG, defaultB, arrow)
-        arrow = arrow or mogStatus
-        if transmogInfo and transmogInfo.pawnOffTreeUpgrade then
-            -- Pawn only rates it higher for another talent tree's scale: same "usable but
-            -- off-spec" red as a loot spec mismatch. Hiding that scale in Pawn removes the arrow.
-            arrow:SetVertexColor(1, 0.35, 0.35)
-        elseif transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
-            arrow:SetVertexColor(1, 0.35, 0.35)
-        elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
-            arrow:SetVertexColor(1, 1, 0)
-        else
-            arrow:SetVertexColor(defaultR, defaultG, defaultB)
-        end
-    end
 
     local showAnim = false
     if status == "waiting" then
@@ -994,14 +1062,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     SetPartShown(caerdonButton, mogStatusBackground, true)
     SetPartShown(caerdonButton, mogStatus, true)
 
-    local displayInfo
-    if feature then
-        displayInfo = feature:GetDisplayInfoInternal(originalButton, item, feature, locationInfo, options, mogStatus,
+    if not displayInfo and feature then
+        displayInfo = feature:GetDisplayInfoInternal(originalButton, item, feature, locationInfo, options, status,
             bindingStatus)
     end
     -- A feature can leave the level gain out (levelGain = { shouldShow = false }), for a window
     -- that already shows the upgrade its own way. No other feature sets it.
-    levelGainAllowed = not (displayInfo and displayInfo.levelGain and displayInfo.levelGain.shouldShow == false)
+    local levelGainAllowed = not (displayInfo and displayInfo.levelGain and displayInfo.levelGain.shouldShow == false)
+    -- The piece's level gain, when one is to be shown at all.
+    local levelGain = upgradeDeltaText and GetShownLevelGain(transmogInfo, levelGainAllowed) or nil
     local equipLocation = item and item.GetEquipLocation and item:GetEquipLocation()
     local isTabard = equipLocation == "INVTYPE_TABARD"
     local isShirt = equipLocation == "INVTYPE_BODY"
@@ -1028,36 +1097,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     local isProminent = false
 
-    -- The store's category icons: a ring in the middle half of a 64 px texture. The crop is the
-    -- ring's square, which also cuts the shadow around it off square (see roundStatusIcon below).
+    -- Whether the icon is one of the store's ring icons (SetRingIcon).
     local isRingIcon = false
-    local function SetRingIcon(texture)
-        isRingIcon = true
-        mogStatus:SetTexCoord(16 / 64, 48 / 64, 16 / 64, 48 / 64)
-        mogStatus:SetTexture(texture)
-    end
-
-    -- The upgrade icon: an arrow on a ring. lowSkill: the toon's level is not there yet.
-    local function DrawUpgradeIcon(lowSkill)
-        isProminent = false
-        iconBackgroundAdjustment = 4
-        mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-        mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-        if lowSkill then
-            mogStatusBackground:SetVertexColor(0.4, 1, 0)
-        else
-            mogStatusBackground:SetVertexColor(0, 1, 1)
-        end
-
-        mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-        mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-        ApplyUpgradeArrowColor(0.4, 1, 0.2)
-        if lowSkill then
-            ShowUpgradeDeltaText(0.9, 0.82, 0.1)
-        else
-            ShowUpgradeDeltaText()
-        end
-    end
     local caerdonType = item and item.GetCaerdonItemType and item:GetCaerdonItemType()
     local housingInfo = (caerdonType == CaerdonItemType.Housing and item:GetItemData() and item:GetItemData():GetHousingInfo()) or
         nil
@@ -1084,9 +1125,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
     elseif status == "openable" then
         isProminent = true
-        SetRingIcon("Interface\\Store\\category-icon-free")
+        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-free")
     elseif status == "readable" then
-        SetRingIcon("Interface\\Store\\category-icon-services")
+        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-services")
     elseif status == "lowSkill" or status == "lowSkillPlus" then
         mogStatus:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
         mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
@@ -1108,24 +1149,28 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "upgrade" then
         isProminent = false
         if shouldShowUpgradeIcon then
-            DrawUpgradeIcon(false)
+            iconBackgroundAdjustment = 4
+            upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, false,
+                transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         end
     elseif status == "upgradeLowSkill" then
         isProminent = false
         if shouldShowUpgradeIcon then
-            DrawUpgradeIcon(true)
+            iconBackgroundAdjustment = 4
+            upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, true,
+                transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         end
     elseif status == "locked" then
         isProminent = true
-        SetRingIcon("Interface\\Store\\category-icon-key")
+        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-key")
     elseif status == "oldexpansion" and displayInfo and displayInfo.oldExpansionIcon.shouldShow then
         alpha = 0.9
-        SetRingIcon("Interface\\Store\\category-icon-wow")
+        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-wow")
     elseif status == "needForProfession" then
         -- TODO: Need to improve to pass data for icon determination.
         isProminent = true
         if displayInfo and displayInfo.ownIcon.shouldShow then
-            SetRingIcon("Interface\\Store\\category-icon-featured")
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-featured")
             -- mogStatus:SetTexture("Interface\\WorldMap\\worldquest-icon-enchanting")
         end
     elseif status == "canCombine" then
@@ -1195,12 +1240,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
 
         if not housingIconSet then
-            SetRingIcon("Interface\\Store\\category-icon-featured")
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-featured")
         end
     elseif status == "own" or status == "ownPlus" then
         isProminent = true
         if displayInfo and displayInfo.ownIcon.shouldShow then
-            SetRingIcon("Interface\\Store\\category-icon-featured")
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-featured")
             if status == "ownPlus" then
                 mogStatus:SetVertexColor(0.4, 1, 0)
             end
@@ -1208,7 +1253,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "other" or status == "otherPlus" then
         isProminent = true
         if displayInfo and displayInfo.otherIcon.shouldShow then
-            SetRingIcon("Interface\\Store\\category-icon-placeholder")
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-placeholder")
             if status == "otherPlus" then
                 mogStatus:SetVertexColor(0.4, 1, 0)
             end
@@ -1267,7 +1312,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus:SetTexture("Interface\\PaperDollInfoFrame\\StatSortArrows")
             mogStatus:SetVertexColor(1, 0.95, 0.75)
         elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
-            SetRingIcon("Interface\\Store\\category-icon-clothes")
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
         end
     elseif (status == "auction" or status == "auctionGoods") and displayInfo and displayInfo.auctionIcon and displayInfo.auctionIcon.shouldShow then
         -- The auction house pays enough more than a vendor to list it instead.
@@ -1281,11 +1326,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         -- "auction" lands here where its own icon is off (anything but bags and bank).
         if displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
             alpha = 0.9
-            SetRingIcon("Interface\\Store\\category-icon-bag")
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-bag")
         end
     elseif status == "waiting" then
         alpha = 0.5
-        SetRingIcon("Interface\\Common\\StreamCircle")
+        isRingIcon = SetRingIcon(mogStatus, "Interface\\Common\\StreamCircle")
         -- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
         -- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
         -- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
@@ -1301,7 +1346,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         status ~= "waiting" then
         local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
         if statusTexture == nil or statusTexture == "" or statusTexture == 0 then
-            DrawUpgradeIcon(badgeStatus == "upgradeLowSkill")
+            isProminent = false
+            iconBackgroundAdjustment = 4
+            upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame,
+                badgeStatus == "upgradeLowSkill", transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         else
             showBadge = true
         end
@@ -1327,25 +1375,20 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
         upgradeBadge:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
         upgradeBadge:SetTexture("Interface\\Buttons\\JumpUpArrow")
-        ApplyUpgradeArrowColor(0.4, 1, 0.2, upgradeBadge)
+        ApplyUpgradeArrowColor(upgradeBadge, transmogInfo, allowMismatchedSpecUpgrades, 0.4, 1, 0.2)
     end
 
-    if not upgradeDeltaShown and transmogInfo and transmogInfo.upgradeItemLevelDelta and transmogInfo.upgradeItemLevelDelta > 0 then
-        ShowUpgradeDeltaText()
+    if not upgradeDeltaShown and levelGain then
+        ShowLevelGain(self, originalButton, caerdonButton, deltaAnchorFrame, levelGain, 0.2, 1.0, 0.2)
+        upgradeDeltaShown = true
     end
 
     -- Show house XP bonus as a delta indicator for unowned housing items
     if not upgradeDeltaShown and upgradeDeltaText and housingInfo and
         housingInfo.firstAcquisitionBonus and housingInfo.firstAcquisitionBonus > 0 and
         (status == "own") then
-        if caerdonButton then
-            caerdonButton.upgradeDeltaAnchor = deltaAnchorFrame
-        end
-        upgradeDeltaText:SetFormattedText("+%d", housingInfo.firstAcquisitionBonus)
-        upgradeDeltaText:SetTextColor(1, 0.82, 0) -- Gold for house XP
-        upgradeDeltaText:SetAlpha(1.0)
-        SetPartShown(caerdonButton, upgradeDeltaText, true)
-        self:UpdateUpgradeDeltaPosition(originalButton)
+        -- Gold for house XP
+        ShowLevelGain(self, originalButton, caerdonButton, deltaAnchorFrame, housingInfo.firstAcquisitionBonus, 1, 0.82, 0)
         upgradeDeltaShown = true
     end
 
@@ -1408,16 +1451,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeBadgeRing:SetAlpha(alpha)
     end
 
-    C_Timer.After(0, function()
-        if (caerdonButton.searchOverlay and caerdonButton.searchOverlay:IsShown()) then
-            mogStatusBackground:SetAlpha(0.3)
-            mogStatus:SetAlpha(0.3)
-            if upgradeBadge then
-                upgradeBadge:SetAlpha(0.3)
-                upgradeBadgeRing:SetAlpha(0.3)
-            end
-        end
-    end)
+    if caerdonButton.searchOverlay then
+        QueueSearchDim(caerdonButton)
+    end
 
     if options.isFiltered then
         if options.filterColor then
@@ -1580,7 +1616,7 @@ function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
 end
 
 function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus,
-                                                    bindingStatus)
+                                                    bindingStatus, displayInfo)
     local caerdonButton = self:GetCaerdonButton(button)
 
     local bindsOnText = caerdonButton and caerdonButton.bindsOnText
@@ -1591,12 +1627,14 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
         caerdonButton.caerdonHasText = false
     end
 
-    if not feature then return end
+    if not feature or not bindingStatus then return end
 
-    local displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
-        bindingStatus)
+    if not displayInfo then
+        displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
+            bindingStatus)
+    end
 
-    if not bindingStatus or not displayInfo.bindingStatus.shouldShow then
+    if not displayInfo.bindingStatus.shouldShow then
         return
     end
 
@@ -1809,12 +1847,11 @@ local NOT_READY_MAX_RETRIES = 10
 -- plus the bag slot, or the key the feature passed. nil when the feature passed none. UpdateButton
 -- stores it on the button and the retry compares against it, so both must build it here.
 local function GetRequestKey(item, feature, locationInfo)
-    local locationKey = locationInfo.locationKey
     if item:HasItemLocationBankOrBags() then
-        local itemLocation = item:GetItemLocation()
-        local bag, slot = itemLocation:GetBagAndSlot()
-        locationKey = format("bag%d-slot%d", bag, slot)
+        local bag, slot = item:GetItemLocation():GetBagAndSlot()
+        return format("%s-bag%d-slot%d", feature:GetName(), bag, slot)
     end
+    local locationKey = locationInfo.locationKey
     if not locationKey then
         return nil
     end
@@ -1838,7 +1875,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
     isReady, mogStatus, bindingStatus, bindingResult, transmogInfo = item:GetCaerdonStatus(feature, locationInfo)
     if not isReady then
         -- Tooltip data shows "Retrieving item information". Instead of
-        -- polling through the coroutine, stash the item and let a single
+        -- polling through the queue, stash the item and let a single
         -- deferred timer batch-retry all pending items once.
         local locationKey = GetRequestKey(item, feature, locationInfo)
 
@@ -1947,9 +1984,18 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
     end
 
     if button then
-        self:SetItemButtonStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus, transmogInfo)
+        -- The window's display rules, asked for once and handed to both halves of the draw.
+        -- With no status and no text neither half reads them.
+        local displayInfo
+        if feature and (mogStatus or bindingStatus) then
+            displayInfo = feature:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
+                bindingStatus)
+        end
+        self:SetItemButtonStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus, transmogInfo,
+            displayInfo)
         self:SetItemButtonMogStatusFilter(button, options.isFiltered)
-        self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+        self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus,
+            displayInfo)
         self:SetButtonRefreshGeneration(button, self.refreshGeneration)
         if not milestones.firstDraw then
             Counters:Milestone("firstDraw")
@@ -2000,32 +2046,11 @@ end
 function CaerdonWardrobeMixin:ClearButton(button)
     local caerdonButton = self:GetCaerdonButton(button)
     if caerdonButton then
-        if self.waitingToProcess then
-            for locationKey, processInfo in pairs(self.waitingToProcess) do
-                if processInfo.button == button then
-                    self.waitingToProcess[locationKey] = nil
-                end
-            end
-        end
-
-        if self.processQueue then
-            for locationKey, processInfo in pairs(self.processQueue) do
-                if processInfo.button == button then
-                    self.processQueue[locationKey] = nil
-                end
-            end
-        end
-
-        if self.featureProcessItems then
-            for feature, items in pairs(self.featureProcessItems) do
-                if items then
-                    for locationKey, processInfo in pairs(items) do
-                        if processInfo.button == button then
-                            items[locationKey] = nil
-                        end
-                    end
-                end
-            end
+        -- Every list of requests is kept by button (see UpdateButton), so nothing is searched.
+        self.waitingToProcess[button] = nil
+        self.processQueue[button] = nil
+        for _, items in pairs(self.featureProcessItems) do
+            items[button] = nil
         end
 
         self:SetItemButtonStatus(button)
@@ -2034,16 +2059,14 @@ function CaerdonWardrobeMixin:ClearButton(button)
 end
 
 function CaerdonWardrobeMixin:CancelPending(feature)
-    for locationKey, processInfo in pairs(self.waitingToProcess) do
-        if processInfo.feature == feature then
-            self.waitingToProcess[locationKey] = nil
+    for queueKey, request in pairs(self.waitingToProcess) do
+        if request.feature == feature then
+            self.waitingToProcess[queueKey] = nil
         end
     end
-    if self.processQueue then
-        for locationKey, processInfo in pairs(self.processQueue) do
-            if processInfo.feature == feature then
-                self.processQueue[locationKey] = nil
-            end
+    for queueKey, request in pairs(self.processQueue) do
+        if request.feature == feature then
+            self.processQueue[queueKey] = nil
         end
     end
     if self.featureProcessContinuables[feature] then
@@ -2079,7 +2102,7 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 
     local locationKey = GetRequestKey(item, feature, locationInfo)
 
-    if locationKey then -- opt-in to coroutine-based update
+    if locationKey then -- a request with no place of its own is not queued
         self:SetButtonLocationKey(button, locationKey)
 
         if not item:IsItemEmpty() then
@@ -2093,31 +2116,63 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
         -- One pending request per button, not per location. Two buttons of a feature can show
         -- the same slot (BetterBags' food and drink bar beside its bag), and kept per location
         -- the later request replaced the earlier one, whose button was then not drawn.
-        self.waitingToProcess[button or locationKey] = {
-            button = button,
-            item = item,
-            feature = feature,
-            locationInfo = locationInfo,
-            options = options,
-            locationKey = locationKey
-        }
+        -- A window often asks for a button more than once before it is drawn; the request that
+        -- is still waiting is the one that gets the new answer.
+        local queueKey = button or locationKey
+        local request = self.waitingToProcess[queueKey]
+        if not request then
+            request = {}
+            self.waitingToProcess[queueKey] = request
+        end
+        request.button, request.item, request.feature = button, item, feature
+        request.locationInfo, request.options, request.locationKey = locationInfo, options, locationKey
         if not milestones.firstRequest then
             Counters:Milestone("firstRequest")
         end
 
-        -- Re-register OnUpdate if it was unregistered while idle
-        if not self:GetScript("OnUpdate") then
-            self.timeSinceLastUpdate = 0
-            self:SetScript("OnUpdate", self.OnUpdate)
-        end
+        self:WakeQueue()
 
         return
     end
 end
 
--- The draw of one queued item. An error in it used to end the queue's coroutine, and every
--- item still in that batch was then never drawn. Now it costs this button its icon (none is
--- better than a stale one) and the rest go on.
+-- How long one frame's pass over the queue may take, in seconds. The queue used to draw twenty
+-- items a frame whatever they cost: where a draw is cheap (a status already worked out) that
+-- spread a window over more frames than it needed, and where it is dear (a first look at a bag
+-- of equipment) twenty were a frame of 35 ms and more. One item is always drawn, however long
+-- it takes.
+local QUEUE_FRAME_BUDGET = 0.008
+
+-- Starts the queue's passes when it was idle. The first pass is in a later frame than the
+-- request, never the same one: a window asks for its buttons from inside its own update, and
+-- what it does to them after that call is then done. GetTime() is the frame's time, the same
+-- for every call in a frame.
+function CaerdonWardrobeMixin:WakeQueue()
+    if not self:GetScript("OnUpdate") then
+        self.queueWokenAt = GetTime()
+        self:SetScript("OnUpdate", self.OnUpdate)
+    end
+end
+
+-- Whether nothing is asked for that has not been drawn: nothing in the queue, nothing waiting
+-- for an item to load or for its tooltip.
+function CaerdonWardrobeMixin:IsQueueIdle()
+    if next(self.waitingToProcess) ~= nil or next(self.processQueue) ~= nil then
+        return false
+    end
+    if self.pendingTooltipRetries and next(self.pendingTooltipRetries) ~= nil then
+        return false
+    end
+    for _, items in pairs(self.featureProcessItems) do
+        if next(items) ~= nil then
+            return false
+        end
+    end
+    return true
+end
+
+-- The draw of one queued item. An error in it costs this button its icon (none is better than
+-- a stale one) and the rest of the batch goes on.
 function CaerdonWardrobeMixin:ProcessQueuedItem(button, item, feature, locationInfo, options)
     if not Contained(self.ProcessItem, self, button, item, feature, locationInfo, options) then
         Counters:Unwound()
@@ -2125,108 +2180,95 @@ function CaerdonWardrobeMixin:ProcessQueuedItem(button, item, feature, locationI
     end
 end
 
-function CaerdonWardrobeMixin:ProcessItem_Coroutine()
-    -- Always reset processQueue so stale ContinuableContainer callbacks from a
-    -- previous coroutine don't block this one.  Those callbacks can set
-    -- processQueue to non-nil after the old coroutine exits, which previously
-    -- caused the nil-guard to skip all processing permanently.
-    self.processQueue = {}
+-- One request off the queue: drawn, set aside until its item has loaded, or dropped.
+function CaerdonWardrobeMixin:ProcessRequest(queueKey, request)
+    local button, item, feature = request.button, request.item, request.feature
+    local locationInfo = request.locationInfo
 
-    while true do
-        local itemCount = 0
-        for queueKey, processInfo in pairs(self.waitingToProcess) do
-            -- Don't process item if the key is different than expected
-            if self:GetButtonLocationKey(processInfo.button) == processInfo.locationKey then
-                itemCount = itemCount + 1
-                self.processQueue[queueKey] = processInfo
-            end
-
-            self.waitingToProcess[queueKey] = nil
-        end
-
-        local itemsProcessedThisFrame = 0
-        local maxItemsPerFrame = 20 -- Raised from 4; per-item cost is low with status/source caching
-
-        for queueKey, processInfo in pairs(self.processQueue) do
-            local button = processInfo.button
-            local item = processInfo.item
-            local feature = processInfo.feature
-            local locationInfo = processInfo.locationInfo
-            local options = processInfo.options
-            local locationKey = processInfo.locationKey
-
-            if feature:IsSameItem(button, item, locationInfo) and self:GetButtonLocationKey(button) == locationKey then
-                if item:IsItemEmpty() then -- BattlePet or something else - assuming item is ready.
-                    self:ProcessQueuedItem(button, item, feature, locationInfo, options)
-                    itemsProcessedThisFrame = itemsProcessedThisFrame + 1
-                else
-                    -- Check if item is already cached to process immediately
-                    if item:IsItemDataCached() then
-                        if self:GetButtonLocationKey(button) == locationKey then
-                            self:ProcessQueuedItem(button, item, feature, locationInfo, options)
-                            itemsProcessedThisFrame = itemsProcessedThisFrame + 1
-                        else
-                            self:ClearButton(button)
-                        end
-                    else
-                        -- Item not cached, add to continuable container
-                        self.featureProcessContinuables[feature] = self.featureProcessContinuables[feature] or
-                            ContinuableContainer:Create();
-                        -- The container asks the client for the item here; the counters file the
-                        -- question under the feature.
-                        Counters.requester = feature:GetName()
-                        self.featureProcessContinuables[feature]:AddContinuable(item);
-                        Counters.requester = nil
-                        self.featureProcessItems[feature] = self.featureProcessItems[feature] or {}
-                        self.featureProcessItems[feature][queueKey] = processInfo
-                    end
-                end
-            else
-                self:ClearButton(button)
-            end
-
-            self.processQueue[queueKey] = nil
-
-            -- Yield after processing a few items to maintain frame rate
-            if itemsProcessedThisFrame >= maxItemsPerFrame then
-                coroutine.yield()
-                itemsProcessedThisFrame = 0
-            end
-        end
-
-        for feature, continuableContainer in pairs(self.featureProcessContinuables) do
-            continuableContainer:ContinueOnLoad(function()
-                local items = self.featureProcessItems[feature]
-                -- Store items that need processing back into the queue.
-                -- Route through waitingToProcess so items are picked up even if
-                -- this callback fires after the current coroutine has exited.
-                if items then
-                    for queueKey, processInfo in pairs(items) do
-                        -- A newer request for the same button stands: this one is the older.
-                        if self.waitingToProcess[queueKey] == nil then
-                            self.waitingToProcess[queueKey] = processInfo
-                        end
-                    end
-                    self.featureProcessItems[feature] = nil
-
-                    -- Re-register OnUpdate so a new coroutine is created if needed
-                    if not self:GetScript("OnUpdate") then
-                        self.timeSinceLastUpdate = 0
-                        self:SetScript("OnUpdate", self.OnUpdate)
-                    end
-                end
-            end)
-            self.featureProcessContinuables[feature] = nil
-        end
-
-        if itemCount == 0 and itemsProcessedThisFrame == 0 then
-            break
-        end
-
-        coroutine.yield()
+    -- The button has since been asked for another place, or was given up (ClearButtonState).
+    -- Whatever was asked last stands: this request is not drawn, and it clears nothing either,
+    -- since a newer request for the button may be waiting.
+    if self:GetButtonLocationKey(button) ~= request.locationKey then
+        return
+    end
+    if not feature:IsSameItem(button, item, locationInfo) then
+        self:ClearButton(button)
+        return
     end
 
-    self.processQueue = nil
+    -- An empty item is a battle pet or the like: nothing to load.
+    if item:IsItemEmpty() or item:IsItemDataCached() then
+        self:ProcessQueuedItem(button, item, feature, locationInfo, request.options)
+        return
+    end
+
+    -- Its data has to come from the client first. A feature's items wait together in one
+    -- container, which DrainQueue sends off once the batch is through.
+    local container = self.featureProcessContinuables[feature]
+    if not container then
+        container = ContinuableContainer:Create()
+        self.featureProcessContinuables[feature] = container
+    end
+    -- The container asks the client for the item here; the counters file the question under
+    -- the feature.
+    Counters.requester = feature:GetName()
+    container:AddContinuable(item)
+    Counters.requester = nil
+    local items = self.featureProcessItems[feature]
+    if not items then
+        items = {}
+        self.featureProcessItems[feature] = items
+    end
+    items[queueKey] = request
+end
+
+-- One frame's work on the queue, until the time is up. Returns true when nothing is left to
+-- draw (items still loading are not the queue's: they wake it when they arrive).
+function CaerdonWardrobeMixin:DrainQueue(deadline)
+    -- What was asked for before a batch is started is that batch. A request made while it is
+    -- worked on (a draw that makes its window ask again, an item that came back unloaded)
+    -- waits for the next batch, a frame later at the earliest, so nothing can keep one pass
+    -- going in circles.
+    local queue = self.processQueue
+    if next(queue) == nil then
+        queue = self.waitingToProcess
+        self.waitingToProcess = self.processQueue
+        self.processQueue = queue
+    end
+
+    local queueKey, request = next(queue)
+    while queueKey ~= nil do
+        queue[queueKey] = nil
+        self:ProcessRequest(queueKey, request)
+        if GetTimePreciseSec() >= deadline then
+            break
+        end
+        queueKey, request = next(queue)
+    end
+    if next(queue) ~= nil then
+        return false
+    end
+
+    -- The batch is through: what it found unloaded is asked for now. The requests come back
+    -- through waitingToProcess, so they are picked up whenever the answer arrives.
+    for feature, container in pairs(self.featureProcessContinuables) do
+        self.featureProcessContinuables[feature] = nil
+        container:ContinueOnLoad(function()
+            local items = self.featureProcessItems[feature]
+            if items then
+                self.featureProcessItems[feature] = nil
+                for itemKey, itemRequest in pairs(items) do
+                    -- A newer request for the same button stands: this one is the older.
+                    if self.waitingToProcess[itemKey] == nil then
+                        self.waitingToProcess[itemKey] = itemRequest
+                    end
+                end
+                self:WakeQueue()
+            end
+        end)
+    end
+
+    return next(self.waitingToProcess) == nil
 end
 
 function CaerdonWardrobeMixin:OnEvent(event, ...)
@@ -2250,44 +2292,33 @@ function CaerdonWardrobeMixin:OnEvent(event, ...)
     Counters.event = outerEvent
 end
 
-local next = next -- faster lookup as a local apparently (haven't measured)
-
-function CaerdonWardrobeMixin:OnUpdate(elapsed)
+function CaerdonWardrobeMixin:OnUpdate()
     -- Pause processing during combat to avoid tainting Blizzard's secure
     -- frame operations (GetWidth, etc.) which cause errors in 12.0.1+.
     if InCombatLockdown() then
         return
     end
 
-    self.timeSinceLastUpdate = (self.timeSinceLastUpdate or 0) + elapsed
-    if (self.timeSinceLastUpdate > 0.05) then
-        if self.processItemCoroutine then
-            if coroutine.status(self.processItemCoroutine) ~= "dead" then
-                if Counters.on then
-                    Counters:BeginPass()
-                end
-                local ok, result = coroutine.resume(self.processItemCoroutine)
-                if Counters.on then
-                    Counters:EndPass(coroutine.status(self.processItemCoroutine) == "dead")
-                end
-                if not ok then
-                    error(result)
-                end
-            else
-                self.processItemCoroutine = nil
-            end
-            return
-        elseif next(self.waitingToProcess) ~= nil then
-            self.processItemCoroutine = coroutine.create(function() self:ProcessItem_Coroutine() end)
-        else
-            -- Nothing to process - unregister until new work arrives
-            self:SetScript("OnUpdate", nil)
-            if milestones.firstDraw and not milestones.queueIdle then
-                Counters:Milestone("queueIdle")
-            end
-        end
+    -- Not in the frame the work arrived in (see WakeQueue).
+    if self.queueWokenAt == GetTime() then
+        return
+    end
+    self.queueWokenAt = nil
 
-        self.timeSinceLastUpdate = 0
+    if Counters.on then
+        Counters:BeginPass()
+    end
+    local finished = self:DrainQueue(GetTimePreciseSec() + QUEUE_FRAME_BUDGET)
+    if Counters.on then
+        Counters:EndPass(finished)
+    end
+
+    if finished then
+        -- Nothing to process - unregister until new work arrives
+        self:SetScript("OnUpdate", nil)
+        if milestones.firstDraw and not milestones.queueIdle then
+            Counters:Milestone("queueIdle")
+        end
     end
 end
 
@@ -2485,7 +2516,7 @@ function CaerdonWardrobeMixin:SKILL_LINES_CHANGED()
 end
 
 function CaerdonWardrobeMixin:PLAYER_REGEN_ENABLED()
-    -- Combat ended — process any deferred refresh and resume coroutine
+    -- Combat ended: process any deferred refresh. The queue's passes go on by themselves.
     if self.refreshPendingAfterCombat then
         self.refreshPendingAfterCombat = nil
         self:RefreshItems()

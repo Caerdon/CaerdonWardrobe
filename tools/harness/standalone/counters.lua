@@ -340,16 +340,20 @@ local function StartSession(options)
         self:EnsureCaerdonButton(button)
         return nil, not had
     end
-    function CaerdonWardrobe:SetItemButtonStatus(button, item, feature, locationInfo, drawOptions, status)
+    -- As the real ones: the display rules are asked for only when the caller did not hand
+    -- them over, which ProcessItem does for a draw.
+    function CaerdonWardrobe:SetItemButtonStatus(button, item, feature, locationInfo, drawOptions, status,
+                                                 bindingStatus, transmogInfo, displayInfo)
         Spend(1.5, 4)
-        if feature and status ~= "waiting" then
+        if feature and status ~= "waiting" and not displayInfo then
             feature:GetDisplayInfoInternal()
         end
     end
     function CaerdonWardrobe:SetItemButtonMogStatusFilter() end
-    function CaerdonWardrobe:SetItemButtonBindType(button, item, feature)
+    function CaerdonWardrobe:SetItemButtonBindType(button, item, feature, locationInfo, drawOptions, status,
+                                                   bindingStatus, displayInfo)
         Spend(0.5, 1)
-        if feature then
+        if feature and bindingStatus and not displayInfo then
             feature:GetDisplayInfoInternal()
         end
     end
@@ -616,7 +620,7 @@ do
     local items = {}
     for index = 1, 45 do items[index] = NewItem(2000 + index) end
     AskFor(items)
-    Tick(8)
+    Tick(50)
 
     local report = CaerdonCounters:GetReport()
     local profile = report.profile
@@ -634,7 +638,9 @@ do
     end
     Expect("UpdateButton", 45, 157.5, 0, 405, 0)
     Expect("ClearButton", 45, 90, 0, 225, 0)
-    Expect("ProcessItem", 45, 461.25, 0, 2115, 0)
+    -- A draw: the status 7.75 ms and 36 KB, the display rules once 0.25 and 3, the two halves
+    -- of the drawing 1.5 and 4, 0.5 and 1.
+    Expect("ProcessItem", 45, 450, 0, 1980, 0)
     Expect("GetCaerdonStatus (computed)", 45, 348.75, 45, 1620, 90)
     Expect("GetTooltipData", 45, 90, 90, 360, 360)
     Expect("GetBindingStatus", 45, 22.5, 22.5, 45, 45)
@@ -642,26 +648,28 @@ do
     -- Once per item: the status computes it, and the draw reads what the status hands back.
     Expect("GetTransmogInfo", 45, 180, 135, 1125, 900)
     Expect("GetEquipmentSets", 45, 45, 45, 225, 225)
-    Expect("SetItemButtonStatus", 135, 213.75, 202.5, 675, 540)
-    Expect("SetItemButtonBindType", 90, 56.25, 45, 225, 90)
-    Expect("GetDisplayInfoInternal", 90, 22.5, 22.5, 270, 270)
+    Expect("SetItemButtonStatus", 135, 202.5, 202.5, 540, 540)
+    Expect("SetItemButtonBindType", 90, 45, 45, 90, 90)
+    -- Once per draw: ProcessItem asks and hands the answer to both halves.
+    Expect("GetDisplayInfoInternal", 45, 11.25, 11.25, 135, 135)
     Equal(Function(report, "GetCaerdonStatus (cache hit)").calls, 0, "profile: no cache hit yet")
-    Near(Function(report, "ProcessItem").worstMs, 10.25, "profile: the worst draw")
+    Near(Function(report, "ProcessItem").worstMs, 10, "profile: the worst draw")
 
     Equal(profile.queueWait.count, 45, "profile: every draw had waited in the queue")
     Check(profile.queueWait.meanMs > 100 and profile.queueWait.worstMs >= profile.queueWait.meanMs,
-        "profile: the wait is at least the queue's two passes")
+        "profile: the wait runs from the request to the draw, frames later for the last ones")
     Equal(profile.drains.count, 1, "profile: one drain")
-    Equal(profile.drains.passes, 4, "profile: four passes (20, 20, 5, and the one that finds nothing)")
-    -- A pass also holds the test addon's hook: 45 draws of 10.25 ms plus 10 ms each.
-    Near(profile.drains.ms, 461.25 + 450, "profile: the drain's time is the passes' own")
-    Near(profile.drains.worstPassMs, 20 * 20.25, "profile: the longest pass drew twenty")
-    Near(profile.drains.kb, 2115 + 4500, "profile: the drain's memory")
+    -- A pass also holds the test addon's hook: a draw of 10 ms plus 10 ms, which is more than
+    -- a frame's budget, so every pass draws one item and the last pass is the last draw.
+    Equal(profile.drains.passes, 45, "profile: a pass per draw, and none that finds nothing")
+    Near(profile.drains.ms, 450 + 450, "profile: the drain's time is the passes' own")
+    Near(profile.drains.worstPassMs, 20, "profile: the longest pass drew one")
+    Near(profile.drains.kb, 1980 + 4500, "profile: the drain's memory")
     Equal(profile.drains.recent[1].draws, 45, "profile: the drain's draws")
 
     -- The same items again without a refresh: answered from the cache.
     AskFor(items)
-    Tick(8)
+    Tick(50)
     report = CaerdonCounters:GetReport()
     local hit = Function(report, "GetCaerdonStatus (cache hit)")
     Equal(hit.calls, 45, "profile: 45 cache hits")
@@ -710,7 +718,7 @@ do
     AskFor({ NewItem(3005) })
     Tick(8)
     report = CaerdonCounters:GetReport()
-    Near(Function(report, "ProcessItem").ms, 10.25, "error: the next draw is timed right")
+    Near(Function(report, "ProcessItem").ms, 10, "error: the next draw is timed right")
     Near(Function(report, "ProcessItem").ownMs, 0, "error: with nothing left over from the failed call")
 
     -- An error after the call had said how it ended (a cache hit whose copy raises): what the
@@ -879,8 +887,8 @@ do
             if entry.label == "ProcessItem" then draws = entry end
         end
         Equal(draws and draws.calls, 24, "tests: 24 draws counted in the two")
-        -- Each refresh computes afresh: 10.25 ms a draw, without the 10 ms of the tests' hook.
-        Near(draws and draws.ms, 24 * 10.25, "tests: the tests' own hook is not in the figure")
+        -- Each refresh computes afresh: 10 ms a draw, without the 10 ms of the tests' hook.
+        Near(draws and draws.ms, 24 * 10, "tests: the tests' own hook is not in the figure")
         Equal(counted.profile.drains.count, 2, "tests: two drains")
     end
     local triggers = T.RefreshTriggers()

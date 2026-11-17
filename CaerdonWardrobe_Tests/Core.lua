@@ -504,23 +504,10 @@ if CaerdonCounters and CaerdonCounters.Attach then
     CaerdonCounters:Attach()
 end
 
--- Whether the addon has nothing queued. This reads the queue's own fields and is the one
--- place the tests know how the queue is built: when the core can answer the question itself,
--- ask it here instead.
+-- Whether the addon has nothing queued: nothing waiting to be drawn, for an item to load or
+-- for a tooltip. The core answers that itself.
 function T.CoreIsIdle()
-    local core = CaerdonWardrobe
-    if next(core.waitingToProcess) ~= nil or core.processItemCoroutine ~= nil or core.processQueue ~= nil then
-        return false
-    end
-    if core.pendingTooltipRetries and next(core.pendingTooltipRetries) ~= nil then
-        return false
-    end
-    for _, items in pairs(core.featureProcessItems) do
-        if next(items) ~= nil then
-            return false
-        end
-    end
-    return true
+    return CaerdonWardrobe:IsQueueIdle()
 end
 
 -- Inside a job: wait until the queue has been empty for `settle` seconds in a row.

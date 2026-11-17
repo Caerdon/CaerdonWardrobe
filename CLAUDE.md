@@ -31,7 +31,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 
 ## Code Map
 
-- `CaerdonWardrobe.lua`: the queue (`UpdateButton`, `ProcessItem`), drawing (`SetItemButtonStatus`, `SetItemButtonBindType`, `SetStatusIconPosition`), `RefreshItems`.
+- `CaerdonWardrobe.lua`: the queue (`UpdateButton`, `DrainQueue`, `ProcessItem`), drawing (`SetItemButtonStatus`, `SetItemButtonBindType`, `SetStatusIconPosition`), `RefreshItems`.
 - `CaerdonItem.lua`: `CaerdonItemMixin` with `GetCaerdonStatus`, the tooltip scan (`GetTooltipData`) and `GetBindingStatus`.
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
@@ -73,6 +73,8 @@ The result is cached by item link (plus `|B` when soulbound, `|n<owned>` for sta
 - **Every feature's `Refresh()` must re-run `UpdateButton`** for the buttons it decorated. `RefreshItems` only wipes caches.
 - **Features call `ContinueOnItemLoad` before `UpdateButton`**, so `customDataLoaded` is true.
 - **A draw path does not call `GetTransmogInfo()`.** It reads the table `GetCaerdonStatus` returns, which is the one the verdict was made from and is shared by every button of that cache entry (notes: Processing Pipeline).
+- **A change to the drawing code is compared with the code from before, call by call:** `scenarios/draw-path.lua` writes down every widget call of `SetItemButtonStatus` and `SetItemButtonBindType` (notes: Offline Harness, Scenarios).
+- **An item's table holds only its data.** Its methods come through a metatable, so do not copy an item or walk it with `pairs` for them (notes: Processing Pipeline).
 - **One failure stays alone:** the core calls each feature's `Init`, `Refresh` and event handlers and draws each queued item through `Contained`, which hands an error to the game's error handler and carries on. A new loop over features or items does the same (notes: Processing Pipeline).
 - **A verdict that depends on game state needs its own refresh:** the status cache is keyed by item link, so the module must call `RefreshItems` when that state changes. The signal modules show the pattern: compare a signature, refresh only on a change.
 - **The counters wrap functions by name** (`Counters:Attach`). Renaming or splitting one of them means changing its line there; the export says "not found" for one it missed (notes: Counters).
