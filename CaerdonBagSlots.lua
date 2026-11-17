@@ -659,7 +659,7 @@ local function CheckForChange()
         current.reagentTakesProfession ~= context.reagentTakesProfession then
         CaerdonBagSlots:InvalidateCaches()
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-            CaerdonWardrobe:RefreshItems()
+            CaerdonWardrobe:RefreshItems("bag slots")
         end
     end
 end
@@ -668,9 +668,9 @@ local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 -- Fires when a bag slot's content changes; guarded in case a client does not have it.
 pcall(eventFrame.RegisterEvent, eventFrame, "BAG_CONTAINER_UPDATE")
--- A profession learned or dropped. Also fires on every skill point; the check is cheap and
--- only refreshes when the set of professions changed.
-pcall(eventFrame.RegisterEvent, eventFrame, "SKILL_LINES_CHANGED")
+-- A profession learned or dropped is not listened for here: the refresh watcher reads the
+-- professions on SKILL_LINES_CHANGED and refreshes everything when they changed
+-- (CaerdonRefresh.lua). They stay in the signature, for a change the watcher has not read yet.
 eventFrame:SetScript("OnEvent", function()
     if not context then
         return

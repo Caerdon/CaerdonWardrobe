@@ -260,7 +260,7 @@ eventFrame:SetScript("OnEvent", function()
     if current.signature ~= previous.signature then
         carried = nil
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-            CaerdonWardrobe:RefreshItems()
+            CaerdonWardrobe:RefreshItems("food carried")
         end
     else
         carried = current

@@ -337,14 +337,14 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
                 NS:GetDefaultConfig().Icon.ShowMismatchedSpecUpgrades
         end
 
-        CaerdonWardrobe:RefreshItems()
+        CaerdonWardrobe:RefreshItems("settings")
     end
 end
 
 function CaerdonWardrobeConfigMixin:OnSave()
     -- Make sure that errors aren't swallowed for InterfaceOption callbacks
     xpcall(function()
-        CaerdonWardrobe:RefreshItems()
+        CaerdonWardrobe:RefreshItems("settings")
     end, geterrorhandler())
 end
 

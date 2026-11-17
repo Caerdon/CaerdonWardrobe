@@ -4,8 +4,6 @@ local DEBUG_ENABLED = false
 -- local DEBUG_ITEM = 82800
 local ADDON_NAME, NS = ...
 local L = NS.L
-local isHousingSupported = select(4, GetBuildInfo()) >= 110207 and Enum and Enum.ItemClass and
-    Enum.ItemClass.Housing ~= nil
 
 BINDING_HEADER_CAERDON = L["Caerdon Addons"]
 BINDING_NAME_COPYMOUSEOVERLINK = L["Copy Mouseover Link"]
@@ -158,10 +156,10 @@ function CaerdonWardrobeMixin:OnLoad()
     pcall(self.RegisterEvent, self, "UPDATE_EXPANSION_LEVEL")
     self:RegisterEvent "VARIABLES_LOADED"
     self:RegisterEvent "NEW_RECIPE_LEARNED"
-    self:RegisterEvent "SKILL_LINES_CHANGED"
+    -- Skill lines, the player's flags and the housing events are not here: each also comes
+    -- when nothing changed, so the watcher compares before it refreshes (CaerdonRefresh.lua).
     self:RegisterEvent "PLAYER_EQUIPMENT_CHANGED"
     self:RegisterEvent "EQUIPMENT_SWAP_FINISHED"
-    self:RegisterEvent "PLAYER_FLAGS_CHANGED"
     self:RegisterEvent "NEW_MOUNT_ADDED"
     self:RegisterEvent "NEW_TOY_ADDED"
     self:RegisterEvent "NEW_PET_ADDED"
@@ -173,13 +171,6 @@ function CaerdonWardrobeMixin:OnLoad()
         if pcall(self.RegisterEvent, self, talentEvent) then
             self[talentEvent] = self.OnTalentsChanged
         end
-    end
-    if isHousingSupported then
-        self:RegisterEvent "HOUSING_STORAGE_ENTRY_UPDATED"
-        self:RegisterEvent "HOUSING_STORAGE_UPDATED"
-        self:RegisterEvent "HOUSE_DECOR_ADDED_TO_CHEST"
-        self:RegisterEvent "DYE_COLOR_UPDATED"
-        self:RegisterEvent "DYE_COLOR_CATEGORY_UPDATED"
     end
 
     hooksecurefunc("EquipPendingItem", function(...) self:OnEquipPendingItem(...) end)
@@ -2419,8 +2410,11 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
     end
 end
 
-function CaerdonWardrobeMixin:RefreshItems()
-    Counters:NoteRefresh()
+-- Every verdict is thrown away and every window asked to draw again. `reason` is the refresh's
+-- name in the counters ("skills", "quests") and `detail` what changed, in words; without a
+-- reason it is filed under the event the frame is handling, or the line that asked.
+function CaerdonWardrobeMixin:RefreshItems(reason, detail)
+    Counters:NoteRefresh(type(reason) == "string" and reason or nil, type(detail) == "string" and detail or nil)
 
     if self.refreshTimer then
         self.refreshTimer:Cancel()
@@ -2467,7 +2461,7 @@ function CaerdonWardrobeMixin:OnTalentsChanged()
         CaerdonAPI:InvalidateTalentTrees()
         local after = CaerdonAPI:GetPrimaryTalentTree()
         if before ~= after then
-            self:RefreshItems()
+            self:RefreshItems("talents", ("leading tree: %s -> %s"):format(tostring(before), tostring(after)))
         end
     end)
 end
@@ -2476,7 +2470,7 @@ function CaerdonWardrobeMixin:OnEquipPendingItem()
     -- TODO: Bit of a hack... wait a bit and then update...
     --       Need to figure out a better way.  Otherwise,
     --		 you end up with BoE markers on things you've put on.
-    C_Timer.After(1, function() self:RefreshItems() end)
+    C_Timer.After(1, function() self:RefreshItems("equip pending") end)
 end
 
 -- Session log of the transmog collection events this frame received (oldest first).
@@ -2545,10 +2539,6 @@ function CaerdonWardrobeMixin:EQUIPMENT_SWAP_FINISHED()
     self:RefreshItems()
 end
 
-function CaerdonWardrobeMixin:PLAYER_FLAGS_CHANGED()
-    self:RefreshItems()
-end
-
 function CaerdonWardrobeMixin:UPDATE_EXPANSION_LEVEL()
     -- Can change while logged in!
     self:RefreshItems()
@@ -2558,15 +2548,11 @@ function CaerdonWardrobeMixin:NEW_RECIPE_LEARNED()
     self:RefreshItems()
 end
 
-function CaerdonWardrobeMixin:SKILL_LINES_CHANGED()
-    self:RefreshItems()
-end
-
 function CaerdonWardrobeMixin:PLAYER_REGEN_ENABLED()
     -- Combat ended: process any deferred refresh. The queue's passes go on by themselves.
     if self.refreshPendingAfterCombat then
         self.refreshPendingAfterCombat = nil
-        self:RefreshItems()
+        self:RefreshItems("after combat")
     end
 end
 
@@ -2580,39 +2566,4 @@ end
 
 function CaerdonWardrobeMixin:NEW_PET_ADDED()
     self:RefreshItems()
-end
-
-function CaerdonWardrobeMixin:HOUSING_STORAGE_ENTRY_UPDATED()
-    if isHousingSupported then
-        self:RefreshItems()
-        C_Timer.After(0.1, function() self:RefreshItems() end)
-    end
-end
-
-function CaerdonWardrobeMixin:HOUSING_STORAGE_UPDATED()
-    if isHousingSupported then
-        self:RefreshItems()
-        C_Timer.After(0.1, function() self:RefreshItems() end)
-    end
-end
-
-function CaerdonWardrobeMixin:HOUSE_DECOR_ADDED_TO_CHEST()
-    if isHousingSupported then
-        self:RefreshItems()
-        C_Timer.After(0.1, function() self:RefreshItems() end)
-    end
-end
-
-function CaerdonWardrobeMixin:DYE_COLOR_UPDATED()
-    if isHousingSupported then
-        self:RefreshItems()
-        C_Timer.After(0.1, function() self:RefreshItems() end)
-    end
-end
-
-function CaerdonWardrobeMixin:DYE_COLOR_CATEGORY_UPDATED()
-    if isHousingSupported then
-        self:RefreshItems()
-        C_Timer.After(0.1, function() self:RefreshItems() end)
-    end
 end

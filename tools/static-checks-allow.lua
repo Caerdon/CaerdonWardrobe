@@ -115,6 +115,11 @@ return {
         ["Enum.ItemContainerSubclass"] = { "forever", "`and ... or <number>` in CaerdonBagSlots" },
         ["Enum.ItemQuiverSubclass"] = { "forever", "`and ... or <number>` in CaerdonBagSlots" },
 
+        -- Forever's skill list (weapon skills, proficiencies). Retail has no such table.
+        ["C_SkillInfo"] = { "forever", "read into a local and tested before use in CaerdonRefresh's ReadSkills" },
+        ["C_SkillInfo.GetNumSkillLines"] = { "forever", "tested with the table in ReadSkills" },
+        ["C_SkillInfo.GetSkillLineInfo"] = { "forever", "tested with the table in ReadSkills" },
+
         -- Fallbacks for clients older than either supported one. Each sits behind a test for
         -- the current API or for the name itself, so it is never reached; deleting the
         -- fallback deletes the entry.

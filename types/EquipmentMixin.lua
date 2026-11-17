@@ -137,21 +137,29 @@ end
 -- PVP context detection (cached per invalidation cycle)
 local cachedPvpContext = nil
 
-local function IsInPvpContext()
-    if cachedPvpContext ~= nil then
-        return cachedPvpContext
-    end
+local function ReadPvpContext()
     local _, instanceType = GetInstanceInfo()
     if instanceType == "pvp" or instanceType == "arena" then
-        cachedPvpContext = true
         return true
     end
     if C_PvP and C_PvP.IsWarModeDesired and C_PvP.IsWarModeDesired() then
-        cachedPvpContext = true
         return true
     end
-    cachedPvpContext = false
     return false
+end
+
+local function IsInPvpContext()
+    if cachedPvpContext == nil then
+        cachedPvpContext = ReadPvpContext()
+    end
+    return cachedPvpContext
+end
+
+-- The answer as the client gives it now, not the one kept for the cycle: the refresh watcher
+-- compares it to decide whether a change of the player's flags or of the world was one of this
+-- (CaerdonRefresh.lua).
+function CaerdonEquipment:ReadPvpContext()
+    return ReadPvpContext()
 end
 
 -- Returns effective item levels for a candidate-vs-equipped comparison,

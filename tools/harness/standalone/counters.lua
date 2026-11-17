@@ -108,6 +108,7 @@ end
 local function NewFrame()
     local frame = { events = {}, scripts = {} }
     function frame:RegisterEvent(event) self.events[event] = true end
+    function frame:RegisterUnitEvent(event) self.events[event] = true end
     function frame:UnregisterEvent(event) self.events[event] = nil end
     function frame:SetScript(name, fn) self.scripts[name] = fn end
     function frame:GetScript(name) return self.scripts[name] end
@@ -264,6 +265,7 @@ local function StartSession(options)
     assert(blizzard, "the Builds mirror is needed for Blizzard's ContinuableContainer")
     assert(loadstring(blizzard:read("*a"), "@Interface/AddOns/Blizzard_ObjectAPI/Mainline/ContinuableContainer.lua"))()
     blizzard:close()
+    LoadAddonFile("CaerdonWardrobe", "CaerdonRefresh.lua", "CaerdonWardrobe", NS)
     LoadAddonFile("CaerdonWardrobe", "CaerdonWardrobe.lua", "CaerdonWardrobe", NS)
 
     CaerdonItemType = { Equipment = "Equipment", Empty = "Empty" }
@@ -498,13 +500,21 @@ end
 ------------------------------------------------------------------------------------------
 
 do
-    Fire("SKILL_LINES_CHANGED")
-    Fire("SKILL_LINES_CHANGED")
+    Fire("NEW_TOY_ADDED")
+    Fire("NEW_TOY_ADDED")
     Fire("PLAYER_EQUIPMENT_CHANGED")
     AddonChunk("CaerdonWardrobe", "CaerdonQuestItems.lua", "\n\nCaerdonWardrobe:RefreshItems()")()
-    -- A timer of the core: its own line, not the event that set it.
+    -- A timer of the core says why: its reason, not the event that set it.
     EquipPendingItem()
     clock = clock + 1.01
+    RunTimers()
+    -- The watcher (the real CaerdonRefresh.lua): the first event is its first reading, which
+    -- counts as a change; the second reads the same skills and refreshes nothing.
+    Fire("SKILL_LINES_CHANGED")
+    clock = clock + 1
+    RunTimers()
+    Fire("SKILL_LINES_CHANGED")
+    clock = clock + 1
     RunTimers()
     -- The test addon, through a hook on RefreshItems as it has one.
     hooksecurefunc(CaerdonWardrobe, "RefreshItems", function() end)
@@ -513,18 +523,35 @@ do
     assert(loadstring("CaerdonWardrobe:RefreshItems()", "@Interface/AddOns/Other/Other.lua"))()
 
     local refreshes = CaerdonCounters:GetReport().refreshes
-    Equal(refreshes.total, 8, "refresh: eight calls counted, with the one of section 1")
-    Equal(refreshes.by.SKILL_LINES_CHANGED, 2, "refresh: an event of the core is named by the event")
+    Equal(refreshes.total, 10, "refresh: ten calls counted, with the two of section 1")
+    Equal(refreshes.by.pvp, 1, "refresh: one of those two was the watcher's first reading as the world came")
+    Equal(refreshes.by.NEW_TOY_ADDED, 2, "refresh: an event of the core is named by the event")
+    Equal(refreshes.by.skills, 1, "refresh: two skill line events with the same skills are one refresh, named by its watch")
+    Equal(refreshes.by.SKILL_LINES_CHANGED, nil, "refresh: and none is filed under the event")
     Equal(refreshes.by.PLAYER_EQUIPMENT_CHANGED, 1, "refresh: a second event")
     Equal(refreshes.by["CaerdonQuestItems.lua:3"], 1, "refresh: a signal module is named by its line")
     Equal(refreshes.by["CaerdonWardrobe_Tests/Timing.lua:1"], 1, "refresh: the test addon is named with its folder, through a hook")
     Equal(refreshes.by["(not the addon's own code)"], 2, "refresh: another addon's call, and the mock's own in section 1")
-    local timerLabel
-    for trigger in pairs(refreshes.by) do
-        if trigger:find("^CaerdonWardrobe%.lua:%d+$") then timerLabel = trigger end
+    Equal(refreshes.by["equip pending"], 1, "refresh: the core's own timer is named by the reason it gives")
+    Equal(#refreshes.recent, 10, "refresh: the recent list holds them")
+    local skillsEntry
+    for _, entry in ipairs(refreshes.recent) do
+        if entry.trigger == "skills" then skillsEntry = entry end
     end
-    Check(timerLabel ~= nil, "refresh: the core's own timer is named by its line in CaerdonWardrobe.lua")
-    Equal(#refreshes.recent, 8, "refresh: the recent list holds them")
+    Equal(skillsEntry and skillsEntry.detail, "first reading", "refresh: the watcher's entry says what had changed")
+    local skills
+    for _, watch in ipairs(refreshes.watched) do
+        if watch.name == "skills" then skills = watch end
+    end
+    Check(skills ~= nil and skills.events == 2 and skills.checks == 4 and skills.changes == 1,
+        "refresh: the report says how many events the watch saw, how often it read and how often that was a change")
+    local watchedLine, recentLine
+    for _, line in ipairs(CaerdonCounters:GetReportLines()) do
+        if line.text == "watched skills: 2 events, read 4 times, 1 changes" then watchedLine = true end
+        if line.text:find("s: skills (first reading)", 1, true) then recentLine = true end
+    end
+    Check(watchedLine, "refresh: the export has a line per watch")
+    Check(recentLine, "refresh: and the newest refreshes with their reasons")
     Check(CaerdonCounters.event == nil, "refresh: no event is left set after the handlers")
 end
 
@@ -883,7 +910,9 @@ do
     for _, entry in ipairs(login and login.profile and login.profile.functions or {}) do
         if entry.label == "ProcessItem" then loginDraws = entry.calls end
     end
-    Equal(loginDraws, 12, "tests: the login's profile holds its twelve draws")
+    -- Twelve asked for, and the twelve again when the watcher takes its first reading of the
+    -- world (CaerdonRefresh.lua), which counts as a change.
+    Equal(loginDraws, 24, "tests: the login's profile holds its draws")
     Check(CaerdonCounters.on == false, "tests: the profile is off once the login record is written")
 
     -- A timing with Enable debug and the profile both on: it runs without either and puts

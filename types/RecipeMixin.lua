@@ -195,6 +195,28 @@ function CaerdonRecipe:GetRecordedTools()
     return PlayerRecipeData and PlayerRecipeData.tools
 end
 
+-- For the refresh watcher (CaerdonRefresh.lua): the ranks saved for this toon, which a recipe's
+-- verdict reads through FindSkillLine. Adds one key per skill line to the reading.
+function CaerdonRecipe:AddSkillReading(reading)
+    if type(PlayerProfessionData) ~= "table" then
+        return
+    end
+    for name, entry in pairs(PlayerProfessionData) do
+        if type(entry) == "table" then
+            if type(entry.skillLevel) == "number" then
+                reading["saved " .. tostring(name)] = entry.skillLevel
+            end
+            if type(entry.childSkillLines) == "table" then
+                for childName, child in pairs(entry.childSkillLines) do
+                    if type(child) == "table" and type(child.skillLevel) == "number" then
+                        reading["saved " .. tostring(name) .. " > " .. tostring(childName)] = child.skillLevel
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Function to cache individual profession skill lines (specializations)
 local function CacheSkillLine(skillLineID)
     local skillLineInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skillLineID)

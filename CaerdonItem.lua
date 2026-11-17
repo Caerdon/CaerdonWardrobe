@@ -1450,7 +1450,7 @@ local function IsCopySpellLoading(spellID)
             copySpellLoads[spellID] = "answered"
             -- Only for a text that came: many use spells have none (a recipe's).
             if (C_Spell.GetSpellDescription(spellID) or "") ~= "" then
-                CaerdonWardrobe:RefreshItems()
+                CaerdonWardrobe:RefreshItems("spell text")
             end
         end, function()
             -- The client has no data for it: the empty description is the answer after all.

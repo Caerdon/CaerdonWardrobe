@@ -36,6 +36,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
 - Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`).
+- `CaerdonRefresh.lua`: the refresh watcher (`NS.Refresh:Watch`). An event that also comes when nothing changed (skill lines, the player's flags, housing) is compared with the last reading before it refreshes.
 - `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
 - `CaerdonCounters.lua`: loaded first. Login milestones, loads asked of the client and full refreshes by trigger, always; time and memory per function while its profile is switched on, which the test addon does (the export's `[Counters]` section).
 - `config/`: `Config.lua` (defaults, migrations, the main page, `/caerdon`, the one-time message dialog), `Icons.lua` and `Display.lua` (the two settings pages), `ConfigPanel.lua` (layout helpers), `LayoutEditor.lua` (`/caerdonlayout`).
@@ -77,7 +78,7 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 - **A change to the drawing code is compared with the code from before, call by call:** `scenarios/draw-path.lua` writes down every widget call of `SetItemButtonStatus` and `SetItemButtonBindType` (notes: Offline Harness, Scenarios).
 - **An item's table holds only its data.** Its methods come through a metatable, so do not copy an item or walk it with `pairs` for them (notes: Processing Pipeline).
 - **One failure stays alone:** the core calls each feature's `Init`, `Refresh` and event handlers and draws each queued item through `Contained`, which hands an error to the game's error handler and carries on. A new loop over features or items does the same (notes: Processing Pipeline).
-- **A verdict that depends on game state needs its own refresh:** the status cache is keyed by item link, so the module must call `RefreshItems` when that state changes. The signal modules show the pattern: compare a signature, refresh only on a change.
+- **A verdict that depends on game state needs its own refresh:** the status cache is keyed by item link, so the module must call `RefreshItems` when that state changes. The signal modules show the pattern: compare a signature, refresh only on a change. An event that also comes when nothing changed gets a watch instead of a handler, and a refresh says why (`RefreshItems(reason, detail)`; notes: Refresh).
 - **The counters wrap functions by name** (`Counters:Attach`). Renaming or splitting one of them means changing its line there; the export says "not found" for one it missed (notes: Counters).
 - **Do not refresh on `TRANSMOG_SOURCE_COLLECTABILITY_UPDATE`:** the addon's own queries trigger it, which risks a loop.
 - **Do not change `LoadSources`' `#waitingForItems == 0` check** or remove the once-guard in `ContinueWithCancelOnItemLoad` (notes: LoadSources).

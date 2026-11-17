@@ -294,7 +294,7 @@ function CaerdonHousingMixin:GetHousingInfo()
             if C_Timer and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
                 local delay = math.min(1 + retries * 0.5, 3)
                 C_Timer.After(delay, function()
-                    CaerdonWardrobe:RefreshItems()
+                    CaerdonWardrobe:RefreshItems("housing pending")
                 end)
             end
         end

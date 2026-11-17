@@ -71,15 +71,6 @@ local function ReadProfessions()
     return names, skillLines
 end
 
-local function ProfessionSignature(names)
-    local list = {}
-    for name in pairs(names) do
-        list[#list + 1] = name
-    end
-    table.sort(list)
-    return table.concat(list, "|")
-end
-
 local function AddToolName(ctx, toolName, professionName, source)
     local key = toolName:lower()
     local entry = ctx.toolNames[key]
@@ -95,7 +86,6 @@ local function BuildContext()
     local ctx = {
         professionNames = names,
         skillLines = skillLines,
-        signature = ProfessionSignature(names),
         carriedInBags = ToolsCarriedInBags(),
         knownItems = {}, -- itemID -> { professions = { [name] = true }, name = item name or nil }
         toolNames = {},  -- lower-case tool name -> { name, professions = { [name] = true }, source }
@@ -250,7 +240,7 @@ end
 function CaerdonProfessionTools:OnToolsRecorded()
     self:InvalidateCaches()
     if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-        CaerdonWardrobe:RefreshItems()
+        CaerdonWardrobe:RefreshItems("tools recorded")
     end
 end
 
@@ -306,28 +296,6 @@ function CaerdonProfessionTools:GetDebugState()
     }
 end
 
--- Learning or dropping a profession changes which items are tools. The event also fires on
--- every skill point, so the icons are only refreshed when the set of professions changed.
-local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("SKILL_LINES_CHANGED")
-local changeTimerPending = false
-eventFrame:SetScript("OnEvent", function()
-    if not context or changeTimerPending then
-        -- Nothing was judged since the last refresh, so nothing on screen can be stale.
-        return
-    end
-    changeTimerPending = true
-    C_Timer.After(0.5, function()
-        changeTimerPending = false
-        if not context then
-            return
-        end
-        local names = ReadProfessions()
-        if ProfessionSignature(names) ~= context.signature then
-            CaerdonProfessionTools:InvalidateCaches()
-            if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-                CaerdonWardrobe:RefreshItems()
-            end
-        end
-    end)
-end)
+-- Learning or dropping a profession changes which items are tools. No event is listened for
+-- here: the refresh watcher reads the toon's professions on SKILL_LINES_CHANGED and refreshes
+-- everything when they changed (CaerdonRefresh.lua), which empties the context above.

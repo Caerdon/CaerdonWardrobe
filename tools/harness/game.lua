@@ -126,6 +126,8 @@ function H.StockGame(toon, items)
     Set("GetRealmName", function() return toon.realm end)
     Set("GetExpansionLevel", function() return 0 end)
     Set("InCombatLockdown", function() return false end)
+    -- Read by the refresh watcher as the world comes (CaerdonRefresh.lua, the PVP watch).
+    Set("GetInstanceInfo", function() return "Elsewhere", "none" end)
     Set("UnitName", function() return toon.name end)
     Set("UnitFullName", function() return toon.name, toon.realm end)
     Set("UnitGUID", function() return "Player-1-00000001" end)

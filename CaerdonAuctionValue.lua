@@ -130,7 +130,7 @@ function CaerdonAuctionValue:RecordDepositSample(itemLocation)
             local changed = data.depositRate == nil or math.abs(data.depositRate - rate) > 0.005
             data.depositRate = rate
             if changed and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-                CaerdonWardrobe:RefreshItems()
+                CaerdonWardrobe:RefreshItems("auction deposit")
             end
         end
     end
@@ -370,7 +370,7 @@ function CaerdonAuctionValue:OnBagsChanged()
             if info.shouldAuction ~= tracked.shouldAuction then
                 wipe(trackedStacks)
                 if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-                    CaerdonWardrobe:RefreshItems()
+                    CaerdonWardrobe:RefreshItems("auction stacks")
                 end
                 return
             end
@@ -410,7 +410,7 @@ local function OnPricesUpdated()
     refreshTimer = C_Timer.NewTimer(REFRESH_DELAY, function()
         refreshTimer = nil
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-            CaerdonWardrobe:RefreshItems()
+            CaerdonWardrobe:RefreshItems("auction prices")
         end
     end)
 end

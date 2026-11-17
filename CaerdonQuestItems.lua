@@ -131,7 +131,7 @@ local function RequestRefresh()
         -- RefreshItems calls InvalidateCaches below, so anything evaluated while this timer
         -- was pending (a bag update racing the quest completion flag) is dropped again.
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-            CaerdonWardrobe:RefreshItems()
+            CaerdonWardrobe:RefreshItems("quests")
         end
     end)
 end

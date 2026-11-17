@@ -198,7 +198,7 @@ return function(H, S)
     -- The same caches RefreshItems empties are the ones the recorder empties.
     do
         local core = H.ReadFile(H.addonDir .. "/CaerdonWardrobe.lua")
-        local refresh = core:match("function CaerdonWardrobeMixin:RefreshItems%(%)(.-)\nend")
+        local refresh = core:match("function CaerdonWardrobeMixin:RefreshItems%([%w_, ]*%)(.-)\nend")
         local recorder = H.ReadFile(TESTS .. "/Recorder.lua")
         local count = 0
         for call in (refresh or ""):gmatch("([%w_]+:Invalidate[%w_]*%(%))") do

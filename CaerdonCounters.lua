@@ -231,9 +231,10 @@ local recentRefreshes = {}
 -- a handler is that event's; any other one is named by the line that asked.
 Counters.event = nil
 
--- From RefreshItems, on every call.
-function Counters:NoteRefresh()
-    local trigger = self.event
+-- From RefreshItems, on every call. A caller that says why is filed under its reason (the
+-- watcher's "skills", a signal module's "bag slots"), with what changed when it says that too.
+function Counters:NoteRefresh(reason, detail)
+    local trigger = reason or self.event
     if not trigger then
         -- Above this function sits RefreshItems itself, then whoever called it.
         local file, lineNumber = Caller(3, false)
@@ -241,7 +242,7 @@ function Counters:NoteRefresh()
     end
     refreshes.total = refreshes.total + 1
     refreshesBy[trigger] = (refreshesBy[trigger] or 0) + 1
-    recentRefreshes[#recentRefreshes + 1] = { at = Round(SinceLoad(), 2), trigger = trigger }
+    recentRefreshes[#recentRefreshes + 1] = { at = Round(SinceLoad(), 2), trigger = trigger, detail = detail }
     if #recentRefreshes > RECENT_REFRESHES then
         table.remove(recentRefreshes, 1)
     end
@@ -660,8 +661,10 @@ function Counters:GetReport()
         report.refreshes.by[trigger] = count
     end
     for index, entry in ipairs(recentRefreshes) do
-        report.refreshes.recent[index] = { at = entry.at, trigger = entry.trigger }
+        report.refreshes.recent[index] = { at = entry.at, trigger = entry.trigger, detail = entry.detail }
     end
+    -- What the watcher compared before it refreshed (CaerdonRefresh.lua): events against changes.
+    report.refreshes.watched = NS and NS.Refresh and NS.Refresh:GetReport() or {}
 
     local profile = {
         on = profiling,
@@ -747,6 +750,16 @@ function Counters:GetReportLines()
     end
     add(1, ("Full refreshes: %d%s"):format(refreshReport.total,
         #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+    for _, watch in ipairs(refreshReport.watched) do
+        add(2, ("watched %s: %d events, read %d times, %d changes%s"):format(watch.name, watch.events, watch.checks,
+            watch.changes, watch.notRegistered and ("; this client has no " .. watch.notRegistered) or ""))
+    end
+    -- The newest few, with what the caller said had changed.
+    local RECENT_SHOWN = 8
+    for index = math.max(1, #refreshReport.recent - RECENT_SHOWN + 1), #refreshReport.recent do
+        local entry = refreshReport.recent[index]
+        add(2, ("at %s s: %s%s"):format(Figure(entry.at), entry.trigger, entry.detail and (" (" .. entry.detail .. ")") or ""))
+    end
 
     local itemLoads = report.itemLoads
     add(1, ("Loads asked of the client: %d (%d loaded, %d failed, %d not answered), mean answer %s s, slowest %s s")
