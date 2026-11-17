@@ -423,5 +423,40 @@ do
     Equal(#errors, 0, "an event before the core exists raises nothing")
 end
 
+------------------------------------------------------------------------------------------
+print("The profession window opens")
+------------------------------------------------------------------------------------------
+for _, flavor in ipairs({ "retail", "forever" }) do
+    local watcher = Start(flavor)
+    Check(frame.events.TRADE_SKILL_DATA_SOURCE_CHANGED == true, flavor .. ": the profession window's event is registered")
+    Fire("SKILL_LINES_CHANGED")
+    Advance(1)
+    Equal(#refreshes, 1, flavor .. ": the first reading")
+
+    -- Opened on a profession whose ranks are saved as they are.
+    Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")
+    Advance(1)
+    Equal(#refreshes, 1, flavor .. ": the window opening on ranks already saved refreshes nothing")
+    Equal(Watched(watcher, "skills").events, 2, flavor .. ": the event is counted with the skill line events")
+
+    -- The recipe code has saved a new rank by the time the watch reads.
+    state.saved.Blacksmithing.skillLevel = 55
+    Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")
+    Equal(#refreshes, 2, flavor .. ": a rank saved before the watch reads refreshes at the event")
+    Equal(refreshes[2].reason, "skills", flavor .. ": under the skills watch's name")
+    Equal(refreshes[2].detail, "saved Blacksmithing: 50 -> 55", flavor .. ": and names the saved rank")
+    Advance(1)
+    Equal(#refreshes, 2, flavor .. ": and not again when the burst is over")
+
+    -- The recipe code's own handler runs after the watch's: the check after the burst has it.
+    Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")
+    Equal(#refreshes, 2, flavor .. ": nothing is saved yet when the event comes")
+    state.saved.Blacksmithing.skillLevel = 60
+    Advance(1)
+    Equal(#refreshes, 3, flavor .. ": a rank saved after the event refreshes when the burst is over")
+    Equal(refreshes[3].detail, "saved Blacksmithing: 55 -> 60", flavor .. ": and names it")
+    Equal(#errors, 0, flavor .. ": no error")
+end
+
 print(("%d checks, %d failed"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)

@@ -994,6 +994,34 @@ local function IsLowerArmorClassThanEquipped(item)
     return false
 end
 
+-- Pawn changed what its verdicts are made from. The upgrade verdicts here read Pawn's scales,
+-- their weights, which of them are shown and its record of the best items, and they are kept
+-- with the status until the next refresh. Pawn sends no event for a change of those, but it
+-- throws its own calculated values away: every function that edits a scale or switches one on
+-- or off calls PawnResetTooltips, and a change of spec or a reset of its upgrade tracking
+-- calls PawnInvalidateBestItems (read in Pawn 2.14.3). So those two are hooked. An import or
+-- a reset calls them several times in a row, hence one refresh when the run is over.
+local PAWN_CHANGE_DELAY = 0.2
+local pawnChangeTimer
+local function OnPawnChanged()
+    if pawnChangeTimer then
+        return
+    end
+    pawnChangeTimer = C_Timer.NewTimer(PAWN_CHANGE_DELAY, function()
+        pawnChangeTimer = nil
+        if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
+            CaerdonWardrobe:RefreshItems("pawn")
+        end
+    end)
+end
+-- Pawn is an optional dependency, so it has loaded before this file when it is installed.
+if type(PawnResetTooltips) == "function" then
+    hooksecurefunc("PawnResetTooltips", OnPawnChanged)
+end
+if type(PawnInvalidateBestItems) == "function" then
+    hooksecurefunc("PawnInvalidateBestItems", OnPawnChanged)
+end
+
 -- Pawn only counts a score at least 0.5% higher as an upgrade (PawnIsItemAnUpgrade).
 local PAWN_UPGRADE_THRESHOLD = 1.005
 

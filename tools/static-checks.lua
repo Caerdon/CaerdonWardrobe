@@ -1035,7 +1035,11 @@ do
         return definesMethod(client, hook.root, hook.method)
     end
     for _, hook in ipairs(addon.hooks) do
-        if hook.name then
+        if hook.name and isThirdParty(hook.name) then
+            -- Another addon's global function, hooked by its name: no client has it.
+            allowUsed["thirdParty:" .. hook.name] = true
+            thirdPartyHooks[#thirdPartyHooks + 1] = ("%s  %s"):format(hook.name, hook.place)
+        elseif hook.name then
             local function has(client) return (client.api[hook.name] or client.writes[hook.name]) and true or false end
             compare(section, hook.name, has(retail), has(forever), hook.place, "hooks")
         elseif addon.ownNames[hook.root] then
@@ -1273,7 +1277,7 @@ end
 
 print("")
 print("== Not checked")
-print(("  %d hooksecurefunc calls on another addon's table (their source is not read):"):format(#thirdPartyHooks))
+print(("  %d hooksecurefunc calls on another addon's table or function (their source is not read):"):format(#thirdPartyHooks))
 for _, line in ipairs(thirdPartyHooks) do print("    " .. line) end
 print(("  %d hooksecurefunc calls on a local value: %s"):format(#addon.dynamicHooks, table.concat(addon.dynamicHooks, ", ")))
 if #unresolvedMembers > 0 then

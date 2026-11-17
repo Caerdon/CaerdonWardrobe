@@ -282,9 +282,12 @@ local function ReadPvp()
     return { pvp = CaerdonEquipment and CaerdonEquipment.ReadPvpContext and CaerdonEquipment:ReadPvpContext() or false }
 end
 
+-- The second event is the profession window opening on a profession: the recipe code saves
+-- that profession's ranks then (types/RecipeMixin.lua), which are part of the reading, and no
+-- skill line event need follow.
 Refresh:Watch({
     name = "skills",
-    events = { "SKILL_LINES_CHANGED" },
+    events = { "SKILL_LINES_CHANGED", "TRADE_SKILL_DATA_SOURCE_CHANGED" },
     read = ReadSkills,
     delay = 0.5,
     leading = true,
