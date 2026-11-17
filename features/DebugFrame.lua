@@ -2573,6 +2573,49 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- The journal's own answers, which decide the verdict: a mount is learnable while the
+    -- journal calls it uncollected, a pet while none of its species is collected.
+    if identifiedType == CaerdonItemType.Mount then
+        local mountInfo = itemData and itemData.GetMountInfo and itemData:GetMountInfo()
+        if mountInfo then
+            addLine(0, "")
+            addLine(0, "[Mount]")
+            addKV(1, "Mount ID", mountInfo.mountID)
+            addKV(1, "Spell ID", mountInfo.spellID)
+            addKV(1, "Name", mountInfo.name)
+            addKV(1, "Is Collected", mountInfo.isCollected)
+            addKV(1, "Is Usable", mountInfo.isUsable)
+            addKV(1, "Is Faction Specific", mountInfo.isFactionSpecific)
+            addKV(1, "Faction ID", mountInfo.factionID)
+            addKV(1, "Hidden On Character", mountInfo.shouldHideOnChar)
+            addKV(1, "Is Equipment", mountInfo.isEquipment)
+            addKV(1, "Equipment Applied", mountInfo.isEquipmentApplied)
+            addKV(1, "Needs Item", mountInfo.needsItem)
+        end
+    elseif identifiedType == CaerdonItemType.CompanionPet or identifiedType == CaerdonItemType.BattlePet then
+        local petInfo
+        if identifiedType == CaerdonItemType.CompanionPet then
+            petInfo = itemData and itemData.GetCompanionPetInfo and itemData:GetCompanionPetInfo()
+        else
+            petInfo = itemData and itemData.GetBattlePetInfo and itemData:GetBattlePetInfo()
+        end
+        addLine(0, "")
+        addLine(0, "[Pet]")
+        if petInfo then
+            addKV(1, "Species ID", petInfo.speciesID)
+            addKV(1, "Name", petInfo.name)
+            addKV(1, "Num Collected", petInfo.numCollected)
+            addKV(1, "Limit", petInfo.limit)
+            addKV(1, "Is Unique", petInfo.isUnique)
+            addKV(1, "Is Tradeable", petInfo.isTradeable)
+            addKV(1, "Is Obtainable", petInfo.isObtainable)
+            addKV(1, "Can Battle", petInfo.canBattle)
+            addKV(1, "Needs Item", petInfo.needsItem)
+        else
+            addLine(1, "The pet journal has no pet for this item.")
+        end
+    end
+
     if identifiedType == CaerdonItemType.Recipe then
         addLine(0, "")
         addLine(0, "[Recipe]")

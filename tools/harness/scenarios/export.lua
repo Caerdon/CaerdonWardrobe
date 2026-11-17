@@ -31,6 +31,10 @@ return function(H, S)
             stack = 1, equipLoc = "INVTYPE_WAIST", price = 210, classID = 4, subClassID = 3, bindType = 2 },
         [920003] = { name = "Cracked Fang", quality = 0, level = 5, minLevel = 0, type = "Miscellaneous", subType = "Junk",
             stack = 20, price = 12, classID = 15, subClassID = 0 },
+        [920004] = { name = "Reins of the Dun Ram", quality = 4, level = 1, minLevel = 10, type = "Miscellaneous",
+            subType = "Mount", stack = 1, price = 0, classID = 15, subClassID = 5, bindType = 1 },
+        [920005] = { name = "Moss Toad", quality = 1, level = 1, minLevel = 0, type = "Miscellaneous",
+            subType = "Companion Pets", stack = 1, price = 0, classID = 15, subClassID = 2, bindType = 1 },
     }
 
     local game = H.StockGame(TOON, ITEMS)
@@ -548,6 +552,75 @@ return function(H, S)
         for _, entry in ipairs(T.db.errors) do
             Check(false, "contract: " .. tostring(entry.message))
         end
+    end
+
+    --------------------------------------------------------------------------------------
+    -- A mount and a pet: the journal's answers in their own sections
+    --------------------------------------------------------------------------------------
+
+    do
+        -- What the rest of the export asks for and this client has no answer to.
+        game:Set("C_AddOns.GetAddOnInfo", function(name) return name, name, "", true, nil, "INSECURE" end)
+        game:Set("PLAYER_FACTION_GROUP", { [0] = "Horde", [1] = "Alliance" })
+
+        local journal = { mountCollected = false, petsCollected = 0 }
+        game:Set("C_MountJournal.GetMountFromItem", function(itemID) return itemID == 920004 and 77 or nil end)
+        game:Set("C_MountJournal.GetMountInfoByID", function(mountID)
+            if mountID == 77 then
+                return "Dun Ram", 7770, 132248, false, true, 3, false, true, 1, false, journal.mountCollected, 77
+            end
+        end)
+        game:Set("C_PetJournal.GetPetInfoByItemID", function(itemID)
+            if itemID == 920005 then
+                return "Moss Toad", 132230, 5, 4400, "Vendor", "A toad.", false, true, true, false, true, 5500, 880
+            end
+        end)
+        game:Set("C_PetJournal.GetNumCollectedInfo", function(speciesID)
+            if speciesID == 880 then
+                return journal.petsCollected, 3
+            end
+            return 0, 0
+        end)
+
+        -- The rows of one section, from its title to the blank line after it.
+        local function Section(link, title)
+            local payload = feature:BuildClipboardPayload(env.CaerdonItem:CreateFromItemLink(link))
+            local rows, inside = {}, false
+            for line in (payload .. "\n"):gmatch("(.-)\n") do
+                if line == title then
+                    inside = true
+                elseif inside and line == "" then
+                    break
+                elseif inside then
+                    rows[#rows + 1] = line
+                end
+            end
+            return inside and table.concat(rows, "\n") or nil, payload
+        end
+
+        local mount = Section(game.Link(920004), "[Mount]")
+        Equal(mount, table.concat({
+            "  Mount ID: 77", "  Spell ID: 7770", "  Name: Dun Ram", "  Is Collected: false", "  Is Usable: true",
+            "  Is Faction Specific: true", "  Faction ID: 1", "  Hidden On Character: false", "  Is Equipment: nil",
+            "  Equipment Applied: nil", "  Needs Item: true" }, "\n"), "mount: the journal's answer, uncollected")
+        journal.mountCollected = true
+        mount = Section(game.Link(920004), "[Mount]")
+        Check(mount and mount:find("  Is Collected: true\n", 1, true) and mount:find("  Needs Item: false", 1, true),
+            "mount: collected once the journal says so (" .. tostring(mount) .. ")")
+
+        local pet = Section(game.Link(920005), "[Pet]")
+        Equal(pet, table.concat({
+            "  Species ID: 880", "  Name: Moss Toad", "  Num Collected: 0", "  Limit: 3", "  Is Unique: false",
+            "  Is Tradeable: true", "  Is Obtainable: true", "  Can Battle: true", "  Needs Item: true" }, "\n"),
+            "pet: the journal's answer, none collected")
+        journal.petsCollected = 1
+        pet = Section(game.Link(920005), "[Pet]")
+        Check(pet and pet:find("  Num Collected: 1\n", 1, true) and pet:find("  Needs Item: false", 1, true),
+            "pet: one collected (" .. tostring(pet) .. ")")
+
+        local none, payload = Section(LINK, "[Mount]")
+        Equal(none, nil, "a piece of armor has no mount section")
+        Check(not payload:find("[Pet]", 1, true), "and no pet section")
     end
 
     Equal(#client.errors, 0, "no error reached the error handler")
