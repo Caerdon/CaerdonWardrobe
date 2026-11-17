@@ -183,11 +183,18 @@ local WOWUNIT_ITEMS = {
     25114,  -- Doomsayer's Mace
     116550, -- Auchenai Mace
     36495,  -- Ferrous Hammer
+    -- Found by /cwtest search on a druid (2026-11-16) for the shape the old items have no
+    -- case of: a look another toon needs, known from a source this toon cannot use.
+    164760, -- Illidari Warglaive
+    168100, -- Alliance Tabard
+    -- A cloak that asks for a reputation (Sporeggar, Honored), which the search found on a
+    -- druid without it.
+    25827,  -- Muck-Covered Drape
 }
 
 T.Verdict({
     id = "retail.appearance.learnable",
-    version = 2,
+    version = 3,
     title = "A source this toon can collect, of a look the account does not have, is learnable",
     flavor = "retail",
     facts = "appearance",
@@ -198,6 +205,7 @@ T.Verdict({
         playerCanCollect = true,
         lookKnownElsewhere = false,
         levelMet = true,
+        canUse = true,
     },
     kinds = {
         {
@@ -235,6 +243,69 @@ T.Verdict({
     confirmed = false,
 })
 
+-- The level is not the only thing a piece can ask for. A reputation the toon lacks is a red
+-- requirement line in the tooltip and no use error in the transmog answers; the client's
+-- "can this toon use the item" is what tells it from a piece that is learnable now, which is
+-- why the tests for those ask for canUse. Muck-Covered Drape showed it (retail, a druid,
+-- 2026-11-16): the search took it for a second source to learn, the addon said lowSkill.
+T.Verdict({
+    id = "retail.appearance.requirementNotMet",
+    version = 1,
+    title = "A source this toon could collect, on a piece with a requirement it has not met, is learnable later",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        sourceValid = true,
+        useError = false,
+        playerCanCollect = true,
+        lookKnownUsable = false,
+        levelMet = true,
+        canUse = false,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = WOWUNIT_ITEMS,
+            expect = { status = "lowSkill" },
+        },
+    },
+    confirmed = false,
+})
+
+-- The same piece when its look is known from a source this toon can use. The cloak is a case
+-- of this test or of the one above from one login to the next: whether the look's other
+-- source counts as usable is the client's answer about that source, and it has read both
+-- ways within minutes with nothing learned in between (most likely before and after the
+-- other source's item was loaded; not settled).
+T.Verdict({
+    id = "retail.appearance.requirementNotMetKnownLook",
+    version = 1,
+    title = "The same of a look this toon knows from another item is a second source to learn later",
+    flavor = "retail",
+    facts = "appearance",
+    shape = {
+        sourceCollected = false,
+        sourceValid = true,
+        useError = false,
+        playerCanCollect = true,
+        lookKnownUsable = true,
+        levelMet = true,
+        canUse = false,
+        sameLookShown = true,
+    },
+    kinds = {
+        {
+            name = "druid",
+            toon = { class = "DRUID" },
+            pool = WOWUNIT_ITEMS,
+            expect = { status = "lowSkillPlus" },
+        },
+    },
+    confirmed = false,
+})
+
 T.Verdict({
     id = "retail.appearance.otherToon",
     version = 1,
@@ -260,7 +331,7 @@ T.Verdict({
 
 T.Verdict({
     id = "retail.appearance.knownLook",
-    version = 1,
+    version = 2,
     title = "A source this toon can collect, of a look it knows from another item, is a second source",
     flavor = "retail",
     facts = "appearance",
@@ -271,6 +342,7 @@ T.Verdict({
         playerCanCollect = true,
         lookKnownUsable = true,
         levelMet = true,
+        canUse = true,
         sameLookShown = true,
     },
     kinds = {
@@ -286,7 +358,7 @@ T.Verdict({
 
 T.Verdict({
     id = "retail.appearance.knownLookHidden",
-    version = 1,
+    version = 2,
     title = "With looks known from another item not shown, such a source is nothing to learn",
     flavor = "retail",
     facts = "appearance",
@@ -297,6 +369,7 @@ T.Verdict({
         playerCanCollect = true,
         lookKnownUsable = true,
         levelMet = true,
+        canUse = true,
         sameLookShown = false,
     },
     kinds = {
@@ -315,7 +388,7 @@ T.Verdict({
 
 T.Verdict({
     id = "retail.appearance.knownLookUnusable",
-    version = 1,
+    version = 2,
     title = "A source this toon can collect, of a look known only from a source it cannot use, is a look to learn",
     flavor = "retail",
     facts = "appearance",
@@ -327,6 +400,7 @@ T.Verdict({
         lookKnownUsable = false,
         lookKnownUnusable = true,
         levelMet = true,
+        canUse = true,
     },
     kinds = {
         {
