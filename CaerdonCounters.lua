@@ -14,7 +14,7 @@
 --
 -- This is the first file the addon loads, so "seconds since load" starts here.
 
-local ADDON_NAME = ...
+local ADDON_NAME, NS = ...
 
 CaerdonCounters = {}
 local Counters = CaerdonCounters
@@ -460,6 +460,12 @@ function Counters:Attach()
     Probe("CaerdonEquipmentMixin", CaerdonEquipmentMixin, "GetEquipmentSets")
     Probe("CaerdonWardrobe", core, "SetItemButtonStatus")
     Probe("CaerdonWardrobe", core, "SetItemButtonBindType")
+
+    -- What runs with no window open: the two handlers of every item tooltip anyone fills, and
+    -- the auction module's look at its tracked stacks on every change in the bags.
+    Probe("CaerdonAPI", CaerdonAPI, "OnTooltipItem")
+    Probe("Tooltip", NS and NS.Tooltip, "OnTooltipSetItem")
+    Probe("CaerdonAuctionValue", CaerdonAuctionValue, "OnBagsChanged")
 
     -- Each feature holds its own copy of the display rules, made when it registered.
     local features = type(core) == "table" and core.GetRegisteredFeatures and core:GetRegisteredFeatures()

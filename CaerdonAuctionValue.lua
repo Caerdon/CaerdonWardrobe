@@ -347,8 +347,9 @@ function CaerdonAuctionValue:GetOwnedQuantity(itemID)
 end
 
 -- A stack's verdict depends on how many are owned. Looting one more only redraws the slot it
--- landed in, so when the new total flips a verdict every icon is refreshed.
-local function OnBagsChanged()
+-- landed in, so when the new total flips a verdict every icon is refreshed. A method, so that
+-- the counters can time it (CaerdonCounters.lua, Attach).
+function CaerdonAuctionValue:OnBagsChanged()
     if not next(trackedStacks) then
         return
     end
@@ -428,7 +429,7 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "BAG_UPDATE_DELAYED" then
-        OnBagsChanged()
+        CaerdonAuctionValue:OnBagsChanged()
     elseif event == "PLAYER_LOGIN" or addonName == "Auctionator" then
         RegisterForUpdates()
         if providerState.registered then

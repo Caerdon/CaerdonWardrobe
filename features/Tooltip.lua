@@ -869,4 +869,6 @@ function TooltipMixin:AddTransmogInfoToTooltip(tooltip, item)
 end
 
 Tooltip = CreateFromMixins(TooltipMixin)
+-- For the counters, which time OnTooltipSetItem (CaerdonCounters.lua, Attach).
+NS.Tooltip = Tooltip
 Tooltip:OnLoad()

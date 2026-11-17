@@ -272,6 +272,12 @@ local function StartSession(options)
     CaerdonEquipment, CaerdonQuestItems, CaerdonFoodDrink, CaerdonProfessionTools, CaerdonBagSlots =
         invalidate, invalidate, invalidate, invalidate, invalidate
     CaerdonWardrobeConfig = nil -- saved variables arrive after the files
+    -- What the addon runs with no window open, as far as the counters time it: the two
+    -- handlers of an item tooltip and the auction module's look at the bags.
+    CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end }
+    NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end }
+    CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end }
+    Session.outside = { api = CaerdonAPI, tooltip = NS.Tooltip }
 
     -- The item side, in the shape of the real one: a cache per link, the tooltip, the binding,
     -- the transmog info (kept with the verdict and returned fifth, which is where a draw takes
@@ -667,6 +673,20 @@ do
     Near(profile.drains.kb, 1980 + 4500, "profile: the drain's memory")
     Equal(profile.drains.recent[1].draws, 45, "profile: the drain's draws")
 
+    -- Outside a draw: three item tooltips and two changes in the bags, called the way the
+    -- addon calls them (looked up on their table at each call).
+    Equal(Function(report, "OnTooltipItem").calls, 0, "outside: nothing counted before a tooltip")
+    for _ = 1, 3 do
+        Session.outside.api:OnTooltipItem()
+        Session.outside.tooltip:OnTooltipSetItem()
+    end
+    CaerdonAuctionValue:OnBagsChanged()
+    CaerdonAuctionValue:OnBagsChanged()
+    report = CaerdonCounters:GetReport()
+    Expect("OnTooltipItem", 3, 0.75, 0.75, 3, 3)
+    Expect("OnTooltipSetItem", 3, 1.5, 1.5, 6, 6)
+    Expect("OnBagsChanged", 2, 0.25, 0.25, 0, 0)
+
     -- The same items again without a refresh: answered from the cache.
     AskFor(items)
     Tick(50)
@@ -805,7 +825,7 @@ do
     GetLocale = function() return "enUS" end
     GetFramerate = function() return 60 end
     WOW_PROJECT_ID = 18
-    CaerdonAPI = { GetClientFlavor = function() return "Forever" end }
+    CaerdonAPI.GetClientFlavor = function() return "Forever" end
     C_AddOns = {
         GetNumAddOns = function() return 0 end,
         GetAddOnMetadata = function() return "v5.0.0" end,
