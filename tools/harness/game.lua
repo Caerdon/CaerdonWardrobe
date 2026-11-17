@@ -244,6 +244,7 @@ function H.StockGame(toon, items)
                 leftText = line.text,
                 leftColor = env.CreateColor(line.r or 1, line.g or 1, line.b or 1, 1),
                 bonding = line.bonding,
+                requirementType = line.requirementType,
             }
         end
         return { type = 0, id = ItemID(link), hyperlink = link, lines = lines }

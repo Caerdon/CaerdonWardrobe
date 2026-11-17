@@ -2256,6 +2256,11 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Refresh Generation", CaerdonWardrobe:GetRefreshGeneration())
         addKV(1, "Last Refresh",
             lastRefreshTime and string.format("%.1fs ago", now - lastRefreshTime) or "none this session")
+        -- The skills an item's tooltip asked a rank of: a weapon skill or Defense among them
+        -- refreshes with every point from then on (CaerdonRefresh.lua).
+        local skillsAsked = NS.Refresh:GetSkillRequirementsNoted()
+        addKV(1, "Skill Ranks A Tooltip Asked For",
+            #skillsAsked > 0 and table.concat(skillsAsked, ", ") or "none this session")
         if eventLog and #eventLog > 0 then
             addLine(1, "Events (oldest first):")
             for _, entry in ipairs(eventLog) do

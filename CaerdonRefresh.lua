@@ -190,6 +190,52 @@ end
 -- (tools, bags, profession quests), a profession's rank (a recipe's requirement), and through
 -- the tooltip's red text any other skill an item asks for. So the reading is every skill line
 -- the client lists, with its rank.
+--
+-- But for the lines that go up by use in a fight, a point with every few swings: the weapon
+-- skills and Defense, by the IDs under which Blizzard's Forever skills frame knows them
+-- (Blizzard_UIPanels_Game/Camelot/SkillsFrame.lua: WEAPON_SKILL_LINES, DEFENSE_SKILL_ID). An
+-- item asks for such a skill by wanting the toon to have it, which is the line being there.
+-- Whether one also asks for a rank of it is a server's rule, so the item code says when a
+-- tooltip does (NoteSkillRequirement), and from then on that line is read with its rank too.
+local RAISED_BY_USE = {
+    [43] = true,   -- Swords
+    [44] = true,   -- Axes
+    [45] = true,   -- Bows
+    [46] = true,   -- Guns
+    [54] = true,   -- Maces
+    [55] = true,   -- Two-Handed Swords
+    [95] = true,   -- Defense
+    [136] = true,  -- Staves
+    [160] = true,  -- Two-Handed Maces
+    [162] = true,  -- Fist Weapons / Unarmed
+    [172] = true,  -- Two-Handed Axes
+    [173] = true,  -- Daggers
+    [176] = true,  -- Thrown
+    [226] = true,  -- Crossbows
+    [228] = true,  -- Wands
+    [229] = true,  -- Polearms
+    [3014] = true, -- Feral Combat
+}
+local PRESENT = "present"
+
+-- Skill name -> true: a tooltip asked for a rank of it ("Requires First Aid (50)"). Kept for
+-- the session: it says something about the game's items, not about the toon.
+local rankAsked = {}
+
+function Refresh:NoteSkillRequirement(skillName)
+    rankAsked[skillName] = true
+end
+
+-- For the export: the names, sorted.
+function Refresh:GetSkillRequirementsNoted()
+    local names = {}
+    for name in pairs(rankAsked) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    return names
+end
+
 local function ReadSkills()
     local reading = {}
 
@@ -209,7 +255,8 @@ local function ReadSkills()
         for index = 1, skillInfo.GetNumSkillLines() do
             local line = skillInfo.GetSkillLineInfo(index)
             if line and not line.isHeader and line.skillID then
-                reading["skill " .. tostring(line.skillID)] = line.rank or 0
+                local byRank = not RAISED_BY_USE[line.skillID] or rankAsked[line.name]
+                reading["skill " .. tostring(line.skillID)] = byRank and (line.rank or 0) or PRESENT
             end
         end
     end

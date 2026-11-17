@@ -139,6 +139,8 @@ local function Start(flavor)
             { skillID = 43, name = "Swords", isHeader = false, rank = 97 },
             { skillID = 95, name = "Defense", isHeader = false, rank = 100 },
             { skillID = 164, name = "Blacksmithing", isHeader = false, rank = 50 },
+            -- A line no fight raises and no profession either.
+            { skillID = 633, name = "Lockpicking", isHeader = false, rank = 20 },
         }
         C_SkillInfo = {
             GetNumSkillLines = function() return #state.lines end,
@@ -194,12 +196,21 @@ do
     Equal(skills.changes, 1, "and one change")
 
     -- A rank the client already has when it sends the event.
-    state.lines[2].rank = 98
+    state.lines[5].rank = 21
     Fire("SKILL_LINES_CHANGED")
     Equal(#refreshes, 2, "a rank that went up refreshes at once")
-    Equal(refreshes[2].detail, "skill 43: 97 -> 98", "and names the line and both ranks")
+    Equal(refreshes[2].detail, "skill 633: 20 -> 21", "and names the line and both ranks")
     Advance(1)
     Equal(#refreshes, 2, "once")
+
+    -- A point of a weapon skill or of Defense, as a fight brings them: no item asked for a
+    -- rank of either, so the line being there is all that is read.
+    state.lines[2].rank = 98
+    state.lines[3].rank = 101
+    Fire("SKILL_LINES_CHANGED")
+    Advance(1)
+    Equal(#refreshes, 2, "a weapon skill's point and one of Defense refresh nothing")
+    Equal(#watcher:GetSkillRequirementsNoted(), 0, "no skill's rank was asked for yet")
 
     -- A client that sends the event before its answers change.
     Fire("SKILL_LINES_CHANGED")
@@ -208,8 +219,8 @@ do
     Advance(0.4)
     Equal(#refreshes, 2, "nor does anything before the burst is over")
     Advance(0.2)
-    Equal(#refreshes, 3, "the check after the burst finds the new skill")
-    Equal(refreshes[3].detail, "skill 44: new, 1", "and names it")
+    Equal(#refreshes, 3, "the check after the burst finds the new skill, a weapon skill too")
+    Equal(refreshes[3].detail, "skill 44: new, present", "and names it")
 
     -- A header is no skill, and an index the client has nothing for is passed over.
     state.lines[1].rank = 5
@@ -220,12 +231,29 @@ do
     Equal(#errors, 0, "and raise nothing")
     state.lines[#state.lines] = nil
 
+    -- An item's tooltip asked for a rank of a weapon skill: from then on its rank is read.
+    watcher:NoteSkillRequirement("Swords")
+    watcher:NoteSkillRequirement("Swords")
+    watcher:NoteSkillRequirement("Tailoring")
+    Equal(table.concat(watcher:GetSkillRequirementsNoted(), ", "), "Swords, Tailoring", "the skills asked for are kept, each once, sorted")
+    Fire("SKILL_LINES_CHANGED")
+    Equal(#refreshes, 4, "the next event reads the rank where it read the line being there")
+    Equal(refreshes[4].detail, "skill 43: present -> 98", "and says so")
+    Advance(1)
+    state.lines[2].rank = 99
+    state.lines[3].rank = 102
+    Fire("SKILL_LINES_CHANGED")
+    Equal(#refreshes, 5, "a point of the skill that was asked for refreshes")
+    Equal(refreshes[5].detail, "skill 43: 98 -> 99", "and Defense, which nothing asked for, is not in it")
+    Advance(1)
+    Equal(#refreshes, 5, "once")
+
     -- A profession dropped: gone from the professions and from the list, its saved rank stays.
     table.remove(state.professions, 1)
     table.remove(state.lines, 4)
     Fire("SKILL_LINES_CHANGED")
-    Equal(#refreshes, 4, "a dropped profession refreshes")
-    Equal(refreshes[4].detail, "profession 164: gone, was 50; skill 164: gone, was 50", "and says what is gone, in the order of the keys")
+    Equal(#refreshes, 6, "a dropped profession refreshes")
+    Equal(refreshes[6].detail, "profession 164: gone, was 50; skill 164: gone, was 50", "and says what is gone, in the order of the keys")
     Advance(1)
 
     -- More differences than the detail lists.
@@ -235,8 +263,8 @@ do
     state.professions[1].rank = 13
     state.saved.Blacksmithing.skillLevel = 51
     Fire("SKILL_LINES_CHANGED")
-    Equal(#refreshes, 5, "several ranks at once are one refresh")
-    Equal(refreshes[5].detail, "profession 185: 12 -> 13; saved Blacksmithing: 50 -> 51; skill 43: 98 -> 99; and 2 more",
+    Equal(#refreshes, 7, "several ranks at once are one refresh")
+    Equal(refreshes[7].detail, "profession 185: 12 -> 13; saved Blacksmithing: 50 -> 51; skill 43: 99 -> 100; and 1 more",
         "with three of them named and the rest counted")
     Advance(1)
 
@@ -246,13 +274,13 @@ do
     Fire("SKILL_LINES_CHANGED")
     Equal(#errors, 1, "a reading that raises goes to the error handler")
     Check(errors[1] and errors[1]:find("the saved ranks could not be read", 1, true) ~= nil, "with its message")
-    Equal(#refreshes, 6, "and the other watch of the event still refreshes")
-    Equal(refreshes[6].reason, "probe", "under its own name")
-    Equal(refreshes[6].detail, nil, "a watch that reads nothing has nothing to say about what changed")
+    Equal(#refreshes, 8, "and the other watch of the event still refreshes")
+    Equal(refreshes[8].reason, "probe", "under its own name")
+    Equal(refreshes[8].detail, nil, "a watch that reads nothing has nothing to say about what changed")
     state.savedRaises = nil
     Advance(1)
     Fire("SKILL_LINES_CHANGED")
-    Equal(#refreshes, 7, "a watch without a reading and without a delay refreshes at every event")
+    Equal(#refreshes, 9, "a watch without a reading and without a delay refreshes at every event")
     Equal(Watched(watcher, "probe").notRegistered, "NO_SUCH_EVENT", "an event the client refused is in the report")
     Equal(Watched(watcher, "skills").notRegistered, nil, "and nothing is for a watch whose events it took")
     Advance(1)

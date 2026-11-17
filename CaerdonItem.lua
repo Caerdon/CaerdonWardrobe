@@ -83,6 +83,25 @@ end
 
 -- Reusable table for GetTooltipData output to avoid per-call allocation.
 -- Safe because GetTooltipData is only called synchronously within GetCaerdonStatus.
+-- ITEM_MIN_SKILL ("Requires %s (%d)") as a pattern that captures the skill's name and the rank.
+-- Made at the first skill requirement line, since the locale's strings are there by then.
+local skillRequirementPattern
+local function SkillRequirementPattern()
+    if not skillRequirementPattern then
+        -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
+        local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
+        skillCheck = string.gsub(skillCheck, "2%$", "")
+        skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
+        if GetLocale() == "zhCN" then
+            skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
+        else
+            skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
+        end
+        skillRequirementPattern = skillCheck
+    end
+    return skillRequirementPattern
+end
+
 local recycledTooltipData = {}
 local function ResetTooltipData(embeddedLink)
     local t = recycledTooltipData
@@ -977,19 +996,17 @@ function CaerdonItemMixin:GetTooltipData(data)
                 if leftHex and leftHex ~= "ffff2020" then
                     tooltipData.skillRequirementMet = true
                 end
+                local requiredSkill, requiredRank
+                if lineText then
+                    requiredSkill, requiredRank = strmatch(lineText, SkillRequirementPattern())
+                end
+                if requiredSkill then
+                    -- An item asks for a rank of this skill, so its rank is one to watch
+                    -- (CaerdonRefresh.lua: a weapon skill is otherwise read as there or not).
+                    NS.Refresh:NoteSkillRequirement(requiredSkill)
+                end
                 if isRecipe or isMiscellaneousStudy then
-                    -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-                    local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-                    skillCheck = string.gsub(skillCheck, "2%$", "")
-                    skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-                    if GetLocale() == "zhCN" then
-                        skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-                    else
-                        skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-                    end
-
-                    if strmatch(lineText, skillCheck) then
-                        local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+                    if requiredSkill then
                         local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self,
                             requiredSkill, requiredRank)
                         -- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
