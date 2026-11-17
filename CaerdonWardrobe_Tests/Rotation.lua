@@ -259,6 +259,24 @@ function T.NoteBagButton(button, featureName, locationInfo)
     note.bag, note.slot, note.feature = bag, slot, featureName
 end
 
+-- Bag buttons on screen that the last full refresh has not reached: drawn this session for a
+-- slot that still holds an item, and not since that refresh. A window that leaves its buttons
+-- alone while it is closed owes them a draw when it opens; one left here was never paid.
+-- Returns how many were looked at and the ones found.
+function T.StaleBagButtons()
+    local generation = CaerdonWardrobe:GetRefreshGeneration()
+    local checked, stale = 0, {}
+    for button, note in pairs(bagButtons) do
+        if button:IsVisible() and C_Container.GetContainerItemID(note.bag, note.slot) then
+            checked = checked + 1
+            if CaerdonWardrobe:GetButtonRefreshGeneration(button) ~= generation then
+                stale[#stale + 1] = { feature = note.feature, bag = note.bag, slot = note.slot }
+            end
+        end
+    end
+    return checked, stale
+end
+
 local function CountVisible()
     local count = 0
     for button in pairs(bagButtons) do

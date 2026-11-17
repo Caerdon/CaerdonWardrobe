@@ -925,6 +925,37 @@ do
     local diff = T.DiffTriggers({ a = 1, b = 2 }, { a = 1, b = 5, c = 1 })
     Check(diff.a == nil and diff.b == 3 and diff.c == 1, "tests: DiffTriggers")
 
+    -- A window opened after a refresh it was closed for: the refresh asks for nothing, the
+    -- opening (by hand in the client, here between two frames) asks for all twelve.
+    Session.feature.Refresh = function() end
+    T.StaleBagButtons = function() return 12, { { feature = "Bags", bag = 0, slot = 3 } } end
+    local timings = #T.db.timing
+    T.RunOpenTiming("bags")
+    Tick(40)
+    Equal(#T.db.timing, timings, "open: the job waits for the window")
+    AskFor(items)
+    Tick(40)
+    local opened = T.db.timing[timings + 1]
+    Check(opened ~= nil and opened.kind == "open", "open: a record of its own kind is written")
+    if opened then
+        Equal(opened.closed and opened.closed.draws, 0, "open: the refresh with the window closed drew nothing")
+        Equal(opened.draws, 12, "open: the opening drew the twelve")
+        Equal(opened.byFeature and opened.byFeature.Bags and opened.byFeature.Bags.requests, 12, "open: after twelve requests")
+        Check(opened.firstDrawMs ~= nil and opened.firstDrawMs > 0 and opened.lastDrawMs >= opened.firstDrawMs,
+            "open: with the icon times counted from the first request")
+        Check(opened.frames > 0 and not opened.timedOut, "open: it ends when the queue is idle")
+        Equal(opened.staleCount, 1, "open: buttons the refresh did not reach are counted")
+        Check(IsPlain(opened), "open: the record is plain data")
+    end
+    Check(CaerdonWardrobeConfig.Debug.Enabled == true, "open: Enable debug is back on afterwards")
+    -- Nobody opens anything.
+    T.RunOpenTiming("bags")
+    Tick(600)
+    local unopened = T.db.timing[timings + 2]
+    Check(unopened ~= nil and unopened.nothingAsked == true and unopened.draws == nil,
+        "open: a window that is never opened is recorded as that")
+    Check(T.timingRun == nil, "open: and the run is closed")
+
     T.CountersCommand("")
     Equal(#T.db.counters, 1, "tests: /cwtest counters stores a report")
     T.CountersCommand("on")
@@ -937,7 +968,8 @@ do
 
     Fire("PLAYER_LOGOUT")
     local totals = T.db.events["1.60.1.70938"]
-    Check(totals and totals.triggers and totals.triggers[forcedLabel] == 4,
+    -- The four of the refresh timing and one for each of the two open timings.
+    Check(totals and totals.triggers and totals.triggers[forcedLabel] == 6,
         "tests: the triggers are added to the build's totals on logout")
     Equal(#T.db.errors, 0, "tests: no error of the tests' own")
     Equal(#errors, 0, "tests: no error reached the error handler")

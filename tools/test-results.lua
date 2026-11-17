@@ -589,6 +589,39 @@ local function printTiming(db)
                     :format(figure(counted.runs), figure(counted.medianCpuMs), figure(record.medianCpuMs), figure(counted.medianDraws)))
                 printProfile(counted.profile, "          ", counted.runs)
             end
+        elseif record.kind == "open" then
+            -- A refresh with the window closed, then the window opened by hand.
+            local closed = record.closed or {}
+            print(("    %s  %-8s %-10s closed: draws %s  addon ms %s  memory KB %s  [%s, %s, addon %s]")
+                :format(when(record.at), "open", tostring(record.label), figure(closed.draws), figure(closed.cpuMs),
+                    figure(closed.memoryKB), tostring(record.toon), tostring(record.build), tostring(record.subjectVersion)))
+            if record.nothingAsked then
+                print("        opened: nothing was asked for while the test waited")
+            else
+                local parts = {}
+                for _, name in ipairs(sortedKeys(record.byFeature or {})) do
+                    parts[#parts + 1] = describeFeature(name, record.byFeature[name], true)
+                end
+                print(("        opened: draws %s  addon ms %s, longest frame %s  first icon ms %s  last icon ms %s  (from the first request; %s frames in %s s)%s")
+                    :format(figure(record.draws), figure(record.cpuMs), figure(record.worstFrameMs),
+                        figure(record.firstDrawMs), figure(record.lastDrawMs), figure(record.frames), figure(record.seconds),
+                        record.timedOut and "  TIMED OUT" or ""))
+                if #parts > 0 then
+                    print("        drawn on opening: " .. table.concat(parts, ", "))
+                end
+                if record.staleCount then
+                    if record.staleCount == 0 then
+                        print(("        all %s bag buttons on screen were drawn since the refresh"):format(figure(record.bagButtonsOnScreen)))
+                    else
+                        local where = {}
+                        for _, entry in ipairs(record.stale or {}) do
+                            where[#where + 1] = ("%s %s/%s"):format(tostring(entry.feature), tostring(entry.bag), tostring(entry.slot))
+                        end
+                        print(("        STALE: %s of %s bag buttons on screen were not drawn since the refresh: %s")
+                            :format(figure(record.staleCount), figure(record.bagButtonsOnScreen), table.concat(where, ", ")))
+                    end
+                end
+            end
         elseif record.kind == "idle" then
             print(("    %s  %-8s %ss  addon ms %s (%s per second, worst frame %s)  refreshes per minute %s  draws %s  memory KB %s  [%s, %s]")
                 :format(when(record.at), "idle", figure(record.seconds), figure(record.cpuMs), figure(record.cpuMsPerSecond),

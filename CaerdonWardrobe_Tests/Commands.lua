@@ -169,6 +169,7 @@ local HELP = {
     "/cwtest snapshot [base] - record what is drawn for the bags (and the bank when open); compare with the base",
     "/cwtest timing <label> [runs] - time forced refreshes with the windows that are open now",
     "/cwtest timing idle [seconds] - time standing still",
+    "/cwtest timing open - with the bags closed: one refresh, then open the bags when told; times what the opening draws",
     "/cwtest probe <item ID> ... - record everything about some items",
     "/cwtest record <item ID or link> ... | slot <bag> <slot> | bags | list | clear - record the client's answers behind a verdict, for the offline harness",
     "/cwtest sources - appearance sources of what was drawn this session whose item the client does not have",
@@ -231,9 +232,11 @@ end
 COMMANDS.timing = function(rest)
     local label, amount = rest:match("^(%S+)%s*(%d*)$")
     if not label then
-        T.Print("say what is open: /cwtest timing bags, /cwtest timing bank, /cwtest timing vendor, /cwtest timing idle")
+        T.Print("say what is open: /cwtest timing bags, /cwtest timing bank, /cwtest timing vendor, /cwtest timing idle; or /cwtest timing open with the bags closed")
     elseif label == "idle" then
         T.RunIdleTiming(tonumber(amount))
+    elseif label == "open" then
+        T.RunOpenTiming("bags")
     else
         T.RunRefreshTiming(label, tonumber(amount))
     end

@@ -116,6 +116,7 @@ function T.NoteTimedRequest(name, isEmpty)
     if not run then
         return
     end
+    run.firstRequest = run.firstRequest or T.Milliseconds()
     local entry = RunFeature(run, name)
     entry.requests = entry.requests + 1
     if isEmpty then
@@ -148,24 +149,11 @@ function T.NoteTimedDraw(name, button)
     end
 end
 
--- Inside a job: one forced refresh, measured until the queue has drained.
-local function MeasureRefresh()
-    local memoryBefore = AddonMemory()
-    -- Start on a fresh frame. The memory reading takes a while and the client's timers may
-    -- count from the start of the frame they are set in; measured in the same frame, the
-    -- first draw came before the refresh's own 0.1 s delay could have been over.
-    T.Yield()
-    local drawsBefore = T.counters.processItem
-    local run = { byFeature = {}, events = {} }
-    -- A tooltip on screen is refreshed by the client and announces it with an event some
-    -- windows redraw on, so a resting mouse can change the run.
-    local tooltip = TooltipOwner()
-    T.timingRun = run
-    local started = T.Milliseconds()
-    local startedAt = GetTime()
-    CaerdonWardrobe:RefreshItems()
-
-    local cpu, frames, idleSince, worstFrame = 0, 0, nil, 0
+-- Inside a job: the frames of a run that has started, until the queue has been idle for a
+-- while and at least minSeconds are over. cpu: addon time already counted for the run.
+-- Returns the addon's time, the frames and the longest one.
+local function FollowRun(run, startedAt, minSeconds, cpu)
+    local frames, idleSince, worstFrame = 0, nil, 0
     while true do
         T.Yield()
         frames = frames + 1
@@ -175,7 +163,7 @@ local function MeasureRefresh()
             worstFrame = last
         end
         local now = GetTime()
-        if now - startedAt >= MIN_RUN_SECONDS and T.CoreIsIdle() then
+        if now - startedAt >= minSeconds and T.CoreIsIdle() then
             idleSince = idleSince or now
             if now - idleSince >= SETTLE_SECONDS then
                 break
@@ -188,8 +176,11 @@ local function MeasureRefresh()
             break
         end
     end
-    T.timingRun = nil
+    return cpu, frames, worstFrame
+end
 
+-- What a run noted per window and per event, as plain data with times from `started`.
+local function PlainRun(run, started)
     local byFeature, events
     for name, entry in pairs(run.byFeature) do
         byFeature = byFeature or {}
@@ -207,6 +198,29 @@ local function MeasureRefresh()
         events = events or {}
         events[event] = { count = entry.count, firstMs = Round(entry.first - started, 1), items = entry.items }
     end
+    return byFeature, events
+end
+
+-- Inside a job: one forced refresh, measured until the queue has drained.
+local function MeasureRefresh()
+    local memoryBefore = AddonMemory()
+    -- Start on a fresh frame. The memory reading takes a while and the client's timers may
+    -- count from the start of the frame they are set in; measured in the same frame, the
+    -- first draw came before the refresh's own 0.1 s delay could have been over.
+    T.Yield()
+    local drawsBefore = T.counters.processItem
+    local run = { byFeature = {}, events = {} }
+    -- A tooltip on screen is refreshed by the client and announces it with an event some
+    -- windows redraw on, so a resting mouse can change the run.
+    local tooltip = TooltipOwner()
+    T.timingRun = run
+    local started = T.Milliseconds()
+    local startedAt = GetTime()
+    CaerdonWardrobe:RefreshItems()
+
+    local cpu, frames, worstFrame = FollowRun(run, startedAt, MIN_RUN_SECONDS, 0)
+    T.timingRun = nil
+    local byFeature, events = PlainRun(run, started)
 
     return {
         byFeature = byFeature,
@@ -275,6 +289,97 @@ function T.RunRefreshTiming(label, count)
         elseif record.fewestDraws ~= record.mostDraws then
             T.Print("|cffffcc00the refreshes drew between %d and %d items, so something else was drawing too|r (a window opened, a page changed, an item moved). Run it again with nothing changing.",
                 record.fewestDraws, record.mostDraws)
+        end
+        if T.OnTestsFinished then
+            T.OnTestsFinished()
+        end
+    end)
+end
+
+------------------------------------------------------------------------------------------
+-- A window opened after a refresh it was closed for
+------------------------------------------------------------------------------------------
+
+local OPEN_WAIT_SECONDS = 30
+
+-- A window that leaves its buttons alone while it is not on screen owes them a draw when it
+-- opens (BetterBags' bags). Two figures come of that: what a refresh still costs with the
+-- window closed, and what the opening costs, from the first request it makes to the last
+-- icon. The job refreshes once with everything closed, then waits for the window to be
+-- opened by hand. Afterwards every bag button on screen must carry the refresh's generation.
+function T.RunOpenTiming(label)
+    T.Start("timing", function()
+        if not T.WaitForIdle(0.5, 20) then
+            T.Print("the addon's queue did not go idle, so nothing was timed.")
+            return
+        end
+        local record = BaseRecord("open", label)
+        local restore = T.MeasureUndisturbed()
+
+        local closed = MeasureRefresh()
+        record.closed = closed
+        T.Print("a refresh with the windows as they are: %d draws, addon time %s ms. |cffffcc00Open the bags now|r (within %d seconds).",
+            closed.draws, tostring(closed.cpuMs), OPEN_WAIT_SECONDS)
+
+        local memoryBefore = AddonMemory()
+        T.Yield()
+        local drawsBefore = T.counters.processItem
+        local run = { byFeature = {}, events = {} }
+        T.timingRun = run
+        local waitingSince = GetTime()
+        while not run.firstRequest and GetTime() - waitingSince < OPEN_WAIT_SECONDS do
+            T.Yield()
+        end
+        if not run.firstRequest then
+            T.timingRun = nil
+            restore()
+            record.nothingAsked = true
+            T.Push(T.db.timing, record, 40)
+            T.Print("nothing was asked for in %d seconds: no window opened, or the one that did owed nothing and asked for nothing.",
+                OPEN_WAIT_SECONDS)
+            if T.OnTestsFinished then
+                T.OnTestsFinished()
+            end
+            return
+        end
+
+        -- The requests were made in this frame or the one before, depending on whether the
+        -- window's code or this job ran first: the frame before this one is counted, which is
+        -- either theirs or an idle one.
+        local started, startedAt = run.firstRequest, GetTime()
+        local cpu, frames, worstFrame = FollowRun(run, startedAt, 0, LastFrameMs())
+        T.timingRun = nil
+        record.byFeature = PlainRun(run, started)
+        record.cpuMs = Round(cpu)
+        record.frames = frames
+        record.seconds = Round(GetTime() - startedAt, 2)
+        record.worstFrameMs = Round(worstFrame)
+        record.draws = T.counters.processItem - drawsBefore
+        record.firstDrawMs = run.firstDraw and Round(run.firstDraw - started, 1) or nil
+        record.lastDrawMs = run.lastDraw and Round(run.lastDraw - started, 1) or nil
+        -- Whatever else the addon allocated while the job waited for the window is in it.
+        record.memoryKB = Round(AddonMemory() - memoryBefore, 1)
+        record.timedOut = run.timedOut
+        if T.StaleBagButtons then
+            local checked, stale = T.StaleBagButtons()
+            record.bagButtonsOnScreen = checked
+            record.staleCount = #stale
+            -- Enough to find them; a bag that was not redrawn at all would be hundreds.
+            for index = #stale, 13, -1 do
+                stale[index] = nil
+            end
+            record.stale = stale
+        end
+        restore()
+        T.Push(T.db.timing, record, 40)
+        T.Print("%s, opened: %d draws, addon time %s ms, first icon after %s ms, last after %s ms, longest frame %s ms.",
+            tostring(label), record.draws, tostring(record.cpuMs), tostring(record.firstDrawMs or "-"),
+            tostring(record.lastDrawMs or "-"), tostring(record.worstFrameMs))
+        if record.staleCount and record.staleCount > 0 then
+            T.Print("|cffff4040%d of %d bag buttons on screen were not drawn since the refresh|r: their icons are the old ones.",
+                record.staleCount, record.bagButtonsOnScreen)
+        elseif record.staleCount then
+            T.Print("all %d bag buttons on screen were drawn since the refresh.", record.bagButtonsOnScreen)
         end
         if T.OnTestsFinished then
             T.OnTestsFinished()
