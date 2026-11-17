@@ -346,6 +346,15 @@ function CaerdonAuctionValue:GetOwnedQuantity(itemID)
     return count
 end
 
+-- A full refresh has thrown every verdict away (CaerdonWardrobe:RefreshItems), and the stacks
+-- watched for those verdicts go with them. Each one that is drawn again is judged and watched
+-- again; one that is not (a stack in a bag that stays closed, an item since sold) needs no
+-- watching, because its next draw judges it on what is owned then. Kept past the refresh, the
+-- list only grew, and every change in the bags asked the client about all of it.
+function CaerdonAuctionValue:InvalidateCaches()
+    wipe(trackedStacks)
+end
+
 -- A stack's verdict depends on how many are owned. Looting one more only redraws the slot it
 -- landed in, so when the new total flips a verdict every icon is refreshed. A method, so that
 -- the counters can time it (CaerdonCounters.lua, Attach).

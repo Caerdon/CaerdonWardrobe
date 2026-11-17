@@ -481,6 +481,7 @@ local function EmptyTheAddonsCaches()
     CaerdonFoodDrink:InvalidateCaches()
     CaerdonProfessionTools:InvalidateCaches()
     CaerdonBagSlots:InvalidateCaches()
+    CaerdonAuctionValue:InvalidateCaches()
     if CaerdonAPI.InvalidateTalentTrees then
         CaerdonAPI:InvalidateTalentTrees()
     end

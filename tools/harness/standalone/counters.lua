@@ -276,7 +276,7 @@ local function StartSession(options)
     -- handlers of an item tooltip and the auction module's look at the bags.
     CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end }
     NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end }
-    CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end }
+    CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end, InvalidateCaches = function() end }
     Session.outside = { api = CaerdonAPI, tooltip = NS.Tooltip }
 
     -- The item side, in the shape of the real one: a cache per link, the tooltip, the binding,

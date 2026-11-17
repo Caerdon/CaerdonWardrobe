@@ -711,6 +711,13 @@ function CaerdonAPIMixin:InitTooltipTracking()
     end)
 end
 
+-- The names tooltip data has been seen to use for an item's ID, its bag and its slot, in the
+-- order they are tried. Up here because the handler below runs on every item tooltip anyone
+-- fills, a held one several times a second.
+local TOOLTIP_ID_KEYS = { "itemID", "id", "itemId" }
+local TOOLTIP_BAG_KEYS = { "bagID", "bagIndex", "containerID", "containerIndex", "bag" }
+local TOOLTIP_SLOT_KEYS = { "slotIndex", "slot", "slotID", "containerSlot" }
+
 function CaerdonAPIMixin:OnTooltipItem(tooltip, tooltipData)
     if not tooltipData then
         return
@@ -724,8 +731,7 @@ function CaerdonAPIMixin:OnTooltipItem(tooltip, tooltipData)
         context.itemID = context.itemID or GetItemIDFromLink(tooltipData.hyperlink)
     end
 
-    local idKeys = { "itemID", "id", "itemId" }
-    for _, key in ipairs(idKeys) do
+    for _, key in ipairs(TOOLTIP_ID_KEYS) do
         local value = tooltipData[key]
         if type(value) == "number" and value > 0 then
             context.itemID = value
@@ -733,8 +739,7 @@ function CaerdonAPIMixin:OnTooltipItem(tooltip, tooltipData)
         end
     end
 
-    local bagKeys = { "bagID", "bagIndex", "containerID", "containerIndex", "bag" }
-    for _, key in ipairs(bagKeys) do
+    for _, key in ipairs(TOOLTIP_BAG_KEYS) do
         local value = tooltipData[key]
         if type(value) == "number" then
             context.bag = value
@@ -742,8 +747,7 @@ function CaerdonAPIMixin:OnTooltipItem(tooltip, tooltipData)
         end
     end
 
-    local slotKeys = { "slotIndex", "slot", "slotID", "containerSlot" }
-    for _, key in ipairs(slotKeys) do
+    for _, key in ipairs(TOOLTIP_SLOT_KEYS) do
         local value = tooltipData[key]
         if type(value) == "number" then
             context.slot = value

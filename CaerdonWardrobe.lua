@@ -2433,6 +2433,7 @@ function CaerdonWardrobeMixin:RefreshItems()
     CaerdonFoodDrink:InvalidateCaches()
     CaerdonProfessionTools:InvalidateCaches()
     CaerdonBagSlots:InvalidateCaches()
+    CaerdonAuctionValue:InvalidateCaches()
     self.refreshGeneration = self.refreshGeneration + 1
     self.lastRefreshTime = GetTime()
 
