@@ -143,6 +143,11 @@ local function RunKind(def, kind, toon)
         else
             local facts = T.Facts.Read(def.facts, item)
             local misses = T.Facts.Mismatch(def.shape, facts)
+            -- An item a quest takes shows the quest icon, whatever the shape's rule says of
+            -- it: it fits no shape that does not ask for one.
+            if not misses and facts.questTakes and def.shape.questTakes == nil then
+                misses = { { key = "questTakes", want = false, have = true } }
+            end
             local verdict
             if not misses then
                 local ready, status, binding = T.GetVerdict(item)

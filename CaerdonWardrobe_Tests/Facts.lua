@@ -35,7 +35,14 @@ function Facts.Item(item)
     local link, itemID = item:GetItemLink(), item:GetItemID()
     local name, _, quality, itemLevel, minLevel, _, _, maxStack, equipLoc, _, sellPrice, classID, subClassID,
     bindType, expansionID = C_Item.GetItemInfo(link)
+    -- A quest that takes the item puts the quest icon before most others (a look to learn
+    -- among them), so the item says nothing about another rule for as long. No client API
+    -- maps an item to a quest: this is the quest module's answer, an input like the setting
+    -- in Facts.Appearance. Kept only when true, so the facts on file compare as they did.
+    local questIconOn = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowQuestItems
+    local questInfo = questIconOn and item:GetQuestItemInfo() or nil
     return {
+        questTakes = (questInfo and questInfo.hasQuestValue) and true or nil,
         levelMet = (minLevel or 0) <= UnitLevel("player"),
         itemID = itemID,
         name = name,

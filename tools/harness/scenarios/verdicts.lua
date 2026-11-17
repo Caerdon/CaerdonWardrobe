@@ -206,6 +206,32 @@ return function(H, S)
         NoErrors("setting on")
     end
 
+    -- A quest takes the plain vest: it shows the quest icon, which is no failure of the rule
+    -- for a look to learn. The quest module's answer is put in its place; the item code and
+    -- the tests' reader are the real ones.
+    do
+        local quests = client.env.CaerdonQuestItems
+        local real = quests.GetItemQuestInfo
+        quests.GetItemQuestInfo = function(_, itemID)
+            return itemID == 910001 and { hasQuestValue = true, isActive = false, isUpcoming = true, quests = {} } or nil
+        end
+        client.env.CaerdonWardrobe:RefreshItems()
+        client:Tick(20)
+        Run({ kind = "verdict" })
+        local taken = Case("scenario.learnable", 910001)
+        Equal(taken.result, "retired", "quest: a piece a quest takes is retired from the look-to-learn test, not failed")
+        Check(tostring(taken.note):find("questTakes is true", 1, true) ~= nil,
+            "quest: and says the quest is why (" .. tostring(taken.note) .. ")")
+        Equal(Case("scenario.belowLevel", 910006).result, "pass", "quest: a piece no quest takes is judged as before")
+
+        quests.GetItemQuestInfo = real
+        client.env.CaerdonWardrobe:RefreshItems()
+        client:Tick(20)
+        Run({ kind = "verdict" })
+        Equal(Case("scenario.learnable", 910001).result, "pass", "quest: the quest gone, the vest is a case again")
+        NoErrors("quest")
+    end
+
     --------------------------------------------------------------------------------------
     -- The canary
     --------------------------------------------------------------------------------------

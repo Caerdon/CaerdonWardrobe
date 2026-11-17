@@ -53,6 +53,13 @@ local bindTextTable = {
 -- verdict made from it, so drawing reads the same table and it is computed once per entry.
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
+
+-- The statuses that give way to the quest icon in GetCaerdonStatus, beside an empty one.
+local QUEST_REPLACES = {
+    collected = true, sellable = true, send = true, oldexpansion = true,
+    own = true, ownPlus = true, other = true, otherPlus = true, otherNoLoot = true,
+    lowSkill = true, lowSkillPlus = true,
+}
 local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
 local copySpellLoads = {} -- spell ID -> "asked" or "answered": its data was asked for this session
 function CaerdonItem:InvalidateStatusCache()
@@ -2389,11 +2396,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         mogStatus = self:GetIngredientStatus() or mogStatus
     end
 
-    -- Quest value only replaces the "nothing left to do with this" results, so a learnable
-    -- appearance or an upgrade keeps its own icon while a sellable one stops looking like trash.
-    -- Something to send to another toon is replaced as well: this toon's quest comes first.
-    if hasQuestValue and (not mogStatus or mogStatus == "" or mogStatus == "collected" or
-            mogStatus == "sellable" or mogStatus == "send" or mogStatus == "oldexpansion") then
+    -- Quest value replaces the "nothing left to do with this" results, something to send to
+    -- another toon, and anything to learn: the item has to be there at the turn-in, and the
+    -- learnable icon is read as "sell it, use it or send it". An upgrade keeps its arrow; one
+    -- that was also a look to learn gets the arrow as a badge on the quest icon (the drawing
+    -- reads bindingResult.upgradeStatus).
+    if hasQuestValue and (not mogStatus or mogStatus == "" or QUEST_REPLACES[mogStatus]) then
         mogStatus = "quest"
     end
 

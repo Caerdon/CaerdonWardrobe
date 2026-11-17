@@ -153,7 +153,7 @@ function CaerdonWardrobeConfigIcons:Register()
         texture = "Interface\\MINIMAP\\MapQuestHub_Icon32",
         coords = ARROW_COORDS
     })
-    local showQuest = self:AddCheckbox({ key = "showQuestItems", text = "Show the quest icon", tooltip = "Marks quest items and items that a quest in your log takes. One switch for every window.", configSection = "Icon", configValue = "ShowQuestItems" })
+    local showQuest = self:AddCheckbox({ key = "showQuestItems", text = "Show the quest icon", tooltip = "Marks quest items and items that a quest in your log takes. It comes before the learnable icons, because the item has to be in your bags when you hand the quest in. One switch for every window.", configSection = "Icon", configValue = "ShowQuestItems" })
     self:AddCheckbox({ key = "showUpcomingQuestItems", text = "Also for quests I have not picked up yet (needs QuestieDB)", tooltip = "Also marks items that a quest you have not picked up yet will ask for, as long as you can take the quest within a few levels and it is not trivial for you. Uses the QuestieDB addon's data; without it only the quests in your log are checked.", configSection = "Icon", configValue = "ShowUpcomingQuestItems" },
         { indent = 1, dependsOn = showQuest })
 

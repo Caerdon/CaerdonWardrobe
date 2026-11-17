@@ -1972,7 +1972,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                 -- TODO: Exceptions need to be broken out
                 -- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
                 local featureName = feature and feature:GetStatusRuleName()
-                if featureName == "EncounterJournal" or featureName == "Merchant" or featureName == "CustomerOrders" then
+                -- An item a quest takes keeps the quest icon in these windows too.
+                if mogStatus ~= "quest" and
+                    (featureName == "EncounterJournal" or featureName == "Merchant" or featureName == "CustomerOrders") then
                     if transmogInfo.needsItem and featureName ~= "Merchant" then
                         if not transmogInfo.matchesLootSpec then
                             if mogStatus == "own" or mogStatus == "lowSkill" then

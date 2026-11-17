@@ -47,7 +47,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 
 ### Status order in `GetCaerdonStatus`
 
-Each later step only replaces the statuses listed, so a learnable look or an upgrade keeps its icon.
+Each later step only replaces the statuses listed, so an upgrade keeps its icon, and a learnable look keeps its own against everything but a quest.
 
 1. Old expansion and Quest-class items (early; the type branch may overwrite them).
 2. The branch for the item's type (equipment, consumable, recipe, pet, mount, toy, ...).
@@ -57,7 +57,7 @@ Each later step only replaces the statuses listed, so a learnable look or an upg
 6. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).
 7. Outgrown food and drink become `sellable` (replaces empty, `collected`).
 8. Ingredients this toon has no use for: `send` when another toon's recipes take it, `sellable` when its own have outgrown it (replaces empty).
-9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion`).
+9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion` and every learnable status: `own`, `other`, their Plus forms, `otherNoLoot`, `lowSkill`; not an upgrade).
 10. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
 11. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
