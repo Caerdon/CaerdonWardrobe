@@ -264,8 +264,11 @@ function BetterBagsVendorMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
 
     for vendorButton in pairs(trackedVendorButtons) do
-        -- Pooled buttons have no mode and stay hidden until BetterBags draws them again.
-        if vendorButton.mode and vendorButton.frame and vendorButton.frame:IsShown() then
+        -- Pooled buttons have no mode and stay hidden until BetterBags draws them again. On
+        -- screen, not just shown: a closed vendor keeps its cards, shown inside a hidden
+        -- panel, and every vendor that opens draws all of its cards (through the wrapped
+        -- methods above), so nothing is owed to the ones that are skipped here.
+        if vendorButton.mode and vendorButton.frame and vendorButton.frame:IsVisible() then
             self:UpdateVendorButton(vendorButton)
         end
     end

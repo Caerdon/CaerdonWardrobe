@@ -17,6 +17,16 @@ function BankMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
+-- Whether the panel is on screen. Shown is not enough: a bag addon with a bank of its own
+-- (BetterBags) moves the bank frame under a hidden parent and still shows the panel while the
+-- bank is open, because the client's bank functions ask for that. Its buttons are then filled
+-- and refreshed like any others, where nobody sees them, and since such a panel never gets
+-- its OnHide it keeps its tab and its buttons after the bank is closed. The panel is asked,
+-- not the button: a button is refreshed before it is shown.
+local function IsPanelOnScreen()
+    return BankPanel:IsVisible()
+end
+
 function BankMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
     local noTabSelected = BankPanel.selectedTabID == nil;
@@ -38,6 +48,11 @@ function BankMixin:OnUpdateSearchResults(frame)
 end
 
 function BankMixin:OnBankButtonRefresh(button)
+    -- Nothing is drawn or cleared where it cannot be seen. A panel that comes on screen fills
+    -- its buttons again (BankPanelMixin:OnShow), which brings every one of them back here.
+    if not IsPanelOnScreen() then
+        return
+    end
     local itemInfo = button.itemInfo
     if not itemInfo then
         CaerdonWardrobe:ClearButton(button)

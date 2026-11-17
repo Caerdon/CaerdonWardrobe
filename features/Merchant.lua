@@ -26,12 +26,21 @@ function MerchantMixin:Init()
     return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE", "BAG_UPDATE_DELAYED" }
 end
 
+-- Whether Blizzard's vendor window is on screen. Shown is not enough: a bag addon with a
+-- vendor window of its own (BetterBags) moves this one under a hidden parent and leaves it
+-- shown, since hiding it would end the visit. Its ten buttons are then filled like any
+-- others, where nobody sees them. A window that comes on screen updates itself
+-- (MerchantFrame_OnShow), which brings its buttons back through the two hooks in Init.
+local function IsMerchantOnScreen()
+    return MerchantFrame:IsVisible()
+end
+
 function MerchantMixin:MERCHANT_UPDATE()
     self:Refresh()
 end
 
 function MerchantMixin:TOOLTIP_DATA_UPDATE()
-    if not MerchantFrame:IsShown() then
+    if not IsMerchantOnScreen() then
         return
     end
 
@@ -47,7 +56,7 @@ end
 function MerchantMixin:BAG_UPDATE_DELAYED()
     self.bagCacheDirty = true
 
-    if MerchantFrame:IsShown() then
+    if IsMerchantOnScreen() then
         self:Refresh()
     end
 end
@@ -133,7 +142,7 @@ end
 function MerchantMixin:Refresh()
     self:RefreshBagCache()
     CaerdonWardrobeFeatureMixin:Refresh(self)
-    if MerchantFrame:IsShown() then
+    if IsMerchantOnScreen() then
         if MerchantFrame.selectedTab == 1 then
             self:OnMerchantUpdate()
         else
@@ -327,6 +336,9 @@ function MerchantMixin:IsAnotherAddonFiltering()
 end
 
 function MerchantMixin:OnMerchantUpdate()
+    if not IsMerchantOnScreen() then
+        return
+    end
     self:ProcessMerchantButtons()
 end
 
@@ -471,6 +483,9 @@ function MerchantMixin:ProcessMerchantButtons()
 end
 
 function MerchantMixin:OnBuybackUpdate()
+    if not IsMerchantOnScreen() then
+        return
+    end
     local numBuybackItems = GetNumBuybackItems();
 
     for index = 1, BUYBACK_ITEMS_PER_PAGE, 1 do -- Only 1 actual page for buyback right now
