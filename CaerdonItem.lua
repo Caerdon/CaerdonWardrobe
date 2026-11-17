@@ -102,12 +102,101 @@ local function SkillRequirementPattern()
     return skillRequirementPattern
 end
 
+-- An "Equip:" line that is a plain stat, not an effect. WoW Forever writes what classic gear
+-- gives beyond the primary stats (spell power, attack power, crit, mana per 5 sec) as green
+-- "Equip:" lines. It builds them from its own TOOLTIP_ITEM_STAT_* strings and hands them out
+-- as type None, while an effect that is a spell (a quiver's attack speed) comes as
+-- ItemSpellTriggerOnEquip with a spell ID. A stat is weighed like any other stat (item level,
+-- Pawn) and is no reason to keep a piece; an effect is.
+--   * Skill bonuses (TOOLTIP_ITEM_STAT_SKILL_*, "Increased Fishing +3") are left out on
+--     purpose: they stay an effect.
+--   * A line is only a stat when it matches one of these strings in full, so a family the
+--     list lacks, and every "Equip:" line of a client without the strings (retail), stays an
+--     effect.
+--   * The names are built here, which the static check cannot see: the recorder gets them
+--     from CaerdonItem:GetEquipStatStringNames().
+local EQUIP_STAT_PREFIX = "TOOLTIP_ITEM_STAT_"
+local EQUIP_STAT_FAMILIES = {
+    "ATTACK_POWER", "RANGED_ATTACK_POWER", "WEAPON_DAMAGE", "ARMOR_PENETRATION",
+    "CRIT_PERCENT", "HIT_PERCENT", "HASTE_PCT", "EXPERTISE_PCT",
+    "DEFENSE", "DODGE_PCT", "PARRY_PCT", "BLOCK_CHANCE", "BLOCK_VALUE",
+    "HEALTH_REGEN", "MANA_REGEN",
+    "SPELL_POWER", "SPELL_DAMAGE", "SPELL_HEALING", "SPELL_PENETRATION",
+    "ARCANE_DAMAGE", "FIRE_DAMAGE", "FROST_DAMAGE", "HOLY_DAMAGE", "NATURE_DAMAGE", "SHADOW_DAMAGE",
+    "ARCANE_PENETRATION", "FIRE_PENETRATION", "FROST_PENETRATION", "NATURE_PENETRATION", "SHADOW_PENETRATION",
+}
+-- Attack power and spell damage against one kind of creature: AP_VS_BEAST, SD_VS_UNDEAD.
+local EQUIP_STAT_CREATURES = { "BEAST", "DEMON", "DRAGONKIN", "ELEMENTAL", "GIANT", "HUMANOID", "MECHANICAL", "UNDEAD" }
+-- Healing and damage in one line, each with its own direction.
+local EQUIP_STAT_OTHERS = {
+    "SPELL_HEALING_INCREASE_DAMAGE_INCREASE", "SPELL_HEALING_INCREASE_DAMAGE_DECREASE",
+    "SPELL_HEALING_DECREASE_DAMAGE_INCREASE", "SPELL_HEALING_DECREASE_DAMAGE_DECREASE",
+}
+
+local equipStatStringNames
+function CaerdonItem:GetEquipStatStringNames()
+    if not equipStatStringNames then
+        local names = {}
+        local function AddFamily(family)
+            names[#names + 1] = EQUIP_STAT_PREFIX .. family .. "_INCREASE"
+            names[#names + 1] = EQUIP_STAT_PREFIX .. family .. "_DECREASE"
+        end
+        for _, family in ipairs(EQUIP_STAT_FAMILIES) do
+            AddFamily(family)
+        end
+        for _, creature in ipairs(EQUIP_STAT_CREATURES) do
+            AddFamily("AP_VS_" .. creature)
+            AddFamily("SD_VS_" .. creature)
+        end
+        for _, name in ipairs(EQUIP_STAT_OTHERS) do
+            names[#names + 1] = EQUIP_STAT_PREFIX .. name
+        end
+        equipStatStringNames = names
+    end
+    return equipStatStringNames
+end
+
+-- "Equip: Improves your chance to hit by %1$.1f%%." as a pattern for the whole line. A number
+-- is matched loosely (digits and separators), since how a locale writes one is not known.
+local function EquipStatPattern(format)
+    local pattern = format:gsub("%%%%", "\2"):gsub("%%[%d%$%.]*%a", "\1")
+    pattern = pattern:gsub("%p", "%%%0"):gsub("\1", "[%%d%%.,]+"):gsub("\2", "%%%%")
+    return "^" .. pattern .. "$"
+end
+
+local equipStatPatterns
+local equipStatLines = {} -- line text -> whether it is a stat line; a tooltip's lines repeat
+local function IsEquipStatLine(lineText)
+    local isStat = equipStatLines[lineText]
+    if isStat == nil then
+        if not equipStatPatterns then
+            equipStatPatterns = {}
+            for _, name in ipairs(CaerdonItem:GetEquipStatStringNames()) do
+                local format = _G[name]
+                if type(format) == "string" then
+                    equipStatPatterns[#equipStatPatterns + 1] = EquipStatPattern(format)
+                end
+            end
+        end
+        isStat = false
+        for index = 1, #equipStatPatterns do
+            if strfind(lineText, equipStatPatterns[index]) then
+                isStat = true
+                break
+            end
+        end
+        equipStatLines[lineText] = isStat
+    end
+    return isStat
+end
+
 local recycledTooltipData = {}
 local function ResetTooltipData(embeddedLink)
     local t = recycledTooltipData
     t.canLearn = false
     t.canCombine = false
     t.hasEquipEffect = false
+    t.hasEquipEffectBeyondStats = false
     t.isRelearn = false
     t.bindingStatus = nil
     t.isRetrieving = false
@@ -121,6 +210,7 @@ local function ResetTooltipData(embeddedLink)
     t.requiredTradeSkillTooLow = false
     t.raceClassRestricted = false
     t.skillRequirementMet = false
+    t.hasSkillRequirement = false
     t.embeddedLink = embeddedLink
     return t
 end
@@ -534,6 +624,17 @@ local function MatchesTeleportKeyword(text)
     return false
 end
 
+-- The item's use has to be aimed at an enemy: the client's own answer, the one it takes to
+-- colour an action button out of range. Such a use is a combat effect (Torch of Holy Flame
+-- 7344, "Decrease the armor of target by 50"), while what is fun or special about an item is
+-- mostly cast on oneself, on a friend or on nothing at all.
+function CaerdonItemMixin:HasHostileUse() -- requires item data to be loaded
+    if self:IsItemEmpty() or not self:GetHasUse() then
+        return false
+    end
+    return C_Item.IsHarmfulItem(self:GetItemID()) == true
+end
+
 function CaerdonItemMixin:HasTeleportUse()
     if self.cachedTeleportUse ~= nil then
         return self.cachedTeleportUse
@@ -856,12 +957,17 @@ function CaerdonItemMixin:GetTooltipData(data)
             line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnEquip then
             if line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnEquip then
                 tooltipData.hasEquipEffect = true
+                tooltipData.hasEquipEffectBeyondStats = true
             end
 
             if lineText then
                 -- Text fallback for clients that don't type the equip line
                 if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
                     tooltipData.hasEquipEffect = true
+                    -- Only an untyped line can be a plain stat (see IsEquipStatLine).
+                    if line.type ~= Enum.TooltipDataLineType.None or not IsEquipStatLine(lineText) then
+                        tooltipData.hasEquipEffectBeyondStats = true
+                    end
                 end
 
                 -- NOTE: I had removed the check for isRecipe for some reason... but then things like Reaves would get flagged as canLearn.
@@ -991,6 +1097,7 @@ function CaerdonItemMixin:GetTooltipData(data)
                     tooltipData.raceClassRestricted = true
                 end
             elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
+                tooltipData.hasSkillRequirement = true
                 -- "Requires Engineering (50)" not in red: the client's own verdict that this
                 -- toon has the skill at that rank.
                 if leftHex and leftHex ~= "ffff2020" then
@@ -1436,7 +1543,10 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
     return {
         bindingStatus = bindingStatus,
         needsItem = needsItem,
+        -- Any "Equip:" line, and whether one of them is more than a plain stat (spell power and
+        -- the like on WoW Forever, see IsEquipStatLine). Only the second keeps a piece.
         hasEquipEffect = hasEquipEffect,
+        hasEquipEffectBeyondStats = (tooltipData and tooltipData.hasEquipEffectBeyondStats) or false,
         isBindOnPickup = isBindOnPickup,
         unusableItem = unusableItem,
         isLocked = isLocked,
@@ -1445,6 +1555,8 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         raceClassRestricted = raceClassRestricted,
         -- The tooltip has a skill requirement line ("Requires Engineering (50)") that is met.
         skillRequirementMet = (tooltipData and tooltipData.skillRequirementMet) or false,
+        -- The tooltip has a skill requirement line at all, met or not.
+        hasSkillRequirement = (tooltipData and tooltipData.hasSkillRequirement) or false,
         -- The tooltip carries the client's "Already known" line.
         alreadyKnown = (tooltipData and tooltipData.isKnownSpell) or false
     }
@@ -2014,6 +2126,22 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 if protectRecraftPotential then
                     redundantForPlayer = false
                 end
+                -- An equip effect keeps a piece; an "Equip:" line that is only a stat (spell
+                -- power on WoW Forever) does not, where a vendor pays for the piece. Without a
+                -- vendor price it is kept as before: a quest's piece (Cursed Eye of Paleth
+                -- 2944, traded in for the cleansed one) has none.
+                local keptForEquipEffect = bindingResult.hasEquipEffectBeyondStats or
+                    (bindingResult.hasEquipEffect and not (itemSellPrice and itemSellPrice > 0))
+                -- A use keeps a piece, so that nothing fun or special is marked for sale. A use
+                -- that has to be aimed at an enemy is a combat effect, outgrown like a stat,
+                -- and does not. Kept whatever the use: a trinket and a piece that asks for a
+                -- skill (an engineer's gadgets are aimed at enemies too), and a piece no vendor
+                -- pays for (a quest's tool: Morbent's Bane 7297). The client is asked last.
+                local keptForUseEffect = hasUseEffect and not (
+                    equipLocation ~= "INVTYPE_TRINKET" and
+                    not bindingResult.hasSkillRequirement and
+                    itemSellPrice and itemSellPrice > 0 and
+                    self:HasHostileUse())
 
                 if mogStatus == "collected" and
                     self:IsSellable() and
@@ -2026,9 +2154,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     not hasTeleportUse and
                     not protectEqualItemLevel and
                     not protectRecraftPotential and
-                    (redundantForPlayer or (not hasUseEffect and
+                    (redundantForPlayer or (not keptForUseEffect and
                         not self:GetSetID() and
-                        not bindingResult.hasEquipEffect)) then
+                        not keptForEquipEffect)) then
                     mogStatus = "sellable"
                 end
             end

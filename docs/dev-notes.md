@@ -304,13 +304,32 @@ A piece whose look is already known from another item is a second source, not a 
 
 ## Sellable Rules
 
-Equipment is `sellable` when it is `collected`, redundant or without use / equip effect / set, and not protected. Never sellable:
+Equipment is `sellable` when it is `collected`, redundant or without use / equip effect / set, and not protected (what counts as a use and as an equip effect: below the list). Never sellable:
 
 - **Fishing poles** (weapon subclass `Fishingpole`).
 - **Profession tools:** a Weapon with a met skill requirement line (`bindingResult.skillRequirementMet`; armor with a profession requirement is judged normally), or anything `GetProfessionToolInfo()` names.
 - **Equal item level** unless the piece is `identicalToEquipped` (see Upgrades), recraftable items, legendaries and cosmetics with an effect, tabards with a use, teleport items, artifacts.
   - **Recraftable is a fact of the copy, not of the link.** The client is asked by the copy's GUID (`CaerdonItemMixin:IsRecraftable`), so a bare link (the mail, a buyback row, a chat link) always answers no. A verdict is cached per link, and a crafted piece judged first by its link left `sellable` for its copy in the bags until the next refresh, or the other way round. So a crafted piece that lies somewhere has a cache entry of its own (`|c` in the key, `StatusCacheKey` in `CaerdonItem.lua`): its link ends in its maker's GUID, which is how it is told. A soulbound copy was already apart through `|B`. Offline (`scenarios/equipment-once.lua`, which the code from before fails in both orders). Retail client (12.1.5.70783, a druid, 2026-11-16), the code from before: nine crafted pieces in the bags, each recraftable in its slot and not by its link; one read `sellable` by its link and `collected` in its slot. Retail client with the change (the same druid): the bags are drawn as before, 127 items the same and none changed.
   - **A new fact that is asked of the copy belongs in the key the same way,** or copies of one link will take each other's verdict. `CaerdonItemMixin:GetStatusCacheKey()` says which entry a copy uses.
+
+**A use that has to be aimed at an enemy does not keep a piece** (`CaerdonItemMixin:HasHostileUse`, which is `C_Item.IsHarmfulItem`; `keptForUseEffect` in the equipment branch).
+
+- **Why:** a use keeps a learned piece so that nothing fun or special is marked for sale. The client does not say what a use is worth, only what it is aimed at. A use that needs an enemy is a combat effect (Torch of Holy Flame 7344: "Decrease the armor of target by 50"), outgrown like a stat; what is fun or special is mostly cast on oneself, on a friend or on nothing. It is a rule of thumb (author decision, 2026-11-17): a piece it marks wrongly is a reason to add a guard here.
+- **Kept whatever the use is aimed at:** a trinket; a piece with a skill requirement line, met or not (`bindingResult.hasSkillRequirement`: an engineer's gadgets are aimed at enemies too); a piece no vendor pays for (a quest's tool: Morbent's Bane 7297, whose use is cast on Morbent Fel). The client is asked last, so none of these asks it.
+- **Unchanged:** a teleport, a tabard's use and a legendary's are protected on their own; a set or an equip effect beyond a stat still keeps the piece.
+- **Both flavors:** the function is on both clients and the rule is not flavor-specific.
+- **Export:** `Use Spell` under `[Caerdon]`: the spell, the client's two answers (`IsHarmfulItem`, `IsHelpfulItem`) and the addon's reading.
+- **Evidence.** Offline: `scenarios/hostile-use.lua`, hand-made items. Forever client (1.60.1.70959, a hunter, 2026-11-17): the torch reads `sellable`, which the rule only gives when the client calls its use harmful, and nothing else in the bags was seen to change. Not seen: a trinket, a gadget or a quest's tool in a client, and retail.
+
+**An "Equip:" line that is a plain stat is not an equip effect for this rule** (`IsEquipStatLine` in `CaerdonItem.lua`; `bindingResult.hasEquipEffect` is any "Equip:" line, `hasEquipEffectBeyondStats` one that is more than a stat, and only the second keeps a piece).
+
+- **Why:** Forever writes what classic gear gives beyond the primary stats (spell power, attack power, crit, mana per 5 sec) as green "Equip:" lines. Counting them as effects kept every learned caster piece from `sellable`, on any class. Such a stat is weighed like any other: by item level and Pawn, which decide upgrade, tie and redundancy before this rule is reached.
+- **How a stat line is told:** the client builds it from one of its `TOOLTIP_ITEM_STAT_*` strings and hands it out as type `None`; an effect that is a spell (a quiver's attack speed) comes as `ItemSpellTriggerOnEquip` with a spell ID. So: an untyped line that matches one of those strings in full, the number matched loosely. The match is on the client's own strings, so it holds in any locale.
+- **Still an effect:** a typed line whatever it says; a skill bonus (`TOOLTIP_ITEM_STAT_SKILL_*`, "Increased Fishing +3"), left out on purpose; an untyped line that matches no string; every "Equip:" line on a client without the strings. Retail has none of them, so nothing changes there, its PVP item level line included.
+- **Only where a vendor pays for the piece.** Without a vendor price a stat line keeps the piece as before: a quest's piece that is traded in later (Cursed Eye of Paleth 2944) has none, and nothing else says it is still needed.
+- **Legendaries, cosmetics and equippable junk** still read `hasEquipEffect`, any line.
+- **The names are built at run time** (`CaerdonItem:GetEquipStatStringNames()`), so the static check does not see them; the recorder takes the list from that function. A family the list lacks stays an effect, and `scenarios/equip-stat-lines.lua` fails when the Forever listings have an "Equip:" stat string that is not named.
+- **Evidence.** Forever client (1.60.1, the fixtures and two exports of a hunter): the line types and texts of attack power, spell power, healing with damage, shadow and fire damage (type `None`), a quiver's attack speed (`ItemSpellTriggerOnEquip`, with a spell ID) and a fishing pole's skill bonus (`None`). Offline: the rule on those texts, on both flavors (`scenarios/equip-stat-lines.lua`). Forever client with the change (1.60.1.70959, the same hunter, 2026-11-17): an off-hand and a cloak with a spell power line read `sellable`. Not seen: how the client writes a percentage ("1.0%" is what its format says).
 
 Other sources of `sellable`:
 

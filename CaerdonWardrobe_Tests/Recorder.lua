@@ -212,6 +212,13 @@ local function Names()
         for _, name in ipairs(Keys.ALSO_NAMES) do
             allNames[name] = allNames[name] or "api"
         end
+        -- The global strings the item code builds the names of (the stat lines among a
+        -- tooltip's "Equip:" lines). The list is the addon's, so it cannot fall behind it.
+        if CaerdonItem.GetEquipStatStringNames then
+            for _, name in ipairs(CaerdonItem:GetEquipStatStringNames()) do
+                allNames[name] = allNames[name] or ""
+            end
+        end
     end
     return allNames
 end

@@ -223,6 +223,15 @@ function H.StockGame(toon, items)
     Set("C_Item.IsItemBindToAccountUntilEquip", function() return false end)
     Set("C_Item.GetItemUniquenessByID", function() return false end)
     Set("C_Item.IsUsableItem", function() return true, false end)
+    -- spell.hostile / spell.friendly: what the item's use has to be aimed at.
+    Set("C_Item.IsHarmfulItem", function(reference)
+        local item = Item(reference)
+        return item ~= nil and item.spell ~= nil and item.spell.hostile == true
+    end)
+    Set("C_Item.IsHelpfulItem", function(reference)
+        local item = Item(reference)
+        return item ~= nil and item.spell ~= nil and item.spell.friendly == true
+    end)
     Set("C_Item.GetFirstTriggeredSpellForItem", function() return nil end)
     Set("C_ArtifactUI.IsArtifactItem", function() return false end)
     Set("C_ToyBox.GetToyInfo", function() return nil end)

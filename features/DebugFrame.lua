@@ -2335,6 +2335,20 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         -- unusableItem / skillTooLow come from the red-text tooltip scan and drive canEquipForPlayer
         addTable(1, "Binding Result", bindingResult)
     end
+    -- What the client says the item's use is aimed at: a use that needs an enemy does not keep
+    -- a learned piece from "sellable" (CaerdonItemMixin:HasHostileUse).
+    local useSpellName, useSpellID = C_Item.GetItemSpell(item:GetItemID())
+    if useSpellID then
+        addLine(1, "Use Spell:")
+        addKV(2, "Name", useSpellName)
+        addKV(2, "Spell ID", useSpellID)
+        addKV(2, "C_Item.IsHarmfulItem", C_Item.IsHarmfulItem(item:GetItemID()))
+        addKV(2, "C_Item.IsHelpfulItem", C_Item.IsHelpfulItem(item:GetItemID()))
+        addKV(2, "Hostile Use", item:HasHostileUse())
+        addKV(2, "Teleport Use", item:HasTeleportUse())
+    else
+        addKV(1, "Use Spell", "none")
+    end
 
     local forDebugUse = item:GetForDebugUse()
     if forDebugUse then
