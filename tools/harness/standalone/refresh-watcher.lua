@@ -64,8 +64,10 @@ local function Fire(event, ...)
     end
 end
 
--- Loads the real file into a client of one flavor.
-local function Start(flavor)
+-- Loads the real file into a client of one flavor. Both clients have a faction list; the mock
+-- has one only where a section asks for it (withFactions), so that the sections about another
+-- watch count that watch's refreshes alone.
+local function Start(flavor, withFactions)
     clock, timers, errors, refreshes, unknownEvents = 100, {}, {}, {}, { NO_SUCH_EVENT = true }
     frame = { events = {}, unitEvents = {} }
     function frame:RegisterEvent(event)
@@ -126,8 +128,8 @@ local function Start(flavor)
         end,
     }
     CaerdonWardrobe = {
-        RefreshItems = function(_, reason, detail)
-            refreshes[#refreshes + 1] = { reason = reason, detail = detail, at = clock }
+        RefreshItems = function(_, reason, detail, changed)
+            refreshes[#refreshes + 1] = { reason = reason, detail = detail, about = changed, at = clock }
         end,
     }
 
@@ -151,6 +153,45 @@ local function Start(flavor)
         Enum = { ItemClass = { Housing = 20 } }
         -- Retail has the namespace and none of the list's functions.
         C_SkillInfo = {}
+    end
+
+    -- The reputation window's list, as both clients' C_Reputation gives it: a header that only
+    -- groups others, one with a standing of its own, and factions. `points` is the bar.
+    C_Reputation, C_GossipInfo, C_MajorFactions = {}, nil, nil
+    if withFactions then
+        state.factions = {
+            { factionID = 1118, name = "Classic", isHeader = true, isHeaderWithRep = false, reaction = 4, points = 0 },
+            { factionID = 72, name = "Stormwind", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 3200 },
+            { factionID = 576, name = "Timbermaw Hold", isHeader = false, isHeaderWithRep = false, reaction = 3, points = -2900 },
+            { factionID = 169, name = "Steamwheedle Cartel", isHeader = true, isHeaderWithRep = true, reaction = 4, points = 500 },
+            { factionID = 21, name = "Booty Bay", isHeader = false, isHeaderWithRep = false, reaction = 4, points = 500 },
+        }
+        state.friendships, state.renown = {}, {}
+        C_Reputation = {
+            GetNumFactions = function() return #state.factions end,
+            GetFactionDataByIndex = function(index)
+                local faction = state.factions[index]
+                if not faction then return nil end
+                -- A new table at every call, as the client's.
+                return { factionID = faction.factionID, name = faction.name, isHeader = faction.isHeader,
+                    isHeaderWithRep = faction.isHeaderWithRep, reaction = faction.reaction, currentStanding = faction.points }
+            end,
+            IsMajorFaction = function(factionID) return state.renown[factionID] ~= nil end,
+        }
+        -- Both clients have these two as well (Forever's reputation window calls them).
+        C_GossipInfo = {
+            GetFriendshipReputation = function(factionID)
+                local rank = state.friendships[factionID]
+                return { friendshipFactionID = rank and factionID or 0, reaction = rank or "" }
+            end,
+        }
+        C_MajorFactions = {
+            GetMajorFactionData = function(factionID)
+                local level = state.renown[factionID]
+                -- false: a renown faction the toon has not unlocked.
+                return level and { factionID = factionID, renownLevel = level } or nil
+            end,
+        }
     end
 
     local namespace = {}
@@ -310,6 +351,7 @@ do
     Fire("PLAYER_FLAGS_CHANGED", "player")
     Equal(#refreshes, 2, "War Mode switched on refreshes")
     Equal(refreshes[2].detail, "pvp: false -> true", "and says so")
+    Equal(refreshes[2].about, "worn", "as a change of what is worn")
     Advance(1)
 
     state.warMode, state.instanceType = false, "pvp"
@@ -456,6 +498,167 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     Equal(#refreshes, 3, flavor .. ": a rank saved after the event refreshes when the burst is over")
     Equal(refreshes[3].detail, "saved Blacksmithing: 55 -> 60", flavor .. ": and names it")
     Equal(#errors, 0, flavor .. ": no error")
+end
+
+------------------------------------------------------------------------------------------
+print("Reputation")
+------------------------------------------------------------------------------------------
+local function Named(reason)
+    local list = {}
+    for _, refresh in ipairs(refreshes) do
+        if refresh.reason == reason then list[#list + 1] = refresh end
+    end
+    return list
+end
+local function Faction(factionID)
+    for index, faction in ipairs(state.factions) do
+        if faction.factionID == factionID then return faction, index end
+    end
+end
+
+for _, flavor in ipairs({ "forever", "retail" }) do
+    local watcher = Start(flavor, true)
+    Check(frame.events.UPDATE_FACTION == true, flavor .. ": the faction event is registered")
+    Check(frame.events.MAJOR_FACTION_RENOWN_LEVEL_CHANGED == true and frame.events.MAJOR_FACTION_UNLOCKED == true,
+        flavor .. ": and the two renown events")
+
+    -- The login: the first reading is taken as the world arrives, with the PVP watch's.
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Equal(#Named("reputation"), 1, flavor .. ": the world's arrival is the first reading")
+    Equal(Named("reputation")[1].detail, "first reading", flavor .. ": which says so")
+    Equal(Named("reputation")[1].at, Named("pvp")[1].at, flavor .. ": at the moment of the PVP watch's, so the windows draw once for both")
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": the faction events of a login refresh nothing more")
+
+    -- Points: every kill and every quest turned in.
+    for _ = 1, 5 do
+        Faction(72).points = Faction(72).points + 25
+        Fire("UPDATE_FACTION")
+        Advance(1)
+    end
+    Equal(#Named("reputation"), 1, flavor .. ": points gained within a standing refresh nothing")
+    local watch = Watched(watcher, "reputation")
+    Check(watch.events == 7 and watch.checks == 12 and watch.changes == 1, flavor .. ": seven events, read as each burst starts and ends, one change")
+
+    -- A standing reached, on a client that has it when the event comes.
+    Faction(576).reaction = 4
+    Fire("UPDATE_FACTION")
+    Equal(#Named("reputation"), 2, flavor .. ": a standing reached refreshes at the event")
+    Equal(Named("reputation")[2].detail, "faction 576 (Timbermaw Hold): 3 -> 4", flavor .. ": and names the faction and both standings")
+    Equal(Named("reputation")[2].about, nil, flavor .. ": as a change about everything")
+    Advance(1)
+    Equal(#Named("reputation"), 2, flavor .. ": and not again when the burst is over")
+
+    -- And on one that still answers with the old standing then.
+    Fire("UPDATE_FACTION")
+    Equal(#Named("reputation"), 2, flavor .. ": the old standing at the event refreshes nothing")
+    Faction(72).reaction = 6
+    Advance(0.4)
+    Equal(#Named("reputation"), 2, flavor .. ": nor before half a second is over")
+    Advance(0.2)
+    Equal(#Named("reputation"), 3, flavor .. ": the check after the burst has it")
+    Equal(Named("reputation")[3].detail, "faction 72 (Stormwind): 5 -> 6", flavor .. ": and names it")
+
+    -- A standing lost is a change like one reached.
+    Faction(72).reaction = 5
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[4] and Named("reputation")[4].detail, "faction 72 (Stormwind): 6 -> 5", flavor .. ": a standing lost refreshes too")
+    Advance(1)
+
+    -- Headers: one that only groups is not read, one with a standing of its own is.
+    Faction(1118).reaction = 5
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 4, flavor .. ": a header that only groups others is not read")
+    Faction(169).reaction = 5
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(Named("reputation")[5] and Named("reputation")[5].detail, "faction 169 (Steamwheedle Cartel): 4 -> 5", flavor .. ": a header with a standing of its own is")
+
+    -- A faction met for the first time.
+    table.insert(state.factions, { factionID = 59, name = "Thorium Brotherhood", isHeader = false, isHeaderWithRep = false, reaction = 4, points = 0 })
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(Named("reputation")[6] and Named("reputation")[6].detail, "faction 59 (Thorium Brotherhood): new, 4", flavor .. ": a faction met is a change")
+
+    -- The list is the reputation window's: a collapsed header takes its factions out of it.
+    local _, bootyBay = Faction(21)
+    local hidden = table.remove(state.factions, bootyBay)
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(Named("reputation")[7] and Named("reputation")[7].detail, "faction 21 (Booty Bay): gone, was 4", flavor .. ": a header collapsed is a change")
+    hidden.reaction = 5
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 7, flavor .. ": and a standing reached below it is not seen")
+    table.insert(state.factions, hidden)
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(Named("reputation")[8] and Named("reputation")[8].detail, "faction 21 (Booty Bay): new, 5", flavor .. ": until the header is opened again")
+
+    -- Another world entered (an instance, a boat) reads again and finds the same.
+    Fire("PLAYER_ENTERING_WORLD", false, false)
+    Advance(1)
+    Equal(#Named("reputation"), 8, flavor .. ": the world's arrival later on refreshes nothing by itself")
+    Equal(#errors, 0, flavor .. ": no error")
+end
+
+-- Friendships and renown, which the standing's number does not tell.
+do
+    local watcher = Start("retail", true)
+    table.insert(state.factions, { factionID = 1358, name = "Nat Pagle", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 8400 })
+    table.insert(state.factions, { factionID = 2507, name = "Dragonscale Expedition", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 0 })
+    state.friendships[1358] = "Buddy"
+    state.renown[2507] = 11
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Advance(1)
+    Equal(#Named("reputation"), 1, "retail: the first reading")
+
+    state.friendships[1358] = "Friend"
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[2] and Named("reputation")[2].detail, "faction 1358 (Nat Pagle): Buddy -> Friend", "a friendship's rank is read by its name, with the standing's number as it was")
+    Advance(1)
+
+    -- The renown event alone: Blizzard's window listens for it besides the faction event.
+    state.renown[2507] = 12
+    Fire("MAJOR_FACTION_RENOWN_LEVEL_CHANGED", 2507, 12, 11)
+    Equal(Named("reputation")[3] and Named("reputation")[3].detail, "faction 2507 (Dragonscale Expedition): renown 11 -> renown 12", "a renown level is read, at its own event")
+    Advance(1)
+
+    -- A renown faction the toon has not unlocked has no data; unlocking it is a change.
+    table.insert(state.factions, { factionID = 2600, name = "The Severed Threads", isHeader = false, isHeaderWithRep = false, reaction = 4, points = 0 })
+    state.renown[2600] = false
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(Named("reputation")[4] and Named("reputation")[4].detail, "faction 2600 (The Severed Threads): new, renown 0", "a renown faction with no data yet is read as level 0")
+    state.renown[2600] = 1
+    Fire("MAJOR_FACTION_UNLOCKED", 2600)
+    Equal(Named("reputation")[5] and Named("reputation")[5].detail, "faction 2600 (The Severed Threads): renown 0 -> renown 1", "and unlocked at its own event")
+    Advance(1)
+    Equal(Watched(watcher, "reputation").changes, 5, "five changes in all")
+    Equal(#errors, 0, "nothing raised")
+end
+
+-- A client with the list and neither of the other two namespaces reads standings alone.
+do
+    local watcher = Start("forever", true)
+    C_GossipInfo, C_MajorFactions = nil, nil
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Advance(1)
+    Faction(576).reaction = 4
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[2] and Named("reputation")[2].detail, "faction 576 (Timbermaw Hold): 3 -> 4", "without the friendship and renown functions the standings are read")
+    Advance(1)
+    Equal(#errors, 0, "and nothing raised")
+    Check(watcher ~= nil, "the watcher is there")
+end
+
+-- Without the list's functions there is no watch, and no first reading of nothing.
+do
+    local watcher = Start("forever")
+    Check(Watched(watcher, "reputation") == nil, "a client with no faction list has no reputation watch")
+    Check(frame.events.UPDATE_FACTION == nil, "and the faction event is not asked for")
 end
 
 print(("%d checks, %d failed"):format(checks, failures))

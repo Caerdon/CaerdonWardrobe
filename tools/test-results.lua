@@ -180,6 +180,21 @@ local function printSessions(db)
             print(("        %.1f minutes, %d full refreshes of the addon's own (%.2f a minute)%s%s"):format(session.minutes,
                 own, own / minutes, forced > 0 and (", %d more forced by the tests"):format(forced) or "",
                 #parts > 0 and (": " .. table.concat(parts, ", ")) or ""))
+            -- How often the windows drew for them: refreshes in a run share one redraw. A redraw
+            -- is the tests' when the newest refresh before it was (a record from before redraws
+            -- were counted has none).
+            local redraws = refreshes.redraws
+            if redraws then
+                local forcedRedraws = 0
+                for name, count in pairs(redraws.by or {}) do
+                    if tostring(name):find("^CaerdonWardrobe_Tests/") then
+                        forcedRedraws = forcedRedraws + count
+                    end
+                end
+                local ownRedraws = (redraws.total or 0) - forcedRedraws
+                print(("        the windows drew again %d times for them (%.2f a minute)%s"):format(ownRedraws, ownRedraws / minutes,
+                    forcedRedraws > 0 and (", %d more times for the tests"):format(forcedRedraws) or ""))
+            end
             -- The refreshes that said what had changed and kept the rest (the tests' forced
             -- ones included; a record from before a refresh could say so has none).
             parts = {}
@@ -527,6 +542,9 @@ local function printLedger(ledger, indent)
             parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.by[name])
         end
         print(indent .. ("full refreshes: %s%s"):format(figure(refreshes.total), #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+        if refreshes.redraws then
+            print(indent .. ("  the windows drew again %s times"):format(figure(refreshes.redraws.total)))
+        end
         parts = {}
         for _, name in ipairs(sortedKeys(refreshes.about or {})) do
             parts[#parts + 1] = ("%s %d"):format(tostring(name), refreshes.about[name])

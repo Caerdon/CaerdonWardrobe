@@ -555,6 +555,70 @@ do
     Check(watchedLine, "refresh: the export has a line per watch")
     Check(recentLine, "refresh: and the newest refreshes with their reasons")
     Check(CaerdonCounters.event == nil, "refresh: no event is left set after the handlers")
+
+    -- Redraws: the windows' Refresh() runs a tenth of a second after the last refresh of a
+    -- run, so the two are not the same count.
+    local function Redraws(trigger)
+        local redraws = CaerdonCounters:GetReport().refreshes.redraws
+        return trigger and (redraws.by[trigger] or 0) or redraws.total
+    end
+    local function Refreshes()
+        return CaerdonCounters:GetReport().refreshes.total
+    end
+    clock = clock + 1
+    RunTimers()
+    local drawn, asked = Redraws(), Refreshes()
+    local drawnForGear, drawnForToy = Redraws("PLAYER_EQUIPMENT_CHANGED"), Redraws("NEW_TOY_ADDED")
+    Check(drawn > 0 and drawn < asked, "redraw: the windows had drawn less often than there were refreshes: " .. drawn .. " of " .. asked)
+
+    Fire("NEW_TOY_ADDED")
+    Fire("NEW_TOY_ADDED")
+    Fire("PLAYER_EQUIPMENT_CHANGED")
+    Equal(Refreshes() - asked, 3, "redraw: three refreshes in a run")
+    Equal(Redraws() - drawn, 0, "redraw: draw nothing in the calls themselves")
+    clock = clock + 0.09
+    RunTimers()
+    Equal(Redraws() - drawn, 0, "redraw: nor before a tenth of a second is over")
+    clock = clock + 0.02
+    RunTimers()
+    Equal(Redraws() - drawn, 1, "redraw: and are one redraw")
+    Equal(Redraws("PLAYER_EQUIPMENT_CHANGED") - drawnForGear, 1, "redraw: filed under the newest refresh before it")
+    Equal(Redraws("NEW_TOY_ADDED") - drawnForToy, 0, "redraw: and not under the ones it was started over by")
+    clock = clock + 1
+    RunTimers()
+    Equal(Redraws() - drawn, 1, "redraw: once")
+
+    Fire("NEW_TOY_ADDED")
+    clock = clock + 0.11
+    RunTimers()
+    Fire("NEW_TOY_ADDED")
+    clock = clock + 0.11
+    RunTimers()
+    Equal(Redraws() - drawn, 3, "redraw: two refreshes apart are two redraws")
+    Equal(Redraws("NEW_TOY_ADDED") - drawnForToy, 2, "redraw: each under its own")
+
+    -- In a fight the caches are emptied and the windows wait for its end.
+    local notInCombat = InCombatLockdown
+    InCombatLockdown = function() return true end
+    Fire("NEW_TOY_ADDED")
+    Fire("NEW_TOY_ADDED")
+    clock = clock + 1
+    RunTimers()
+    Equal(Redraws() - drawn, 3, "redraw: a refresh in a fight draws nothing")
+    InCombatLockdown = notInCombat
+    Fire("PLAYER_REGEN_ENABLED")
+    clock = clock + 0.11
+    RunTimers()
+    Equal(Redraws() - drawn, 4, "redraw: the fight's end is one redraw for all of them")
+    Equal(Redraws("after combat"), 1, "redraw: under the refresh that the fight's end makes")
+    Equal(Refreshes() - asked, 8, "redraw: eight refreshes were four redraws")
+
+    local redrawLine
+    for _, line in ipairs(CaerdonCounters:GetReportLines()) do
+        if line.text == ("the windows drew again %d times"):format(Redraws()) then redrawLine = true end
+    end
+    Check(redrawLine, "redraw: the export says how often the windows drew")
+    Equal(#errors, 0, "redraw: no error reached the error handler")
 end
 
 ------------------------------------------------------------------------------------------

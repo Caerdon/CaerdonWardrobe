@@ -312,6 +312,54 @@ Refresh:Watch({
     delay = 0.5,
 })
 
+-- Reputation. UPDATE_FACTION comes for every point gained (a kill, a quest turned in) and for
+-- a click in the reputation window. What a verdict reads of it is a requirement in red that a
+-- standing meets ("Requires Timbermaw Hold - Friendly"), through the tooltip. So the reading
+-- is where the toon stands with every faction of the client's list, not its points: the
+-- standing's number, for a friendship its rank's name, for a renown faction its level.
+--
+-- The list is the reputation window's: a faction under a collapsed header is not in it, so
+-- collapsing one is a change here and what happens below it is not seen.
+local function ReadReputation()
+    local reading = {}
+    local friendshipOf = C_GossipInfo and C_GossipInfo.GetFriendshipReputation
+    local isRenown = C_Reputation.IsMajorFaction
+    local renownOf = C_MajorFactions and C_MajorFactions.GetMajorFactionData
+
+    for index = 1, C_Reputation.GetNumFactions() do
+        local faction = C_Reputation.GetFactionDataByIndex(index)
+        -- A header that only groups others has no standing of its own.
+        if faction and faction.factionID and faction.factionID > 0 and (not faction.isHeader or faction.isHeaderWithRep) then
+            local factionID = faction.factionID
+            local standing = faction.reaction or 0
+            -- Told apart as Blizzard's reputation window does it.
+            local friendship = friendshipOf and friendshipOf(factionID)
+            if friendship and (friendship.friendshipFactionID or 0) > 0 then
+                standing = friendship.reaction or standing
+            elseif isRenown and renownOf and isRenown(factionID) then
+                local renown = renownOf(factionID)
+                standing = "renown " .. tostring(renown and renown.renownLevel or 0)
+            end
+            reading[("faction %d (%s)"):format(factionID, tostring(faction.name))] = standing
+        end
+    end
+
+    return reading
+end
+
+-- The renown events are the ones Blizzard's reputation window listens for besides the first.
+-- The world's arrival is there for the first reading: it comes with the PVP watch's, at a
+-- login, and the windows draw once for both.
+if C_Reputation and C_Reputation.GetNumFactions and C_Reputation.GetFactionDataByIndex then
+    Refresh:Watch({
+        name = "reputation",
+        events = { "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED", "MAJOR_FACTION_UNLOCKED", "PLAYER_ENTERING_WORLD" },
+        read = ReadReputation,
+        delay = 0.5,
+        leading = true,
+    })
+end
+
 -- Housing: the catalog is not always through with a change when its event comes, and one
 -- change sends several events. One refresh, when the run of them is over.
 if select(4, GetBuildInfo()) >= 110207 and Enum and Enum.ItemClass and Enum.ItemClass.Housing ~= nil then

@@ -2542,7 +2542,10 @@ function CaerdonWardrobeMixin:RefreshItems(reason, detail, changed)
         return
     end
 
+    -- A tenth of a second, started over by every refresh: the events of one change come in a
+    -- run (a quest turned in with three looks is four), and the windows draw once for it.
     self.refreshTimer = C_Timer.NewTimer(0.1, function()
+        Counters:NoteRedraw()
         local name, instance
         for name, instance in pairs(registeredFeatures) do
             Contained(instance.Refresh, instance)

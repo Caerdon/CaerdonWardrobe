@@ -227,6 +227,9 @@ local refreshes = { total = 0 }
 local refreshesBy = {}   -- trigger -> count
 local refreshesAbout = {} -- what a refresh said had changed ("worn", "collection") -> count
 local recentRefreshes = {}
+local redraws = { total = 0 }
+local redrawsBy = {}     -- the trigger of the newest refresh before a redraw -> count
+local lastRefreshTrigger
 
 -- The event the addon's frame is handling, set by its OnEvent. A refresh asked for from inside
 -- a handler is that event's; any other one is named by the line that asked.
@@ -251,6 +254,17 @@ function Counters:NoteRefresh(reason, detail, changed)
     if #recentRefreshes > RECENT_REFRESHES then
         table.remove(recentRefreshes, 1)
     end
+    lastRefreshTrigger = trigger
+end
+
+-- From RefreshItems' timer, as it starts on the features' Refresh(). A refresh empties the
+-- caches at once and the windows draw a tenth of a second after the last one of a run, so a
+-- run of refreshes is one redraw, and one put off by a fight is none until the fight is over.
+-- Filed under the trigger of the newest refresh before it.
+function Counters:NoteRedraw()
+    local trigger = lastRefreshTrigger or "(no refresh)"
+    redraws.total = redraws.total + 1
+    redrawsBy[trigger] = (redrawsBy[trigger] or 0) + 1
 end
 
 ------------------------------------------------------------------------------------------
@@ -673,6 +687,10 @@ function Counters:GetReport()
     for index, entry in ipairs(recentRefreshes) do
         report.refreshes.recent[index] = { at = entry.at, trigger = entry.trigger, detail = entry.detail, about = entry.about }
     end
+    report.refreshes.redraws = { total = redraws.total, by = {} }
+    for trigger, count in pairs(redrawsBy) do
+        report.refreshes.redraws.by[trigger] = count
+    end
     -- What the watcher compared before it refreshed (CaerdonRefresh.lua): events against changes.
     report.refreshes.watched = NS and NS.Refresh and NS.Refresh:GetReport() or {}
 
@@ -760,6 +778,8 @@ function Counters:GetReportLines()
     end
     add(1, ("Full refreshes: %d%s"):format(refreshReport.total,
         #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""))
+    -- How often the windows drew for them: refreshes in a run share one redraw.
+    add(2, ("the windows drew again %d times"):format(refreshReport.redraws.total))
     -- The ones that said what had changed, and so kept what does not follow from it.
     parts = {}
     for _, changed in ipairs(SortedByCount(refreshReport.about)) do

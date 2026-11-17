@@ -195,6 +195,9 @@ end
 local COUNTED = {
     "PLAYER_FLAGS_CHANGED", "SKILL_LINES_CHANGED", "TRANSMOG_COLLECTION_UPDATED", "BAG_UPDATE_DELAYED",
     "PLAYER_EQUIPMENT_CHANGED", "QUEST_TURNED_IN", "TRANSMOG_COLLECTION_SOURCE_ADDED", "NEW_RECIPE_LEARNED",
+    -- The reputation watch's event, and beside it one that no code of Blizzard's listens for:
+    -- how often each comes says whether the second is a standing reached or every point.
+    "UPDATE_FACTION", "FACTION_STANDING_CHANGED",
 }
 
 T.counters = { refreshItems = 0, processItem = 0, byFeature = {}, requests = {} }
