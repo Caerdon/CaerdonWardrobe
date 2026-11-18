@@ -6,6 +6,9 @@
 --   1. A run of such calls is one refresh, named "pawn", about everything.
 --   2. Pawn's functions still run, with their arguments.
 --   3. Without Pawn the addon loads and nothing is hooked.
+--   4. Pawn's "Show item level upgrades" checkbox calls neither: it sets the value and calls
+--      PawnResetBags, which Pawn also calls after every change of the worn gear. A call with
+--      the value as it was is nothing; one with it changed is a refresh.
 --
 -- Pawn here is two functions of the scenario's own. That Pawn calls them when a scale changes
 -- was read in Pawn's code and is not proven by this.
@@ -22,6 +25,8 @@ return function(H, S)
         if withPawn then
             game:Set("PawnResetTooltips", function(...) world.pawnCalls[#world.pawnCalls + 1] = { "reset", ... } end)
             game:Set("PawnInvalidateBestItems", function(...) world.pawnCalls[#world.pawnCalls + 1] = { "best", ... } end)
+            game:Set("PawnResetBags", function(...) world.pawnCalls[#world.pawnCalls + 1] = { "bags", ... } end)
+            game:Set("PawnCommon.ShowItemLevelUpgrades", true)
         end
         local client = H.Client.New({ flavor = "forever", provider = game })
         game.client = client
@@ -99,6 +104,25 @@ return function(H, S)
         Check(#world.pawnCalls == 1 and world.pawnCalls[1][1] == "reset" and world.pawnCalls[1][2] == "a" and world.pawnCalls[1][3] == 2,
             "hook: Pawn's function runs with its arguments")
         client:Tick(10)
+
+        -- The bags are reset after a change of the worn gear: the option is as it was.
+        world.refreshes = {}
+        env.PawnResetBags()
+        env.PawnResetBags()
+        client:Tick(10)
+        Equal((Named(world, "pawn")), 0, "bags: a reset of Pawn's bags with its options as they were is nothing")
+        -- The checkbox: the value, then the same call.
+        env.PawnCommon.ShowItemLevelUpgrades = false
+        env.PawnResetBags()
+        client:Tick(10)
+        Equal((Named(world, "pawn")), 1, "bags: with \"Show item level upgrades\" switched off it is one refresh")
+        env.PawnResetBags()
+        client:Tick(10)
+        Equal((Named(world, "pawn")), 1, "bags: and the next reset is nothing again")
+        env.PawnCommon.ShowItemLevelUpgrades = true
+        env.PawnResetBags()
+        client:Tick(10)
+        Equal((Named(world, "pawn")), 2, "bags: switched back on, one more")
         Equal(#client.errors, 0, "with Pawn: no error reached the error handler")
     end
 

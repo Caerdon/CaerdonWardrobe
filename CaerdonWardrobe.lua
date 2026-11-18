@@ -994,7 +994,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local itemData = item and item.GetItemData and item:GetItemData()
     local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
     local showNeutralSameLevel = sameLevelBehavior == "neutral"
-    local allowMismatchedSpecUpgrades = CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == true
+    local allowMismatchedSpecUpgrades = CaerdonWardrobeConfig.Icon.ShowOtherSpecUpgrades == true
     local equipmentSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
     local isEquipmentSetItem = equipmentSets and #equipmentSets > 0
     local showGearSetText = isEquipmentSetItem and bindingStatus and IsGearSetStatus(bindingStatus, item) and
@@ -1106,9 +1106,31 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local isTabard = equipLocation == "INVTYPE_TABARD"
     local isShirt = equipLocation == "INVTYPE_BODY"
     local globalUpgradeEnabled = CaerdonWardrobeConfig.Icon.ShowUpgradeIcon ~= false
-    local upgradeSlotAvailable = displayInfo and displayInfo.upgradeIcon.shouldShow and not isEquipmentSetItem and
+    -- A gear set's piece was picked for its slot, so whether it still gets the arrow is the
+    -- player's choice (Icon.ShowUpgradeOnGearSets). Its level gain is drawn either way.
+    local arrowOnPiece = not isEquipmentSetItem or CaerdonWardrobeConfig.Icon.ShowUpgradeOnGearSets ~= false
+    -- An upgrade for another spec only (another spec's Pawn scale, or another loot spec's gear)
+    -- is no news on a set's piece: the set is where the player put it for that spec.
+    local otherSpec = transmogInfo and
+        (transmogInfo.pawnOffTreeUpgrade or transmogInfo.upgradeMatchesSpec == false)
+    if isEquipmentSetItem and otherSpec then
+        arrowOnPiece = false
+    end
+    -- An upgrade for another spec is shown only where the player asked for those
+    -- (Icon.ShowOtherSpecUpgrades): neither arrow nor level gain otherwise. Every kind of it:
+    -- gear for another loot spec, another spec's visible Pawn scale, another spec's gear set.
+    if otherSpec and not allowMismatchedSpecUpgrades then
+        arrowOnPiece = false
+        levelGain = nil
+    end
+    local upgradeSlotAvailable = displayInfo and displayInfo.upgradeIcon.shouldShow and arrowOnPiece and
         not isTabard
     local shouldShowUpgradeIcon = globalUpgradeEnabled and upgradeSlotAvailable
+    -- The gear set's own icon. A piece keeps it when it is an upgrade: the arrow then rides on
+    -- it as the small badge (upgradeOnSetIcon), or is left out where set pieces get none.
+    local gearSetIcon = isEquipmentSetItem and IsGearSetStatus(bindingStatus, item) and
+        CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon
+    local upgradeOnSetIcon = nil
     -- unusableNow: the tooltip's red text says the toon cannot wear the piece now, so it gets no
     -- equal-level icon (the status code sets it, and gives such a piece no protection either).
     local canEquipForNeutral = transmogInfo and not transmogInfo.unusableNow and
@@ -1179,14 +1201,20 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
     elseif status == "upgrade" then
         isProminent = false
-        if shouldShowUpgradeIcon then
+        if gearSetIcon then
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
+            upgradeOnSetIcon = status
+        elseif shouldShowUpgradeIcon then
             iconBackgroundAdjustment = 4
             upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, false,
                 transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         end
     elseif status == "upgradeLowSkill" then
         isProminent = false
-        if shouldShowUpgradeIcon then
+        if gearSetIcon then
+            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
+            upgradeOnSetIcon = status
+        elseif shouldShowUpgradeIcon then
             iconBackgroundAdjustment = 4
             upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, true,
                 transmogInfo, allowMismatchedSpecUpgrades, levelGain)
@@ -1383,10 +1411,13 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- (transmogInfo.upgradeStatus is the status logic's own verdict): the arrow rides on that
     -- icon as a small badge, so an upgrade always reads as one. Where the window does not show
     -- that icon at all, the item is drawn as the upgrade it is.
-    local badgeStatus = transmogInfo and transmogInfo.upgradeStatus
+    --
+    -- A gear set's piece that is an upgrade and shows the set's icon is the same case: its status
+    -- is the upgrade, and the icon it kept carries the badge.
+    local badgeStatus = upgradeOnSetIcon or (transmogInfo and transmogInfo.upgradeStatus)
     local showBadge = false
-    if badgeStatus and shouldShowUpgradeIcon and status ~= "upgrade" and status ~= "upgradeLowSkill" and
-        status ~= "waiting" then
+    if badgeStatus and shouldShowUpgradeIcon and status ~= "waiting" and
+        (upgradeOnSetIcon or (status ~= "upgrade" and status ~= "upgradeLowSkill")) then
         local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
         if statusTexture == nil or statusTexture == "" or statusTexture == 0 then
             isProminent = false

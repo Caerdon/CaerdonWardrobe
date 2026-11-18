@@ -536,6 +536,17 @@ local equippedGearSnapshot = nil
 local equipmentSetIndex = nil
 local equipmentSetIndexTime = nil
 
+-- The toon's other specs with the Pawn scale and the gear each is compared against, built at the
+-- first piece that asks and kept until the next refresh (GetOtherSpecs).
+local otherSpecCache = nil
+
+-- Pawn's value of an item on a scale it does not show: scale name -> item link -> value (false:
+-- Pawn had none). Pawn calculates such a value anew at every call, and a refresh asks for every
+-- piece again, so it is kept here across refreshes. A link names the item with its enchant and
+-- gems, and the value follows from those and the scale's weights alone, so it stands until Pawn
+-- says its scales changed (OnPawnChanged).
+local otherSpecValues = {}
+
 GetEquippedGearSnapshot = function()
     if equippedGearSnapshot then
         return equippedGearSnapshot
@@ -585,6 +596,7 @@ function CaerdonEquipment:InvalidateCaches(changed)
     cachedPvpContext = nil
     equippedGearSnapshot = nil
     equipmentSetIndex = nil
+    otherSpecCache = nil
     if changed == "worn" and not collectionChanged then
         return
     end
@@ -1009,8 +1021,10 @@ local PAWN_CHANGE_DELAY = 0.2
 local pawnChangeTimer
 local function OnPawnChanged()
     if pawnChangeTimer then
+        wipe(otherSpecValues)
         return
     end
+    wipe(otherSpecValues)
     pawnChangeTimer = C_Timer.NewTimer(PAWN_CHANGE_DELAY, function()
         pawnChangeTimer = nil
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
@@ -1018,12 +1032,38 @@ local function OnPawnChanged()
         end
     end)
 end
+
+-- Pawn's "Show item level upgrades" is read by the verdicts too, and its checkbox calls neither
+-- of the two: it sets the value and calls PawnResetBags (read in Pawn 2.14.4). That function
+-- also runs after every change of the worn gear, so it is no change by itself: the value is
+-- compared with the one last seen, here and as a verdict reads it (NotePawnItemLevelOption).
+local pawnItemLevelOption = nil
+local function ReadPawnItemLevelOption()
+    return PawnCommon ~= nil and PawnCommon.ShowItemLevelUpgrades and true or false
+end
+local function NotePawnItemLevelOption()
+    if pawnItemLevelOption == nil and PawnCommon ~= nil then
+        pawnItemLevelOption = ReadPawnItemLevelOption()
+    end
+end
+local function OnPawnBagsReset()
+    local now = ReadPawnItemLevelOption()
+    if pawnItemLevelOption == nil then
+        pawnItemLevelOption = now
+    elseif pawnItemLevelOption ~= now then
+        pawnItemLevelOption = now
+        OnPawnChanged()
+    end
+end
 -- Pawn is an optional dependency, so it has loaded before this file when it is installed.
 if type(PawnResetTooltips) == "function" then
     hooksecurefunc("PawnResetTooltips", OnPawnChanged)
 end
 if type(PawnInvalidateBestItems) == "function" then
     hooksecurefunc("PawnInvalidateBestItems", OnPawnChanged)
+end
+if type(PawnResetBags) == "function" then
+    hooksecurefunc("PawnResetBags", OnPawnBagsReset)
 end
 
 -- Pawn only counts a score at least 0.5% higher as an upgrade (PawnIsItemAnUpgrade).
@@ -1046,12 +1086,9 @@ local function PawnPrefersEquipped(item, ignoredScales)
         return false, "Pawn comparison API missing"
     end
 
-    -- Pawn's "Show item level upgrades" option is the player's answer to "is a higher item level
-    -- an upgrade on its own?" (on by default on retail, where item level gates content and event
-    -- power; off on classic-era clients). While it is on, item level keeps the final say.
-    if PawnCommon.ShowItemLevelUpgrades then
-        return false, "Pawn counts item level upgrades (ShowItemLevelUpgrades on)"
-    end
+    -- Pawn's own "Show item level upgrades" is not asked here: whether a higher item level
+    -- outweighs Pawn's scores is the addon's setting (Icon.ItemLevelOverPawn, read by the caller).
+    -- That option still changes what Pawn's arrow answers, which is Pawn's verdict.
 
     local inventoryTypeName = item:GetInventoryTypeName()
     if inventoryTypeName == "INVTYPE_TRINKET" then
@@ -1152,23 +1189,41 @@ end
 -- points. Without specializations Pawn has no automatic mode: it shows a scale for every tree of
 -- the class and its arrow API answers "an upgrade for any of them", so a Beast Mastery hunter gets
 -- an arrow on gloves that only Survival's strength weight likes, and the pair the hunter is wearing
--- gets one right back once they are swapped. Returns nil (nothing to ignore) when the client has
--- no talent trees (retail), no tree leads, or ignoring would leave no visible scale. Only scales
--- for the player's class that name a spec are ever ignored; custom scales always count.
+-- gets one right back once they are swapped.
+--
+-- With specializations (retail) Pawn shows the scale of the spec being played by itself, and a
+-- player can make another spec's visible beside it. Then the same holds: the scales of the other
+-- specs are the ones ignored. A scale's SpecID is the spec's index there, which is what
+-- GetSpecialization answers (Pawn's own PawnGetDefaultScale fills it from that).
+--
+-- Returns nil (nothing to ignore) when no tree leads, no spec is chosen, or ignoring would leave
+-- no visible scale. Only scales for the player's class that name a spec are ever ignored; custom
+-- scales always count.
 -- Second return value: the names of the scales ignored and kept, for the Debug Frame export.
 local function GetPawnOffTreeScales()
     if not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) then
         return nil
     end
 
-    local treeIndex, _, _, treeCount = CaerdonAPI:GetPrimaryTalentTree()
-    if not treeIndex then
+    local treeIndex, treeCount, specIndex
+    if CaerdonAPI:GetTalentTrees() then
+        local _
+        treeIndex, _, _, treeCount = CaerdonAPI:GetPrimaryTalentTree()
+    else
+        -- 5 is the spec of a toon that has not chosen one.
+        specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
+        if specIndex and (specIndex < 1 or specIndex > 4) then
+            specIndex = nil
+        end
+    end
+    if not treeIndex and not specIndex then
         return nil
     end
 
     local ok, offTree, detail = pcall(function()
         local _, classFile, classID = UnitClass("player")
-        local specIDs = PawnSpecIDsForTalentTree(classFile, treeIndex, treeCount)
+        local specIDs = treeIndex and PawnSpecIDsForTalentTree(classFile, treeIndex, treeCount) or
+            { [specIndex] = true }
         local ignored, ignoredNames, keptNames = {}, {}, {}
         for scaleName, scale in pairs(PawnCommon.Scales) do
             if PawnIsScaleVisible(scaleName) then
@@ -1195,6 +1250,15 @@ local function GetPawnOffTreeScales()
     return offTree, detail
 end
 
+-- Whether the player wants upgrades for this spec of the class shown while another is played
+-- (Icon.OtherSpecs, one switch per spec of the toon's class on the Icons page; a spec that was
+-- never switched off is wanted). Clients without specs have no such switches.
+local function IsOtherSpecWanted(classFile, specIndex)
+    local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local chosen = icon and icon.OtherSpecs
+    return not (type(chosen) == "table" and chosen[tostring(classFile) .. tostring(specIndex)] == false)
+end
+
 -- True when Pawn calls the item an upgrade only for scales in offTreeScales, i.e. for a talent
 -- tree the toon is not using. PawnIsItemAnUpgrade is what Pawn's arrow API and tooltip both use,
 -- and it names the scales. Anything unclear returns false, which keeps Pawn's verdict.
@@ -1204,7 +1268,7 @@ local function IsPawnUpgradeOffTreeOnly(item, offTreeScales)
         return false, "Pawn upgrade API missing"
     end
 
-    local ok, verdict, detail = pcall(function()
+    local ok, verdict, detail, unwanted = pcall(function()
         local candidate = PawnGetItemData(item:GetItemLink())
         if not candidate or not candidate.Link then
             return false, "Pawn has no data for the item"
@@ -1220,19 +1284,221 @@ local function IsPawnUpgradeOffTreeOnly(item, offTreeScales)
 
         local names = {}
         local offTreeOnly = true
+        -- Third return value: every scale named is for a spec the player switched off.
+        local unwantedOnly = true
+        local _, classFile = UnitClass("player")
         for _, upgrade in ipairs(upgradeInfo) do
             names[#names + 1] = upgrade.LocalizedScaleName or tostring(upgrade.ScaleName)
             if not offTreeScales[upgrade.ScaleName] then
                 offTreeOnly = false
             end
+            local scale = PawnCommon.Scales and PawnCommon.Scales[upgrade.ScaleName]
+            if not scale or type(scale.SpecID) ~= "number" or IsOtherSpecWanted(classFile, scale.SpecID) then
+                unwantedOnly = false
+            end
         end
-        return offTreeOnly, table.concat(names, ", ")
+        return offTreeOnly, table.concat(names, ", "), offTreeOnly and unwantedOnly
     end)
 
     if not ok then
         return false, "error: " .. tostring(verdict)
     end
-    return verdict == true, detail
+    return verdict == true, detail, unwanted == true
+end
+
+-- An upgrade for another of the toon's specs (Icon.ShowOtherSpecUpgrades).
+--
+-- Pawn's own verdict is over the scales it shows, and in its automatic mode that is the played
+-- spec's alone. Its values are not: PawnGetSingleValueFromItem scores an item on any scale by
+-- name, shown or not (read in Pawn 2.14.4). So a piece is scored here on each other spec's scale
+-- and compared with what that spec wears: the gear set assigned to the spec, or the worn gear
+-- where none is assigned or the set leaves the slot alone. Worn gear is a poor stand-in (a
+-- tank's ring against a healer's scale), which is why the set comes first.
+--
+-- No verdict for a spec: a trinket (Pawn does not score them), a slot the spec's set has empty
+-- or whose piece is not to be found (the bank), a piece Pawn has no values for, and the piece
+-- that is the set's own. With two slots the weaker one is the one to beat, as Pawn has it.
+
+-- The link of the piece at a gear set's location, as C_EquipmentSet.GetItemLocations gives it
+-- (0: nothing in the slot, 1: the set leaves the slot alone, -1: the piece is missing).
+local function LinkAtSetLocation(location)
+    if type(location) ~= "number" or location <= 1 then
+        return nil
+    end
+    local data = EquipmentManager_GetLocationData(location)
+    if not data then
+        return nil
+    end
+    local slot, bag = tonumber(data.slot), tonumber(data.bag)
+    if data.isBank and not bag then
+        return slot and GetInventoryItemLink("player", slot) or nil
+    elseif data.isBank or data.isBags then
+        if bag and slot then
+            local itemLocation = ItemLocation:CreateFromBagAndSlot(bag, slot)
+            if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
+                return C_Item.GetItemLink(itemLocation)
+            end
+        end
+        return nil
+    elseif data.isPlayer then
+        return slot and GetInventoryItemLink("player", slot) or nil
+    end
+    return nil
+end
+
+-- { { index, id, scale, label, setID, baseline = {} } ... }, by spec index. Empty on
+-- a client without specializations, without Pawn, or for a toon with no spec chosen.
+local function GetOtherSpecs()
+    if otherSpecCache then
+        return otherSpecCache
+    end
+    local specs = {}
+    otherSpecCache = specs
+    if not (PawnCommon and PawnCommon.Scales and PawnGetItemData and PawnGetSingleValueFromItem) then
+        return specs
+    end
+    if CaerdonAPI:GetTalentTrees() then
+        return specs
+    end
+    local current = CaerdonAPI:GetPlayerSpecializationIndex()
+    if not current or current < 1 or current > 4 then
+        return specs
+    end
+
+    local _, classFile, classID = UnitClass("player")
+    local seen = {}
+    for scaleName, scale in pairs(PawnCommon.Scales) do
+        local specIndex = scale.SpecID
+        if scale.ClassID == classID and scale.Provider ~= nil and type(specIndex) == "number" and
+            specIndex ~= current and not seen[specIndex] and IsOtherSpecWanted(classFile, specIndex) then
+            seen[specIndex] = true
+            local setID = C_EquipmentSet and C_EquipmentSet.GetEquipmentSetForSpec and
+                C_EquipmentSet.GetEquipmentSetForSpec(specIndex) or nil
+            specs[#specs + 1] = {
+                index = specIndex,
+                id = (CaerdonAPI:GetSpecializationInfo(specIndex)),
+                scale = scaleName,
+                label = scale.LocalizedName or scaleName,
+                setID = setID,
+                baseline = {},
+            }
+        end
+    end
+    table.sort(specs, function(a, b) return a.index < b.index end)
+    return specs
+end
+
+-- Pawn's value of the item on the scale, from the values kept (otherSpecValues), or nil.
+local function OtherSpecValue(scaleName, link)
+    local values = otherSpecValues[scaleName]
+    if not values then
+        values = {}
+        otherSpecValues[scaleName] = values
+    end
+    local value = values[link]
+    if value == nil then
+        value = false
+        local data = PawnGetItemData(link)
+        if data and data.Link then
+            local _, unenchanted = PawnGetSingleValueFromItem(data, scaleName)
+            if unenchanted then
+                value = unenchanted
+            end
+        else
+            -- Pawn has nothing for the item yet: asked again the next time, not kept.
+            return nil
+        end
+        values[link] = value
+    end
+    return value or nil
+end
+
+-- What the spec has in the slot and Pawn's value of it on the spec's scale, or nil. Found once
+-- per refresh. The set is asked where its pieces are as the slot is first needed, not when the
+-- specs were listed: a piece moves in the bags without a refresh.
+local function OtherSpecBaseline(spec, slotID)
+    local entry = spec.baseline[slotID]
+    if entry == nil then
+        entry = false
+        local link
+        local locations = spec.setID and C_EquipmentSet.GetItemLocations(spec.setID) or nil
+        local location = locations and locations[slotID]
+        if spec.setID and location ~= 1 then
+            link = LinkAtSetLocation(location)
+        else
+            link = GetInventoryItemLink("player", slotID)
+        end
+        if link then
+            local value = OtherSpecValue(spec.scale, link)
+            if value then
+                entry = { link = link, value = value }
+            end
+        end
+        spec.baseline[slotID] = entry
+    end
+    return entry or nil
+end
+
+-- The names of the other specs the piece is an upgrade for, or nil. itemSpecs: the specs the
+-- client says the piece is for (C_Item.GetItemSpecInfo), which a spec has to be among when the
+-- list is not empty.
+local function GetOtherSpecUpgrades(item, itemSpecs)
+    local inventoryTypeName = item:GetInventoryTypeName()
+    if inventoryTypeName == "INVTYPE_TRINKET" then
+        return nil
+    end
+    local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
+    if not inventorySlots then
+        return nil
+    end
+    local specs = GetOtherSpecs()
+    if #specs == 0 then
+        return nil
+    end
+
+    local ok, names = pcall(function()
+        local link = item:GetItemLink()
+        if not link then
+            return nil
+        end
+
+        local found
+        for _, spec in ipairs(specs) do
+            local forSpec = true
+            if itemSpecs and #itemSpecs > 0 and spec.id then
+                forSpec = false
+                for _, specID in ipairs(itemSpecs) do
+                    if specID == spec.id then
+                        forSpec = true
+                        break
+                    end
+                end
+            end
+            if forSpec then
+                local value = OtherSpecValue(spec.scale, link)
+                local lowest
+                local judged = value ~= nil and value > 0
+                if judged then
+                    for _, slotID in ipairs(inventorySlots) do
+                        local baseline = OtherSpecBaseline(spec, slotID)
+                        if not baseline or baseline.link == link then
+                            judged = false
+                            break
+                        end
+                        if not lowest or baseline.value < lowest then
+                            lowest = baseline.value
+                        end
+                    end
+                end
+                if judged and lowest and value > lowest * PAWN_UPGRADE_THRESHOLD then
+                    found = found or {}
+                    found[#found + 1] = spec.label
+                end
+            end
+        end
+        return found and table.concat(found, ", ") or nil
+    end)
+    return ok and names or nil
 end
 
 -- For the Debug Frame export: which visible Pawn scales are being ignored for this toon, or nil.
@@ -1817,12 +2083,18 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local pawnOffTreeUpgrade = false
     local pawnUpgradeScales = nil
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
+        NotePawnItemLevelOption()
         pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
         pawnOffTreeScales = GetPawnOffTreeScales()
+        local offTreeUnwanted = false
         if pawnRecommended and pawnOffTreeScales then
-            pawnOffTreeOnly, pawnUpgradeScales = IsPawnUpgradeOffTreeOnly(item, pawnOffTreeScales)
+            pawnOffTreeOnly, pawnUpgradeScales, offTreeUnwanted = IsPawnUpgradeOffTreeOnly(item, pawnOffTreeScales)
         end
         local pawnUpgrade = pawnRecommended
+        -- Only for specs the player switched off: no upgrade as far as Pawn's verdict goes.
+        if offTreeUnwanted then
+            pawnUpgrade = false
+        end
         if pawnUpgrade then
             if blockedOffhandSlot then
                 pawnUpgrade = false
@@ -1831,7 +2103,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
                 playerLootSpecID = GetPlayerLootSpecID()
             end
 
-            if (playerLootSpecID and playerLootSpecID > 0 and not matchesLootSpec) or uniqueUpgradeBlocked then
+            -- A piece for another loot spec keeps Pawn's verdict: it is judged as any piece is,
+            -- and whether it is shown is the drawing's (Icon.ShowOtherSpecUpgrades).
+            if uniqueUpgradeBlocked then
                 pawnUpgrade = false
             end
         elseif uniqueUpgradeCandidate and not uniqueUpgradeBlocked then
@@ -1867,15 +2141,48 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- lower-ilvl piece Pawn recommended, the higher-ilvl piece just taken off is not an upgrade.
     -- When a Pawn upgrade for another talent tree only was blocked above, it counts as "not
     -- recommended" here and the scores are compared on the toon's own scales alone.
+    --
+    -- With Pawn loaded the fallback is the player's choice: Icon.ShowItemLevelUpgrades switches
+    -- it off altogether, and Icon.ItemLevelOverPawn lets it stand against Pawn's scores (a gear
+    -- score to reach, a game mode that goes by item level). Without Pawn it is all there is.
     local pawnPrefersEquipped = false
     local pawnComparison = nil
+    -- A higher item level that would be the upgrade, with the arrow for it switched off.
+    local levelGainOnly = false
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or nil
+    local itemLevelCounts = not pawnAvailable or not iconConfig or iconConfig.ShowItemLevelUpgrades ~= false
+    local itemLevelOverPawn = pawnAvailable and itemLevelCounts and iconConfig ~= nil and
+        iconConfig.ItemLevelOverPawn == true
     if not shouldShowUpgrade and upgradeItemLevelDelta and upgradeItemLevelDelta > 0 and not uniqueUpgradeBlocked and
         not isTabard and not lowerArmorClassThanEquipped then
-        if pawnRecommended == false or pawnOffTreeOnly then
+        if itemLevelOverPawn then
+            pawnComparison = "a higher item level counts whatever Pawn's scores say (the addon's setting)"
+        elseif pawnRecommended == false or pawnOffTreeOnly then
             pawnPrefersEquipped, pawnComparison = PawnPrefersEquipped(item, pawnOffTreeScales)
         end
         if not pawnPrefersEquipped then
+            if itemLevelCounts then
+                shouldShowUpgrade = true
+            else
+                -- The setting takes the arrow, not the level gain, which has a setting of its
+                -- own: the piece is no upgrade and keeps its gain for the drawing.
+                levelGainOnly = true
+                pawnComparison = "a higher item level alone gets no arrow (the addon's setting)"
+            end
+        end
+    end
+
+    -- No upgrade for the spec being played: one for another of the toon's specs, where the
+    -- player asked for those. Flagged like an upgrade that only another spec's visible Pawn
+    -- scale sees, and drawn the same way.
+    if not shouldShowUpgrade and iconConfig and iconConfig.ShowOtherSpecUpgrades == true and
+        not uniqueUpgradeBlocked and not isTabard and not isShirt then
+        local otherSpecNames = GetOtherSpecUpgrades(item, sourceSpecs)
+        if otherSpecNames then
             shouldShowUpgrade = true
+            pawnOffTreeUpgrade = true
+            pawnUpgradeScales = otherSpecNames
+            pawnComparison = "an upgrade for another spec, scored against that spec's gear"
         end
     end
 
@@ -1885,6 +2192,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
     if shouldShowUpgrade and blockedOffhandSlot then
         shouldShowUpgrade = false
+    end
+
+    if levelGainOnly and (not playerCanUseSource or blockedOffhandSlot) then
+        levelGainOnly = false
     end
 
     if isTabard or isShirt then
@@ -1917,7 +2228,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- equippedLineComparison is the per-slot verdict, for the Debug Frame export.
         identicalToEquipped = identicalToEquipped,
         equippedLineComparison = equippedLineComparison,
-        upgradeItemLevelDelta = shouldShowUpgrade and upgradeItemLevelDelta or nil,
+        upgradeItemLevelDelta = (shouldShowUpgrade or levelGainOnly) and upgradeItemLevelDelta or nil,
         pawnIdentifiedUpgrade = pawnIdentifiedUpgrade,
         -- Higher item level than the equipped piece, but Pawn scores the equipped piece at least
         -- as high on every visible scale, so the item-level upgrade arrow was withheld.

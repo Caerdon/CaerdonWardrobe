@@ -648,12 +648,21 @@ return function(H, S)
             info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
                 hasMetRequirements = true } },
         { name = "off-tree", binding = "BoA",
+            info = { pawnOffTreeUpgrade = true, upgradeItemLevelDelta = 3, upgradeStatus = "upgradeLowSkill" },
+            config = function(config) config.Icon.ShowOtherSpecUpgrades = true end },
+        { name = "off-tree, not shown", binding = "BoA",
             info = { pawnOffTreeUpgrade = true, upgradeItemLevelDelta = 3, upgradeStatus = "upgradeLowSkill" } },
         { name = "other spec", binding = "WuE",
             info = { upgradeMatchesSpec = false, pawnIdentifiedUpgrade = true, upgradeStatus = "upgrade",
                 upgradeItemLevelDelta = 2 },
-            config = function(config) config.Icon.ShowMismatchedSpecUpgrades = true end },
+            config = function(config) config.Icon.ShowOtherSpecUpgrades = true end },
+        -- The same piece with the setting off, which is the default: neither arrow nor gain.
+        { name = "other spec, not shown", binding = "WuE",
+            info = { upgradeMatchesSpec = false, pawnIdentifiedUpgrade = true, upgradeStatus = "upgrade",
+                upgradeItemLevelDelta = 2 } },
         { name = "pawn", info = { pawnIdentifiedUpgrade = true, upgradeStatus = "upgrade" } },
+        -- A higher item level whose arrow is switched off: no upgrade, and the gain alone.
+        { name = "gain without the arrow", info = { upgradeItemLevelDelta = 3, canEquip = true, hasMetRequirements = true } },
         { name = "level gain switched off", noGain = true, binding = "BoE",
             info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade" } },
         { name = "equal level",
@@ -669,6 +678,52 @@ return function(H, S)
             config = function(config)
                 config.Binding.ShowGearSets = true
                 config.Binding.ShowGearSetsAsIcon = true
+            end },
+        -- A gear set's piece that is better than what is worn, with the arrow on such pieces
+        -- (the default) and without it, each with the set's name alone and with its icon.
+        { name = "gear set, upgrade", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true },
+            config = function(config) config.Binding.ShowGearSets = true end },
+        { name = "gear set as icon, upgrade", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true },
+            config = function(config)
+                config.Binding.ShowGearSets = true
+                config.Binding.ShowGearSetsAsIcon = true
+            end },
+        { name = "gear set, upgrade, no arrow on sets", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true },
+            config = function(config)
+                config.Binding.ShowGearSets = true
+                config.Icon.ShowUpgradeOnGearSets = false
+            end },
+        { name = "gear set as icon, upgrade, no arrow on sets", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true },
+            config = function(config)
+                config.Binding.ShowGearSets = true
+                config.Binding.ShowGearSetsAsIcon = true
+                config.Icon.ShowUpgradeOnGearSets = false
+            end },
+        -- A set's piece that only another spec's Pawn scale calls an upgrade, and one for another
+        -- loot spec: neither gets the arrow or the badge, with the arrow on set pieces on.
+        { name = "gear set, other spec's scale", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { pawnOffTreeUpgrade = true, upgradeItemLevelDelta = 3, isUpgrade = true, upgradeStatus = "upgrade" },
+            config = function(config) config.Binding.ShowGearSets = true end },
+        { name = "gear set as icon, other spec's scale", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { pawnOffTreeUpgrade = true, upgradeItemLevelDelta = 3, isUpgrade = true, upgradeStatus = "upgrade" },
+            config = function(config)
+                config.Binding.ShowGearSets = true
+                config.Binding.ShowGearSetsAsIcon = true
+            end },
+        { name = "gear set as icon, other loot spec", binding = "Alpha", item = { sets = { "Alpha" } },
+            info = { upgradeMatchesSpec = false, upgradeItemLevelDelta = 2, isUpgrade = true, upgradeStatus = "upgrade" },
+            config = function(config)
+                config.Binding.ShowGearSets = true
+                config.Binding.ShowGearSetsAsIcon = true
+                config.Icon.ShowOtherSpecUpgrades = true
             end },
         { name = "in the bags", binding = "BoE", item = { inBags = true },
             info = { upgradeItemLevelDelta = 4, upgradeStatus = "upgrade" },
@@ -832,7 +887,53 @@ return function(H, S)
         Equal(plain.collected.hasIcon, false, "equal: and not without the setting")
         Equal(results["gear set as icon"].collected.texture, "Interface\\Store\\category-icon-clothes", "sets: a set piece can show the clothes icon")
         Equal(results["gear set"].collected.text, "|cFFFFFFFFAlpha|r", "sets: or the set's name")
-        Equal(results["gear set"].upgrade.hasIcon, false, "sets: and is never drawn as an upgrade")
+
+        -- A set's piece that is better than what is worn. The arrow on such pieces is a setting.
+        local CLOTHES, ARROW = "Interface\\Store\\category-icon-clothes", "Interface\\Buttons\\JumpUpArrow"
+        local named, withIcon = results["gear set, upgrade"], results["gear set as icon, upgrade"]
+        Equal(named.upgrade.texture, ARROW, "sets: a set piece that is an upgrade gets the arrow")
+        Equal(named.upgrade.gain, "+5", "sets: with the level gain")
+        Equal(named.upgrade.text, "|cFFFFFFFFAlpha|r", "sets: beside the set's name")
+        Equal(withIcon.upgrade.texture, CLOTHES, "sets: with the set's icon on, the piece keeps that icon")
+        Equal(withIcon.upgrade.badge, true, "sets: and the arrow is the badge on it")
+        Equal(withIcon.upgrade.gain, "+5", "sets: with the level gain")
+        Equal(withIcon.upgradeLowSkill.texture, CLOTHES, "sets: the same below the piece's level")
+        Equal(withIcon.upgradeLowSkill.badge, true, "sets: badge and all")
+        Equal(results["gear set as icon"].collected.badge, false, "sets: no badge on a set piece that is no upgrade")
+        local namedOff = results["gear set, upgrade, no arrow on sets"]
+        local iconOff = results["gear set as icon, upgrade, no arrow on sets"]
+        Equal(namedOff.upgrade.hasIcon, false, "sets, arrow off: a set piece is never drawn as an upgrade")
+        Equal(namedOff.upgrade.gain, "+5", "sets, arrow off: its level gain is")
+        Equal(namedOff.own.badge, false, "sets, arrow off: and no other icon of it carries the badge")
+        Equal(iconOff.upgrade.texture, CLOTHES, "sets, arrow off: the set's icon stays on a piece that is an upgrade")
+        Equal(iconOff.upgrade.badge, false, "sets, arrow off: without the badge")
+        Equal(iconOff.upgrade.gain, "+5", "sets, arrow off: with the level gain")
+        local otherScale = results["gear set, other spec's scale"]
+        local otherScaleIcon = results["gear set as icon, other spec's scale"]
+        Equal(otherScale.upgrade.hasIcon, false, "sets, other spec: an upgrade for another spec's scale alone gets no arrow on a set piece")
+        Equal(otherScale.own.badge, false, "sets, other spec: and no badge on another icon of it")
+        Equal(otherScaleIcon.upgrade.texture, CLOTHES, "sets, other spec: with the set's icon on, that icon")
+        Equal(otherScaleIcon.upgrade.badge, false, "sets, other spec: without the badge")
+        Equal(results["gear set as icon, other loot spec"].upgrade.badge, false, "sets, other spec: nor for another loot spec's gear")
+        Equal(results["off-tree"].upgradeLowSkill.texture, ARROW, "sets, other spec: a piece of no set keeps that arrow")
+
+        local gainOnly = results["gain without the arrow"]
+        Equal(gainOnly.collected.gain, "+3", "gain: a piece that is no upgrade shows a level gain it carries")
+        Equal(gainOnly.collected.hasIcon, false, "gain: with no arrow")
+        Equal(gainOnly.collected.badge, false, "gain: and no badge")
+
+        -- Gear for another loot spec, by the setting.
+        local otherShown, otherHidden = results["other spec"], results["other spec, not shown"]
+        Equal(otherShown.upgrade.texture, ARROW, "loot spec: with the setting on the piece has the arrow")
+        Equal(otherShown.upgrade.gain, "+2", "loot spec: and its level gain")
+        Equal(otherShown.own.badge, true, "loot spec: or the badge on another icon")
+        Equal(otherHidden.upgrade.hasIcon, false, "loot spec: with it off, no arrow")
+        Equal(otherHidden.upgrade.gain, nil, "loot spec: no level gain")
+        Equal(otherHidden.own.badge, false, "loot spec: and no badge")
+        local treeHidden = results["off-tree, not shown"]
+        Equal(treeHidden.upgradeLowSkill.hasIcon, false, "other spec: the same for an upgrade only another spec's scale sees")
+        Equal(treeHidden.upgradeLowSkill.gain, nil, "other spec: with no level gain")
+        Equal(otherHidden.own.texture, "Interface\\Store\\category-icon-featured", "loot spec: the look to learn keeps its own icon")
 
         local off = results["icons switched off"]
         Equal(off.own.hasIcon, false, "rules: a window that shows no learnable icon gets none")

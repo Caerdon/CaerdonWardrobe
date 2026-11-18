@@ -338,9 +338,22 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
         end
-        if CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == nil then
-            CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades =
-                NS:GetDefaultConfig().Icon.ShowMismatchedSpecUpgrades
+        -- "Also for my other specs" took the place of the loot spec option, which a player
+        -- may have switched on. Where it was not, the default says what the client showed
+        -- before: the red arrows of the other talent trees on a client without specs.
+        if CaerdonWardrobeConfig.Icon.ShowOtherSpecUpgrades == nil then
+            CaerdonWardrobeConfig.Icon.ShowOtherSpecUpgrades =
+                CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == true or
+                NS:GetDefaultConfig().Icon.ShowOtherSpecUpgrades
+        end
+        if CaerdonWardrobeConfig.Icon.ShowUpgradeOnGearSets == nil then
+            CaerdonWardrobeConfig.Icon.ShowUpgradeOnGearSets = NS:GetDefaultConfig().Icon.ShowUpgradeOnGearSets
+        end
+        if CaerdonWardrobeConfig.Icon.ShowItemLevelUpgrades == nil then
+            CaerdonWardrobeConfig.Icon.ShowItemLevelUpgrades = NS:GetDefaultConfig().Icon.ShowItemLevelUpgrades
+        end
+        if CaerdonWardrobeConfig.Icon.ItemLevelOverPawn == nil then
+            CaerdonWardrobeConfig.Icon.ItemLevelOverPawn = NS:GetDefaultConfig().Icon.ItemLevelOverPawn
         end
 
         CaerdonWardrobe:RefreshItems("settings")
@@ -462,7 +475,19 @@ function NS:GetDefaultConfig()
             ShowUpgradeLevelDelta = false,
             SameLevelBehavior = "none",
             ShowUpgradeIcon = true,
-            ShowMismatchedSpecUpgrades = false,
+            -- The red arrow: an upgrade for another of the toon's specs. On where the client has
+            -- talent trees in place of specs (Pawn shows a scale per tree there, and those
+            -- arrows were always shown), off where it has specs.
+            ShowOtherSpecUpgrades = C_Traits ~= nil and C_Traits.GetGroupDisplayInfoByTreeID ~= nil,
+            -- Which specs of a class that is for: class file and spec index ("DRUID2") = false
+            -- for a spec the player switched off. Nothing here: every spec.
+            OtherSpecs = {},
+            -- The arrow on a piece of a saved gear set. Off: such a piece never gets it.
+            ShowUpgradeOnGearSets = true,
+            -- With Pawn loaded: a higher item level than the worn piece is an upgrade where Pawn
+            -- has no verdict, and (the second) even where Pawn's scores prefer the worn piece.
+            ShowItemLevelUpgrades = true,
+            ItemLevelOverPawn = false,
         },
 
         Binding = {

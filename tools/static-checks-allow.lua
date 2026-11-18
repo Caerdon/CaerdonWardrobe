@@ -50,6 +50,7 @@ return {
         PawnInvalidateBestItems = "Pawn",
         PawnIsItemAnUpgrade = "Pawn",
         PawnIsScaleVisible = "Pawn",
+        PawnResetBags = "Pawn",
         PawnResetTooltips = "Pawn",
         PawnShouldItemLinkHaveUpgradeArrowUnbudgeted = "Pawn",
         Questie = "Questie",

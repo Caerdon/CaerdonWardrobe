@@ -2301,6 +2301,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     itemSellPrice and itemSellPrice > 0 and
                     self:HasHostileUse())
 
+                -- No exception for a piece that only has a level gain to show (the arrow for a
+                -- higher item level switched off): the player said item level alone is no
+                -- upgrade, so the piece is judged like any other that is none.
                 if mogStatus == "collected" and
                     self:IsSellable() and
                     not isArtifactItem and

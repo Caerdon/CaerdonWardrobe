@@ -60,6 +60,43 @@ function CaerdonWardrobeConfigIcons:GetTitle()
     return "Icons"
 end
 
+-- Under "Also for my other specs": one switch per spec of the toon's class, for a player who
+-- only cares about some of them. Only where the client has specs (with talent trees in their
+-- place, Pawn's own list of shown scales is the choice). Stored per class, not per toon.
+function CaerdonWardrobeConfigIcons:AddOtherSpecChoices(dependsOn)
+    if C_Traits ~= nil and C_Traits.GetGroupDisplayInfoByTreeID ~= nil then
+        return
+    end
+    local countSpecs = C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID
+    if not (countSpecs and GetSpecializationInfoForClassID) then
+        return
+    end
+    local _, classFile, classID = UnitClass("player")
+    local count = classID and countSpecs(classID) or 0
+    if not classFile or count < 2 then
+        return
+    end
+
+    local infos = {}
+    for specIndex = 1, count do
+        local _, specName = GetSpecializationInfoForClassID(classID, specIndex)
+        if specName then
+            infos[#infos + 1] = {
+                key = "otherSpec" .. specIndex,
+                text = specName,
+                tooltip = "Show upgrades for " .. specName .. " while you play another specialization.",
+                configSection = "Icon",
+                configSubsection = "OtherSpecs",
+                configValue = classFile .. specIndex,
+                default = true,
+            }
+        end
+    end
+    if #infos > 0 then
+        self:AddCheckboxGrid(infos, { indent = 2, dependsOn = dependsOn })
+    end
+end
+
 function CaerdonWardrobeConfigIcons:Register()
     self:Init()
 
@@ -137,7 +174,19 @@ function CaerdonWardrobeConfigIcons:Register()
     local showUpgrade = self:AddCheckbox({ key = "showUpgradeIcon", text = "Show the upgrade arrow", tooltip = "Shows the arrow when Pawn calls an item an upgrade or, without a Pawn verdict, when its item level is higher than what is equipped.", configSection = "Icon", configValue = "ShowUpgradeIcon" })
     self:AddCheckbox({ key = "showUpgradeInBankAndBags", text = "In bags and bank", tooltip = "Show the arrow on items in your bags and bank. Everywhere else it follows the option above.", configSection = "Icon", configSubsection = "ShowUpgrades", configValue = "BankAndBags" },
         { indent = 1, dependsOn = showUpgrade })
-    self:AddCheckbox({ key = "showMismatchedSpecUpgrade", text = "Also higher item level gear for another loot spec", tooltip = "Keeps the arrow, tinted red, on an item with a higher item level that does not match your current loot specialization.", configSection = "Icon", configValue = "ShowMismatchedSpecUpgrades" },
+    -- Without Pawn the item level is all the arrow goes by: both are shown as they then are, on.
+    local function WithoutPawn()
+        return PawnShouldItemLinkHaveUpgradeArrowUnbudgeted == nil
+    end
+    local WITHOUT_PAWN = "Without the Pawn addon the arrow always goes by item level."
+    local showItemLevel = self:AddCheckbox({ key = "showItemLevelUpgrades", text = "Also higher item level gear", tooltip = "With Pawn: also shows the arrow, in green, on gear with a higher item level than what is equipped when Pawn has no verdict on it (a trinket, a piece Pawn has no values for).", forcedTooltip = WITHOUT_PAWN, configSection = "Icon", configValue = "ShowItemLevelUpgrades" },
+        { indent = 1, dependsOn = showUpgrade, forcedOn = WithoutPawn })
+    self:AddCheckbox({ key = "itemLevelOverPawn", text = "Even when Pawn rates the equipped piece higher", tooltip = "For when item level is what counts (a gear score to reach, a game mode that goes by item level): a higher item level is then always an upgrade.", forcedTooltip = WITHOUT_PAWN, configSection = "Icon", configValue = "ItemLevelOverPawn" },
+        { indent = 2, dependsOn = showItemLevel, forcedOn = WithoutPawn })
+    local showOtherSpecs = self:AddCheckbox({ key = "showOtherSpecUpgrades", text = "Also for my other specs", tooltip = "Shows the arrow, in red, on gear that is an upgrade for another of your specializations. With Pawn it is scored on that spec's scale against the gear set assigned to the spec, or against what you are wearing when none is.", configSection = "Icon", configValue = "ShowOtherSpecUpgrades" },
+        { indent = 1, dependsOn = showUpgrade })
+    self:AddOtherSpecChoices(showOtherSpecs)
+    self:AddCheckbox({ key = "showUpgradeOnGearSets", text = "On gear set pieces", tooltip = "Show the arrow on items that belong to a saved gear set. With the gear set icon on, it sits on that icon as a small badge. Off: a gear set piece never shows the arrow.", configSection = "Icon", configValue = "ShowUpgradeOnGearSets" },
         { indent = 1, dependsOn = showUpgrade })
     self:AddCheckbox({ key = "showUpgradeLevelDelta", text = "Show the item level gain", tooltip = "Displays the item level difference, such as +5, on an upgrade.", configSection = "Icon", configValue = "ShowUpgradeLevelDelta" })
     self:AddDropdown({ key = "sameLevelItems", text = "Same item level as equipped:", configSection = "Icon", configValue = "SameLevelBehavior" }, {
