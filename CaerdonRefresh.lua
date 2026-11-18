@@ -193,9 +193,10 @@ end
 
 -- Skills. SKILL_LINES_CHANGED comes for every skill point, a run of them at every login, and
 -- for a skill learned or dropped. What the verdicts read of it: which professions the toon has
--- (tools, bags, profession quests), a profession's rank (a recipe's requirement), and through
--- the tooltip's red text any other skill an item asks for. So the reading is every skill line
--- the client lists, with its rank.
+-- (tools, bags, profession quests), a profession's rank (a recipe's requirement), its cap (a
+-- book that raises it is "Already known" once it has), and through the tooltip's red text any
+-- other skill an item asks for. So the reading is every skill line the client lists, with its
+-- rank, and a profession's cap.
 --
 -- But for the lines that go up by use in a fight, a point with every few swings: the weapon
 -- skills and Defense, by the IDs under which Blizzard's Forever skills frame knows them
@@ -245,11 +246,22 @@ end
 local function ReadSkills()
     local reading = {}
 
+    -- A profession is read with its cap as well as its rank. The cap is raised by a trainer or
+    -- by a book (Expert Cookbook 16072: 150 to 225) with the rank as it was, and the book's
+    -- tooltip says "Already known" from then on.
+    local professionLines = {}
     if GetProfessions and GetProfessionInfo then
         for _, professionIndex in pairs({ GetProfessions() }) do
-            local name, _, rank, _, _, _, skillLine = GetProfessionInfo(professionIndex)
+            local name, _, rank, maxRank, _, _, skillLine = GetProfessionInfo(professionIndex)
             if skillLine or name then
-                reading["profession " .. tostring(skillLine or name)] = rank or 0
+                local key = "profession " .. tostring(skillLine or name)
+                reading[key] = rank or 0
+                if type(maxRank) == "number" then
+                    reading[key .. " cap"] = maxRank
+                end
+            end
+            if skillLine then
+                professionLines[skillLine] = true
             end
         end
     end
@@ -263,6 +275,12 @@ local function ReadSkills()
             if line and not line.isHeader and line.skillID then
                 local byRank = not RAISED_BY_USE[line.skillID] or rankAsked[line.name]
                 reading["skill " .. tostring(line.skillID)] = byRank and (line.rank or 0) or PRESENT
+                -- A profession's cap, from the list too: which of the two answers has it for
+                -- a secondary profession is not on record. No other line's: a weapon skill's
+                -- and Lockpicking's rise with the level, which is a refresh of its own.
+                if professionLines[line.skillID] and type(line.maxRank) == "number" then
+                    reading["skill " .. tostring(line.skillID) .. " cap"] = line.maxRank
+                end
             end
         end
     end

@@ -118,7 +118,7 @@ local function Start(flavor, withFactions, keepSaved)
     end
     GetProfessionInfo = function(index)
         local profession = state.professions[index]
-        return profession.name, nil, profession.rank, 300, 0, 0, profession.line
+        return profession.name, nil, profession.rank, profession.cap or 300, 0, 0, profession.line
     end
     CaerdonRecipe = {
         -- As types/RecipeMixin.lua's, on the mock's saved ranks.
@@ -152,7 +152,9 @@ local function Start(flavor, withFactions, keepSaved)
             { skillID = 95, name = "Defense", isHeader = false, rank = 100 },
             { skillID = 164, name = "Blacksmithing", isHeader = false, rank = 50 },
             -- A line no fight raises and no profession either.
-            { skillID = 633, name = "Lockpicking", isHeader = false, rank = 20 },
+            { skillID = 633, name = "Lockpicking", isHeader = false, rank = 20, maxRank = 100 },
+            -- A profession's line, with the cap the list has for it.
+            { skillID = 185, name = "Cooking", isHeader = false, rank = 12, maxRank = 300 },
         }
         C_SkillInfo = {
             GetNumSkillLines = function() return #state.lines end,
@@ -304,7 +306,8 @@ do
     table.remove(state.lines, 4)
     Fire("SKILL_LINES_CHANGED")
     Equal(#refreshes, 6, "a dropped profession refreshes")
-    Equal(refreshes[6].detail, "profession 164: gone, was 50; skill 164: gone, was 50", "and says what is gone, in the order of the keys")
+    Equal(refreshes[6].detail, "profession 164 cap: gone, was 300; profession 164: gone, was 50; skill 164: gone, was 50",
+        "and says what is gone, in the order of the keys")
     Advance(1)
 
     -- More differences than the detail lists.
@@ -315,9 +318,28 @@ do
     state.saved.Blacksmithing.skillLevel = 51
     Fire("SKILL_LINES_CHANGED")
     Equal(#refreshes, 7, "several ranks at once are one refresh")
-    Equal(refreshes[7].detail, "profession 185: 12 -> 13; saved Blacksmithing: 50 -> 51; skill 43: 99 -> 100; and 1 more",
+    Equal(refreshes[7].detail, "profession 185: 12 -> 13; saved Blacksmithing: 50 -> 51; skill 185: 12 -> 13; and 2 more",
         "with three of them named and the rest counted")
     Advance(1)
+
+    -- A profession's cap raised with the rank as it was: a trainer, or a book whose tooltip
+    -- says "Already known" from then on (Expert Cookbook 16072 on a Forever client). The two
+    -- answers that hold a cap are each enough.
+    state.professions[1].cap = 375
+    Fire("SKILL_LINES_CHANGED")
+    Equal(#refreshes, 8, "a profession's cap raised refreshes, the rank as it was")
+    Equal(refreshes[8].detail, "profession 185 cap: 300 -> 375", "and names the cap")
+    Advance(1)
+    state.lines[5].maxRank = 375
+    Fire("SKILL_LINES_CHANGED")
+    Equal(#refreshes, 9, "and so does the cap the skill list has for it")
+    Equal(refreshes[9].detail, "skill 185 cap: 300 -> 375", "named as the list's")
+    Advance(1)
+    -- Another line's cap rises with the level, which refreshes by itself.
+    state.lines[4].maxRank = 105
+    Fire("SKILL_LINES_CHANGED")
+    Advance(1)
+    Equal(#refreshes, 9, "the cap of a line that is no profession is not read")
 
     -- One watch's error stays its own: a second watch on the same event still runs.
     watcher:Watch({ name = "probe", events = { "SKILL_LINES_CHANGED", "NO_SUCH_EVENT" } })
@@ -325,13 +347,13 @@ do
     Fire("SKILL_LINES_CHANGED")
     Equal(#errors, 1, "a reading that raises goes to the error handler")
     Check(errors[1] and errors[1]:find("the saved ranks could not be read", 1, true) ~= nil, "with its message")
-    Equal(#refreshes, 8, "and the other watch of the event still refreshes")
-    Equal(refreshes[8].reason, "probe", "under its own name")
-    Equal(refreshes[8].detail, nil, "a watch that reads nothing has nothing to say about what changed")
+    Equal(#refreshes, 10, "and the other watch of the event still refreshes")
+    Equal(refreshes[10].reason, "probe", "under its own name")
+    Equal(refreshes[10].detail, nil, "a watch that reads nothing has nothing to say about what changed")
     state.savedRaises = nil
     Advance(1)
     Fire("SKILL_LINES_CHANGED")
-    Equal(#refreshes, 9, "a watch without a reading and without a delay refreshes at every event")
+    Equal(#refreshes, 11, "a watch without a reading and without a delay refreshes at every event")
     Equal(Watched(watcher, "probe").notRegistered, "NO_SUCH_EVENT", "an event the client refused is in the report")
     Equal(Watched(watcher, "skills").notRegistered, nil, "and nothing is for a watch whose events it took")
     Advance(1)
