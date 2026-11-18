@@ -1972,6 +1972,14 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         data = C_TooltipInfo and feature and feature:GetTooltipData(self, locationInfo) or nil
     end
 
+    -- The link's tooltip is asked for here and not inside GetTooltipData, so that the one answer
+    -- also serves the equipment code, which reads the PVP floor from it (GetTransmogInfo).
+    local linkTooltip = nil
+    if not data then
+        linkTooltip = C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink) or nil
+        data = linkTooltip
+    end
+
     local tooltipData = self:GetTooltipData(data)
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
@@ -2142,7 +2150,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     elseif caerdonType == CaerdonItemType.Equipment then
         local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
-        local transmogInfo = itemData:GetTransmogInfo()
+        local transmogInfo = itemData:GetTransmogInfo(linkTooltip)
         if transmogInfo then
             if transmogInfo.isNotReady then
                 isReady = false

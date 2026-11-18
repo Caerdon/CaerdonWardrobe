@@ -240,9 +240,18 @@ local function GetCandidateItemLevel(item)
     return GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
 end
 
-local function GetCandidatePvpFloor(item)
+-- linkTooltip: the client's tooltip for the item's link, where the caller has it (the status
+-- has just read it). The floor line is then taken from that answer and no tooltip is fetched:
+-- a bag copy's slot and its link carry the same line. A worn piece is still asked by its slot.
+local function GetCandidatePvpFloor(item, linkTooltip)
     if item.extraData and item.extraData.overrideItemLevel then
         return nil
+    end
+    if linkTooltip then
+        local itemLocation = item:GetItemLocation()
+        if not (itemLocation and itemLocation:IsEquipmentSlot()) then
+            return ExtractPvpFloorFromTooltip(linkTooltip)
+        end
     end
     return GetPvpFloorForItem(item)
 end
@@ -377,12 +386,14 @@ local function DetermineUniqueness(itemLinkOrID, itemID)
     return key, limitCategoryCount or 1
 end
 
--- The item being judged, for the upgrade helpers below: its item level, its PVP floor (a tooltip
--- fetched from the client) and its uniqueness. Each helper used to read these for itself, so one
+-- The item being judged, for the upgrade helpers below: its item level, its PVP floor (a line of
+-- its tooltip) and its uniqueness. Each helper used to read these for itself, so one
 -- GetTransmogInfo fetched the same tooltip up to four times. A candidate is made per call and
 -- reads each of the three when a helper first asks, so what no helper asks about is never read.
-local function NewCandidate(item)
-    return { item = item }
+-- linkTooltip: the tooltip of the item's link where the caller already has it, so the floor
+-- costs no fetch (GetCandidatePvpFloor); without it one is fetched.
+local function NewCandidate(item, linkTooltip)
+    return { item = item, linkTooltip = linkTooltip }
 end
 
 local function CandidateLevel(candidate)
@@ -396,7 +407,7 @@ end
 local function CandidatePvpFloor(candidate)
     if not candidate.pvpFloorRead then
         candidate.pvpFloorRead = true
-        candidate.pvpFloor = GetCandidatePvpFloor(candidate.item)
+        candidate.pvpFloor = GetCandidatePvpFloor(candidate.item, candidate.linkTooltip)
     end
     return candidate.pvpFloor
 end
@@ -1931,7 +1942,9 @@ local ITEM_PROFICIENCY_USE_ERROR = Enum.TransmogUseErrorType and Enum.TransmogUs
 local NO_COLLECTION_CATEGORY = Enum.TransmogCollectionType and Enum.TransmogCollectionType.None or 0
 
 -- Wowhead Transmog Guide - https://www.wowhead.com/transmogrification-overview-frequently-asked-questions
-function CaerdonEquipmentMixin:GetTransmogInfo()
+-- linkTooltip: what C_TooltipInfo.GetHyperlink said for the item's link, from a caller that has
+-- just asked (the status). The PVP floor is read from it; without it the tooltip is fetched.
+function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
     local item = self.item
     local itemLink = item:GetItemLink()
     local inventoryTypeName = item:GetInventoryTypeName()
@@ -1972,7 +1985,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local sourceUseErrorType
     local sourceUseError
     local validSourceInfoForPlayer
-    local candidate = NewCandidate(item)
+    local candidate = NewCandidate(item, linkTooltip)
     local uniqueUpgradeBlocked, uniqueUpgradeCandidate, uniqueCategoryKey = GetUniqueUpgradeInfo(candidate)
     local betterItemEquipped, betterItemEquippedViaPvp = HasBetterOrEqualEquippedItem(candidate)
     local equalItemLevelEquipped, tiedEquippedSlots = HasEqualEquippedItemLevel(candidate)

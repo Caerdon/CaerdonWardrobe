@@ -215,6 +215,8 @@ return function(H, S)
         end)
 
         Counted("C_TooltipInfo.GetHyperlink")
+        Counted("C_TooltipInfo.GetBagItem")
+        Counted("C_TooltipInfo.GetInventoryItem")
         Counted("C_Item.GetDetailedItemLevelInfo")
         Counted("C_Item.GetItemUniquenessByID")
         Counted("C_EquipmentSet.GetItemLocations")
@@ -332,8 +334,12 @@ return function(H, S)
 
         world.transmogInfos = 0
         local first = Load(world, 920001)
+        world.counts = {}
         local status, _, info = Status(world, first)
         Equal(status, "upgrade", "memo: the gloves are an upgrade")
+        -- The status has the link's tooltip and hands it on: the floor that makes the gloves an
+        -- upgrade costs no fetch of its own.
+        Equal(Count(world, "C_TooltipInfo.GetHyperlink", 920001), 1, "floor: the status and the floor share one tooltip of the link")
         Equal(world.transmogInfos, 1, "memo: the status computed the transmog info once")
         Check(type(info) == "table" and info.upgradeItemLevelDelta == 5, "memo: and hands it back with the verdict")
 
@@ -357,6 +363,35 @@ return function(H, S)
         local _, _, thirdInfo = Status(world, third)
         Equal(world.transmogInfos, 2, "memo: after a refresh it is computed again")
         Check(type(thirdInfo) == "table" and thirdInfo ~= info, "memo: into a table of its own")
+
+        -- A copy in a bag slot: its floor used to be read from the slot's tooltip, a second
+        -- fetch beside the status's. Now the link's serves both, and the verdict is the same.
+        core:RefreshItems()
+        local boots = Loaded(world, env.CaerdonItem:CreateFromBagAndSlot(0, 4))
+        world.counts = {}
+        local bootsStatus, _, bootsInfo = Status(world, boots)
+        Equal(Count(world, "C_TooltipInfo.GetBagItem", 0), 0, "floor: no tooltip is fetched for a bag slot")
+        Equal(Count(world, "C_TooltipInfo.GetHyperlink", 920030), 1, "floor: the link's is fetched once")
+        Check(type(bootsInfo) == "table" and bootsInfo.betterItemEquipped == true,
+            "floor: and the boots are compared with the worn pair as before (" .. tostring(bootsStatus) .. ")")
+        -- Asked without a status before it (the export, a tooltip), the floor is fetched as before.
+        world.counts = {}
+        boots:GetItemData():GetTransmogInfo()
+        Equal(Count(world, "C_TooltipInfo.GetBagItem", 0), 1, "floor: without the status's tooltip the slot's is fetched")
+        -- A worn piece is asked by its slot either way.
+        -- (After a refresh the three worn slots are read again for the comparison, and the piece
+        -- itself once more.)
+        local wornGloves = Loaded(world, env.CaerdonItem:CreateFromEquipmentSlot(10))
+        Status(world, wornGloves)
+        core:RefreshItems()
+        world.counts = {}
+        Status(world, wornGloves)
+        Equal(Count(world, "C_TooltipInfo.GetInventoryItem", "player"), 4,
+            "floor: a worn piece is asked by its slot, with the status's tooltip in hand")
+        core:RefreshItems()
+        world.counts = {}
+        wornGloves:GetItemData():GetTransmogInfo()
+        Equal(Count(world, "C_TooltipInfo.GetInventoryItem", "player"), 4, "floor: as it is without")
         NoErrors(world, "memo")
     end
 
@@ -378,6 +413,12 @@ return function(H, S)
         local again = Loaded(world, env.CaerdonItem:CreateFromItemLink(link, { overrideItemLevel = 40 }))
         local _, _, againInfo = Status(world, again)
         Check(againInfo == highInfo, "row: a second row at the same level does")
+        -- A row that says its own level is judged by that level alone: the floor in its link's
+        -- tooltip, which makes the gloves an upgrade elsewhere, does not count for it.
+        local listed = Loaded(world, env.CaerdonItem:CreateFromItemLink(world.game.Link(920001), { overrideItemLevel = 15 }))
+        local listedStatus, _, listedInfo = Status(world, listed)
+        Check(listedStatus ~= "upgrade" and type(listedInfo) == "table" and listedInfo.isUpgrade ~= true,
+            "row: a row with its own level takes no floor from the tooltip (" .. tostring(listedStatus) .. ")")
         NoErrors(world, "row")
     end
 
