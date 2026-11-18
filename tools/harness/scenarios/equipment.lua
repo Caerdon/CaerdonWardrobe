@@ -26,6 +26,10 @@ return function(H, S)
         return item
     end
 
+    -- The tooltip of the piece the client has no data for yet. One table for every client started
+    -- here, filled by the case that uses it.
+    local lateTooltip = {}
+
     local function Items()
         return {
             -- A shirt nobody has learned, as the old canary's Brawler's Harness was.
@@ -66,6 +70,9 @@ return function(H, S)
             [910016] = Armor("Lent Cloak", "INVTYPE_CLOAK",
                 { appearanceID = 5116, sourceID = 7116, valid = false, canCollect = false, account = true }),
             [910017] = Armor("Own Cloak", "INVTYPE_CLOAK", { appearanceID = 5116, sourceID = 7117, collected = true }),
+            -- A piece whose tooltip the client has not got yet (lateTooltip).
+            [910018] = Armor("Hazy Greaves", "INVTYPE_LEGS", { appearanceID = 5118, sourceID = 7118 },
+                { tooltip = lateTooltip }),
             -- Bound to the account (Enum.ItemBind.ToWoWAccount).
             [910008] = { name = "Family Crest", quality = 7, level = 1, minLevel = 0, type = "Miscellaneous",
                 subType = "Other", stack = 1, price = 0, classID = 15, subClassID = 4, bindType = 7 },
@@ -314,6 +321,32 @@ return function(H, S)
         Equal(shirt and (Status(shown, shirt)), "own", "completion: a new look is own with either setting")
         CheckKnownLooks(shown, true)
         NoErrors(shown, "setting on, after")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- A tooltip the client has not got yet
+    --------------------------------------------------------------------------------------
+
+    -- A retail client (12.1.5) gave the line as an error line, in red, for a piece that had just
+    -- come off the toon. Read as red text it is a requirement the toon does not meet, and the
+    -- verdict made from it was kept. It is no verdict: the item is not ready, in either line type.
+    do
+        local late = Start()
+        local retrieving = late.env.RETRIEVING_ITEM_INFO
+        Check(type(retrieving) == "string" and retrieving ~= "", "late tooltip: the client has the line's text")
+        for _, lineType in ipairs({ 41, 0 }) do
+            lateTooltip[1] = { text = retrieving, type = lineType, r = 1, g = 0.125, b = 0.125 }
+            local greaves = Load(late, 910018)
+            Check(greaves ~= nil, "late tooltip: the piece loads")
+            if greaves then
+                Equal((Status(late, greaves)), "<not ready>",
+                    "late tooltip: no verdict while the line is there, as a line of type " .. lineType)
+                lateTooltip[1] = { text = "Binds when equipped", type = 20, bonding = 2 }
+                Equal((Status(late, greaves)), "own", "late tooltip: and the piece's own once the tooltip is")
+                late.env.CaerdonWardrobe:RefreshItems("test")
+            end
+        end
+        NoErrors(late, "late tooltip")
     end
 
     --------------------------------------------------------------------------------------

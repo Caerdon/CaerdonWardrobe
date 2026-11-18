@@ -941,6 +941,15 @@ function CaerdonItemMixin:GetTooltipData(data)
     for lineIndex, line in ipairs(data.lines) do
         local lineText = line.leftText and tostring(line.leftText) or nil
 
+        -- The client has no tooltip for the item yet. Asked of every line, before anything is read
+        -- from one: the line's type is not the same in every build (an ErrorLine in retail 12.1.5,
+        -- which the text checks below never see), and it is red, which would read as a requirement
+        -- the toon does not meet.
+        if lineText == RETRIEVING_ITEM_INFO then
+            tooltipData.isRetrieving = true
+            break
+        end
+
         -- Red text (RED_FONT_COLOR, "ffff2020") on any line marks a requirement this toon does not
         -- meet right now: level (UsageRequirement), armor/weapon proficiency (the RIGHT column of the
         -- EquipSlot line, e.g. "Wrist | Mail" on a hunter below 40 on WoW Forever), class, skill,
@@ -1055,9 +1064,6 @@ function CaerdonItemMixin:GetTooltipData(data)
                     -- TODO: Review - removed because I think this is handled by recipe management
                     -- elseif strmatch(lineText, L["Use: Study to increase your"]) then
                     -- 	tooltipData.canLearn = true
-                elseif lineText == RETRIEVING_ITEM_INFO then
-                    tooltipData.isRetrieving = true
-                    break
                 elseif lineText == ITEM_SOULBOUND then
                     tooltipData.isSoulbound = true
                 elseif lineText == ITEM_SPELL_KNOWN then
