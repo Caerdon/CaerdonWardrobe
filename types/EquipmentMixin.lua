@@ -540,6 +540,11 @@ local equipmentSetIndexTime = nil
 -- first piece that asks and kept until the next refresh (GetOtherSpecs).
 local otherSpecCache = nil
 
+-- What a spec nobody chose on the Icons page is taken as (ReadOtherSpecDefault), by spec index,
+-- until the next refresh: it is asked for with every scale Pawn names for a piece. A gear set
+-- assigned and a scale shown or hidden each bring a refresh.
+local otherSpecDefaults = {}
+
 -- Pawn's value of an item on a scale it does not show: scale name -> item link -> value (false:
 -- Pawn had none). Pawn calculates such a value anew at every call, and a refresh asks for every
 -- piece again, so it is kept here across refreshes. A link names the item with its enchant and
@@ -597,6 +602,7 @@ function CaerdonEquipment:InvalidateCaches(changed)
     equippedGearSnapshot = nil
     equipmentSetIndex = nil
     otherSpecCache = nil
+    wipe(otherSpecDefaults)
     if changed == "worn" and not collectionChanged then
         return
     end
@@ -1200,6 +1206,14 @@ end
 -- no visible scale. Only scales for the player's class that name a spec are ever ignored; custom
 -- scales always count.
 -- Second return value: the names of the scales ignored and kept, for the Debug Frame export.
+--
+-- With specializations, the spec being played is judged on its own scale whatever Pawn shows
+-- (author decision). Pawn has a scale for every spec, shown or not, and scores an item on any
+-- of them by name. So where no scale of the toon's own is shown (the played spec's is hidden in
+-- Pawn, and no custom one is shown in its place), that hidden scale is the third return value,
+-- { name, label }, for JudgeOnHiddenOwnScale, and every other spec's shown scale is ignored
+-- even though that leaves none. Without it a piece was judged by item level alone, or by the
+-- other specs' scales as if they were the toon's own.
 local function GetPawnOffTreeScales()
     if not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) then
         return nil
@@ -1220,44 +1234,170 @@ local function GetPawnOffTreeScales()
         return nil
     end
 
-    local ok, offTree, detail = pcall(function()
+    local ok, offTree, detail, hiddenOwn = pcall(function()
         local _, classFile, classID = UnitClass("player")
         local specIDs = treeIndex and PawnSpecIDsForTalentTree(classFile, treeIndex, treeCount) or
             { [specIndex] = true }
         local ignored, ignoredNames, keptNames = {}, {}, {}
+        -- The played spec's scale that Pawn ships (a provider's), where Pawn does not show it.
+        local hidden
         for scaleName, scale in pairs(PawnCommon.Scales) do
+            local label = scale.LocalizedName or scaleName
             if PawnIsScaleVisible(scaleName) then
-                local label = scale.LocalizedName or scaleName
                 if scale.ClassID == classID and type(scale.SpecID) == "number" and not specIDs[scale.SpecID] then
                     ignored[scaleName] = true
                     ignoredNames[#ignoredNames + 1] = label
                 else
                     keptNames[#keptNames + 1] = label
                 end
+            elseif specIndex and scale.ClassID == classID and scale.SpecID == specIndex and scale.Provider ~= nil and
+                (not hidden or scaleName < hidden.name) then
+                hidden = { name = scaleName, label = label }
             end
+        end
+        table.sort(ignoredNames)
+        table.sort(keptNames)
+        if #keptNames == 0 and hidden then
+            local scored = format("kept: none shown, so %s is scored though Pawn hides it", hidden.label)
+            if #ignoredNames == 0 then
+                return nil, scored, hidden
+            end
+            return ignored, format("ignored: %s; %s", table.concat(ignoredNames, ", "), scored), hidden
         end
         if #ignoredNames == 0 or #keptNames == 0 then
             return nil
         end
-        table.sort(ignoredNames)
-        table.sort(keptNames)
         return ignored, format("ignored: %s; kept: %s", table.concat(ignoredNames, ", "), table.concat(keptNames, ", "))
     end)
 
     if not ok then
         return nil
     end
-    return offTree, detail
+    return offTree, detail, hiddenOwn
+end
+
+-- Why a spec's upgrades are wanted or not while another is played, as the Debug Frame export
+-- words it. The Icons page words the same reasons for the player (its switches' tooltips).
+local OTHER_SPEC_REASONS = {
+    chosen = "chosen",
+    gearSet = "a gear set is assigned to it",
+    pawnShown = "Pawn shows its scale",
+    noGearSet = "no gear set is assigned to it",
+    pawnAutomatic = "no gear set is assigned to it, and Pawn picks its scales by itself",
+    pawnHidden = "no gear set is assigned to it, and Pawn does not show its scale",
+    talentTrees = "no specs on this client",
+}
+
+-- What a spec nobody chose is taken as: wanted where the game or Pawn says the toon plays it.
+--   A gear set is assigned to the spec. That is the clearest sign there is, and the set is what
+--   a piece is scored against; without one the worn gear stands in, poorly.
+--   Pawn shows the spec's scale and what it shows is the player's choice, which it is in its
+--   manual mode. In its automatic mode Pawn shows the scale of the spec being played and hides
+--   every other one by itself (PawnOnSpecChanged, read in Pawn 2.14.4), which says nothing about
+--   what the player wants while another spec is played.
+-- Second return value: why, as a key of OTHER_SPEC_REASONS.
+local function ReadOtherSpecDefault(classID, specIndex)
+    if C_EquipmentSet and C_EquipmentSet.GetEquipmentSetForSpec and
+        C_EquipmentSet.GetEquipmentSetForSpec(specIndex) ~= nil then
+        return true, "gearSet"
+    end
+    if not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) then
+        return false, "noGearSet"
+    end
+    if type(PawnOptions) == "table" and PawnOptions.AutoSelectScales == true then
+        return false, "pawnAutomatic"
+    end
+    local ok, shown = pcall(function()
+        for scaleName, scale in pairs(PawnCommon.Scales) do
+            if scale.ClassID == classID and scale.SpecID == specIndex and PawnIsScaleVisible(scaleName) then
+                return true
+            end
+        end
+        return false
+    end)
+    if ok and shown then
+        return true, "pawnShown"
+    end
+    return false, "pawnHidden"
+end
+
+-- The spec's switch as the player left it: true, false, or nil for one never clicked.
+local function ReadOtherSpecChoice(classFile, specIndex)
+    local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
+    local chosen = type(icon) == "table" and icon.OtherSpecs
+    if type(chosen) == "table" then
+        local choice = chosen[tostring(classFile) .. tostring(specIndex)]
+        if choice == true or choice == false then
+            return choice
+        end
+    end
+    return nil
 end
 
 -- Whether the player wants upgrades for this spec of the toon's shown while another is played
 -- (Icon.OtherSpecs in the toon's own settings, CaerdonWardrobeCharacterConfig: one switch per
--- spec of its class on the Icons page; a spec that was never switched off is wanted). Clients
--- without specs have no such switches.
+-- spec of its class on the Icons page). A switch that was clicked stands. One that never was
+-- follows the game and Pawn (ReadOtherSpecDefault). A client with talent trees in place of
+-- specs has no such switches, and every scale Pawn shows there counts.
+-- Second return value: why, as a key of OTHER_SPEC_REASONS.
 local function IsOtherSpecWanted(classFile, specIndex)
-    local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
-    local chosen = type(icon) == "table" and icon.OtherSpecs
-    return not (type(chosen) == "table" and chosen[tostring(classFile) .. tostring(specIndex)] == false)
+    if CaerdonAPI:GetTalentTrees() then
+        return true, "talentTrees"
+    end
+    local choice = ReadOtherSpecChoice(classFile, specIndex)
+    if choice ~= nil then
+        return choice, "chosen"
+    end
+    local default = otherSpecDefaults[specIndex]
+    if not default then
+        local _, _, classID = UnitClass("player")
+        default = { ReadOtherSpecDefault(classID, specIndex) }
+        otherSpecDefaults[specIndex] = default
+    end
+    return default[1], default[2]
+end
+
+-- For the Icons page: what a spec's switch shows until the player clicks it. Read anew, since
+-- the page can be open with no refresh since a gear set was assigned.
+function CaerdonEquipment:IsOtherSpecWantedByDefault(specIndex)
+    local _, _, classID = UnitClass("player")
+    return (ReadOtherSpecDefault(classID, specIndex))
+end
+
+-- For the Icons page's tooltips: whether the spec's switch is on, and why, as a key of
+-- OTHER_SPEC_REASONS ("chosen" for a switch the player clicked). Read anew, like the default.
+function CaerdonEquipment:GetOtherSpecChoice(specIndex)
+    local _, classFile, classID = UnitClass("player")
+    local choice = ReadOtherSpecChoice(classFile, specIndex)
+    if choice ~= nil then
+        return choice, "chosen"
+    end
+    return ReadOtherSpecDefault(classID, specIndex)
+end
+
+-- For the Debug Frame export: each spec of the toon's class, whether its upgrades are wanted
+-- while another is played, and why. nil on a client without specs.
+function CaerdonEquipment:GetOtherSpecChoiceDescription()
+    if CaerdonAPI:GetTalentTrees() then
+        return nil
+    end
+    local countSpecs = C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID
+    local _, classFile, classID = UnitClass("player")
+    local count = countSpecs and classID and countSpecs(classID) or 0
+    if not classFile or count < 2 then
+        return nil
+    end
+    local parts = {}
+    for specIndex = 1, count do
+        local wanted, why = IsOtherSpecWanted(classFile, specIndex)
+        local _, name
+        if GetSpecializationInfoForClassID then
+            _, name = GetSpecializationInfoForClassID(classID, specIndex)
+        end
+        parts[#parts + 1] = format("%s %s (%s)", tostring(name or specIndex), wanted and "on" or "off",
+            tostring(OTHER_SPEC_REASONS[why] or why))
+    end
+    return table.concat(parts, "; ")
 end
 
 -- True when Pawn calls the item an upgrade only for scales in offTreeScales, i.e. for a talent
@@ -1412,6 +1552,63 @@ local function OtherSpecValue(scaleName, link)
         values[link] = value
     end
     return value or nil
+end
+
+-- The piece against the worn gear on the played spec's own scale, where Pawn does not show that
+-- scale (GetPawnOffTreeScales' third return value). Compared the way Pawn compares on a scale
+-- it shows: unenchanted values, the weaker of two slots, Pawn's threshold.
+--   "upgrade": worth more than what is worn.
+--   "equipped": scored, and not worth more. A higher item level is then no upgrade either.
+--   nil: no verdict (a trinket, an empty slot, a piece Pawn has no value for), which leaves the
+--        item level to decide, as it does where a shown scale has no verdict.
+-- Second return value: the numbers, for the Debug Frame export.
+local function JudgeOnHiddenOwnScale(item, scale)
+    if not (PawnGetItemData and PawnGetSingleValueFromItem) then
+        return nil
+    end
+    local inventoryTypeName = item:GetInventoryTypeName()
+    if inventoryTypeName == "INVTYPE_TRINKET" then
+        return nil
+    end
+    local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
+    if not inventorySlots then
+        return nil
+    end
+
+    local ok, verdict, detail = pcall(function()
+        local link = item:GetItemLink()
+        local value = link and OtherSpecValue(scale.name, link)
+        if not value then
+            return nil
+        end
+        local lowest
+        for _, slotID in ipairs(inventorySlots) do
+            local worn = GetInventoryItemLink("player", slotID)
+            if worn then
+                local wornValue = OtherSpecValue(scale.name, worn)
+                if not wornValue then
+                    return nil
+                end
+                if not lowest or wornValue < lowest then
+                    lowest = wornValue
+                end
+            elseif not ShouldIgnoreEmptySlot(slotID, inventoryTypeName) then
+                return nil
+            end
+        end
+        if not lowest then
+            return nil
+        end
+        local numbers = format("%s (not shown in Pawn): %.2f vs %.2f equipped", scale.label, value, lowest)
+        if value > lowest * PAWN_UPGRADE_THRESHOLD then
+            return "upgrade", numbers
+        end
+        return "equipped", numbers
+    end)
+    if not ok then
+        return nil
+    end
+    return verdict, detail
 end
 
 -- What the spec has in the slot and Pawn's value of it on the spec's scale, or nil. Found once
@@ -2083,10 +2280,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     local pawnOffTreeOnly = false
     local pawnOffTreeUpgrade = false
     local pawnUpgradeScales = nil
+    -- The verdict on the played spec's own scale where Pawn does not show it
+    -- (JudgeOnHiddenOwnScale): "upgrade", "equipped" or nil, and its numbers.
+    local hiddenOwnVerdict, hiddenOwnDetail = nil, nil
     if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
         NotePawnItemLevelOption()
         pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
-        pawnOffTreeScales = GetPawnOffTreeScales()
+        local _, hiddenOwnScale
+        pawnOffTreeScales, _, hiddenOwnScale = GetPawnOffTreeScales()
+        if hiddenOwnScale then
+            hiddenOwnVerdict, hiddenOwnDetail = JudgeOnHiddenOwnScale(item, hiddenOwnScale)
+        end
         local offTreeUnwanted = false
         if pawnRecommended and pawnOffTreeScales then
             pawnOffTreeOnly, pawnUpgradeScales, offTreeUnwanted = IsPawnUpgradeOffTreeOnly(item, pawnOffTreeScales)
@@ -2095,6 +2299,13 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         -- Only for specs the player switched off: no upgrade as far as Pawn's verdict goes.
         if offTreeUnwanted then
             pawnUpgrade = false
+        end
+        -- An upgrade on the played spec's own scale, which Pawn does not show: the toon's own,
+        -- whatever the shown scales of its other specs say about the piece.
+        if hiddenOwnVerdict == "upgrade" then
+            pawnUpgrade = true
+            pawnOffTreeOnly = false
+            pawnUpgradeScales = hiddenOwnScale.label
         end
         if pawnUpgrade then
             if blockedOffhandSlot then
@@ -2123,7 +2334,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
             pawnUpgrade = false
         end
 
-        if pawnUpgrade and pawnRecommended then
+        if pawnUpgrade and (pawnRecommended or hiddenOwnVerdict == "upgrade") then
             if pawnOffTreeOnly then
                 pawnOffTreeUpgrade = true
             else
@@ -2147,7 +2358,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
     -- it off altogether, and Icon.ItemLevelOverPawn lets it stand against Pawn's scores (a gear
     -- score to reach, a game mode that goes by item level). Without Pawn it is all there is.
     local pawnPrefersEquipped = false
-    local pawnComparison = nil
+    local pawnComparison = hiddenOwnVerdict == "upgrade" and hiddenOwnDetail or nil
     -- A higher item level that would be the upgrade, with the arrow for it switched off.
     local levelGainOnly = false
     local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or nil
@@ -2158,6 +2369,9 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
         not isTabard and not lowerArmorClassThanEquipped then
         if itemLevelOverPawn then
             pawnComparison = "a higher item level counts whatever Pawn's scores say (the addon's setting)"
+        elseif hiddenOwnVerdict == "equipped" then
+            -- The played spec's own scale, hidden in Pawn, rates the worn piece at least as high.
+            pawnPrefersEquipped, pawnComparison = true, hiddenOwnDetail
         elseif pawnRecommended == false or pawnOffTreeOnly then
             pawnPrefersEquipped, pawnComparison = PawnPrefersEquipped(item, pawnOffTreeScales)
         end

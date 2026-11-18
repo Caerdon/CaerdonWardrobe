@@ -53,6 +53,8 @@ end
 -- (info.perCharacter: which of its specs it plays) is kept with the toon
 -- (CaerdonWardrobeCharacterConfig, saved per character). That table has no defaults and is
 -- not there until the toon's first choice: a value it does not hold reads as info.default.
+-- A click writes what the control then shows, so a default that was only shown becomes a choice
+-- with the first click on that control and on no other.
 local function GetValue(info)
     local value
     if info.perCharacter then
@@ -68,9 +70,13 @@ local function GetValue(info)
         end
     end
     -- info.default: for a key made at run time (one per spec of the toon's class), which the
-    -- defaults cannot list.
+    -- defaults cannot list. A function where the default follows the game: it is asked each
+    -- time the page shows, and the control shows what is in effect until the player clicks.
     if value == nil then
         value = info.default
+        if type(value) == "function" then
+            value = value()
+        end
     end
     return value
 end
@@ -343,8 +349,13 @@ function CaerdonWardrobeConfigPanelMixin:CreateCheckbox(info, x, y, opts)
     local function Forced()
         return opts.forcedOn ~= nil and opts.forcedOn() and true or false
     end
+    -- info.tooltip can be a function, for a text that depends on what the option shows now.
     checkbox:SetScript("OnEnter", function(button)
-        ShowOptionTooltip(button, info.text, Forced() and info.forcedTooltip or info.tooltip)
+        local tooltip = Forced() and info.forcedTooltip or info.tooltip
+        if type(tooltip) == "function" then
+            tooltip = tooltip()
+        end
+        ShowOptionTooltip(button, info.text, tooltip)
     end)
     checkbox:SetScript("OnLeave", HideOptionTooltip)
     if opts.forcedOn and checkbox.SetMotionScriptsWhileDisabled then

@@ -60,6 +60,27 @@ function CaerdonWardrobeConfigIcons:GetTitle()
     return "Icons"
 end
 
+-- A spec switch's tooltip: what it does, why it is on or off right now, and where it is kept.
+-- reason: what CaerdonEquipment:GetOtherSpecChoice says (the equipment code's names).
+local FOLLOWS = " Until you click it, it follows the gear sets you assign and the scales you have Pawn show."
+local function OtherSpecTooltip(specName, wanted, reason)
+    local why
+    if reason == "chosen" then
+        why = (wanted and "On" or "Off") .. " by your choice."
+    elseif reason == "gearSet" then
+        why = "On because a gear set is assigned to " .. specName .. "." .. FOLLOWS
+    elseif reason == "pawnShown" then
+        why = "On because Pawn is set to show the " .. specName .. " scale." .. FOLLOWS
+    elseif reason == "pawnHidden" then
+        why = "Off because no gear set is assigned to " .. specName .. " and Pawn is not set to show its scale." .. FOLLOWS
+    else
+        -- No gear set, and Pawn is not loaded or picks the scale it shows by itself.
+        why = "Off because no gear set is assigned to " .. specName .. "." .. FOLLOWS
+    end
+    return "Show upgrades for " .. specName .. " while you play another specialization.\n\n" .. why ..
+        "\n\nKept for this character only."
+end
+
 -- Under "Also for my other specs": one switch per spec of the toon's class, for a player who
 -- only cares about some of them. Only where the client has specs (with talent trees in their
 -- place, Pawn's own list of shown scales is the choice). Which specs a toon plays is a fact
@@ -86,11 +107,18 @@ function CaerdonWardrobeConfigIcons:AddOtherSpecChoices(dependsOn)
             infos[#infos + 1] = {
                 key = "otherSpec" .. specIndex,
                 text = specName,
-                tooltip = "Show upgrades for " .. specName .. " while you play another specialization. This choice is kept for this character only.",
+                -- Built as the tooltip opens: it says why the switch is as it is, which for one
+                -- never clicked is the game's or Pawn's doing and can change by itself.
+                tooltip = function()
+                    return OtherSpecTooltip(specName, CaerdonEquipment:GetOtherSpecChoice(specIndex))
+                end,
                 configSection = "Icon",
                 configSubsection = "OtherSpecs",
                 configValue = classFile .. specIndex,
-                default = true,
+                -- Never clicked: what the equipment code takes the spec as right now.
+                default = function()
+                    return CaerdonEquipment:IsOtherSpecWantedByDefault(specIndex)
+                end,
                 perCharacter = true,
             }
         end

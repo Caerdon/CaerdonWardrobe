@@ -2550,6 +2550,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "pawnComparison", transmogInfo.pawnComparison)
         addKV(1, "pawnScaleFilter", CaerdonEquipment.GetPawnScaleFilterDescription and
             CaerdonEquipment:GetPawnScaleFilterDescription() or "none (every visible Pawn scale counts)")
+        addKV(1, "otherSpecsWanted", CaerdonEquipment.GetOtherSpecChoiceDescription and
+            CaerdonEquipment:GetOtherSpecChoiceDescription() or "no choice (no specs on this client)")
         addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
         addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
         addKV(1, "sourceID", transmogInfo.sourceID)
