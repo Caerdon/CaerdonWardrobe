@@ -635,7 +635,7 @@ return function(H, S)
         return item
     end
 
-    local STATUSES = { "own", "ownPlus", "other", "otherPlus", "send", "otherNoLoot", "otherPlusNoLoot", "otherSpec",
+    local STATUSES = { "own", "ownPlus", "transform", "other", "otherPlus", "send", "otherNoLoot", "otherPlusNoLoot", "otherSpec",
         "otherSpecPlus", "lowSkill", "lowSkillPlus", "upgrade", "upgradeLowSkill", "upgradeNonEquipment", "sellable",
         "auction", "auctionGoods", "quest", "collected", "oldexpansion", "openable", "locked", "readable",
         "refundable", "canCombine", "readyToCombine", "needForProfession", "housingOwned", "waiting", "notAStatus" }
@@ -725,6 +725,34 @@ return function(H, S)
                 config.Binding.ShowGearSetsAsIcon = true
                 config.Icon.ShowOtherSpecUpgrades = true
             end },
+        -- A piece kept for a look it would gain: taken to the upgrade vendor, or there and to the
+        -- Catalyst, whose mark is then the small one. The plain variant has no word of where.
+        { name = "look by raising", info = { transformLook = { route = "upgrade" } } },
+        { name = "look at the Catalyst and by raising",
+            info = { transformLook = { route = "upgrade", secondRoute = "catalyst" } } },
+        -- An upgrade with a look to gain, in a window that draws no arrow: the look's mark stands
+        -- in the arrow's place. And one with nothing to gain, which has no icon as before.
+        { name = "upgrade with a look to gain, arrows off",
+            info = { transformLook = { route = "upgrade" }, upgradeItemLevelDelta = 5, isUpgrade = true,
+                upgradeStatus = "upgrade", canEquip = true, hasMetRequirements = true },
+            config = function(config) config.Icon.ShowUpgradeIcon = false end },
+        { name = "upgrade with a look at the Catalyst and by raising, arrows off",
+            info = { transformLook = { route = "upgrade", secondRoute = "catalyst" }, upgradeItemLevelDelta = 5,
+                isUpgrade = true, upgradeStatus = "upgrade", canEquip = true, hasMetRequirements = true },
+            config = function(config) config.Icon.ShowUpgradeIcon = false end },
+        { name = "upgrade, arrows off",
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true },
+            config = function(config) config.Icon.ShowUpgradeIcon = false end },
+        -- A look worked out for a piece (no route: none counts) is no mark.
+        { name = "upgrade with no look that counts, arrows off",
+            info = { transformLook = { looks = {} }, isUpgrade = true, upgradeStatus = "upgrade" },
+            config = function(config) config.Icon.ShowUpgradeIcon = false end },
+        -- The two badges on one piece, which the status code does not make: the arrow stands.
+        { name = "look at the Catalyst and by raising, and an upgrade",
+            info = { transformLook = { route = "upgrade", secondRoute = "catalyst" }, upgradeStatus = "upgrade" } },
+        { name = "look at the Catalyst, icons switched off",
+            info = { transformLook = { route = "upgrade", secondRoute = "catalyst" } }, hide = { "ownIcon" } },
         { name = "in the bags", binding = "BoE", item = { inBags = true },
             info = { upgradeItemLevelDelta = 4, upgradeStatus = "upgrade" },
             config = function(config) config.Icon.ShowAuctionValue = true end },
@@ -822,6 +850,12 @@ return function(H, S)
                 text = overlay.bindsOnText:GetText(),
                 gain = overlay.upgradeDeltaText:IsShown() and overlay.upgradeDeltaText:GetText() or nil,
                 badge = overlay.caerdonHasUpgradeBadge == true,
+                routeBadge = overlay.caerdonHasRouteBadge == true,
+                badgeTexture = icon.upgradeBadge and icon.upgradeBadge:IsShown() and
+                    (icon.upgradeBadge:GetAtlas() or icon.upgradeBadge:GetTexture()) or nil,
+                badgeWidth = icon.upgradeBadge and icon.upgradeBadge:IsShown() and icon.upgradeBadge:GetWidth() or nil,
+                ringTexture = icon.upgradeBadgeRing and icon.upgradeBadgeRing:IsShown() and
+                    icon.upgradeBadgeRing:GetTexture() or nil,
                 hasIcon = hasIcon, hasText = hasText, hasGain = hasGain,
                 playing = overlay.mogAnim ~= nil and overlay.mogAnim:IsPlaying(),
                 width = icon:GetWidth(),
@@ -953,6 +987,54 @@ return function(H, S)
         Equal(results["in the bags"].auction.hasIcon, true, "rules: the auction icon shows in the bags")
         Equal(plain.auction.hasIcon, true, "rules: elsewhere an auction status falls back to the sell icon")
         Equal(plain.auction.texture, "Interface\\Store\\category-icon-bag", "rules: which is the bag")
+
+        -- A piece kept for a look it would gain says where it is taken.
+        -- The mocked client has no atlas, so each mark is its plain texture here.
+        local CATALYST, VENDOR = "Interface\\Buttons\\UI-RefreshButton", "Interface\\Icons\\Trade_BlackSmithing"
+        Equal(plain.transform.texture, CATALYST, "looks: with no word of where, the Catalyst's mark as before")
+        Equal(plain.transform.width, plain.sellable.width, "looks: as a minor icon")
+        Equal(plain.transform.playing, false, "looks: and still")
+        Equal(plain.transform.routeBadge, false, "looks: with nothing on it")
+        local raised, both = results["look by raising"], results["look at the Catalyst and by raising"]
+        Equal(raised.transform.texture, VENDOR, "looks: a piece that only has to be raised has the upgrade vendor's mark")
+        Equal(raised.transform.width, plain.transform.width, "looks: at the Catalyst mark's size")
+        Equal(raised.transform.routeBadge, false, "looks: with nothing on it")
+        Equal(both.transform.texture, VENDOR, "looks: where both have a part, the vendor's mark is the icon")
+        Equal(both.transform.routeBadge, true, "looks: and the Catalyst is the small mark on it")
+        Equal(both.transform.badgeTexture, CATALYST, "looks: the Catalyst's mark, which reads at that size")
+        Equal(both.transform.ringTexture, "", "looks: without the upgrade arrow's ring")
+        Equal(both.transform.badge, false, "looks: and it is not taken for an upgrade's badge")
+        Check(both.transform.badgeWidth > upgrade.own.badgeWidth, "looks: larger than the arrow, which sits inside a ring")
+        Equal(both.own.routeBadge, false, "looks: no other status carries it")
+        Equal(both.collected.badgeTexture, nil, "looks: and it is gone with the next draw")
+        Equal(upgrade.own.badgeTexture, ARROW, "looks: an upgrade's badge is the arrow as it was")
+        Equal(upgrade.own.ringTexture, RING, "looks: on its ring")
+        Equal(upgrade.transform.badge, true, "looks: an upgrade's arrow comes first on the mark, were the two to meet")
+        local met = results["look at the Catalyst and by raising, and an upgrade"].transform
+        Equal(met.badge, true, "looks: were both to meet on one piece, the upgrade's arrow is the badge")
+        Equal(met.routeBadge, false, "looks: and the Catalyst's mark is not drawn over it")
+        Equal(met.badgeTexture, ARROW, "looks: the arrow")
+        Equal(met.ringTexture, RING, "looks: on its ring")
+        -- An upgrade keeps its arrow over the look's mark, and gives way to it where no arrow is drawn.
+        Equal(raised.upgrade.texture, ARROW, "looks: an upgrade with a look to gain is drawn as the upgrade")
+        Equal(raised.upgrade.routeBadge, false, "looks: with no mark of the look on the arrow")
+        local noArrow = results["upgrade with a look to gain, arrows off"]
+        Equal(noArrow.upgrade.texture, VENDOR, "looks: with the arrow switched off, the look's mark stands in its place")
+        Equal(noArrow.upgrade.width, plain.transform.width, "looks: at the mark's own size")
+        Equal(noArrow.upgrade.alpha, plain.transform.alpha, "looks: as see-through as the mark is")
+        Equal(noArrow.upgrade.gain, "+5", "looks: with the level gain, which has a setting of its own")
+        Equal(noArrow.upgrade.badge, false, "looks: and no arrow as a badge on it")
+        Equal(noArrow.upgradeLowSkill.texture, VENDOR, "looks: the same below the piece's level")
+        local noArrowBoth = results["upgrade with a look at the Catalyst and by raising, arrows off"]
+        Equal(noArrowBoth.upgrade.texture, VENDOR, "looks: the vendor's mark for an upgrade with a look at both")
+        Equal(noArrowBoth.upgrade.routeBadge, true, "looks: with the Catalyst's small mark on it")
+        Equal(noArrowBoth.upgrade.badgeTexture, CATALYST, "looks: the Catalyst's mark")
+        Equal(results["upgrade, arrows off"].upgrade.hasIcon, false, "looks: an upgrade with nothing to gain has no icon with the arrow off")
+        Equal(results["upgrade with no look that counts, arrows off"].upgrade.hasIcon, false,
+            "looks: nor one whose looks do not count")
+        local hidden = results["look at the Catalyst, icons switched off"]
+        Equal(hidden.transform.hasIcon, false, "looks: a window that shows no learnable icon shows no mark")
+        Equal(hidden.transform.routeBadge, false, "looks: and no small mark without it")
 
         local searched = results["relative frame, small, searched"]
         Equal(searched.own.alpha, 0.3, "search: an icon on a slot the search has dimmed is dimmed")

@@ -17,6 +17,9 @@ local CIRCLE = {
 -- The green variants of the star and the question mark, to use inside a sentence.
 local GREEN_STAR = "|TInterface\\Store\\category-icon-featured:14:14:0:0:64:64:16:48:16:48:102:255:0|t"
 local GREEN_OTHER = "|TInterface\\Store\\category-icon-placeholder:14:14:0:0:64:64:16:48:16:48:102:255:0|t"
+-- The two marks of a piece kept for a look it would gain, as they are drawn on a button.
+local CATALYST_MARK = "|A:CreationCatalyst-32x32:14:14|a"
+local VENDOR_MARK = "|A:Crosshair_Reforge_32:14:14|a"
 
 -- Windows that load on demand are missing on some clients (the dungeon journal on WoW Forever).
 -- The guild bank exists on every client this addon supports, so it tells whether the answers
@@ -157,6 +160,18 @@ function CaerdonWardrobeConfigIcons:Register()
     self:AddCheckbox({ key = "sameLookDifferentLevel", text = "Including when a lower-level toon could use this one", tooltip = "Also marks an item whose look you know when its level requirement is lower than the item you learned it from, so a lower-level toon could use it for transmog.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentLevel" },
         { indent = 1, dependsOn = sameLook })
     self:AddCheckbox({ key = "showBagUpgrades", text = "Bags for an empty bag slot, or bigger than one I have equipped", tooltip = "Marks a bag that fits one of your bag slots when that slot is empty or holds a bag it improves on: a smaller bag of the same kind, a profession bag no bigger than an ordinary bag, or a profession bag smaller than a reagent bag. A profession bag is only marked for an empty slot when you have a profession that uses it, a quiver or ammo pouch when you have a bow, crossbow or gun equipped. Quivers are only compared with their own kind.", configSection = "Icon", configValue = "ShowBagUpgrades" })
+
+    ---------------------------------------------------------------------------------------------
+    self:AddIconHeader({
+        title = "A look to gain later",
+        description = "You know this piece's look, but upgraded or converted at the Catalyst it would have one you do not. " ..
+            "A small mark to keep it by; it is not offered for sale. " ..
+            CATALYST_MARK .. " Take it to the Catalyst. " .. VENDOR_MARK .. " Raise it at the item upgrade vendor. " ..
+            "Both: the vendor's mark with a small Catalyst's mark on it.",
+        atlas = "CreationCatalyst-32x32",
+        texture = "Interface\\Buttons\\UI-RefreshButton"
+    })
+    self:AddCheckbox({ key = "showLooksAfterChange", text = "Mark gear that can become a look I do not have", tooltip = "Marks a piece of this season's gear whose own look you know when raising it on its upgrade track, or converting it at the Catalyst, would give a look you have not learned. The icon says where to take it: the Catalyst's mark, or the upgrade vendor's for a piece that has to be raised. The vendor's mark with a small Catalyst's mark on it means both have a part. An upgrade keeps its arrow, and shows the mark where the arrow is switched off. Not shown on a gear set's piece. Shown wherever the learnable icon is. With this off such a piece is judged like any other whose look you know, so it can get the sellable or auction icon.", configSection = "Icon", configValue = "ShowLooksAfterChange" })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({

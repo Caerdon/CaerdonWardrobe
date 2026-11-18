@@ -2257,17 +2257,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo()
 
     local isUpgrade = nil
 
-    -- TODO: Add check if upgrading item will result in an unlearned appearance.
-    -- if item:GetItemID() == 199446 then
-    -- local itemLocation = item:GetItemLocation()
-    -- if itemLocation and C_ItemUpgrade.CanUpgradeItem(itemLocation) then
-    --     C_ItemUpgrade.SetItemUpgradeFromLocation(item:GetItemLocation())
-    --     local upgradeInfo = C_ItemUpgrade.GetItemUpgradeItemInfo()
-    --     if upgradeInfo and upgradeInfo.currUpgrade < upgradeInfo.maxUpgrade then
-    --         -- print("Item can be upgraded: " .. item:GetItemLink() .. " to " .. upgradeInfo.upgradedItemLink)
-    --         DevTools_Dump(upgradeInfo)
-    --     end
-    -- end
+    -- Whether raising the piece on its upgrade track gives a look that is not known is not
+    -- asked here: CaerdonTransformLooks.lua, from the status code.
 
     local shouldShowUpgrade = false
     local pawnIdentifiedUpgrade = false

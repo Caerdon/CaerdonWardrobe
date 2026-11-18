@@ -256,6 +256,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowAuctionValue == nil then
             CaerdonWardrobeConfig.Icon.ShowAuctionValue = NS:GetDefaultConfig().Icon.ShowAuctionValue
         end
+        if CaerdonWardrobeConfig.Icon.ShowLooksAfterChange == nil then
+            CaerdonWardrobeConfig.Icon.ShowLooksAfterChange = NS:GetDefaultConfig().Icon.ShowLooksAfterChange
+        end
         if CaerdonWardrobeConfig.Icon.ShowOutdatedFood == nil then
             CaerdonWardrobeConfig.Icon.ShowOutdatedFood = NS:GetDefaultConfig().Icon.ShowOutdatedFood
         end
@@ -499,6 +502,9 @@ function NS:GetDefaultConfig()
             ShowQuestItems = true,
             ShowUpcomingQuestItems = true,
             ShowAuctionValue = true,
+            -- A piece whose own look is known and which would have an unknown one raised on
+            -- its upgrade track or converted at the Catalyst (CaerdonTransformLooks.lua).
+            ShowLooksAfterChange = true,
             ShowOutdatedFood = true,
             ShowRecipesForOtherToons = true,
             -- Ingredients (CaerdonIngredients.lua): the mail icon on one another toon's recipes

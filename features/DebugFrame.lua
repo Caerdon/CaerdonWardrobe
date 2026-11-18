@@ -2564,6 +2564,30 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "noCollectionCategory", transmogInfo.noCollectionCategory)
     end
 
+    -- What the piece would look like raised on its upgrade track or converted at the Catalyst,
+    -- with every answer of the client's behind it. Asked afresh for this copy, whatever the
+    -- verdict above was made from.
+    if identifiedType == CaerdonItemType.Equipment and CaerdonTransformLooks then
+        local upgradeDisabled = bindingResult and bindingResult.upgradeLevelDisabled or false
+        local lookLines, lookInfo = CaerdonTransformLooks:Explain(item, transmogInfo and transmogInfo.sourceID or nil,
+            upgradeDisabled)
+        addLine(0, "")
+        addLine(0, "[Looks After a Change]")
+        addKV(1, "marked (the setting)", CaerdonWardrobeConfig.Icon.ShowLooksAfterChange ~= false)
+        addKV(1, "cache entry of its own", CaerdonTransformLooks:MayBeConverted(item, item:GetItemLink()))
+        -- A gear set's piece is not marked, whatever the lines below find for it.
+        local lookSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
+        addKV(1, "in a gear set (not marked while it is)", lookSets and table.concat(lookSets, ", ") or false)
+        for _, lookLine in ipairs(lookLines) do
+            addLine(1, lookLine)
+        end
+        -- Where the piece is taken, which is what the icon says.
+        local lookRoute, lookSecondRoute = CaerdonTransformLooks:GetRoute(lookInfo,
+            CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo and transmogInfo.canEquip)
+        addKV(1, "taken to (the icon)", lookRoute or "nowhere")
+        addKV(1, "and to (the small mark on it)", lookSecondRoute or "nowhere else")
+    end
+
     if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then
         addLine(0, "")
         addLine(0, "[Transmog (Caerdon Debug Internals)]")

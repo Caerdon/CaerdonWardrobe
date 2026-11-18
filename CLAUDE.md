@@ -24,6 +24,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 | `send` | This toon has no use for it and another of the player's toons does: a recipe it can learn, an ingredient its recipes take (mail icon). |
 | `otherNoLoot` | Something to learn, but every remaining source needs another class, race or faction. |
 | `lowSkill` / `lowSkillPlus` | Learnable once a level or skill requirement is met. |
+| `transform` | A piece to keep: its own look is known, and raised on its upgrade track or converted at the Catalyst it would have one that is not (small, still icon that says which: the Catalyst's mark or the upgrade vendor's; retail). |
 | `upgrade` / `upgradeLowSkill` | Better gear than what is equipped. |
 | `sellable` | Nothing left to do with it here. `auction` replaces it, and `auctionGoods` marks trade goods, when the auction house pays enough more. |
 | `quest` | Quest item, or anything an unfinished quest takes. |
@@ -36,7 +37,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `CaerdonItem.lua`: `CaerdonItemMixin` with `GetCaerdonStatus`, the tooltip scan (`GetTooltipData`) and `GetBindingStatus`.
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
-- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take), `CaerdonVendorGoods` (`GetVendorInfo`: how many vendors sell it, from QuestieDB where that is loaded).
+- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take), `CaerdonVendorGoods` (`GetVendorInfo`: how many vendors sell it, from QuestieDB where that is loaded), `CaerdonTransformLooks` (`GetTransformLookInfo`: the look a season's piece gains by being raised on its upgrade track or converted at the Catalyst; retail).
 - `CaerdonRefresh.lua`: the refresh watcher (`NS.Refresh:Watch`). An event that also comes when nothing changed (skill lines, the player's flags, reputation, quest events, housing) is compared before it refreshes: with the last reading, with what was saved for the toon (reputation, `CaerdonRefreshData`), or by the module that owns it with what it answered (the quest module).
 - `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
 - `CaerdonCounters.lua`: loaded first. Login milestones, loads asked of the client and full refreshes by trigger, always; time and memory per function while its profile is switched on, which the test addon does (the export's `[Counters]` section).
@@ -50,18 +51,18 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 Each later step only replaces the statuses listed, so an upgrade keeps its icon, and a learnable look keeps its own against everything but a quest.
 
 1. Old expansion and Quest-class items (early; the type branch may overwrite them).
-2. The branch for the item's type (equipment, consumable, recipe, pet, mount, toy, ...).
+2. The branch for the item's type (equipment, consumable, recipe, pet, mount, toy, ...). A piece of equipment that would be `collected` and would gain an unknown look by an upgrade or at the Catalyst is `transform` here instead, so it is never `sellable` or `auction`; an upgrade keeps its arrow and a gear set's piece stays `collected` with the set's mark (notes: Looks After a Change).
 3. Equippable junk becomes `sellable` (replaces empty).
 4. Bags against the bag slots: `own` / `lowSkill` or `sellable` (replaces empty, `oldexpansion`).
 5. Consumables for another class become `sellable` (replaces empty, `collected`).
 6. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).
 7. Outgrown food and drink become `sellable` (replaces empty, `collected`).
 8. Ingredients this toon has no use for: `send` when another toon's recipes take it and vendors everywhere do not sell it, `sellable` when its own have outgrown it (replaces empty).
-9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion` and every learnable status: `own`, `other`, their Plus forms, `otherNoLoot`, `lowSkill`; not an upgrade).
+9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion`, `transform` and every learnable status: `own`, `other`, their Plus forms, `otherNoLoot`, `lowSkill`; not an upgrade).
 10. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
 11. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
-The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` for a row whose window passed a source or an item level) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 11 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
+The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|x` for a season's armor that lies in a slot and may go to the Catalyst, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` for a row whose window passed a source or an item level) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 11 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
 
 ## Rules
 
@@ -117,6 +118,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | What a tooltip line carries, the export's tooltip sections | Tooltip Lines in the Export |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | A look known from another item, the Plus statuses | Known Looks |
+| A look a piece gains by an upgrade or at the Catalyst | Looks After a Change |
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |
 | What is and is not `sellable` | Sellable Rules |

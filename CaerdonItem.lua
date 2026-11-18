@@ -58,7 +58,7 @@ local statusCache = {}
 local QUEST_REPLACES = {
     collected = true, sellable = true, send = true, oldexpansion = true,
     own = true, ownPlus = true, other = true, otherPlus = true, otherNoLoot = true,
-    lowSkill = true, lowSkillPlus = true,
+    lowSkill = true, lowSkillPlus = true, transform = true,
 }
 local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
 local copySpellLoads = {} -- spell ID -> "asked" or "answered": its data was asked for this session
@@ -218,6 +218,7 @@ local function ResetTooltipData(embeddedLink)
     t.raceClassRestricted = false
     t.skillRequirementMet = false
     t.hasSkillRequirement = false
+    t.upgradeLevelDisabled = false
     t.embeddedLink = embeddedLink
     return t
 end
@@ -1151,6 +1152,10 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.ItemName then
         elseif line.type == Enum.TooltipDataLineType.ItemLevel then
         elseif line.type == Enum.TooltipDataLineType.ItemUpgradeLevel then
+            -- Greyed out: a track the game no longer raises (a past season's piece).
+            if leftHex == "ff808080" or (lineText and lineText:find("|c[fF][fF]808080")) then
+                tooltipData.upgradeLevelDisabled = true
+            end
         elseif line.type == Enum.TooltipDataLineType.FlavorText then
         elseif line.type == Enum.TooltipDataLineType.ErrorLine then
         elseif line.type == Enum.TooltipDataLineType.DisabledLine then
@@ -1253,6 +1258,17 @@ function CaerdonItemMixin:GetIngredientInfo()
         return nil
     end
     return CaerdonIngredients:GetItemInfo(itemID)
+end
+
+-- A look the piece would gain by being raised on its upgrade track or converted at the
+-- Catalyst: nil when there is none. sourceID: the piece's own source, where the caller has
+-- it. upgradeDisabled: its tooltip's upgrade line is greyed out. See
+-- CaerdonTransformLooks:GetItemInfo for the fields.
+function CaerdonItemMixin:GetTransformLookInfo(sourceID, upgradeDisabled)
+    if self:IsItemEmpty() then
+        return nil
+    end
+    return CaerdonTransformLooks:GetItemInfo(self, sourceID, upgradeDisabled)
 end
 
 -- Whether vendors sell the item, as far as anything says: nil when nothing does (QuestieDB is
@@ -1715,6 +1731,8 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         skillRequirementMet = (tooltipData and tooltipData.skillRequirementMet) or false,
         -- The tooltip has a skill requirement line at all, met or not.
         hasSkillRequirement = (tooltipData and tooltipData.hasSkillRequirement) or false,
+        -- The tooltip's upgrade line is greyed out: the piece can no longer be raised.
+        upgradeLevelDisabled = (tooltipData and tooltipData.upgradeLevelDisabled) or false,
         -- The tooltip carries the client's "Already known" line.
         alreadyKnown = (tooltipData and tooltipData.isKnownSpell) or false
     }
@@ -1879,6 +1897,11 @@ local function StatusCacheKey(item, itemLink)
     -- piece's link ends in its maker's GUID.
     if itemLink:find(":Player-", 1, true) and item:IsItemInPlayersControl() then
         key = key .. "|c"
+    end
+    -- Whether the Catalyst takes a piece is asked of the copy as well, and it decides whether
+    -- the piece is a look to learn. Only a season's armor in a slot the Catalyst takes.
+    if CaerdonTransformLooks:MayBeConverted(item, itemLink) then
+        key = key .. "|x"
     end
     -- A stackable item's auction verdict depends on how many are owned.
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
@@ -2170,6 +2193,32 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     learnableLaterStatus = "otherPlus"
                 end
             end
+            -- Where a piece whose own look is known is taken for a look it would gain: raised
+            -- on its upgrade track, or converted at the Catalyst (CaerdonTransformLooks). nil
+            -- where there is none. Kept on the transmog info (transformLook, with route and
+            -- secondRoute) for the drawing, which has an icon for each of the two places,
+            -- and for the export.
+            --
+            -- Where the player does not want these marked (Icon.ShowLooksAfterChange), nothing
+            -- is asked. Nor for a gear set's piece: the set keeps it from being sold and it
+            -- shows the set's own mark. It is marked once it is out of every set (a set's
+            -- change refreshes the icons).
+            local function FindLookRoute()
+                if CaerdonWardrobeConfig.Icon.ShowLooksAfterChange == false or itemData:GetEquipmentSets() then
+                    return nil
+                end
+                local transformLook = self:GetTransformLookInfo(transmogInfo.sourceID,
+                    bindingResult.upgradeLevelDisabled)
+                transmogInfo.transformLook = transformLook
+                -- The Catalyst's answer is for this toon. A look gained by raising the piece
+                -- counts where the toon's class can use it.
+                local route, secondRoute = CaerdonTransformLooks:GetRoute(transformLook,
+                    CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo.canEquip)
+                if route then
+                    transformLook.route, transformLook.secondRoute = route, secondRoute
+                end
+                return route
+            end
             if transmogInfo.isTransmog then
                 if transmogInfo.needsItem then
                     if not transmogInfo.isCompletionistItem then
@@ -2208,13 +2257,23 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     else
                         mogStatus = "upgradeLowSkill"
                     end
+                    -- An upgrade stays one, and its arrow stands. Where the arrow is not
+                    -- drawn (switched off, or not shown by a window) the drawing puts the
+                    -- mark for a look to gain in its place, so that is worked out here too.
+                    FindLookRoute()
                 else
-                    -- if transmogInfo.hasMetRequirements then
+                    -- Not "lowSkill" for a known piece of a level the toon has not reached:
+                    -- too much noise.
                     mogStatus = "collected"
-                    -- Don't mark as lowSkill for equipment if it's known but not the right level... too much noise
-                    -- else
-                    -- 	mogStatus = "lowSkill"
-                    -- end
+                    -- The piece's own look is known. Raised on its upgrade track or converted
+                    -- at the Catalyst it has another one, and where the collection lacks that
+                    -- the piece is marked to be kept for it: "transform", a quiet mark, since
+                    -- the look takes crests or a charge and may be a while off. Not "own",
+                    -- which says "learn it now". It stands in place of "collected", so the
+                    -- piece is not offered for sale.
+                    if FindLookRoute() then
+                        mogStatus = "transform"
+                    end
                 end
             elseif isUpgrade then
                 if transmogInfo.hasMetRequirements then

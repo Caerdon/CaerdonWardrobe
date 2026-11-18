@@ -230,6 +230,21 @@ end
 
 local ICON_PROMINENT_SIZE = 20
 local ICON_SIZE_DIFFERENTIAL = 0.8
+-- A piece that would have an unknown look after a change, by where it is taken for it: the
+-- Catalyst's own mark, and the one the client shows over an item upgrade vendor. Each with a
+-- plain texture for a client that has no such atlas.
+local TRANSFORM_ICONS = {
+    catalyst = { atlas = "CreationCatalyst-32x32", texture = "Interface\\Buttons\\UI-RefreshButton" },
+    upgrade = { atlas = "Crosshair_Reforge_32", texture = "Interface\\Icons\\Trade_BlackSmithing" },
+}
+local function SetTransformIcon(texture, route)
+    local icon = TRANSFORM_ICONS[route] or TRANSFORM_ICONS.catalyst
+    if texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(icon.atlas) then
+        texture:SetAtlas(icon.atlas, false)
+    else
+        texture:SetTexture(icon.texture)
+    end
+end
 -- The small upgrade arrow on another icon (an upgrade that also has a look to learn): its ring
 -- as a share of that icon's size, the arrow as a share of the ring, and how far the ring's
 -- center sits inside the icon's corner, as a share of the ring.
@@ -633,7 +648,9 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
         local towardsBottom = not string.find(anchoredTo, "BOTTOM")
         local overlap = size * UPGRADE_BADGE_OVERLAP
         ring:SetSize(size, size)
-        badge:SetSize(size * UPGRADE_BADGE_ARROW, size * UPGRADE_BADGE_ARROW)
+        -- An arrow sits inside its ring; a mark without a ring has the ring's size.
+        local inner = icon.caerdonBadgePlain and 1 or UPGRADE_BADGE_ARROW
+        badge:SetSize(size * inner, size * inner)
         ring:ClearAllPoints()
         ring:SetPoint("CENTER", icon, (towardsBottom and "BOTTOM" or "TOP") .. (towardsRight and "RIGHT" or "LEFT"),
             towardsRight and -overlap or overlap, towardsBottom and overlap or -overlap)
@@ -1131,12 +1148,33 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local gearSetIcon = isEquipmentSetItem and IsGearSetStatus(bindingStatus, item) and
         CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon
     local upgradeOnSetIcon = nil
+    -- A second place a piece is taken for a look ("transform"): drawn in the badge's place.
+    local routeBadge = nil
     -- unusableNow: the tooltip's red text says the toon cannot wear the piece now, so it gets no
     -- equal-level icon (the status code sets it, and gives such a piece no protection either).
     local canEquipForNeutral = transmogInfo and not transmogInfo.unusableNow and
         ((transmogInfo.canEquipForPlayer ~= nil and transmogInfo.canEquipForPlayer) or transmogInfo.canEquip)
 
     local alpha = 1
+
+    -- The mark of a piece kept for a look it would gain. Small and still, where "own" is
+    -- neither: the look may be a while off. Shown where the icon for a look this toon can
+    -- learn is.
+    --
+    -- The icon says where the piece is taken: the Catalyst's mark, or the upgrade vendor's for
+    -- a piece that has to be raised. Where both have a part, the Catalyst's mark rides on the
+    -- vendor's as the small badge: it is the plainer and brighter of the two, and the vendor's
+    -- was lost at that size.
+    local function DrawLookMark()
+        if displayInfo and displayInfo.ownIcon.shouldShow then
+            local transformLook = transmogInfo and transmogInfo.transformLook
+            alpha = 0.9
+            SetTransformIcon(mogStatus, transformLook and transformLook.route)
+            routeBadge = transformLook and transformLook.secondRoute or nil
+        end
+    end
+    -- The same piece is an upgrade whose arrow is not drawn: the mark stands in its place.
+    local hasLookToGain = transmogInfo and transmogInfo.transformLook and transmogInfo.transformLook.route
 
     mogStatusBackground:SetVertexColor(1, 1, 1)
     mogStatusBackground:SetTexCoord(0, 1, 0, 1)
@@ -1208,6 +1246,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             iconBackgroundAdjustment = 4
             upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, false,
                 transmogInfo, allowMismatchedSpecUpgrades, levelGain)
+        elseif hasLookToGain then
+            DrawLookMark()
         end
     elseif status == "upgradeLowSkill" then
         isProminent = false
@@ -1218,6 +1258,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             iconBackgroundAdjustment = 4
             upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, true,
                 transmogInfo, allowMismatchedSpecUpgrades, levelGain)
+        elseif hasLookToGain then
+            DrawLookMark()
         end
     elseif status == "locked" then
         isProminent = true
@@ -1329,6 +1371,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
                 mogStatus:SetTexture("Interface\\MailFrame\\Mail-Icon")
             end
         end
+    elseif status == "transform" then
+        -- A piece to keep: raised on its upgrade track or converted at the Catalyst it has a
+        -- look that is not known.
+        DrawLookMark()
     elseif status == "otherNoLoot" or status == "otherPlusNoLoot" then
         if displayInfo and displayInfo.otherIcon.shouldShow then
             iconBackgroundAdjustment = 0
@@ -1429,6 +1475,17 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
     end
 
+    -- The second place of a piece kept for a look uses the badge's textures and corner: its
+    -- mark alone, without the ring, at the ring's size. An upgrade's arrow comes first; the two
+    -- do not meet, since an upgrade is not marked for a look to gain.
+    local plainBadge = false
+    if routeBadge and not showBadge then
+        local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
+        if statusTexture ~= nil and statusTexture ~= "" and statusTexture ~= 0 then
+            showBadge, plainBadge = true, true
+        end
+    end
+
     local upgradeBadge, upgradeBadgeRing = mogStatus.upgradeBadge, mogStatus.upgradeBadgeRing
     if showBadge and not upgradeBadge then
         upgradeBadgeRing = caerdonButton:CreateTexture(nil, "ARTWORK", nil, 3)
@@ -1438,8 +1495,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus.upgradeBadge, mogStatus.upgradeBadgeRing = upgradeBadge, upgradeBadgeRing
     end
     mogStatus.caerdonBadgeActive = showBadge
-    caerdonButton.caerdonHasUpgradeBadge = showBadge
-    if showBadge then
+    mogStatus.caerdonBadgePlain = plainBadge
+    caerdonButton.caerdonHasUpgradeBadge = showBadge and not plainBadge
+    caerdonButton.caerdonHasRouteBadge = plainBadge
+    if plainBadge then
+        upgradeBadgeRing:SetTexture("")
+        upgradeBadge:SetTexCoord(0, 1, 0, 1)
+        upgradeBadge:SetVertexColor(1, 1, 1)
+        SetTransformIcon(upgradeBadge, routeBadge)
+    elseif showBadge then
         upgradeBadgeRing:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
         upgradeBadgeRing:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
         if badgeStatus == "upgradeLowSkill" then

@@ -502,6 +502,10 @@ local function EmptyTheAddonsCaches()
     if CaerdonEquipment.ForgetRefusedItems then
         CaerdonEquipment:ForgetRefusedItems()
     end
+    -- And the sets of the class, with what a link said about the Catalyst.
+    if CaerdonTransformLooks and CaerdonTransformLooks.ForgetEverything then
+        CaerdonTransformLooks:ForgetEverything()
+    end
 end
 
 -- Asked at the end of every recorded run whether the addon asked or not: who the toon is and
