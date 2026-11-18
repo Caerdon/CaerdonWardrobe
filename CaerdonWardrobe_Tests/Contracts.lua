@@ -773,24 +773,31 @@ T.Contract({
 -- has two tooltips, the slot's and the bare link's, which is the one the addon computes the
 -- status from; where the two differ, the line types that differ are collected with a few
 -- examples each. That list is what the addon cannot know about a copy from its link.
+--
+-- An example says that a line is on one side only, not what the other side has in its place.
+-- So each example names its item, and for the first kinds of each line type the item's whole
+-- export is kept (cases): both tooltips, as a Copy Details of that item would show them.
 
 local EXPORT_ROW_FIELDS = { type = true, leftText = true, rightText = true, leftColor = true, rightColor = true }
 local EXPORT_EXAMPLE_LENGTH = 200
 local EXPORT_EXAMPLES = 6
+local EXPORT_CASES = 2 -- per line type and side: the kinds whose item is kept whole
 
 -- Keeps an example unless one like it is there: two lines that differ in their numbers only
--- (a cooldown, a price) are one kind of line.
+-- (a cooldown, a price) are one kind of line. Returns whether it was kept.
 local function AddExportExample(list, example)
     local shape = example:gsub("%d+", "#")
     for _, known in ipairs(list) do
         local knownShape = known:gsub("%d+", "#")
         if knownShape == shape then
-            return
+            return false
         end
     end
     if #list < EXPORT_EXAMPLES then
         list[#list + 1] = example
+        return true
     end
+    return false
 end
 
 -- The export's rows as sections: { title, info = { row text }, lines = { { row, fields } } }.
@@ -834,8 +841,10 @@ local function CheckExportLines(c, what, section, data)
     end
 end
 
--- Counts the lines one section has and the other lacks, by line type, into differs.
-local function NoteExportDifferences(differs, section, other, side)
+-- Counts the lines one section has and the other lacks, by line type, into differs. An example
+-- that is kept gets its item beside it (slotItems, linkItems: the same index), and the first
+-- kinds of a type the item's whole export in cases, which rows() makes.
+local function NoteExportDifferences(differs, section, other, side, itemID, cases, rows)
     local has = {}
     for _, line in ipairs(other.lines) do
         has[line.row .. "\n" .. line.fields] = true
@@ -845,12 +854,18 @@ local function NoteExportDifferences(differs, section, other, side)
             local lineType = line.row:match("^type=%S+ %b()") or line.row:match("^type=%S+") or "?"
             local entry = differs[lineType]
             if not entry then
-                entry = { slotOnly = 0, linkOnly = 0, slotExamples = {}, linkExamples = {} }
+                entry = { slotOnly = 0, linkOnly = 0, slotExamples = {}, linkExamples = {}, slotItems = {}, linkItems = {} }
                 differs[lineType] = entry
             end
             entry[side .. "Only"] = entry[side .. "Only"] + 1
             local example = line.row .. (line.fields ~= "" and ("  {" .. line.fields .. "}") or "")
-            AddExportExample(entry[side .. "Examples"], example:sub(1, EXPORT_EXAMPLE_LENGTH))
+            local examples = entry[side .. "Examples"]
+            if AddExportExample(examples, example:sub(1, EXPORT_EXAMPLE_LENGTH)) then
+                entry[side .. "Items"][#examples] = itemID
+                if #examples <= EXPORT_CASES and cases[itemID] == nil then
+                    cases[itemID] = rows()
+                end
+            end
         end
     end
 end
@@ -869,12 +884,35 @@ local function MergeExportLines(old, new)
         else
             target.slotOnly = (target.slotOnly or 0) + (entry.slotOnly or 0)
             target.linkOnly = (target.linkOnly or 0) + (entry.linkOnly or 0)
-            for _, side in ipairs({ "slotExamples", "linkExamples" }) do
-                target[side] = target[side] or {}
-                for _, example in ipairs(entry[side] or {}) do
-                    AddExportExample(target[side], example)
+            for _, side in ipairs({ "slot", "link" }) do
+                local examples, items = side .. "Examples", side .. "Items"
+                target[examples] = target[examples] or {}
+                target[items] = target[items] or {}
+                for index, example in ipairs(entry[examples] or {}) do
+                    if AddExportExample(target[examples], example) then
+                        target[items][#target[examples]] = (entry[items] or {})[index] or 0
+                    end
                 end
             end
+        end
+    end
+    -- A case is kept for an item the merged record names among a type's first kinds, so the
+    -- cases do not grow with the logins.
+    local wanted = {}
+    for _, entry in pairs(merged.differs) do
+        for _, side in ipairs({ "slotItems", "linkItems" }) do
+            for index = 1, EXPORT_CASES do
+                local itemID = (entry[side] or {})[index]
+                if itemID then
+                    wanted[itemID] = true
+                end
+            end
+        end
+    end
+    merged.cases = merged.cases or {}
+    for itemID, rows in pairs(new.cases or {}) do
+        if wanted[itemID] and merged.cases[itemID] == nil then
+            merged.cases[itemID] = rows
         end
     end
     return merged
@@ -882,7 +920,7 @@ end
 
 T.Contract({
     id = "export.tooltipLines",
-    version = 2,
+    version = 3,
     title = "The export shows every tooltip line of a bag item with every field, for the slot and for the link",
     accumulate = true,
     merge = MergeExportLines,
@@ -895,7 +933,7 @@ T.Contract({
         if #slots == 0 then
             return "skip", "needs items in the bags"
         end
-        local items, linkSame, linkDiffers, differs, sample = 0, 0, 0, {}, nil
+        local items, linkSame, linkDiffers, differs, cases, sample = 0, 0, 0, {}, {}, nil
         for index, where in ipairs(slots) do
             local link = C_Container.GetContainerItemLink(where.bag, where.slot)
             if link then
@@ -904,6 +942,17 @@ T.Contract({
                 local rows = feature:GetTooltipReportRows(link, ItemLocation:CreateFromBagAndSlot(where.bag, where.slot))
                 local sections = ExportSections(rows)
                 local slotSection, linkSection = sections[1], sections[2]
+                local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+                local texts
+                local function Texts()
+                    if not texts then
+                        texts = {}
+                        for rowIndex, row in ipairs(rows) do
+                            texts[rowIndex] = string.rep("  ", row.indent) .. row.text
+                        end
+                    end
+                    return texts
+                end
                 if c:Check(#sections == 2 and slotSection.title == "[Tooltip Lines (Raw)]"
                         and linkSection.title == "[Tooltip Lines (Link)]", "%s: %d sections, expected the slot's and the link's",
                         what, #sections) then
@@ -919,15 +968,11 @@ T.Contract({
                     else
                         linkDiffers = linkDiffers + 1
                         CheckExportLines(c, what .. ", link", linkSection, linkData)
-                        NoteExportDifferences(differs, slotSection, linkSection, "slot")
-                        NoteExportDifferences(differs, linkSection, slotSection, "link")
+                        NoteExportDifferences(differs, slotSection, linkSection, "slot", itemID, cases, Texts)
+                        NoteExportDifferences(differs, linkSection, slotSection, "link", itemID, cases, Texts)
                     end
                     if not sample or (not same and not sample.differs) then
-                        local texts = {}
-                        for rowIndex, row in ipairs(rows) do
-                            texts[rowIndex] = string.rep("  ", row.indent) .. row.text
-                        end
-                        sample = { link = link, differs = not same, rows = texts }
+                        sample = { link = link, differs = not same, rows = Texts() }
                     end
                 end
             end
@@ -939,6 +984,7 @@ T.Contract({
         c:Note("linkSame", linkSame)
         c:Note("linkDiffers", linkDiffers)
         c:Note("differs", differs)
+        c:Note("cases", cases)
         c:Note("sample", sample)
     end,
 })

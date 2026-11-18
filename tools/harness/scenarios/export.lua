@@ -360,6 +360,18 @@ return function(H, S)
         Equal(sample.link, game.Link(920002), "contract: the first such item")
         Equal((sample.rows or {})[2], "[Tooltip Lines (Raw)]", "contract: with the export's rows as they are printed")
         Check(Find(sample.rows or {}, "[Tooltip Lines (Link)]") ~= nil, "contract: both sections")
+        -- Each example names its item, and the first kinds of a type keep the item whole.
+        Equal((binding.slotItems or {})[1], 920002, "contract: the slot's example names its item")
+        Equal((binding.linkItems or {})[1], 920002, "contract: and the link's does")
+        Equal((plain.slotItems or {})[2], 920002, "contract: an item beside each kind of a type")
+        Equal(((differs["type=22 (ItemName)"] or {}).linkItems or {})[1], 920003, "contract: the item is the line's own")
+        local cases = detail.cases or {}
+        Equal((cases[920002] or {})[2], "[Tooltip Lines (Raw)]", "contract: the item of a first kind is kept with its export")
+        Check(Find(cases[920002] or {}, "[Tooltip Lines (Link)]") ~= nil, "contract: both tooltips of it")
+        Check(table.concat(cases[920002] or {}, "\n"):find("L: Durability 20 / 25", 1, true) ~= nil,
+            "contract: with the slot's lines")
+        Check(cases[920003] ~= nil, "contract: one case per item, whatever number of types it is the first of")
+        Equal(cases[920001], nil, "contract: an item whose two tooltips agree is no case")
 
         -- The same bags a little later add to what is on record: the cooldown has run on,
         -- and the girdle's slot has a line it did not have.
@@ -373,6 +385,36 @@ return function(H, S)
         Equal(plain.slotOnly, 5, "contract: five plain lines of the slot's alone by now")
         Equal(#(plain.slotExamples or {}), 3, "contract: of three kinds, the cooldown with another number being no new one")
         Equal((plain.slotExamples or {})[3], "type=0 (None) color=ffffffff  L: <Made by Zzyxa>", "contract: the new kind is added")
+        Equal((plain.slotItems or {})[3], 920002, "contract: with its item")
+
+        -- The cases do not grow with the logins: an item that brings a later kind of a type is
+        -- named beside its example and not kept whole, though it is the first of its own run.
+        local bracersSlot = answers.bySlot["0:1"]
+        bracersSlot.lines[#bracersSlot.lines + 1] = { type = 0, leftText = "<Shift Right Click to Socket>", leftColor = Color(WHITE) }
+        result = Run()
+        Equal(result.status, "pass", "contract: a third run passes")
+        plain = ((result.detail or {}).differs or {})["type=0 (None)"] or {}
+        Equal((plain.slotExamples or {})[4], "type=0 (None) color=ffffffff  L: <Shift Right Click to Socket>",
+            "contract: a fourth kind of plain line")
+        Equal((plain.slotItems or {})[4], 920001, "contract: named with the item that has it")
+        cases = (result.detail or {}).cases or {}
+        Equal(cases[920001], nil, "contract: but a later kind's item is not kept whole")
+        Check(cases[920002] ~= nil and cases[920003] ~= nil, "contract: and the cases on record stay")
+
+        -- Nor within one login, where nothing is merged: the fang's slot now says what its link
+        -- says and one line more, the fifth kind of plain line of a record begun anew.
+        answers.bySlot["0:4"] = { type = 0, id = 920003, lines = { fang.lines[1],
+            { type = 0, leftText = "<Right Click to Open>", leftColor = Color(GREEN) } } }
+        T.db.contracts["1.60.1.70938"]["export.tooltipLines"] = nil
+        result = Run()
+        Equal(result.status, "pass", "contract: a first run of a new record passes")
+        plain = ((result.detail or {}).differs or {})["type=0 (None)"] or {}
+        Equal((plain.slotItems or {})[5], 920003, "contract: the fifth kind is named with its item")
+        cases = (result.detail or {}).cases or {}
+        Equal(cases[920003], nil, "contract: which a first run does not keep whole either")
+        Check(cases[920001] ~= nil and cases[920002] ~= nil, "contract: the items of the first two kinds are kept")
+        answers.bySlot["0:4"] = nil
+        bracersSlot.lines[#bracersSlot.lines] = nil
 
         -- An export that prints the fields of some lines only, as it did before, fails.
         local real = feature.GetTooltipReportRows
