@@ -540,10 +540,11 @@ end
 
 -- Recipe items that can still be handed over: which of the player's other toons on this realm
 -- could learn the recipe, from the saved per-toon profession data. Two possible lines:
---   green: toons that have the profession and whose recorded recipe list lacks this recipe
---   gray:  toons that have the profession but whose recipes were never recorded. Only on a
---          recipe this toon already knows, where it explains why there is no sellable icon;
---          anywhere else it would nag on every recipe of that profession.
+--   green: toons that have the profession at the rank the item asks for and lack this recipe
+--   gray:  toons that lack it and whose rank is below what the item asks for, and toons that
+--          have the profession but whose recipes were never recorded. Only on a recipe this
+--          toon already knows, where it explains why there is no sellable icon; anywhere else
+--          it would nag on every recipe of that profession.
 -- The number is the toon's rank in the profession, to hold against the "Requires" line.
 -- With AddIngredientUsers the only tooltip text the addon adds outside debug mode;
 -- Tooltip.ShowRecipeLearners turns both off.
@@ -573,7 +574,12 @@ function TooltipMixin:AddRecipeLearners(tooltip, item)
     if #otherToons.missing > 0 then
         tooltip:AddLine(format(L["Could be learned by: %s"], ListToons(otherToons.missing)), 0.4, 1, 0, wrap)
     end
-    if #otherToons.unknown > 0 and TooltipSaysAlreadyKnown(tooltip) then
+    local saysKnown = (#otherToons.unknown > 0 or #otherToons.tooLow > 0) and TooltipSaysAlreadyKnown(tooltip)
+    if #otherToons.tooLow > 0 and saysKnown and otherToons.requirement then
+        tooltip:AddLine(format(L["Needs %s %d first: %s"], otherToons.requirement.skillName, otherToons.requirement.rank,
+            ListToons(otherToons.tooLow)), 0.6, 0.6, 0.6, wrap)
+    end
+    if #otherToons.unknown > 0 and saysKnown then
         tooltip:AddLine(format(L["Recipes not recorded yet (open the profession on that toon): %s"],
             ListToons(otherToons.unknown)), 0.6, 0.6, 0.6, wrap)
     end

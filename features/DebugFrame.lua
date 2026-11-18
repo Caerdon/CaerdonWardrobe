@@ -2692,13 +2692,54 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 addKV(1, "In This Toon's Saved List", otherToons.knownByPlayer)
                 addLine(1, "Other Toons With " .. tostring(otherToons.professionName) .. ":")
                 for _, toon in ipairs(otherToons.toons) do
-                    addLine(2, string.format("%s (rank %s): %s", tostring(toon.name), tostring(toon.rank),
-                        toon.knowsRecipe and "knows it" or
-                        (toon.recipesRecorded and "can learn it (not in its recorded recipe list)" or
-                            "unknown (its recipes for this profession were never recorded)")))
+                    local reading
+                    if toon.knowsRecipe then
+                        reading = "knows it"
+                    elseif not toon.recipesRecorded then
+                        reading = "unknown (its recipes for this profession were never recorded)"
+                    elseif toon.hasCap then
+                        reading = string.format("has learned it (its recorded cap %s is at the cap the item gives, %s)",
+                            tostring(toon.cap), tostring(otherToons.capTaught))
+                    elseif toon.inRecordedList == false and toon.hasCap == nil then
+                        reading = string.format("not known (its recorded list has no recipe of this name: the item teaches " ..
+                            "no recipe of that list; its recorded cap %s, the cap the item gives %s)",
+                            tostring(toon.cap), tostring(otherToons.capTaught))
+                    else
+                        if toon.hasCap == false then
+                            reading = string.format("lacks it (its recorded cap %s is below the cap the item gives, %s)",
+                                tostring(toon.cap), tostring(otherToons.capTaught))
+                        elseif toon.inRecordedList then
+                            reading = "lacks it (in its recorded list, not learned)"
+                        else
+                            reading = "lacks it (not among the recipes it knows; its whole list is not recorded, " ..
+                                "open the profession on that toon)"
+                        end
+                        local asked = otherToons.requirement
+                        if not asked then
+                            reading = reading .. ": can learn it (the item asks for no rank)"
+                        elseif not toon.skillRank then
+                            reading = reading .. string.format(": can learn it (no rank saved for %s, so none is held against %d)",
+                                tostring(asked.skillName), asked.rank)
+                        elseif toon.skillRank < asked.rank then
+                            reading = reading .. string.format(": rank too low (%s %d, the item asks for %d)",
+                                tostring(asked.skillName), toon.skillRank, asked.rank)
+                        else
+                            reading = reading .. string.format(": can learn it (%s %d, the item asks for %d)",
+                                tostring(asked.skillName), toon.skillRank, asked.rank)
+                        end
+                    end
+                    addLine(2, string.format("%s (rank %s): %s", tostring(toon.name), tostring(toon.rank), reading))
                 end
                 addKV(1, "Toons That Can Learn It", #otherToons.missing)
+                addKV(1, "Toons Whose Rank Is Too Low", #otherToons.tooLow)
                 addKV(1, "Toons Not Recorded", #otherToons.unknown)
+                addKV(1, "Toons Whose List Has No Such Recipe", #otherToons.notInList)
+                if otherToons.requirement then
+                    addKV(1, "Item Asks For", string.format("%s %d", tostring(otherToons.requirement.skillName),
+                        otherToons.requirement.rank))
+                    addKV(1, "Number In Its Use Line", otherToons.requirement.useNumber or "none, or more than one")
+                    addKV(1, "Cap The Item Gives", otherToons.capTaught or "none (no number above the rank it asks for)")
+                end
             else
                 addKV(1, "Other Toons With Profession", "none")
             end
@@ -2911,6 +2952,18 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             -- item a status, and a quest's item gets none (see [Quest Value]).
             addKV(1, "Status From This Rule", (item:GetIngredientStatus()) or "none")
             addKV(1, "Kept From The Auction Icon", item:IsIngredientKeptFromAuction())
+        end
+        -- Who sells it, which keeps the mail icon off what any toon buys for itself.
+        if CaerdonVendorGoods and item.GetVendorInfo then
+            local vendorInfo = item:GetVendorInfo()
+            if vendorInfo then
+                addKV(1, "Vendors That Sell It", string.format("%d (%s)", vendorInfo.vendorCount, vendorInfo.source))
+                addKV(1, "Common Vendor Good", string.format("%s (from %d vendors on; never one to send)",
+                    tostring(vendorInfo.isCommon), vendorInfo.commonFrom))
+            else
+                addKV(1, "Vendors That Sell It", string.format("not known (%s)",
+                    tostring(CaerdonVendorGoods:GetDebugState(item:GetItemID()).unknownReason)))
+            end
         end
         if not ingredientInfo or #ingredientInfo.recipes == 0 then
             addKV(1, "Has A Use", "no recorded recipe takes it")

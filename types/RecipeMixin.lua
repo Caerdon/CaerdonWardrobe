@@ -611,18 +611,81 @@ function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
     return hasSkillLine, meetsMinRank, rank
 end
 
+-- The names of every recipe in a toon's recording of a profession's whole list, learned or
+-- not: { [recipe name] = true }. Kept per recording; a new recording is a new table.
+local recordedNames = setmetatable({}, { __mode = "k" })
+
+-- Whether a toon's recorded list of the profession has a recipe of this name, learned or not.
+-- nil when it has no recording of the whole list (RecordRecipes): then nothing says.
+local function IsInRecordedList(toonRecipes, professionName, recipeName)
+    local recordings = type(toonRecipes) == "table" and toonRecipes.recipes
+    local entry = type(recordings) == "table" and recordings[professionName]
+    if type(entry) ~= "table" or entry.complete ~= true or type(entry.recipes) ~= "table" then
+        return nil
+    end
+    local names = recordedNames[entry]
+    if not names then
+        names = {}
+        for _, recipe in pairs(entry.recipes) do
+            if type(recipe) == "table" and recipe.name then
+                names[recipe.name] = true
+            end
+        end
+        recordedNames[entry] = names
+    end
+    return names[recipeName] == true
+end
+
+-- The cap a toon's recording of the profession was made at, where the profession is one skill
+-- line (WoW Forever: the recorded line has the profession's name). With a line per expansion
+-- (retail) the recorded cap is one line's and says nothing about the profession. nil otherwise.
+local function RecordedCap(toonRecipes, professionName)
+    local recordings = type(toonRecipes) == "table" and toonRecipes.recipes
+    local entry = type(recordings) == "table" and recordings[professionName]
+    if type(entry) == "table" and entry.line == professionName and type(entry.maxRank) == "number" and entry.maxRank > 0 then
+        return entry.maxRank
+    end
+    return nil
+end
+
 -- The player's other toons on this realm that have the recipe item's profession, from the saved
 -- per-toon data, and whether each one's saved recipe list holds this recipe. Returns nil when no
 -- other toon has the profession, otherwise
 --   { professionName, recipeName,
 --     knownByPlayer = this toon's own saved list has the recipe,
---     toons = { { name, rank, knowsRecipe, recipesRecorded } ... },
---     missing = { toons whose recorded list lacks the recipe: they can learn it },
---     unknown = { toons whose list for this profession was never recorded } }
--- (missing / unknown hold the same entries as toons, sorted by name.)
+--     requirement = what the item asks for (CaerdonItemMixin:GetSkillRequirement), read only
+--                   when a toon lacks the recipe,
+--     capTaught = the cap the item raises the profession to, for a book of that kind,
+--     toons = { { name, rank, knowsRecipe, recipesRecorded, inRecordedList,
+--                 cap = its recorded cap, hasCap = it is at the cap the item gives,
+--                 skillRank = its saved rank in the skill the item asks for } ... },
+--     missing = { toons that lack it and can learn it now },
+--     tooLow = { toons that lack it and whose rank is below what the item asks for },
+--     unknown = { toons whose list for this profession was never recorded },
+--     notInList = { toons whose recorded whole list has no recipe of this name, where nothing
+--                   else says whether they have what the item teaches } }
+-- (missing / tooLow / unknown / notInList hold the same entries as toons, sorted by name.)
 -- A toon's list is only as fresh as its last session: it is filled when that toon opens the
 -- profession window or learns a recipe, and recipesRecorded is set once the window has shown
 -- the full list (see GatherRecipes). Nobody can say whether an "unknown" toon needs the recipe.
+--
+-- "Not among the recipes it knows" is not "can learn it". An item of class Recipe may teach
+-- something that is no recipe of the profession's list: a book that raises the profession's cap
+-- (Expert Cookbook 16072) is in no toon's list before or after it is learned, and read as one
+-- every other toon could learn. So where a toon's whole list is recorded, the recipe must be
+-- in it; a name that is not says nothing about that toon (notInList). A toon whose list was
+-- read before whole lists were recorded (inRecordedList nil) is judged as before, by the
+-- recipes it knows, until its profession window is next opened.
+--
+-- A book of that kind is judged by caps instead: the cap it gives is the one number of its use
+-- line, taken as a cap only when it is above the rank the book asks for, and the toon's cap is
+-- the one its recording was made at (as old as its profession window's last opening, and only
+-- where the profession is one skill line). At or above the book's cap the toon has learned it;
+-- below, it lacks it. Without either cap the toon stays in notInList.
+--
+-- A toon that lacks it can learn it only at the rank the item asks for ("Requires Cooking
+-- (125)"): one whose saved rank in that skill is lower is in tooLow, not in missing. A toon
+-- with no saved rank for that skill at all is not held back by it: nothing says its rank.
 function CaerdonRecipe:GetOtherToonRecipeInfo(item)
     local professionName = item:GetItemSubType()
     local recipeName = GetRecipeNameFromItem(item)
@@ -651,7 +714,10 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
                     name = toonName,
                     rank = rank,
                     knowsRecipe = (type(knownRecipes) == "table" and knownRecipes[recipeName] ~= nil) or false,
-                    recipesRecorded = (type(scanned) == "table" and scanned[professionName] == true) or false
+                    recipesRecorded = (type(scanned) == "table" and scanned[professionName] == true) or false,
+                    inRecordedList = IsInRecordedList(toonRecipes, professionName, recipeName),
+                    cap = RecordedCap(toonRecipes, professionName),
+                    professions = toonProfessions,
                 })
             end
         end
@@ -662,10 +728,51 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
     end
 
     table.sort(toons, function(a, b) return a.name < b.name end)
-    local missing, unknown = {}, {}
+    -- What the item asks for, read when the first toon that lacks the recipe needs it.
+    local requirement, requirementRead, capTaught
+    local function Requirement()
+        if not requirementRead then
+            requirementRead = true
+            requirement = item.GetSkillRequirement and item:GetSkillRequirement() or nil
+            if requirement and requirement.useNumber and requirement.useNumber > requirement.rank then
+                capTaught = requirement.useNumber
+            end
+        end
+        return requirement
+    end
+
+    local missing, unknown, notInList, tooLow = {}, {}, {}, {}
     for _, toon in ipairs(toons) do
-        if not toon.knowsRecipe then
-            table.insert(toon.recipesRecorded and missing or unknown, toon)
+        local toonProfessions = toon.professions
+        toon.professions = nil
+        local lacksIt = false
+        if toon.knowsRecipe then
+            -- Nothing to hand over.
+        elseif not toon.recipesRecorded then
+            table.insert(unknown, toon)
+        elseif toon.inRecordedList == false then
+            -- No recipe of its list: a book that raises the cap, if the caps say so.
+            Requirement()
+            if capTaught and toon.cap then
+                toon.hasCap = toon.cap >= capTaught
+                lacksIt = not toon.hasCap
+            else
+                table.insert(notInList, toon)
+            end
+        else
+            lacksIt = true
+        end
+        if lacksIt then
+            local asked = Requirement()
+            if asked then
+                local skillLine = FindSkillLine(toonProfessions, asked.skillName)
+                toon.skillRank = skillLine and skillLine.skillLevel or nil
+            end
+            if asked and toon.skillRank and toon.skillRank < asked.rank then
+                table.insert(tooLow, toon)
+            else
+                table.insert(missing, toon)
+            end
         end
     end
     local playerRecipes = type(realmRecipes) == "table" and realmRecipes[playerName]
@@ -675,8 +782,12 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
         recipeName = recipeName,
         knownByPlayer = (type(playerKnown) == "table" and playerKnown[recipeName] ~= nil) or false,
         toons = toons,
+        requirement = requirement,
+        capTaught = capTaught,
         missing = missing,
-        unknown = unknown
+        tooLow = tooLow,
+        unknown = unknown,
+        notInList = notInList,
     }
 end
 

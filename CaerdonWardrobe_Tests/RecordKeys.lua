@@ -149,6 +149,8 @@ Keys.ALSO_NAMES = {
     -- CaerdonQuestItems does the same with QuestieDB and Questie.
     "LibQuestieDB.RequireContract", "LibQuestieDB.Quest", "LibQuestieDB.Quest.Get", "LibQuestieDB.Quest.GetAllIds",
     "LibQuestieDB.Enum", "Questie.API.RegisterOnReady", "QuestieLoader.ImportModule",
+    -- CaerdonVendorGoods reads who sells an item off the same library.
+    "LibQuestieDB.Item", "LibQuestieDB.Item.Get",
 }
 
 -- A hooked function tells the recorder what it was asked, not what it answered, so the

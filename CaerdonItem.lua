@@ -1249,11 +1249,65 @@ function CaerdonItemMixin:GetIngredientInfo()
     return CaerdonIngredients:GetItemInfo(itemID)
 end
 
+-- Whether vendors sell the item, as far as anything says: nil when nothing does (QuestieDB is
+-- not loaded). See CaerdonVendorGoods:GetItemInfo for the fields.
+function CaerdonItemMixin:GetVendorInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonVendorGoods:GetItemInfo(itemID)
+end
+
+-- The skill and rank the item's tooltip asks for, to hold another toon's saved rank against
+-- (CaerdonRecipe:GetOtherToonRecipeInfo). nil when it names no skill with a rank, otherwise
+--   { skillName, rank = the "Requires Cooking (125)" line,
+--     useNumber = the number in its "Use:" line, where that line has exactly one }
+-- A book that raises a profession's cap says the new cap in its use line and nowhere else
+-- ("... allowing a maximum of 225 cooking skill", Expert Cookbook 16072). What the number
+-- means is the caller's to say; a line with a colour or plural escape has more than one run
+-- of digits and gives none.
+function CaerdonItemMixin:GetSkillRequirement()
+    local itemLink = self:GetItemLink()
+    local data = itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
+    if type(data) ~= "table" or type(data.lines) ~= "table" then
+        return nil
+    end
+    local lineTypes, requirementTypes = Enum.TooltipDataLineType, Enum.TooltipDataUsageRequirementType
+    local skillName, rank, useNumber
+    for _, line in ipairs(data.lines) do
+        local lineText = line.leftText and tostring(line.leftText) or nil
+        if not lineText then
+            -- Nothing to read.
+        elseif line.type == lineTypes.UsageRequirement then
+            if not rank and requirementTypes and line.requirementType == requirementTypes.Skill then
+                local name, number = strmatch(lineText, SkillRequirementPattern())
+                if name and tonumber(number) then
+                    skillName, rank = name, tonumber(number)
+                end
+            end
+        elseif lineTypes.ItemSpellTriggerOnUse and line.type == lineTypes.ItemSpellTriggerOnUse and not useNumber then
+            local count, found = 0, nil
+            for number in lineText:gmatch("%d+") do
+                count, found = count + 1, number
+            end
+            if count == 1 then
+                useNumber = tonumber(found)
+            end
+        end
+    end
+    if not rank then
+        return nil
+    end
+    return { skillName = skillName, rank = rank, useNumber = useNumber }
+end
+
 -- What to do with an ingredient this toon has no use for. Returns the status that replaces an
 -- empty one, or nil, and the ingredient info where it was read:
 --   "send":     another toon of the realm has a recipe that takes it (which recipes count is
 --               the setting Icon.IngredientsForOtherToons: one that still gives it skill, or
---               any it knows), and the item can be handed over.
+--               any it knows), and the item can be handed over. Not what vendors everywhere
+--               sell (thread, spices, a vial): the other toon buys that where it stands.
 --   "sellable": this toon's own recipes take it, every one of them is gray, and a vendor pays.
 -- Only for an item that is a material and nothing else: a trade good, or what the client
 -- itself calls a crafting reagent. A recipe can take anything, and an item of another class
@@ -1294,7 +1348,11 @@ function CaerdonItemMixin:GetIngredientStatus()
     if showSend and not self:IsSoulbound() and self:GetBinding() ~= CaerdonItemBind.BindOnPickup then
         local toons = iconConfig.IngredientsForOtherToons == "any" and info.usedBy or info.skillFor
         if #toons > 0 then
-            return "send", info
+            -- Asked last: it is the one question here that goes to another addon's data.
+            local vendorInfo = self:GetVendorInfo()
+            if not (vendorInfo and vendorInfo.isCommon) then
+                return "send", info
+            end
         end
     end
     if showOutgrown and info.isOutgrown then
@@ -1404,8 +1462,9 @@ end
 -- Bag 253668 on a tailor who knows it) or cannot learn it. Returns the status that replaces
 -- "collected", or nil to leave it:
 --   "send":      it can still be handed over and another toon on the realm has the profession
---                without the recipe in its recorded list (CaerdonRecipe:GetOtherToonRecipeInfo):
---                mail it. The same status an ingredient another toon can use gets.
+--                at the rank the item asks for, and the recipe in its recorded list as one
+--                not learned (CaerdonRecipe:GetOtherToonRecipeInfo): mail it. The same
+--                status an ingredient another toon can use gets.
 --   "sellable":  this toon knows it and nobody else wants it; needs a vendor price.
 -- For "sellable" only the client's own tooltip verdict counts as known; the name-based recipe
 -- lookup cannot tell recipe ranks that share a name apart, which is fine for hiding a star or
@@ -1423,9 +1482,12 @@ function CaerdonItemMixin:GetUnneededRecipeStatus(bindingResult)
             if #otherToons.missing > 0 then
                 return "send"
             end
-            if alreadyKnown and #otherToons.unknown > 0 then
-                -- A toon with the profession whose recipes were never recorded: it may need
-                -- this one, so do not call it sellable, but there is nothing to claim either.
+            if alreadyKnown and (#otherToons.unknown > 0 or #otherToons.notInList > 0 or #otherToons.tooLow > 0) then
+                -- A toon with the profession whose recipes were never recorded, whose
+                -- recorded list has no such recipe and nothing else says whether it has what
+                -- the item teaches, or whose rank is below what the item asks for: it may
+                -- need this one, so do not call it sellable, but there is nothing to claim
+                -- either.
                 return nil
             end
         end

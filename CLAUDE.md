@@ -36,7 +36,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `CaerdonItem.lua`: `CaerdonItemMixin` with `GetCaerdonStatus`, the tooltip scan (`GetTooltipData`) and `GetBindingStatus`.
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
-- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take).
+- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take), `CaerdonVendorGoods` (`GetVendorInfo`: how many vendors sell it, from QuestieDB where that is loaded).
 - `CaerdonRefresh.lua`: the refresh watcher (`NS.Refresh:Watch`). An event that also comes when nothing changed (skill lines, the player's flags, reputation, quest events, housing) is compared before it refreshes: with the last reading, with what was saved for the toon (reputation, `CaerdonRefreshData`), or by the module that owns it with what it answered (the quest module).
 - `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
 - `CaerdonCounters.lua`: loaded first. Login milestones, loads asked of the client and full refreshes by trigger, always; time and memory per function while its profile is switched on, which the test addon does (the export's `[Counters]` section).
@@ -56,7 +56,7 @@ Each later step only replaces the statuses listed, so an upgrade keeps its icon,
 5. Consumables for another class become `sellable` (replaces empty, `collected`).
 6. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).
 7. Outgrown food and drink become `sellable` (replaces empty, `collected`).
-8. Ingredients this toon has no use for: `send` when another toon's recipes take it, `sellable` when its own have outgrown it (replaces empty).
+8. Ingredients this toon has no use for: `send` when another toon's recipes take it and vendors everywhere do not sell it, `sellable` when its own have outgrown it (replaces empty).
 9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion` and every learnable status: `own`, `other`, their Plus forms, `otherNoLoot`, `lowSkill`; not an upgrade).
 10. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
 11. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.

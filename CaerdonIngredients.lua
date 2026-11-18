@@ -5,7 +5,8 @@
 -- skill, learned or not. One whose recipes are all gray has been outgrown.
 --
 -- Two statuses come of it (CaerdonItemMixin:GetIngredientStatus, in CaerdonItem.lua):
---   "send":     this toon has no use for it and another toon's recipes do: mail it.
+--   "send":     this toon has no use for it and another toon's recipes do: mail it. Not what
+--               vendors everywhere sell (CaerdonVendorGoods.lua).
 --   "sellable": this toon's recipes have outgrown it and nobody else wants it.
 -- An ingredient a recipe of this toon's still gives skill for is kept, with no icon. One no
 -- recorded recipe of this toon's takes is never called sellable: nothing says what else it

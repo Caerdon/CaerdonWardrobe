@@ -34,6 +34,10 @@ return function(H, S)
     local PATTERN = 970010
     ITEMS[PATTERN] = { name = "Recipe: Clam Bake", quality = 1, level = 20, minLevel = 0, type = "Recipe", subType = "Cooking",
         stack = 1, price = 50, classID = 9, subClassID = 5 }
+    -- A book that raises the profession's cap: of class Recipe, and it teaches no recipe.
+    local BOOK = 970012
+    ITEMS[BOOK] = { name = "Expert Cookbook", quality = 1, level = 30, minLevel = 0, type = "Recipe", subType = "Cooking",
+        stack = 1, price = 2500, classID = 9, subClassID = 5 }
     ITEMS[DUST].price = 0
     -- Ammunition a recipe takes: not a material to the client.
     local ARROW = 970011
@@ -147,6 +151,23 @@ return function(H, S)
         game:Set("PLAYER_FACTION_GROUP", { [0] = "Horde", [1] = "Alliance" })
         -- features/Tooltip.lua registers with it as it loads.
         game:Set("TooltipDataProcessor.AddTooltipPostCall", function() end)
+        -- QuestieDB, as far as the vendor goods module reads it: how many vendors sell an
+        -- item (world.vendors). It has no quests, so the quest module leaves it alone.
+        world.vendors = {}
+        if options.vendors then
+            game:Set("LibQuestieDB.RequireContract", function() return true end)
+            game:Set("LibQuestieDB.Item.Get", function(itemID, field)
+                local count = field == "vendors" and world.vendors[itemID]
+                if not count then
+                    return nil
+                end
+                local npcs = {}
+                for index = 1, count do
+                    npcs[index] = 1000 + index
+                end
+                return npcs
+            end)
+        end
 
         local client = H.Client.New({ flavor = options.flavor, provider = game })
         game.client = client
@@ -189,6 +210,19 @@ return function(H, S)
             return table.concat(tooltip.lines, " | ")
         end
 
+        -- The lines the addon adds to a recipe item's tooltip about other toons.
+        -- known: the tooltip carries the client's "Already known" line.
+        function world.TooltipLinesFor(itemID, known)
+            local tooltip = { lines = {} }
+            function tooltip:AddLine(line) self.lines[#self.lines + 1] = line end
+            function tooltip:GetPrimaryTooltipData()
+                return { lines = known and { { type = env.Enum.TooltipDataLineType.UsageRequirement,
+                    requirementType = env.Enum.TooltipDataUsageRequirementType.NotAlreadyKnown } } or {} }
+            end
+            namespace.Tooltip:AddRecipeLearners(tooltip, world.Item(itemID))
+            return table.concat(tooltip.lines, " | ")
+        end
+
         -- The profession window opens on Cooking, stays open a moment and closes.
         function world.Open()
             world.ready = true
@@ -220,12 +254,13 @@ return function(H, S)
             return data and data[TOON.realm] and data[TOON.realm][TOON.name] and data[TOON.realm][TOON.name].recipes
         end
         -- The rows of the export's section, from its title to the blank line after it.
-        function world.Section(itemID)
+        function world.Section(itemID, title)
+            title = title or "[Ingredients]"
             local feature = env.CaerdonWardrobe:GetFeature("DebugFrame")
             local payload = feature:BuildClipboardPayload(world.Item(itemID))
             local rows, inside = {}, false
             for line in (payload .. "\n"):gmatch("(.-)\n") do
-                if line == "[Ingredients]" then
+                if line == title then
                     inside = true
                 elseif inside and line == "" then
                     break
@@ -262,6 +297,9 @@ return function(H, S)
         Check(Has(section, "  Recorded Professions: none"), Label("and that nothing is recorded"))
         Check(Has(section, "  Not Recorded (open the profession once): Cooking, First Aid"),
             Label("and which professions were never opened"))
+        Check(Has(section, "  Vendors That Sell It: not known (QuestieDB is not loaded)"),
+            Label("and that nothing says who sells it, without QuestieDB"))
+        Equal(world.Item(WOLF):GetVendorInfo(), nil, Label("which the item reads as nothing known"))
         local statusBefore = world.Status(BOAR)
 
         world.Open()
@@ -526,6 +564,9 @@ return function(H, S)
                         reagents = { [BOAR] = 1, [SPICE] = 1 } },
                     [STEAK] = { name = "Wolf Steak", learned = true, difficulty = GRAY, maxTrivialLevel = 95,
                         reagents = { [WOLF] = 1 } },
+                    -- In its list and not learned: what the recipe item PATTERN teaches.
+                    [9401] = { name = "Clam Bake", learned = false, difficulty = ORANGE, maxTrivialLevel = 150,
+                        reagents = {} },
                 }) }),
                 -- A profession this toon does not have, a recipe not learned yet.
                 Mira = Toon({ Tailoring = { skillLine = 197, rank = 80, maxRank = 150, line = "Tailoring", complete = true,
@@ -550,7 +591,8 @@ return function(H, S)
             Dorn = { Cooking = { skillLevel = 100 } },
             Olaf = { Cooking = { skillLevel = 0 } },
         } }
-        local world = Start({ flavor = "forever", label = "send", saved = saved, professions = professions, tooltip = true })
+        local world = Start({ flavor = "forever", label = "send", saved = saved, professions = professions, tooltip = true,
+            vendors = true })
         local iconConfig = world.env.CaerdonWardrobeConfig.Icon
         Equal(iconConfig.ShowIngredientsForOtherToons, true, "send: on by default")
         Equal(iconConfig.IngredientsForOtherToons, "skill", "send: for what gives the other toon skill")
@@ -568,6 +610,112 @@ return function(H, S)
         iconConfig.ShowRecipesForOtherToons = false
         Equal(world.Item(PATTERN):GetUnneededRecipeStatus({ alreadyKnown = true }), "sellable", "send: sold with that option off")
         iconConfig.ShowRecipesForOtherToons = true
+        -- A book that raises the profession's cap is of class Recipe and no recipe of any list
+        -- (Expert Cookbook 16072 in a Forever client): the other toon's recorded whole list has
+        -- no such name, before it learns the book or after, so nothing says it can learn it.
+        do
+            local lineTypes = world.env.Enum.TooltipDataLineType
+            local SKILL = world.env.Enum.TooltipDataUsageRequirementType.Skill
+            local REQUIRES = { text = "Requires Cooking (125)", type = lineTypes.UsageRequirement, requirementType = SKILL }
+            local RAISES = { text = "Use: Teaches you how to be an Expert Cook, allowing a maximum of 225 cooking skill.",
+                type = lineTypes.ItemSpellTriggerOnUse }
+            local dornRecording = world.env.CaerdonRecipeData.Farrealm.Dorn.recipes.Cooking
+            local dornRank = world.env.CaerdonProfessionData.Farrealm.Dorn.Cooking
+            local book = world.Item(BOOK)
+            local function Lists()
+                local others = book:GetRecipeOtherToonInfo()
+                return others and ("missing %d, too low %d, unknown %d, not in list %d"):format(#others.missing, #others.tooLow,
+                    #others.unknown, #others.notInList), others
+            end
+
+            -- Nothing in its tooltip says what it gives: nothing is said about the toon.
+            Equal(Lists(), "missing 0, too low 0, unknown 0, not in list 1",
+                "book: a toon whose recorded list has no such recipe is not one that can learn it")
+            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = true }), nil,
+                "book: so a book this toon knows is neither one to send nor one to sell")
+            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = false }), nil, "book: nor is one it does not know")
+            Equal(world.TooltipLinesFor(BOOK, true), "", "book: and its tooltip names nobody")
+            local recipeSection = world.Section(BOOK, "[Recipe]")
+            Check(Has(recipeSection, "    Dorn (rank 100): not known (its recorded list has no recipe of this name: " ..
+                "the item teaches no recipe of that list; its recorded cap 225, the cap the item gives nil)"),
+                "book: the export says why (" .. tostring(recipeSection) .. ")")
+            Check(Has(recipeSection, "  Toons Whose List Has No Such Recipe: 1"), "book: and counts the toon")
+
+            -- The book as the client has it: the rank it asks for and the cap it gives.
+            ITEMS[BOOK].tooltip = { RAISES, REQUIRES }
+            local requirement = book:GetSkillRequirement()
+            Check(requirement ~= nil and requirement.skillName == "Cooking" and requirement.rank == 125 and requirement.useNumber == 225,
+                "caps: the tooltip's skill, rank and the one number of its use line are read")
+            -- The other toon's cap is at the book's: it has learned it.
+            Equal(Lists(), "missing 0, too low 0, unknown 0, not in list 0", "caps: a toon at the cap the book gives has learned it")
+            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = true }), "sellable",
+                "caps: so a book this toon knows and nobody else wants is one to sell")
+            Check(Has(world.Section(BOOK, "[Recipe]"), "    Dorn (rank 100): has learned it (its recorded cap 225 is at the cap " ..
+                "the item gives, 225)"), "caps: and the export says so")
+            -- Below the book's cap and below the rank the book asks for: not yet.
+            dornRecording.maxRank = 150
+            Equal(Lists(), "missing 0, too low 1, unknown 0, not in list 0",
+                "caps: a toon below the cap lacks it, and below the rank the book asks for cannot learn it yet")
+            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = true }), nil, "caps: no mail icon, and not one to sell either")
+            Equal(world.TooltipLinesFor(BOOK, true), "Needs Cooking 125 first: Dorn (Cooking 100)",
+                "caps: the tooltip of a book this toon knows says what the other toon needs")
+            Equal(world.TooltipLinesFor(BOOK, false), "", "caps: and nothing on one it does not know")
+            recipeSection = world.Section(BOOK, "[Recipe]")
+            Check(Has(recipeSection, "    Dorn (rank 100): lacks it (its recorded cap 150 is below the cap the item gives, 225): " ..
+                "rank too low (Cooking 100, the item asks for 125)"), "caps: the export says both (" .. tostring(recipeSection) .. ")")
+            Check(Has(recipeSection, "  Item Asks For: Cooking 125") and Has(recipeSection, "  Cap The Item Gives: 225") and
+                Has(recipeSection, "  Toons Whose Rank Is Too Low: 1"), "caps: with what the item asks for and gives")
+            -- At the rank the book asks for: one to send.
+            dornRank.skillLevel = 125
+            Equal(Lists(), "missing 1, too low 0, unknown 0, not in list 0", "caps: at the rank the book asks for it can learn it")
+            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = true }), "send", "caps: and the book is one to send")
+            Equal(world.TooltipLinesFor(BOOK, true), "Could be learned by: Dorn (Cooking 125)", "caps: with the toon in the tooltip")
+            -- A recording made on one of several skill lines says nothing about the profession's cap.
+            dornRecording.line = "Outland Cooking"
+            Equal(Lists(), "missing 0, too low 0, unknown 0, not in list 1", "caps: a cap of one skill line of several is not compared")
+            dornRecording.line = "Cooking"
+            -- A use line whose number is not above the rank asked for is no cap.
+            ITEMS[BOOK].tooltip = { { text = "Use: Teaches you 5 ways to burn a steak.", type = lineTypes.ItemSpellTriggerOnUse }, REQUIRES }
+            Equal(Lists(), "missing 0, too low 0, unknown 0, not in list 1", "caps: a number that is not above the rank asked for is no cap")
+            -- Nor is one of two numbers.
+            ITEMS[BOOK].tooltip = { { text = "Use: Teaches 2 ways to reach 225 cooking skill.", type = lineTypes.ItemSpellTriggerOnUse },
+                REQUIRES }
+            Equal(Lists(), "missing 0, too low 0, unknown 0, not in list 1", "caps: a use line with two numbers gives no cap")
+            ITEMS[BOOK].tooltip = nil
+            dornRecording.maxRank = 225
+
+            -- A recipe of the list asks for a rank too.
+            dornRank.skillLevel = 100
+            local pattern = world.Item(PATTERN)
+            Check(Has(world.Section(PATTERN, "[Recipe]"), "    Dorn (rank 100): lacks it (in its recorded list, not learned): " ..
+                "can learn it (the item asks for no rank)"), "rank: a recipe that asks for no rank is one the toon can learn")
+            ITEMS[PATTERN].tooltip = { { text = "Requires Cooking (120)", type = lineTypes.UsageRequirement, requirementType = SKILL } }
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), nil,
+                "rank: a recipe the other toon's rank is too low for is neither one to send nor one to sell")
+            Equal(world.TooltipLinesFor(PATTERN, true), "Needs Cooking 120 first: Dorn (Cooking 100)", "rank: and its tooltip says so")
+            dornRank.skillLevel = 120
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send", "rank: at the rank it asks for it is one to send")
+            -- A skill the toon has no saved rank for is not held against it.
+            ITEMS[PATTERN].tooltip = { { text = "Requires Outland Cooking (50)", type = lineTypes.UsageRequirement, requirementType = SKILL } }
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send",
+                "rank: a skill line the toon has no saved rank for holds nothing back")
+            Check(Has(world.Section(PATTERN, "[Recipe]"), ": can learn it (no rank saved for Outland Cooking, so none is held against 50)"),
+                "rank: and the export says so")
+            ITEMS[PATTERN].tooltip = nil
+            dornRank.skillLevel = 100
+
+            -- A toon whose recipes were read before whole lists were recorded: judged as
+            -- before, by the recipes it knows, until its profession is opened again.
+            world.env.CaerdonProfessionData.Farrealm.Bera = { Cooking = { skillLevel = 60 } }
+            world.env.CaerdonRecipeData.Farrealm.Bera = { knownRecipes = {}, scannedProfessions = { Cooking = true }, tools = {} }
+            local _, others = Lists()
+            Check(others ~= nil and #others.missing == 1 and others.missing[1].name == "Bera" and #others.notInList == 1,
+                "book: a toon with no recording of its whole list is judged by the recipes it knows")
+            Check(Has(world.Section(BOOK, "[Recipe]"), "    Bera (rank 60): lacks it (not among the recipes it knows; " ..
+                "its whole list is not recorded, open the profession on that toon)"), "book: and the export says which it was")
+            world.env.CaerdonProfessionData.Farrealm.Bera = nil
+            world.env.CaerdonRecipeData.Farrealm.Bera = nil
+        end
         Equal(world.Status(CLOTH), "send", "send: an ingredient of a profession this toon lacks, for a recipe not learned there")
         Equal(world.Status(BOAR), "send", "send: an ingredient the other toon still gets skill from")
         Equal(world.Status(SPICE), "send", "send: and another one of the same recipe")
@@ -578,6 +726,35 @@ return function(H, S)
         Check(world.Info(ARROW) ~= nil and #world.Info(ARROW).skillFor == 1, "arrows: another toon's recipe takes them")
         Equal(world.Status(ARROW), "", "arrows: an item that is no trade good and no crafting reagent is not one to send")
         Equal(world.TooltipLines(ARROW), "", "arrows: and its tooltip names nobody")
+        -- What vendors everywhere sell, the other toon buys where it stands (Star Wood, which
+        -- 75 vendors sell, had the mail icon in a Forever client). What a few vendors sell is
+        -- still sent: their stock may be a handful.
+        do
+            local vendorInfo = world.Item(SPICE):GetVendorInfo()
+            Check(vendorInfo ~= nil and vendorInfo.vendorCount == 0 and vendorInfo.isCommon == false,
+                "vendors: with QuestieDB, an item no vendor sells reads as that")
+            world.vendors[SPICE] = 19
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            Equal(world.Status(SPICE), "send", "vendors: an ingredient a few vendors sell is still one to send")
+            world.vendors[SPICE] = 20
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            Equal(world.Status(SPICE), "", "vendors: one that vendors everywhere sell is not")
+            Equal(world.TooltipLines(SPICE), "", "vendors: and its tooltip names nobody")
+            Equal(world.Status(BOAR), "send", "vendors: the other ingredient of the same recipe still is")
+            local section = world.Section(SPICE)
+            Check(Has(section, "  Vendors That Sell It: 20 (QuestieDB)"), "vendors: the export says how many sell it (" ..
+                tostring(section) .. ")")
+            Check(Has(section, "  Common Vendor Good: true (from 20 vendors on; never one to send)"),
+                "vendors: and what that makes it")
+            Check(Has(section, "  Status From This Rule: none"), "vendors: and that the rule gave nothing")
+            iconConfig.IngredientsForOtherToons = "any"
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            Equal(world.Status(SPICE), "", "vendors: nor with any recipe of the other toon counting")
+            iconConfig.IngredientsForOtherToons = "skill"
+            world.vendors[SPICE] = nil
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            Equal(world.Status(SPICE), "send", "vendors: without the vendors it is one to send again")
+        end
         -- A quest of this toon's comes before another toon.
         do
             local getItemQuestInfo = world.env.CaerdonQuestItems.GetItemQuestInfo
@@ -612,6 +789,13 @@ return function(H, S)
         Check(Has(section, "  Gives Skill To: Dorn (Cooking 100)"), "export: for whom")
         Check(Has(section, "    - Dorn, Cooking (rank 100): Roasted Boar (recipe 9002) x1: known, gives skill until rank 120"),
             "export: and by which recipe")
+        -- Outgrown here and sold by vendors everywhere: not sent, so it is one to sell.
+        world.vendors[BOAR] = 75
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        Equal(world.Status(BOAR), "sellable", "vendors: an outgrown ingredient vendors everywhere sell is sold, not sent")
+        world.vendors[BOAR] = nil
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        Equal(world.Status(BOAR), "send", "vendors: and sent again without them")
 
         -- Outgrown here and gray there: sold, unless a recipe the other toon knows is enough.
         world.rank = 170
