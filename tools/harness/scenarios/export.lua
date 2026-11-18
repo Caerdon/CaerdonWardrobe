@@ -663,6 +663,110 @@ return function(H, S)
         local none, payload = Section(LINK, "[Mount]")
         Equal(none, nil, "a piece of armor has no mount section")
         Check(not payload:find("[Pet]", 1, true), "and no pet section")
+
+        -- Item sets: the bracers are of a set and worn, the girdle is of the same set and not.
+        -- Its tooltip names the set, its two pieces, a bonus the toon has and one it lacks.
+        local sets = Section(game.Link(920002), "[Set Bonuses]")
+        Check(sets ~= nil and sets:find("  Item Set: none (the item info names no set)", 1, true) ~= nil,
+            "sets: a piece of no set says so (" .. tostring(sets) .. ")")
+        Check(sets ~= nil and sets:find("    no line about an item set", 1, true) ~= nil, "sets: and its tooltip has no set line")
+
+        -- (A name the client has asked for once is kept in its environment, so these are put
+        -- there and not handed to the game.)
+        local itemInfo = env.C_Item.GetItemInfo
+        rawset(env.C_Item, "GetItemInfo", function(reference, ...)
+            local values = { itemInfo(reference, ...) }
+            local id = type(reference) == "number" and reference or tonumber(tostring(reference):match("item:(%d+)"))
+            if values[1] and (id == 920001 or id == 920002) then
+                values[16] = 1900
+            end
+            return unpack(values, 1, 17)
+        end)
+        rawset(env.C_Item, "GetItemSetInfo", function(setID) return setID == 1900 and "Soldier's Kit" or nil end)
+        local wornLink = env.GetInventoryItemLink
+        rawset(env, "GetInventoryItemLink", function(_, slot) return slot == 9 and game.Link(920001) or nil end)
+        local GRAY = { 0.5, 0.5, 0.5 }
+        local girdle = Tooltip(ON_EQUIP)
+        girdle.lines[#girdle.lines + 1] = { type = 1, leftText = " ", leftColor = Color(GOLD) }
+        girdle.lines[#girdle.lines + 1] = { type = 0, leftText = "Soldier's Kit (1/2)", leftColor = Color(GOLD) }
+        girdle.lines[#girdle.lines + 1] = { type = 0, leftText = "  Soldier's Bracers", leftColor = Color(WHITE) }
+        girdle.lines[#girdle.lines + 1] = { type = 42, leftText = "  Soldier's Girdle", leftColor = Color(GRAY) }
+        girdle.lines[#girdle.lines + 1] = { type = 1, leftText = " ", leftColor = Color(GOLD) }
+        girdle.lines[#girdle.lines + 1] = { type = 0, leftText = "Set: Stands a little straighter.", leftColor = Color(GREEN) }
+        girdle.lines[#girdle.lines + 1] = { type = 0, leftText = "(2) Set: +10 Armor.", leftColor = Color(GRAY) }
+        girdle.lines[#girdle.lines + 1] = { type = 0, leftText = "Equip: Improves nothing (3/4).", leftColor = Color(GREEN) }
+        local before = answers
+        answers = { link = girdle }
+        sets = Section(game.Link(920002), "[Set Bonuses]")
+        answers = before
+        Equal(sets, table.concat({
+            "  Item Set: 1900 \"Soldier's Kit\"",
+            "  Bonus Spells For The Played Spec: " .. (sets and sets:match("Bonus Spells For The Played Spec: ([^\n]*)") or "?"),
+            "  Tooltip (the link's):",
+            "    set line: \"Soldier's Kit\", 1 of 2 worn",
+            "    piece: \"Soldier's Bracers\", worn (type 0, color ffffffff)",
+            "    piece: \"Soldier's Girdle\", not worn (type 42, color ff808080)",
+            "    bonus the toon has (no piece count in the line): \"Stands a little straighter.\"",
+            "    bonus the toon does not have, at 2 pieces: \"+10 Armor.\"",
+            "  Worn Pieces Of Item Sets:",
+            "    1900 \"Soldier's Kit\": 1 worn: slot 9 [Soldier's Bracers]",
+            "  Worn With The Same Equip Location (INVTYPE_WAIST): none" }, "\n"),
+            "sets: the set, its count, its pieces, both kinds of bonus and the worn pieces")
+        rawset(env.C_Item, "GetItemInfo", itemInfo)
+        rawset(env, "GetInventoryItemLink", wornLink)
+    end
+
+    --------------------------------------------------------------------------------------
+    -- Copy Details waits for the data of an item that lies in a slot
+    --------------------------------------------------------------------------------------
+
+    do
+        -- The client has the item's data from its fourth answer on, or never.
+        local answersUntilCached, asked, requested = 3, 0, 0
+        rawset(env.C_Item, "DoesItemExist", function() return true end)
+        rawset(env.C_Item, "IsItemDataCached", function()
+            asked = asked + 1
+            return answersUntilCached ~= nil and asked > answersUntilCached
+        end)
+        rawset(env.C_Item, "RequestLoadItemData", function() requested = requested + 1 end)
+        local stand = { location = {} }
+        function stand:IsItemEmpty() return false end
+        function stand:HasItemLocation() return true end
+        function stand:GetItemLocation() return self.location end
+        function stand:ContinueWithCancelOnItemLoad(callback) callback() return function() end end
+        local built, shown = 0, nil
+        local buildPayload, showOutput = feature.BuildClipboardPayload, feature.ShowCopyOutput
+        function feature:BuildClipboardPayload() built = built + 1 return "note: " .. tostring(self.copyWaitNote) end
+        function feature:ShowCopyOutput(payload) shown = payload end
+
+        feature.currentCaerdonItem = stand
+        feature:CopyCurrentItemDetails()
+        Equal(requested, 1, "wait: the item's data is asked for")
+        Equal(built, 0, "wait: nothing is built while the client has no data")
+        Check(client:TickUntil(function() return shown ~= nil end, 10), "wait: the export comes once the data has")
+        Check(shown and shown:find("it came within", 1, true) ~= nil, "wait: and says that it waited (" .. tostring(shown) .. ")")
+
+        answersUntilCached, asked, shown, built = nil, 0, nil, 0
+        feature:CopyCurrentItemDetails()
+        Check(client:TickUntil(function() return shown ~= nil end, 10), "wait: with no data ever, the export still comes")
+        Check(shown and shown:find("after 3 s; exported without", 1, true) ~= nil, "wait: saying so (" .. tostring(shown) .. ")")
+        Equal(built, 1, "wait: built once")
+
+        answersUntilCached, asked, shown, requested = 0, 0, nil, 0
+        feature:CopyCurrentItemDetails()
+        Equal(shown, "note: nil", "wait: data that is there is not waited for, and the export has no note")
+        Equal(requested, 0, "wait: nor asked for")
+
+        -- A second click while the first is waiting takes its place.
+        answersUntilCached, asked, shown, built = nil, 0, nil, 0
+        feature:CopyCurrentItemDetails()
+        answersUntilCached, asked = 0, 0
+        feature:CopyCurrentItemDetails()
+        client:Tick(5)
+        Equal(built, 1, "wait: a click during the wait leaves one export, not two")
+
+        feature.BuildClipboardPayload, feature.ShowCopyOutput = buildPayload, showOutput
+        feature.currentCaerdonItem = nil
     end
 
     Equal(#client.errors, 0, "no error reached the error handler")

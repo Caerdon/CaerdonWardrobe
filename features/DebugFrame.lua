@@ -1687,10 +1687,39 @@ function DebugFrameMixin:CopyCurrentItemDetails()
         return
     end
 
-    self.copyCancelFunc = item:ContinueWithCancelOnItemLoad(function()
-        performCopy()
-        self.copyCancelFunc = nil
-    end)
+    -- An item given by its bag or equipment slot counts as loaded for the item's own wait
+    -- whether or not the client has its data (CaerdonItemMixin:IsItemCached), and the wait
+    -- reports once at the start, before the sources' items have come. An export built while the
+    -- client has nothing for the item is one line, "Retrieving item information". So the copy
+    -- asks for the data itself and waits for it, a few seconds at most, and the export says so.
+    local location = item:HasItemLocation() and item:GetItemLocation() or nil
+    local function DataMissing()
+        return location ~= nil and C_Item.DoesItemExist(location) and not C_Item.IsItemDataCached(location)
+    end
+    local tries = 0
+    local cancelled = false
+    local function Continue()
+        if cancelled then
+            return
+        end
+        if DataMissing() and tries < 15 then
+            tries = tries + 1
+            C_Timer.After(0.2, Continue)
+            return
+        end
+        self.copyWaitNote = tries > 0 and
+            (DataMissing() and "the client had no data for the item after 3 s; exported without"
+                or ("the client had no data for the item at first; it came within %.1f s"):format(tries * 0.2)) or nil
+        self.copyCancelFunc = item:ContinueWithCancelOnItemLoad(function()
+            performCopy()
+            self.copyCancelFunc = nil
+        end)
+    end
+    if DataMissing() then
+        C_Item.RequestLoadItemData(location)
+        self.copyCancelFunc = function() cancelled = true end
+    end
+    Continue()
 end
 
 -- "/cdebug geometry": the [Button Geometry] section on its own, for when that is all that is being
@@ -1902,6 +1931,142 @@ function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation)
             slotRows)
     end
     return rows
+end
+
+-- A client format string ("%s (%d/%d)") as a pattern that finds its values in a tooltip line.
+local function TextPattern(formatString)
+    if type(formatString) ~= "string" then
+        return nil
+    end
+    local pattern = formatString:gsub("%%%d+%$", "%%")
+    pattern = pattern:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
+    pattern = pattern:gsub("%%s", "(.+)"):gsub("%%d", "(%%d+)")
+    return "^%s*" .. pattern .. "%s*$"
+end
+
+local function ItemSetOf(link)
+    local setID = link and select(16, C_Item.GetItemInfo(link)) or nil
+    if not setID then
+        return nil
+    end
+    return setID, C_Item.GetItemSetInfo and C_Item.GetItemSetInfo(setID) or nil
+end
+
+-- The export's "[Set Bonuses]": what the client says about the item set of a piece (a tier set
+-- and the like, not a saved equipment set), which of the worn pieces belong to item sets, and
+-- what the piece's tooltip says about the set's bonuses. Readings only: no verdict is made from
+-- any of it. The tooltip names the piece count of a bonus the toon does not have and not of one
+-- it has, which is what a rule about losing a bonus would have to get around.
+local function ExplainSetBonuses(item)
+    local lines = {}
+    local function add(indent, text, ...)
+        lines[#lines + 1] = string.rep("  ", indent) .. (select("#", ...) > 0 and text:format(...) or text)
+    end
+    local link = item:GetItemLink()
+    if not link then
+        return lines
+    end
+
+    local setID, setName = ItemSetOf(link)
+    add(0, "Item Set: %s", setID and ("%d \"%s\""):format(setID, tostring(setName)) or "none (the item info names no set)")
+
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
+    local specID = specIndex and CaerdonAPI:GetSpecializationInfo(specIndex) or nil
+    if not C_Item.GetSetBonusesForSpecializationByItemID then
+        add(0, "Bonus Spells For The Played Spec: the client has no such function")
+    elseif not specID then
+        add(0, "Bonus Spells For The Played Spec: not asked (no specialization)")
+    else
+        local spells = C_Item.GetSetBonusesForSpecializationByItemID(specID, item:GetItemID())
+        local texts = {}
+        for index, spellID in ipairs(spells or {}) do
+            texts[index] = ("%s \"%s\""):format(tostring(spellID),
+                tostring(C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or "?"))
+        end
+        add(0, "Bonus Spells For The Played Spec (spec %s): %s", tostring(specID),
+            #texts > 0 and table.concat(texts, "; ") or (spells and "none" or "no answer"))
+    end
+
+    -- The tooltip: the set's line with its count, its pieces, its bonuses.
+    local namePattern = TextPattern(ITEM_SET_NAME)
+    local needsPattern = TextPattern(ITEM_SET_BONUS_GRAY)
+    local hasPattern = TextPattern(ITEM_SET_BONUS)
+    local disabledLine = Enum.TooltipDataLineType and Enum.TooltipDataLineType.DisabledLine
+    local data = C_TooltipInfo and C_TooltipInfo.GetHyperlink(link) or nil
+    local inPieces = false
+    local found = false
+    add(0, "Tooltip (the link's):")
+    for _, line in ipairs(data and data.lines or {}) do
+        local text = line.leftText and tostring(line.leftText) or ""
+        local color = line.leftColor and line.leftColor.GenerateHexColor and line.leftColor:GenerateHexColor() or "?"
+        local name, worn, total
+        if namePattern then
+            name, worn, total = text:match(namePattern)
+        end
+        local needs, needsText
+        if needsPattern then
+            needs, needsText = text:match(needsPattern)
+        end
+        local hasText = not needs and hasPattern and text:match(hasPattern) or nil
+        if name and tonumber(worn) and tonumber(total) then
+            found, inPieces = true, true
+            add(1, "set line: \"%s\", %s of %s worn", name, worn, total)
+        elseif needs then
+            found, inPieces = true, false
+            add(1, "bonus the toon does not have, at %s pieces: \"%s\"", needs, tostring(needsText):sub(1, 90))
+        elseif hasText then
+            found, inPieces = true, false
+            add(1, "bonus the toon has (no piece count in the line): \"%s\"", tostring(hasText):sub(1, 90))
+        elseif inPieces and text:match("%S") then
+            add(1, "piece: \"%s\", %s (type %s, color %s)", (text:gsub("^%s+", "")),
+                line.type == disabledLine and "not worn" or "worn", tostring(line.type), color)
+        else
+            inPieces = false
+        end
+    end
+    if not found then
+        add(1, data and "no line about an item set" or "no tooltip")
+    end
+
+    -- The worn pieces, by the item set each belongs to, and what is worn where this piece goes.
+    local equipLoc = select(9, C_Item.GetItemInfo(link))
+    local bySet, order, sameKind, unknown = {}, {}, {}, {}
+    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+        local wornLink = GetInventoryItemLink("player", slot)
+        if wornLink then
+            local wornSetID, wornSetName = ItemSetOf(wornLink)
+            local wornName, _, _, _, _, _, _, _, wornEquipLoc = C_Item.GetItemInfo(wornLink)
+            local label = ("slot %d [%s]"):format(slot, tostring(wornName))
+            if not wornName then
+                -- The client can be without the item info of a worn piece; its set is then
+                -- not known here, and the list below is short of it.
+                unknown[#unknown + 1] = tostring(slot)
+                C_Item.RequestLoadItemDataByID(wornLink)
+            end
+            if wornSetID then
+                if not bySet[wornSetID] then
+                    bySet[wornSetID] = { name = wornSetName, pieces = {} }
+                    order[#order + 1] = wornSetID
+                end
+                table.insert(bySet[wornSetID].pieces, label)
+            end
+            if equipLoc and equipLoc ~= "" and wornEquipLoc == equipLoc then
+                sameKind[#sameKind + 1] = ("%s, item set %s"):format(label,
+                    wornSetID and ("%d \"%s\""):format(wornSetID, tostring(wornSetName)) or "none")
+            end
+        end
+    end
+    if #unknown > 0 then
+        add(0, "Worn Pieces The Client Has No Item Info For (asked for; copy again): slots %s", table.concat(unknown, ", "))
+    end
+    add(0, "Worn Pieces Of Item Sets:%s", #order == 0 and " none" or "")
+    for _, wornSetID in ipairs(order) do
+        local entry = bySet[wornSetID]
+        add(1, "%d \"%s\": %d worn: %s", wornSetID, tostring(entry.name), #entry.pieces, table.concat(entry.pieces, "; "))
+    end
+    add(0, "Worn With The Same Equip Location (%s): %s", tostring(equipLoc),
+        #sameKind > 0 and table.concat(sameKind, "; ") or "none")
+    return lines
 end
 
 function DebugFrameMixin:BuildClipboardPayload(item)
@@ -2193,6 +2358,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
 
     addLine(0, "")
     addLine(0, "[Item]")
+    if self.copyWaitNote then
+        addKV(1, "Waited For Its Data", self.copyWaitNote)
+    end
     local itemLink = item:GetItemLink() or self.currentItem
     addKV(1, "Link", itemLink or "Unavailable")
     local itemString = itemLink and itemLink:match("|H(.-)|h")
@@ -2586,6 +2754,16 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo and transmogInfo.canEquip)
         addKV(1, "taken to (the icon)", lookRoute or "nowhere")
         addKV(1, "and to (the small mark on it)", lookSecondRoute or "nowhere else")
+    end
+
+    -- Item sets (tier bonuses): what there is to tell whether putting a piece on would cost or
+    -- gain a bonus. Nothing is judged by it yet.
+    if identifiedType == CaerdonItemType.Equipment then
+        addLine(0, "")
+        addLine(0, "[Set Bonuses]")
+        for _, setLine in ipairs(ExplainSetBonuses(item)) do
+            addLine(1, setLine)
+        end
     end
 
     if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then
@@ -3434,7 +3612,11 @@ end
 
 function DebugFrameMixin:ShowCopyOutput(payload)
     local frame = self:EnsureCopyOutputFrame()
-    frame.editBox:SetText(payload or "")
+    -- An inline texture or atlas in the text (the crafting quality mark in an enchant's tooltip
+    -- line) is drawn in the box and makes its line taller than the others; from there on the
+    -- selection highlight does not lie on the text. It is shown as the text it is instead.
+    payload = (payload or ""):gsub("||", "\1"):gsub("|([TtAa])", "||%1"):gsub("\1", "||")
+    frame.editBox:SetText(payload)
     frame:Show()
     frame.editBox:HighlightText()
     frame.editBox:SetFocus()
