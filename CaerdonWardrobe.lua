@@ -202,9 +202,12 @@ function CaerdonWardrobeMixin:OnLoad()
     self:RegisterEvent "NEW_PET_ADDED"
     self:RegisterEvent "PLAYER_REGEN_ENABLED"
     -- Talent points decide which Pawn scale counts as the toon's own on clients without
-    -- specializations (see OnTalentsChanged). pcall: not every client knows every event.
+    -- specializations; with them it is the spec, and the loot spec decides which gear is the
+    -- toon's (see OnTalentsChanged, which compares before it refreshes). pcall: not every client
+    -- knows every event.
     for _, talentEvent in ipairs({ "TRAIT_CONFIG_UPDATED", "TRAIT_CONFIG_LIST_UPDATED", "ACTIVE_COMBAT_CONFIG_CHANGED",
-        "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE" }) do
+        "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_SPECIALIZATION_CHANGED",
+        "ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "PLAYER_LOOT_SPEC_UPDATED" }) do
         if pcall(self.RegisterEvent, self, talentEvent) then
             self[talentEvent] = self.OnTalentsChanged
         end
@@ -2458,7 +2461,21 @@ function CaerdonWardrobeMixin:OnUpdate()
     end
 end
 
+-- The spec being played and the loot spec chosen (0: the played one), which pick the toon's own
+-- Pawn scale and the gear an upgrade is matched with. nil, nil on a client without specs.
+local function ReadSpec()
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
+    if not specIndex then
+        return nil, nil
+    end
+    return specIndex, CaerdonAPI:GetLootSpecializationID() or 0
+end
+
 function CaerdonWardrobeMixin:PLAYER_ENTERING_WORLD()
+    -- Noted here so that the first change of either in a session is seen as one.
+    if self.knownSpecIndex == nil then
+        self.knownSpecIndex, self.knownLootSpec = ReadSpec()
+    end
 end
 
 function CaerdonWardrobeMixin:PLAYER_LOGOUT()
@@ -2570,7 +2587,9 @@ end
 
 -- Talent points were spent, reset or swapped. Only a change of the leading talent tree matters
 -- (it picks which Pawn scales count as the toon's own), so the icons are refreshed only then.
--- Retail has no talent tree groups: the lookup is nil before and after and nothing happens.
+-- Retail has no talent tree groups: there it is the specialization that picks the scales, and
+-- the loot spec that says which gear is the toon's. Both are compared with what was last noted
+-- (at the world's arrival, or else at the first of these events).
 function CaerdonWardrobeMixin:OnTalentsChanged()
     if self.talentChangeTimer then
         return
@@ -2581,8 +2600,15 @@ function CaerdonWardrobeMixin:OnTalentsChanged()
         local before = CaerdonAPI:GetPrimaryTalentTree()
         CaerdonAPI:InvalidateTalentTrees()
         local after = CaerdonAPI:GetPrimaryTalentTree()
+        local specBefore, lootBefore = self.knownSpecIndex, self.knownLootSpec
+        local specAfter, lootAfter = ReadSpec()
+        self.knownSpecIndex, self.knownLootSpec = specAfter, lootAfter
         if before ~= after then
             self:RefreshItems("talents", ("leading tree: %s -> %s"):format(tostring(before), tostring(after)))
+        elseif specBefore ~= nil and specBefore ~= specAfter then
+            self:RefreshItems("talents", ("specialization: %s -> %s"):format(tostring(specBefore), tostring(specAfter)))
+        elseif specBefore ~= nil and lootBefore ~= lootAfter then
+            self:RefreshItems("loot spec", ("loot specialization: %s -> %s"):format(tostring(lootBefore), tostring(lootAfter)))
         end
     end)
 end

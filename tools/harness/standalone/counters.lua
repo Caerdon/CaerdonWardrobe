@@ -278,7 +278,9 @@ local function StartSession(options)
     CaerdonWardrobeConfig = nil -- saved variables arrive after the files
     -- What the addon runs with no window open, as far as the counters time it: the two
     -- handlers of an item tooltip and the auction module's look at the bags.
-    CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end }
+    -- The core notes the spec as the world comes: a client without specializations here.
+    CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end,
+        GetPlayerSpecializationIndex = function() return nil end }
     NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end }
     CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end, InvalidateCaches = function() end }
     Session.outside = { api = CaerdonAPI, tooltip = NS.Tooltip }
