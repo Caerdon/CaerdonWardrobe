@@ -1250,12 +1250,13 @@ local function GetPawnOffTreeScales()
     return offTree, detail
 end
 
--- Whether the player wants upgrades for this spec of the class shown while another is played
--- (Icon.OtherSpecs, one switch per spec of the toon's class on the Icons page; a spec that was
--- never switched off is wanted). Clients without specs have no such switches.
+-- Whether the player wants upgrades for this spec of the toon's shown while another is played
+-- (Icon.OtherSpecs in the toon's own settings, CaerdonWardrobeCharacterConfig: one switch per
+-- spec of its class on the Icons page; a spec that was never switched off is wanted). Clients
+-- without specs have no such switches.
 local function IsOtherSpecWanted(classFile, specIndex)
-    local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
-    local chosen = icon and icon.OtherSpecs
+    local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
+    local chosen = type(icon) == "table" and icon.OtherSpecs
     return not (type(chosen) == "table" and chosen[tostring(classFile) .. tostring(specIndex)] == false)
 end
 

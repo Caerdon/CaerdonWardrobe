@@ -171,6 +171,8 @@ return function(H, S)
         -- The settings a new install starts with, from the addon's own file.
         client:LoadAddonFile("CaerdonWardrobe", H.addonDir, "config/Config.lua", namespace)
         rawset(client.env, "CaerdonWardrobeConfig", H.DeepCopy(namespace:GetDefaultConfig()))
+        -- The toon's own settings, saved per character.
+        rawset(client.env, "CaerdonWardrobeCharacterConfig", { Icon = { OtherSpecs = { HUNTER2 = false } } })
         rawset(client.env, "CaerdonProfessionData", { ["Farrealm"] = { Zzyxa = {}, Otherone = { Mining = { rank = 5 } } } })
         client:Fire("ADDON_LOADED", "CaerdonWardrobe")
         client:Fire("VARIABLES_LOADED")
@@ -289,6 +291,8 @@ return function(H, S)
     Check(T.Recorder.HookCount() > 20, "record: the functions were hooked (" .. T.Recorder.HookCount() .. ")")
     Check(client.env.C_Item.GetItemInfo ~= untouched, "record: by a secure hook on the client's function")
     Check(type(vest.config) == "table" and vest.config.Icon ~= nil, "record: the settings are in the recording")
+    Check(type(vest.characterConfig) == "table" and vest.characterConfig.Icon.OtherSpecs.HUNTER2 == false,
+        "record: and the toon's own settings")
 
     local environment = T.db.recordings.environments[vest.environment] or {}
     Check(environment.values and environment.values["Enum.ItemClass.Questitem"] == 12, "environment: enum values by path")
@@ -388,6 +392,12 @@ return function(H, S)
 
     local vestFixture = byItem[900002]
     if vestFixture then
+        -- The toon's own settings are the replayed client's, as the player's are.
+        local settled = H.Replay(vestFixture.environment, H.DeepCopy(vestFixture.recording))
+        local own = settled.client and settled.client.env.CaerdonWardrobeCharacterConfig
+        Check(type(own) == "table" and own.Icon.OtherSpecs.HUNTER2 == false,
+            "replay: the toon's own settings are set as they were recorded")
+
         -- 1. The addon decides differently from the same answers. Planted the cheap way round:
         --    the recorded verdict is changed, which is the same disagreement.
         local recording = H.DeepCopy(vestFixture.recording)

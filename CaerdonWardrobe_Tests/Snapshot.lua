@@ -67,8 +67,11 @@ local function DeepDiff(before, after, prefix, found)
     for key in pairs(type(before) == "table" and before or {}) do keys[key] = true end
     for key in pairs(type(after) == "table" and after or {}) do keys[key] = true end
     for _, key in ipairs(T.SortedKeys(keys)) do
-        local left = type(before) == "table" and before[key] or nil
-        local right = type(after) == "table" and after[key] or nil
+        -- Not "and ... or nil": a setting that is false must not read as one that is missing
+        -- (a spec switched off is false where nothing was before).
+        local left, right
+        if type(before) == "table" then left = before[key] end
+        if type(after) == "table" then right = after[key] end
         if type(left) == "table" or type(right) == "table" then
             DeepDiff(left, right, prefix .. tostring(key) .. ".", found)
         elseif left ~= right then
@@ -141,6 +144,7 @@ function T.DiffSnapshots(base, after)
         containersCompared = T.SortedKeys(shared),
         settingsChanged = DeepDiff(base.config, after.config),
     }
+    DeepDiff(base.characterConfig, after.characterConfig, "this character: ", diff.settingsChanged)
     for _, key in ipairs(T.SortedKeys(before)) do
         local old, new = before[key], now[key]
         if not new then
@@ -345,6 +349,9 @@ local function Take(label, part)
         part = part,
         bank = part ~= "bags" and T.IsOpen("bank") and true or false,
         config = T.Plain(CaerdonWardrobeConfig, 5),
+        -- The toon's own settings; nil for a toon that never chose one.
+        characterConfig = type(CaerdonWardrobeCharacterConfig) == "table" and
+            T.Plain(CaerdonWardrobeCharacterConfig, 5) or nil,
         containers = {},
         entries = {},
     }

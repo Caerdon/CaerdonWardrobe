@@ -18,6 +18,7 @@
 ## Author: Caerdon
 ## Version: v5.0.1
 ## SavedVariables: CaerdonWardrobeConfig, CaerdonProfessionData, CaerdonRecipeData, CaerdonAuctionData, CaerdonRefreshData
+## SavedVariablesPerCharacter: CaerdonWardrobeCharacterConfig
 ## OptionalDeps: AdiBags, AngrierWorldQuests, ArkInventory, Auctionator, Baganator, Bagnon, Bagnonium, BaudBag, BetterBags, cargBags_Nivaya, DialogueUI, ElvUI, Inventorian, KkthnxUI, LegionRemixHelper, LiteBag, Narcissus, NDui, Pawn, Skillet, Sorted, TradeSkillMaster, VenturePlan, WorldQuestsList, WorldQuestTracker, ZygorGuidesViewer
 
 ## IconTexture: Interface\Store\category-icon-featured

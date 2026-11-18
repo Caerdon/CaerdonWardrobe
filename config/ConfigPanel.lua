@@ -21,17 +21,24 @@ local defaultConfig
 
 -- The saved table can be replaced wholesale (old settings version) and can lack newer sections,
 -- so every read and write resolves it again instead of holding on to a sub-table.
+-- Saved data that is not a table where one belongs reads as nothing and is replaced on a write.
 local function GetSection(root, info, create)
-    if not (root and info.configSection) then
+    if type(root) ~= "table" or not info.configSection then
         return nil
     end
     local section = root[info.configSection]
+    if type(section) ~= "table" then
+        section = nil
+    end
     if section == nil and create then
         section = {}
         root[info.configSection] = section
     end
     if section and info.configSubsection then
         local subsection = section[info.configSubsection]
+        if type(subsection) ~= "table" then
+            subsection = nil
+        end
         if subsection == nil and create then
             subsection = {}
             section[info.configSubsection] = subsection
@@ -41,13 +48,24 @@ local function GetSection(root, info, create)
     return section
 end
 
+-- Where an option's value is kept. The player's settings are one table for every toon
+-- (CaerdonWardrobeConfig). An option that describes the toon and not the player's taste
+-- (info.perCharacter: which of its specs it plays) is kept with the toon
+-- (CaerdonWardrobeCharacterConfig, saved per character). That table has no defaults and is
+-- not there until the toon's first choice: a value it does not hold reads as info.default.
 local function GetValue(info)
-    local section = GetSection(CaerdonWardrobeConfig, info)
-    local value = section and section[info.configValue]
-    if value == nil then
-        defaultConfig = defaultConfig or NS:GetDefaultConfig()
-        local defaults = GetSection(defaultConfig, info)
-        value = defaults and defaults[info.configValue]
+    local value
+    if info.perCharacter then
+        local section = GetSection(CaerdonWardrobeCharacterConfig, info)
+        value = section and section[info.configValue]
+    else
+        local section = GetSection(CaerdonWardrobeConfig, info)
+        value = section and section[info.configValue]
+        if value == nil then
+            defaultConfig = defaultConfig or NS:GetDefaultConfig()
+            local defaults = GetSection(defaultConfig, info)
+            value = defaults and defaults[info.configValue]
+        end
     end
     -- info.default: for a key made at run time (one per spec of the toon's class), which the
     -- defaults cannot list.
@@ -58,8 +76,17 @@ local function GetValue(info)
 end
 
 local function SetValue(info, value)
-    CaerdonWardrobeConfig = CaerdonWardrobeConfig or {}
-    GetSection(CaerdonWardrobeConfig, info, true)[info.configValue] = value
+    local root
+    if info.perCharacter then
+        if type(CaerdonWardrobeCharacterConfig) ~= "table" then
+            CaerdonWardrobeCharacterConfig = {}
+        end
+        root = CaerdonWardrobeCharacterConfig
+    else
+        CaerdonWardrobeConfig = CaerdonWardrobeConfig or {}
+        root = CaerdonWardrobeConfig
+    end
+    GetSection(root, info, true)[info.configValue] = value
 end
 
 -- The player changed something on a page: the icons follow at once, with the windows that are

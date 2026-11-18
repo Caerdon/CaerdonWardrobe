@@ -300,6 +300,10 @@ function H.StartRecordedClient(environment, recording, options)
         rawset(client.env, name, DeepCopy(value))
     end
     rawset(client.env, "CaerdonWardrobeConfig", DeepCopy(recording.config))
+    -- The toon's own settings: in a recording only where the toon had chosen one.
+    if recording.characterConfig ~= nil then
+        rawset(client.env, "CaerdonWardrobeCharacterConfig", DeepCopy(recording.characterConfig))
+    end
 
     H.LoadBlizzardBase(client)
     H.LoadAddon(client, "CaerdonWardrobe", options.addonDir or H.addonDir, options.skip)

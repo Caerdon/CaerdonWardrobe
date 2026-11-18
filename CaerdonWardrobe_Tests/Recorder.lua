@@ -640,6 +640,10 @@ function Recorder.Record(request)
     recording.request = { itemID = request.itemID, link = request.link, bag = request.bag, slot = request.slot }
     recording.note = request.note
     recording.config = Copy(CaerdonWardrobeConfig, MAX_DEPTH, recording.notes)
+    -- The toon's own settings; not there for a toon that never chose one.
+    if type(CaerdonWardrobeCharacterConfig) == "table" then
+        recording.characterConfig = Copy(CaerdonWardrobeCharacterConfig, MAX_DEPTH, recording.notes)
+    end
     recording.complete = complete and true or false
     if not complete and not recording.error then
         recording.error = recording.loaded and "the addon's status was never ready within one call"

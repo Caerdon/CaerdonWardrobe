@@ -152,7 +152,7 @@ return function(H, S)
         client:Fire("PLAYER_LOGIN")
         client:Fire("PLAYER_ENTERING_WORLD", true, false)
         client:Tick(40)
-        world.client, world.env = client, client.env
+        world.client, world.env, world.namespace = client, client.env, namespace
 
         local core = client.env.CaerdonWardrobe
         local refreshItems = core.RefreshItems
@@ -379,15 +379,58 @@ return function(H, S)
     PawnChanged(world)
     info = Info(world, { GUARDIAN }, {})
     Equal(info.pawnOffTreeUpgrade, true, "chosen specs: a spec that was never switched off counts")
-    icon.OtherSpecs = { DRUID2 = false }
+    -- The choice is the toon's own (CaerdonWardrobeCharacterConfig), not the player's settings.
+    local function Chosen(specs)
+        rawset(world.env, "CaerdonWardrobeCharacterConfig", specs and { Icon = { OtherSpecs = specs } } or nil)
+    end
+    Equal(world.env.CaerdonWardrobeCharacterConfig, nil, "chosen specs: a toon that never chose has no settings of its own")
+    Chosen({ DRUID2 = false })
     info = Info(world, { GUARDIAN }, {})
     Equal(info.isUpgrade, nil, "chosen specs: none for a spec that is switched off")
     info = Info(world, { FERAL, GUARDIAN }, { FERAL })
     Equal(info.isUpgrade, nil, "chosen specs: nor through its scale where Pawn shows that")
-    icon.OtherSpecs = { DRUID2 = true }
+    Chosen({ DRUID2 = true })
     info = Info(world, { FERAL, GUARDIAN }, { FERAL })
     Equal(info.pawnOffTreeUpgrade, true, "chosen specs: switched on again, it counts")
-    icon.OtherSpecs = {}
+    Chosen({})
+    info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+    Equal(info.pawnOffTreeUpgrade, true, "chosen specs: nothing chosen is every spec")
+    -- What the player's settings say about a spec is no longer read.
+    Chosen(nil)
+    icon.OtherSpecs = { DRUID2 = false }
+    info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+    Equal(info.pawnOffTreeUpgrade, true, "chosen specs: a choice left in the player's settings is not the toon's")
+    -- Until the settings load: the toon takes what its class had there, once, and another
+    -- class's choice stays for a toon of that class.
+    icon.OtherSpecs = { DRUID2 = false, DRUID4 = true, MAGE1 = false, ROGUE3 = false, DRUIDIC1 = false }
+    world.namespace:LoadCharacterConfig()
+    local own = world.env.CaerdonWardrobeCharacterConfig
+    Equal(own and own.Icon.OtherSpecs.DRUID2, false, "carried over: the class's choice is the toon's now")
+    Equal(own and own.Icon.OtherSpecs.DRUID4, true, "carried over: a spec left on with it")
+    Equal(own and own.Icon.OtherSpecs.MAGE1, nil, "carried over: not another class's")
+    Equal(own and own.Icon.OtherSpecs.ROGUE3, nil, "carried over: nor one of a class whose name is as long")
+    Equal(own and own.Icon.OtherSpecs.DRUIDIC1, nil, "carried over: nor one whose name only starts like the toon's")
+    Equal(icon.OtherSpecs.DRUID2, nil, "carried over: and gone from the player's settings")
+    Equal(icon.OtherSpecs.MAGE1, false, "carried over: where the other class's stays")
+    info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+    Equal(info.isUpgrade, nil, "carried over: the spec is off for the toon")
+    -- A toon that has chosen keeps its choice against the class's.
+    icon.OtherSpecs = { DRUID2 = true }
+    world.namespace:LoadCharacterConfig()
+    Equal(world.env.CaerdonWardrobeCharacterConfig.Icon.OtherSpecs.DRUID2, false, "carried over: a choice of the toon's own is kept")
+    Equal(icon.OtherSpecs, nil, "carried over: with nothing left, the old table is gone")
+    -- Nothing to carry over: nothing is made.
+    Chosen(nil)
+    world.namespace:LoadCharacterConfig()
+    Equal(world.env.CaerdonWardrobeCharacterConfig, nil, "carried over: no settings are made for a toon with nothing to take")
+    -- Saved data that is no table is no choice, and no error.
+    rawset(world.env, "CaerdonWardrobeCharacterConfig", 7)
+    info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+    Equal(info.pawnOffTreeUpgrade, true, "chosen specs: saved data that is no table is every spec")
+    rawset(world.env, "CaerdonWardrobeCharacterConfig", { Icon = "broken" })
+    info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+    Equal(info.pawnOffTreeUpgrade, true, "chosen specs: and so is a broken section")
+    Chosen(nil)
     world.scaleValues, world.values = nil, nil
     icon.ShowOtherSpecUpgrades = false
 

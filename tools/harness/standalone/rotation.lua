@@ -436,7 +436,9 @@ local function Boot(isReload)
     UpdateAddOnMemoryUsage = function() end
     GetAddOnMemoryUsage = function() return 1000 end
     CaerdonAPI = { GetClientFlavor = function() return "Forever" end }
-    CaerdonWardrobeConfig = {}
+    -- The settings as saved: the player's, and the toon's own (nil until the toon chose one).
+    CaerdonWardrobeConfig = world.config or {}
+    CaerdonWardrobeCharacterConfig = world.characterConfig
     CaerdonItem = { CreateFromBagAndSlot = function(_, bag, slot) return NewItem(bag, slot) end }
 
     session.core = NewCore()
@@ -867,6 +869,28 @@ do
     world.bags[0][3] = nil
     Reload()
     Check(Newest().changedCount == 0 and #Newest().onlyInBase == 1, "nor is one that went")
+
+    -- Settings that differ from the session before are listed with the comparison: the
+    -- player's, and the toon's own. One switched off where nothing was chosen before counts.
+    local function Listed()
+        return "\n" .. table.concat(Newest().settingsChanged or {}, "\n") .. "\n"
+    end
+    world.config = { Icon = { ShowQuestItems = true } }
+    Reload()
+    world.config = { Icon = { ShowQuestItems = false } }
+    world.characterConfig = { Icon = { OtherSpecs = { DRUID2 = false } } }
+    Reload()
+    Check(Listed():find("\nIcon.ShowQuestItems: true -> false\n", 1, true) ~= nil,
+        "a setting of the player's that was switched off is listed:" .. Listed())
+    Check(Listed():find("\nthis character: Icon.OtherSpecs.DRUID2: nil -> false\n", 1, true) ~= nil,
+        "and one of the toon's own, switched off where nothing was chosen")
+    Check(#(Newest().settingsChanged or {}) == 2, "and nothing else: " .. #(Newest().settingsChanged or {}))
+    Reload()
+    Check(#(Newest().settingsChanged or {}) == 0, "settings as they were are not listed")
+    world.config, world.characterConfig = nil, nil
+    Reload()
+    Check(Listed():find("\nthis character: Icon.OtherSpecs.DRUID2: false -> nil\n", 1, true) ~= nil,
+        "a toon's choice that is gone is listed too")
 
     -- The bank, the first time it is opened in a session.
     local function OpenBank()

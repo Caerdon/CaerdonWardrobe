@@ -355,8 +355,50 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ItemLevelOverPawn == nil then
             CaerdonWardrobeConfig.Icon.ItemLevelOverPawn = NS:GetDefaultConfig().Icon.ItemLevelOverPawn
         end
+        NS:LoadCharacterConfig()
 
         CaerdonWardrobe:RefreshItems("settings")
+    end
+end
+
+-- The toon's own settings (CaerdonWardrobeCharacterConfig, saved per character), for the few
+-- that describe the toon and not the player's taste. Today that is one:
+--   Icon.OtherSpecs: class file and spec index ("DRUID2") = false for a spec whose upgrades
+--   the player does not want shown while the toon plays another. Nothing there: every spec.
+-- The table has no defaults, no version and no migrations: it is made by the first choice on a
+-- page, and a reader takes a missing table or key as "never chosen".
+function NS:LoadCharacterConfig()
+    -- The spec choice was kept by class with the player's settings before (in no release).
+    -- The first toon of a class to log in takes what its class had.
+    local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local byClass = type(icon) == "table" and icon.OtherSpecs
+    if type(byClass) ~= "table" then
+        return
+    end
+    local _, classFile = UnitClass("player")
+    if classFile then
+        for key, value in pairs(byClass) do
+            if type(key) == "string" and key:sub(1, #classFile) == classFile and
+                key:sub(#classFile + 1):match("^%d+$") then
+                if type(CaerdonWardrobeCharacterConfig) ~= "table" then
+                    CaerdonWardrobeCharacterConfig = {}
+                end
+                local own = CaerdonWardrobeCharacterConfig
+                if type(own.Icon) ~= "table" then
+                    own.Icon = {}
+                end
+                if type(own.Icon.OtherSpecs) ~= "table" then
+                    own.Icon.OtherSpecs = {}
+                end
+                if own.Icon.OtherSpecs[key] == nil then
+                    own.Icon.OtherSpecs[key] = value
+                end
+                byClass[key] = nil
+            end
+        end
+    end
+    if next(byClass) == nil then
+        icon.OtherSpecs = nil
     end
 end
 
@@ -479,9 +521,8 @@ function NS:GetDefaultConfig()
             -- talent trees in place of specs (Pawn shows a scale per tree there, and those
             -- arrows were always shown), off where it has specs.
             ShowOtherSpecUpgrades = C_Traits ~= nil and C_Traits.GetGroupDisplayInfoByTreeID ~= nil,
-            -- Which specs of a class that is for: class file and spec index ("DRUID2") = false
-            -- for a spec the player switched off. Nothing here: every spec.
-            OtherSpecs = {},
+            -- Which of the toon's specs that is for is the toon's own setting
+            -- (CaerdonWardrobeCharacterConfig.Icon.OtherSpecs, NS:LoadCharacterConfig).
             -- The arrow on a piece of a saved gear set. Off: such a piece never gets it.
             ShowUpgradeOnGearSets = true,
             -- With Pawn loaded: a higher item level than the worn piece is an upgrade where Pawn

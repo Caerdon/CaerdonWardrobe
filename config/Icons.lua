@@ -62,7 +62,9 @@ end
 
 -- Under "Also for my other specs": one switch per spec of the toon's class, for a player who
 -- only cares about some of them. Only where the client has specs (with talent trees in their
--- place, Pawn's own list of shown scales is the choice). Stored per class, not per toon.
+-- place, Pawn's own list of shown scales is the choice). Which specs a toon plays is a fact
+-- about the toon, so this is the one choice on the page that is kept per character, and its
+-- label says so.
 function CaerdonWardrobeConfigIcons:AddOtherSpecChoices(dependsOn)
     if C_Traits ~= nil and C_Traits.GetGroupDisplayInfoByTreeID ~= nil then
         return
@@ -84,15 +86,19 @@ function CaerdonWardrobeConfigIcons:AddOtherSpecChoices(dependsOn)
             infos[#infos + 1] = {
                 key = "otherSpec" .. specIndex,
                 text = specName,
-                tooltip = "Show upgrades for " .. specName .. " while you play another specialization.",
+                tooltip = "Show upgrades for " .. specName .. " while you play another specialization. This choice is kept for this character only.",
                 configSection = "Icon",
                 configSubsection = "OtherSpecs",
                 configValue = classFile .. specIndex,
                 default = true,
+                perCharacter = true,
             }
         end
     end
     if #infos > 0 then
+        local name = UnitName("player")
+        local whose = name and name ~= UNKNOWNOBJECT and (name .. "'s") or "this character's"
+        self:AddLabel("Which of " .. whose .. " specs (kept per character):", { indent = 2 })
         self:AddCheckboxGrid(infos, { indent = 2, dependsOn = dependsOn })
     end
 end
