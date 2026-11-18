@@ -49,12 +49,26 @@ local function GetValue(info)
         local defaults = GetSection(defaultConfig, info)
         value = defaults and defaults[info.configValue]
     end
+    -- info.default: for a key made at run time (one per spec of the toon's class), which the
+    -- defaults cannot list.
+    if value == nil then
+        value = info.default
+    end
     return value
 end
 
 local function SetValue(info, value)
     CaerdonWardrobeConfig = CaerdonWardrobeConfig or {}
     GetSection(CaerdonWardrobeConfig, info, true)[info.configValue] = value
+end
+
+-- The player changed something on a page: the icons follow at once, with the windows that are
+-- open behind the settings. Once per click, whatever number of values the click wrote. (The
+-- settings window's own "commit" comes only as it closes.)
+local function Changed()
+    if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
+        CaerdonWardrobe:RefreshItems("settings")
+    end
 end
 
 local function ApplyTexture(texture, spec)
@@ -294,17 +308,28 @@ function CaerdonWardrobeConfigPanelMixin:CreateCheckbox(info, x, y, opts)
         SetValue(info, checked)
         PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
         self:UpdateDependents()
+        Changed()
     end)
+    -- opts.forcedOn(): the option is on whatever was chosen, because the choice does not exist
+    -- right now (an option about another addon that is not loaded). It is then shown checked
+    -- and not to be changed, with info.forcedTooltip as its explanation; the stored value stays.
+    local function Forced()
+        return opts.forcedOn ~= nil and opts.forcedOn() and true or false
+    end
     checkbox:SetScript("OnEnter", function(button)
-        ShowOptionTooltip(button, info.text, info.tooltip)
+        ShowOptionTooltip(button, info.text, Forced() and info.forcedTooltip or info.tooltip)
     end)
     checkbox:SetScript("OnLeave", HideOptionTooltip)
+    if opts.forcedOn and checkbox.SetMotionScriptsWhileDisabled then
+        checkbox:SetMotionScriptsWhileDisabled(true)
+    end
 
     checkbox.caerdonDependsOn = opts.dependsOn
     checkbox.caerdonRefresh = function()
-        checkbox:SetChecked(GetValue(info) and true or false)
+        checkbox:SetChecked(Forced() or (GetValue(info) and true or false))
     end
     checkbox.caerdonSetEnabled = function(enabled)
+        enabled = enabled and not Forced()
         checkbox:SetEnabled(enabled)
         if enabled then
             checkbox.label:SetTextColor(labelR or 1, labelG or 1, labelB or 1)
@@ -364,6 +389,7 @@ function CaerdonWardrobeConfigPanelMixin:AddAllNoneButtons(y, checkboxes)
             end
             PlaySound(value and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
             self:UpdateDependents()
+            Changed()
         end)
         return button
     end
@@ -407,6 +433,7 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
             menuInfo.func = function()
                 SetValue(info, entry.value)
                 text:SetText(entry.title)
+                Changed()
             end
             UIDropDownMenu_AddButton(menuInfo)
         end
