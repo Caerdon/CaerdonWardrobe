@@ -195,12 +195,14 @@ return function(H, S)
 
         world.client, world.env, world.game, world.namespace = client, env, game, namespace
         -- How often the items were judged again, by the reason given.
-        world.reasons = {}
+        -- And what the newest refresh of each reason said had changed.
+        world.reasons, world.details = {}, {}
         local core = env.CaerdonWardrobe
         local refreshItems = core.RefreshItems
-        function core:RefreshItems(reason, ...)
+        function core:RefreshItems(reason, detail, ...)
             world.reasons[tostring(reason)] = (world.reasons[tostring(reason)] or 0) + 1
-            return refreshItems(self, reason, ...)
+            world.details[tostring(reason)] = detail
+            return refreshItems(self, reason, detail, ...)
         end
         -- The lines the addon adds to the item's tooltip about other toons.
         function world.TooltipLines(itemID)
@@ -445,6 +447,41 @@ return function(H, S)
         Equal(info and info.recipes[1].recordedRank, 166, Label("opened again: with the new rank"))
         Equal(world.reasons["recipes recorded"], nil, Label("opened again: the recording says nothing new, so nothing is judged again"))
         Equal(info and info.recipes[1].quantity, 1, Label("opened again: and the reagents it had"))
+
+        -- A point gained by crafting, the window open. The client has the new rank when its
+        -- event comes, and the watcher's frame hears the event before the recipe code's does:
+        -- one refresh, made from the toon's rank and the rank saved for it alike.
+        local function SkillRefreshes() return world.reasons.skills or 0 end
+        local function SavedRank() return world.env.CaerdonRecipe:GetSavedRank("Cooking") end
+        -- The window's events from before are a burst that is over, so the point is one of its own.
+        world.client:Tick(20)
+        local skillRefreshes = SkillRefreshes()
+        world.ready = true
+        world.rank = 167
+        world.client:Fire("SKILL_LINES_CHANGED")
+        world.client:Tick(20)
+        Equal(SkillRefreshes() - skillRefreshes, 1, Label("a point with the window open: one refresh, not a second when the burst is over"))
+        Check(Has(world.details.skills, "profession 185: 166 -> 167"), Label("a point with the window open: it names the toon's rank (" ..
+            tostring(world.details.skills) .. ")"))
+        Check(Has(world.details.skills, "saved Cooking: 166 -> 167"), Label("a point with the window open: and the saved rank with it"))
+        Equal(SavedRank(), 167, Label("a point with the window open: the rank is saved"))
+        world.ready = false
+
+        -- The window closed, the client says nothing of the profession's own lines: the toon's
+        -- rank refreshes, and the saved one follows when the window opens, at its event.
+        skillRefreshes = SkillRefreshes()
+        world.rank = 168
+        world.client:Fire("SKILL_LINES_CHANGED")
+        world.client:Tick(20)
+        Equal(SkillRefreshes() - skillRefreshes, 1, Label("a point with the window closed: one refresh"))
+        Equal(SavedRank(), 167, Label("a point with the window closed: the saved rank is as it was"))
+        world.ready = true
+        world.client:Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")
+        Equal(SkillRefreshes() - skillRefreshes, 2, Label("the window opened after it: the saved rank refreshes at the event"))
+        Equal(world.details.skills, "saved Cooking: 167 -> 168", Label("the window opened after it: and is named"))
+        world.client:Tick(20)
+        Equal(SkillRefreshes() - skillRefreshes, 2, Label("the window opened after it: once"))
+        world.ready = false
 
         -- A recipe learned between two openings.
         world.recipes[CAKE].learned = true

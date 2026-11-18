@@ -286,6 +286,8 @@ local function ReadSkills()
     end
 
     -- The ranks saved for this toon, which a recipe's verdict reads (types/RecipeMixin.lua).
+    -- The recipe code saves them as it is asked, so that a point gained is in both the
+    -- toon's rank and the saved one at the same check.
     if CaerdonRecipe and CaerdonRecipe.AddSkillReading then
         CaerdonRecipe:AddSkillReading(reading)
     end
@@ -300,9 +302,9 @@ local function ReadPvp()
     return { pvp = CaerdonEquipment and CaerdonEquipment.ReadPvpContext and CaerdonEquipment:ReadPvpContext() or false }
 end
 
--- The second event is the profession window opening on a profession: the recipe code saves
--- that profession's ranks then (types/RecipeMixin.lua), which are part of the reading, and no
--- skill line event need follow.
+-- The second event is the profession window opening on a profession: the client then answers
+-- for that profession's ranks, which the recipe code saves (types/RecipeMixin.lua) and which
+-- are part of the reading, and no skill line event need follow.
 Refresh:Watch({
     name = "skills",
     events = { "SKILL_LINES_CHANGED", "TRADE_SKILL_DATA_SOURCE_CHANGED" },

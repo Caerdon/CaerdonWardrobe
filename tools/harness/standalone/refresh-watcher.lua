@@ -522,7 +522,8 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     Advance(1)
     Equal(#refreshes, 2, flavor .. ": and not again when the burst is over")
 
-    -- The recipe code's own handler runs after the watch's: the check after the burst has it.
+    -- A client that has no answer for the ranks yet when its event comes: the recipe code
+    -- saves them at a later event, and the check after the burst has it.
     Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")
     Equal(#refreshes, 2, flavor .. ": nothing is saved yet when the event comes")
     state.saved.Blacksmithing.skillLevel = 60
