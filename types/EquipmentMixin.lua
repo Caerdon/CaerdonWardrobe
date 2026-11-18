@@ -165,11 +165,12 @@ end
 -- Returns effective item levels for a candidate-vs-equipped comparison,
 -- applying PVP scaling rules. When both pvpFloor args are nil, returns
 -- base levels unchanged (backward compatible).
+--
+-- A floor counts only where the client applies it (IsInPvpContext). Two pieces that both
+-- carry one used to be compared by their floors anywhere, which made a PVP ring of level 242
+-- an upgrade of 13 over a worn PVP ring that is the higher of the two everywhere but in PVP.
 local function GetEffectiveLevels(candidateBase, candidatePvpFloor, equippedBase, equippedPvpFloor)
-    if candidatePvpFloor and equippedPvpFloor then
-        return math.max(candidateBase or 0, candidatePvpFloor),
-               math.max(equippedBase or 0, equippedPvpFloor)
-    elseif IsInPvpContext() then
+    if IsInPvpContext() then
         local effCandidate = candidatePvpFloor and math.max(candidateBase or 0, candidatePvpFloor) or candidateBase
         local effEquipped = equippedPvpFloor and math.max(equippedBase or 0, equippedPvpFloor) or equippedBase
         return effCandidate, effEquipped
@@ -618,13 +619,16 @@ local function HasBetterOrEqualEquippedItem(candidate)
     local filledSlots = 0
     local strictlyBetterCount = 0
     -- Second return value: whether PVP scaling took part in the comparison. Only then may the
-    -- item-level verdict override Pawn, which does not know about PVP floors.
-    local pvpScalingInvolved = candidatePvpFloor ~= nil
+    -- item-level verdict override Pawn, which does not know about PVP floors. It takes part
+    -- where the client applies a floor and a piece has one; a floor on a piece worn outside
+    -- PVP is a line of text.
+    local floorsCount = IsInPvpContext()
+    local pvpScalingInvolved = floorsCount and candidatePvpFloor ~= nil
     for _, slotID in ipairs(inventorySlots) do
         local equipped = snapshot[slotID]
         if equipped then
             filledSlots = filledSlots + 1
-            if equipped.pvpFloor then
+            if floorsCount and equipped.pvpFloor then
                 pvpScalingInvolved = true
             end
             local effCandidate, effEquipped = GetEffectiveLevels(

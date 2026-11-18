@@ -35,6 +35,7 @@ return function(H, S)
         return {
             -- Judged against the worn gloves. Both carry a PVP floor, and only with the floors
             -- is the lower piece the better one (30 against 25, where the levels say 15 and 20).
+            -- The floors count where the client applies them: the toon is in War Mode here.
             [920001] = Armor("Field Gloves", "INVTYPE_HAND", 15, { appearanceID = 5201, sourceID = 7201, collected = true },
                 { tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = PVP_FLOOR:format(30) } } }),
             [920002] = Armor("Worn Gloves", "INVTYPE_HAND", 20, { appearanceID = 5202, sourceID = 7202, collected = true },
@@ -90,7 +91,7 @@ return function(H, S)
     end
 
     -- A client that plays the game. debug: the addon's Enable debug setting.
-    local function Start(debug)
+    local function Start(debug, withPawn)
         local items = Items()
         local game = H.StockGame(TOON, items)
         local world = { game = game, counts = {} }
@@ -162,9 +163,14 @@ return function(H, S)
         game:Set("C_TooltipInfo.GetInventoryItem", function(_, slot) return WORN[slot] and hyperlink(game.Link(WORN[slot])) end)
         game:Set("C_TooltipInfo.GetBagItem", function(bag, slot) return BAG[slot] and hyperlink(game.Link(BAG[slot])) end)
 
-        -- Asked when only one of two pieces has a PVP floor: the toon is in no PVP place.
+        -- What makes a PVP floor count: no PVP place, and War Mode, which a case switches off.
+        world.warMode = true
+        -- Pawn, as far as one case needs it: its answer to "an upgrade?" (world.pawnSays).
+        if withPawn then
+            game:Set("PawnShouldItemLinkHaveUpgradeArrowUnbudgeted", function() return world.pawnSays end)
+        end
         game:Set("GetInstanceInfo", function() return "Elsewhere", "none" end)
-        game:Set("C_PvP.IsWarModeDesired", function() return false end)
+        game:Set("C_PvP.IsWarModeDesired", function() return world.warMode end)
 
         game:Set("C_EquipmentSet.CanUseEquipmentSets", function() return true end)
         game:Set("C_EquipmentSet.GetEquipmentSetIDs", function()
@@ -280,6 +286,17 @@ return function(H, S)
         Equal(info.equalItemLevelEquipped, false, "once: so did the test for a tie")
         Equal(info.upgradeItemLevelDelta, 5, "once: and the level gain")
         Equal(info.isUpgrade, true, "once: which makes it an upgrade")
+
+        -- Out of War Mode no floor counts, though both pieces carry one: 15 against a worn 20.
+        world.warMode = false
+        env.CaerdonEquipment:InvalidateCaches()
+        local outside = Load(world, 920001)
+        info = outside and outside:GetItemData():GetTransmogInfo() or {}
+        Equal(info.betterItemEquipped, true, "no PVP: two pieces with floors are compared by their levels")
+        Equal(info.upgradeItemLevelDelta, nil, "no PVP: so there is no level gain")
+        Equal(info.isUpgrade, nil, "no PVP: and no upgrade")
+        world.warMode = true
+        env.CaerdonEquipment:InvalidateCaches()
     end
 
     --------------------------------------------------------------------------------------
@@ -636,5 +653,24 @@ return function(H, S)
         Equal(InSlot(3):GetStatusCacheKey(), Bare(spareLink):GetStatusCacheKey(), "plain: under one key")
         Check(InSlot(4):GetStatusCacheKey() ~= Bare(link):GetStatusCacheKey(), "crafted: under two")
         NoErrors(fourth, "crafted")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- A PVP floor outside PVP does not let the item level overrule Pawn
+    --------------------------------------------------------------------------------------
+
+    -- The worn piece's higher level may overrule Pawn's upgrade only where PVP scaling took
+    -- part, which Pawn does not know of. Out of PVP a floor on either piece is no such part.
+    do
+        local fifth = Start(false, true)
+        fifth.warMode = false
+        fifth.pawnSays = true
+        fifth.env.CaerdonEquipment:InvalidateCaches()
+        local gloves = Load(fifth, 920001)
+        local info = gloves and gloves:GetItemData():GetTransmogInfo() or {}
+        Equal(info.betterItemEquipped, true, "pawn, no PVP: the worn gloves are the higher ones")
+        Equal(info.pawnIdentifiedUpgrade, true, "pawn, no PVP: and Pawn's upgrade stands, floors or not")
+        Equal(info.isUpgrade, true, "pawn, no PVP: an upgrade")
+        NoErrors(fifth, "pawn")
     end
 end
