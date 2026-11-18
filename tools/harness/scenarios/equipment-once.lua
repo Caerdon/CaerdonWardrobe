@@ -186,6 +186,24 @@ return function(H, S)
         game:Set("C_EquipmentSet.GetEquipmentSetInfo", function(id) return Set(id).name, 134400, id, false, 3, 0, 3, 0, 0 end)
         game:Set("C_EquipmentSet.GetItemLocations", function(id) return Set(id).locations end)
         game:Set("EquipmentManager_GetLocationData", function(location) return LOCATIONS[location] end)
+        -- The game's own answer for a bag slot: the names of the sets that name the slot, in
+        -- one string. world.setInfo: a slot it answers otherwise.
+        game:Set("C_Container.GetContainerItemEquipmentSetInfo", function(bag, slot)
+            local list = world.setInfo and world.setInfo[slot]
+            if not list then
+                local found = {}
+                for _, set in ipairs(SETS) do
+                    for _, location in pairs(set.locations or {}) do
+                        local place = LOCATIONS[location]
+                        if place.isBags and place.bag == bag and place.slot == slot then
+                            found[#found + 1] = set.name
+                        end
+                    end
+                end
+                list = table.concat(found, ", ")
+            end
+            return list ~= "", list
+        end)
 
         -- The lost vest cannot be loaded; the ghost loads here and is refused when asked about
         -- (the scenario fires that event itself).
@@ -388,6 +406,47 @@ return function(H, S)
         local _, binding = Status(world, Load(world, 920005))
         Equal(binding, "*Alpha", "sets: the binding text is the first set's name, starred for more than one")
 
+        -- An item that lies in a bag slot is asked as that copy: the two helms share a link,
+        -- and each is in the sets that name its slot.
+        local first = Loaded(world, env.CaerdonItem:CreateFromBagAndSlot(0, 1))
+        local second = Loaded(world, env.CaerdonItem:CreateFromBagAndSlot(0, 2))
+        local third = Loaded(world, env.CaerdonItem:CreateFromBagAndSlot(0, 3))
+        Equal(first:GetItemLink(), second:GetItemLink(), "copies: the two helms have one link")
+        names = first:GetItemData():GetEquipmentSets()
+        Equal(names and table.concat(names, ","), "Alpha,Beta", "copies: the helm in slot 1 is in both sets")
+        names = second:GetItemData():GetEquipmentSets()
+        Equal(names and table.concat(names, ","), "Alpha", "copies: the helm in slot 2 in the one that names its slot")
+        Equal(third:GetItemData():GetEquipmentSets(), nil, "copies: the spare helm's slot is named by none")
+        local _, firstBinding = Status(world, first)
+        local _, secondBinding = Status(world, second)
+        Equal(firstBinding, "*Alpha", "copies: the first helm's binding text says two sets")
+        Equal(secondBinding, "Alpha", "copies: the second's says one, though the first was judged before it")
+        Check(first:GetStatusCacheKey() ~= second:GetStatusCacheKey(), "copies: the two do not share a cache entry")
+        Equal(Loaded(world, env.CaerdonItem:CreateFromBagAndSlot(0, 1)):GetStatusCacheKey(), first:GetStatusCacheKey(),
+            "copies: the same slot asked again does")
+
+        -- One copy taken out of its set: it is in none, while the other and the bare link,
+        -- which has no copy to ask about, are as they were.
+        local alphaLocations = SETS[1].locations
+        SETS[1].locations = { [1] = "bag1", [10] = "worn10" }
+        client:Tick(1)
+        Equal(second:GetItemData():GetEquipmentSets(), nil, "copies: a copy no set names is in none")
+        names = first:GetItemData():GetEquipmentSets()
+        Equal(names and table.concat(names, ","), "Alpha,Beta", "copies: its twin stays in both")
+        names = helm:GetItemData():GetEquipmentSets()
+        Equal(names and table.concat(names, ","), "Alpha,Beta", "copies: an item known by its link is in a piece's sets")
+        local secondStatus
+        secondStatus, secondBinding = Status(world, second)
+        Check(secondBinding ~= "Alpha" and secondBinding ~= "*Alpha",
+            "copies: and is not drawn as a set's piece (" .. tostring(secondStatus) .. ", " .. tostring(secondBinding) .. ")")
+        _, firstBinding = Status(world, first)
+        Equal(firstBinding, "*Alpha", "copies: the twin still is")
+        Equal(second:GetStatusCacheKey(), second:GetItemLink(), "copies: its cache entry is its link's")
+        SETS[1].locations = alphaLocations
+        client:Tick(1)
+        names = second:GetItemData():GetEquipmentSets()
+        Equal(names and table.concat(names, ","), "Alpha", "copies: put back, it is in its set again")
+
         client:Tick(1)
         world.counts = {}
         helm:GetItemData():GetEquipmentSets()
@@ -557,7 +616,8 @@ return function(H, S)
         Equal(kept.status, "pass", "contract: slot and link agree for every piece in the bag (" .. tostring(kept.message) .. ")")
         Equal(kept.detail and kept.detail.pieces, 4, "contract: four pieces in the bag")
         Equal(kept.detail and kept.detail.differing, 0, "contract: none differs")
-        Equal(kept.detail and kept.detail.apart, 1, "contract: the crafted boots' slot and link do not share an entry")
+        Equal(kept.detail and kept.detail.apart, 2,
+            "contract: two share no entry with their link, the crafted boots and the helm in one set less than its twin")
         Equal(kept.detail and kept.detail.apartDiffering, 1, "contract: so what differs between them is noted and fails nothing")
         Equal(kept.detail and kept.detail.apartFields and kept.detail.apartFields.isRecraftable, 1,
             "contract: with the field")
@@ -572,6 +632,39 @@ return function(H, S)
         Check(table.concat(example.fields or {}, "; "):find("upgradeItemLevelDelta: 25 in the slot, 20 for the link", 1, true) ~= nil,
             "contract: with the field and both values (" .. table.concat(example.fields or {}, "; ") .. ")")
         third.levelInSlot = nil
+
+        -- The sets the addon finds for a bag slot against the game's own answer for it.
+        local byCopy = Run("equipment.setsByCopy")
+        Equal(byCopy.status, "pass", "contract: the addon's sets are the game's for every slot (" .. tostring(byCopy.message) .. ")")
+        Equal(byCopy.detail and byCopy.detail.slots, 4, "contract: four slots asked")
+        Equal(byCopy.detail and byCopy.detail.inSets, 2, "contract: two of them in sets")
+        Equal(byCopy.detail and byCopy.detail.differing, 0, "contract: none differs")
+        -- The game says the spare helm is in a set, which the addon does not find.
+        third.setInfo = { [3] = "Gamma" }
+        byCopy = Run("equipment.setsByCopy")
+        Equal(byCopy.status, "fail", "contract: a slot the game puts in a set and the addon does not fails it")
+        Equal(byCopy.detail and byCopy.detail.differing, 1, "contract: that one slot")
+        Equal(byCopy.detail and byCopy.detail.examples and byCopy.detail.examples[1] and byCopy.detail.examples[1].slot, 3,
+            "contract: named")
+        -- The game says the second helm is in the other set.
+        third.setInfo = { [2] = "Beta" }
+        byCopy = Run("equipment.setsByCopy")
+        Equal(byCopy.status, "fail", "contract: a set's name the game does not give fails it")
+        Equal(byCopy.detail and byCopy.detail.examples and byCopy.detail.examples[1] and byCopy.detail.examples[1].slot, 2,
+            "contract: with the slot")
+        -- And of the first only one of its two.
+        third.setInfo = { [1] = "Alpha" }
+        byCopy = Run("equipment.setsByCopy")
+        Equal(byCopy.status, "fail", "contract: so does a set the addon finds and the game does not name")
+        -- Or of the second one more.
+        third.setInfo = { [2] = "Alpha; Gamma" }
+        byCopy = Run("equipment.setsByCopy")
+        Equal(byCopy.status, "fail", "contract: and a set the game names beyond the addon's, however it joins them")
+        Equal(byCopy.detail and byCopy.detail.examples and byCopy.detail.examples[1] and byCopy.detail.examples[1].fault,
+            "the game names more", "contract: said so")
+        third.setInfo = nil
+        byCopy = Run("equipment.setsByCopy")
+        Equal(byCopy.status, "pass", "contract: with the game's answers as they were it passes again")
 
         -- GetTime() within a frame. The mocked clock stands still, stopwatch included.
         local frame = Run("client.frameTime")

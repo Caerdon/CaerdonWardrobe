@@ -531,8 +531,8 @@ end
 -- ItemLocation creation and API calls across all bag items.
 local equippedGearSnapshot = nil
 
--- Which equipment sets name which item link, and the GetTime() it was built at (see
--- BuildEquipmentSetIndex).
+-- Which equipment sets name which copy and which item link, and the GetTime() it was built at
+-- (see BuildEquipmentSetIndex).
 local equipmentSetIndex = nil
 local equipmentSetIndexTime = nil
 
@@ -1822,9 +1822,27 @@ function CaerdonEquipmentMixin:ContinueWithCancelOnItemDataLoad(callbackFunction
     return self:LoadSources(callbackFunction)
 end
 
--- Item link -> the names of the equipment sets that hold a piece with that link in the bags or the
--- bank, in the order of the client's set list; a set names a link once. A piece that is worn is
--- not listed, as before the index.
+-- A bag slot as one number, the key of a copy in the index below. A piece outside the bags is
+-- under its inventory slot, which is below every bag slot's number.
+local function SetPlace(bag, slot)
+    return (bag + 100) * 1000 + slot
+end
+
+local function ListSetName(names, key, name)
+    local list = names[key]
+    if not list then
+        list = {}
+        names[key] = list
+    end
+    list[#list + 1] = name
+end
+
+-- The names of the equipment sets that hold a piece in the bags or the bank, in the order of the
+-- client's set list, asked two ways. byPlace: the copy at a place, which is the game's own answer,
+-- since a set names where each of its pieces lies. Of two copies with one link, only the one a
+-- set names is in it, and each of two sets' copies is in its own. byLink: a piece with that link,
+-- for an item that lies nowhere (GetEquipmentSetsOf); a set names a link once. A piece that is
+-- worn is in neither, as before the index.
 --
 -- Walking every set's every slot is the same work whichever item asks, and every equipment button
 -- asks, twice on its first draw. So the walk is done once and kept for the rest of the frame
@@ -1832,7 +1850,7 @@ end
 -- that a piece moved, a set changed or the bank opened. (equipmentSetIndex is declared with the
 -- other caches, above InvalidateCaches.)
 local function BuildEquipmentSetIndex()
-    local index = {}
+    local index = { byPlace = {}, byLink = {} }
     if not C_EquipmentSet.CanUseEquipmentSets() then
         return index
     end
@@ -1851,25 +1869,26 @@ local function BuildEquipmentSetIndex()
                     local equipSlot = tonumber(locationData.slot)
                     local equipBag = tonumber(locationData.bag)
 
+                    local place = nil
                     local foundLink = nil
                     if locationData.isBank and not locationData.bag then -- main bank container
+                        place = equipSlot
                         foundLink = GetInventoryItemLink("player", equipSlot)
                     elseif locationData.isBank or locationData.isBags then -- any other bag
+                        place = SetPlace(equipBag, equipSlot)
                         local itemLocation = ItemLocation:CreateFromBagAndSlot(equipBag, equipSlot)
                         if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
                             foundLink = C_Item.GetItemLink(itemLocation)
                         end
                     end
 
+                    if place then
+                        ListSetName(index.byPlace, place, name)
+                    end
                     if foundLink and not (listedLinks and listedLinks[foundLink]) then
                         listedLinks = listedLinks or {}
                         listedLinks[foundLink] = true
-                        local names = index[foundLink]
-                        if not names then
-                            names = {}
-                            index[foundLink] = names
-                        end
-                        names[#names + 1] = name
+                        ListSetName(index.byLink, foundLink, name)
                     end
                 end
             end
@@ -1879,21 +1898,31 @@ local function BuildEquipmentSetIndex()
     return index
 end
 
--- The names of the equipment sets this item is part of, or nil. The list belongs to the index:
--- read it, do not change it.
-function CaerdonEquipmentMixin:GetEquipmentSets()
-    local itemLink = self.item:GetItemLink()
-    if not itemLink then
-        return nil
-    end
-
+-- The names of the equipment sets an item is part of, or nil. An item that lies somewhere is
+-- asked as that copy. One known only by its link (the mail, a merchant's row, the bags a bag
+-- addon remembers) has no copy to ask about and is in the sets of a piece with its link. The
+-- list belongs to the index: read it, do not change it.
+function CaerdonEquipment:GetEquipmentSetsOf(item)
     local now = GetTime()
     if not equipmentSetIndex or equipmentSetIndexTime ~= now then
         equipmentSetIndex = BuildEquipmentSetIndex()
         equipmentSetIndexTime = now
     end
 
-    return equipmentSetIndex[itemLink]
+    local itemLocation = item:GetItemLocation()
+    if itemLocation and itemLocation:HasAnyLocation() then
+        if itemLocation:IsBagAndSlot() then
+            return equipmentSetIndex.byPlace[SetPlace(itemLocation:GetBagAndSlot())]
+        end
+        return equipmentSetIndex.byPlace[itemLocation:GetEquipmentSlot()]
+    end
+
+    local itemLink = item:GetItemLink()
+    return itemLink and equipmentSetIndex.byLink[itemLink] or nil
+end
+
+function CaerdonEquipmentMixin:GetEquipmentSets()
+    return CaerdonEquipment:GetEquipmentSetsOf(self.item)
 end
 
 local ITEM_PROFICIENCY_USE_ERROR = Enum.TransmogUseErrorType and Enum.TransmogUseErrorType.ItemProficiency or 10

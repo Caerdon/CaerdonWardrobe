@@ -87,7 +87,11 @@ return function(H, S)
         nextSlot = nextSlot + 1
         local slot = nextSlot
         slotOf[slot] = itemID
-        local location = { GetBagAndSlot = function() return 0, slot end }
+        local location = {
+            GetBagAndSlot = function() return 0, slot end,
+            HasAnyLocation = function() return true end,
+            IsBagAndSlot = function() return true end,
+        }
         function item:HasItemLocationBankOrBags() return true end
         function item:GetItemLocation() return location end
         return item

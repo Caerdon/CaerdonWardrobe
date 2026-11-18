@@ -1903,6 +1903,13 @@ local function StatusCacheKey(item, itemLink)
     if CaerdonTransformLooks:MayBeConverted(item, itemLink) then
         key = key .. "|x"
     end
+    -- Which equipment sets hold a piece is asked of the copy too, and it decides the binding
+    -- text and whether the piece is judged a spare. So of two copies with one link, the one a
+    -- set names has an entry of its own, and so has each of two sets' copies.
+    local equipmentSets = CaerdonEquipment:GetEquipmentSetsOf(item)
+    if equipmentSets then
+        key = key .. "|e" .. table.concat(equipmentSets, "\1")
+    end
     -- A stackable item's auction verdict depends on how many are owned.
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
         local maxStack = select(8, C_Item.GetItemInfo(itemLink))

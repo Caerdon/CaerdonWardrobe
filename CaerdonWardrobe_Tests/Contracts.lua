@@ -206,6 +206,74 @@ T.Contract({
     end,
 })
 
+-- Which equipment sets hold a piece is asked of the copy: the addon reads where each set's
+-- pieces lie (C_EquipmentSet.GetItemLocations) and looks a bag item up by its slot
+-- (types/EquipmentMixin.lua, GetEquipmentSetsOf). The game answers the same question for a bag
+-- slot itself, with the names in one string. The two are compared for every filled bag slot:
+-- in a set or not, every name the addon gives found in the game's string, and nothing left of
+-- that string but what stands between names. How the game joins the names is not assumed.
+T.Contract({
+    id = "equipment.setsByCopy",
+    version = 1,
+    title = "The equipment sets the addon finds for a bag slot are the ones the game names for that slot",
+    run = function(c)
+        if not (CaerdonEquipment and CaerdonEquipment.GetEquipmentSetsOf) then
+            return "skip", "this addon does not ask about the copy"
+        end
+        local slots, inSets, differing, examples, lists = 0, 0, 0, {}, {}
+        for _, where in ipairs(FilledBagSlots()) do
+            local inSet, setList = C_Container.GetContainerItemEquipmentSetInfo(where.bag, where.slot)
+            local names = CaerdonEquipment:GetEquipmentSetsOf(CaerdonItem:CreateFromBagAndSlot(where.bag, where.slot))
+            local gameSays = type(setList) == "string" and setList or ""
+            local addonSays = names and table.concat(names, " | ") or ""
+            slots = slots + 1
+
+            local fault = nil
+            if (inSet and true or false) ~= (names ~= nil) then
+                fault = inSet and "the game names sets, the addon none" or "the addon names sets, the game none"
+            elseif names then
+                local rest = gameSays
+                for _, name in ipairs(names) do
+                    local from, to = rest:find(name, 1, true)
+                    if not from then
+                        fault = "the game does not name " .. name
+                        break
+                    end
+                    rest = rest:sub(1, from - 1) .. rest:sub(to + 1)
+                end
+                if not fault and rest:find("%w") then
+                    fault = "the game names more"
+                end
+            end
+
+            if inSet or names then
+                inSets = inSets + 1
+                if #lists < 4 then
+                    lists[#lists + 1] = { game = gameSays, addon = addonSays }
+                end
+            end
+            if fault then
+                differing = differing + 1
+                if #examples < 8 then
+                    examples[#examples + 1] = { bag = where.bag, slot = where.slot, fault = fault, game = gameSays,
+                        addon = addonSays, link = C_Container.GetContainerItemLink(where.bag, where.slot) }
+                end
+            end
+        end
+        c:Note("slots", slots)
+        c:Note("inSets", inSets)
+        c:Note("differing", differing)
+        c:Note("lists", lists)
+        c:Note("examples", examples)
+        if inSets == 0 then
+            return "skip", "needs a piece of an equipment set in the bags"
+        end
+        local first = examples[1] and ("bag %d slot %d: %s"):format(examples[1].bag, examples[1].slot, examples[1].fault) or ""
+        c:Check(differing == 0, "%d of %d bag slots are in other sets for the addon than for the game; the first is %s",
+            differing, slots, first)
+    end,
+})
+
 ------------------------------------------------------------------------------------------
 -- Reloading the UI from addon code
 ------------------------------------------------------------------------------------------
