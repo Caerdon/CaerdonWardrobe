@@ -1626,13 +1626,14 @@ function DebugFrameMixin:DisplayItemInfo(item)
     if identifiedType ~= CaerdonItemType.BattlePet and
         identifiedType ~= CaerdonItemType.Quest and
         identifiedType ~= CaerdonItemType.Currency then
+        -- In parentheses: an empty slot's item answers with no value at all, which tostring refuses.
         self:AddDebugEntry("Item Type", item:GetItemType())
         self:AddDebugEntry("Item SubType", item:GetItemSubType())
-        self:AddDebugEntry("Item Type ID", tostring(item:GetItemTypeID()))
-        self:AddDebugEntry("Item SubType ID", tostring(item:GetItemSubTypeID()))
+        self:AddDebugEntry("Item Type ID", tostring((item:GetItemTypeID())))
+        self:AddDebugEntry("Item SubType ID", tostring((item:GetItemSubTypeID())))
         self:AddDebugEntry("Binding", item:GetBinding())
-        self:AddDebugEntry("Expansion ID", tostring(item:GetExpansionID()))
-        self:AddDebugEntry("Is Crafting Reagent", tostring(item:GetIsCraftingReagent()))
+        self:AddDebugEntry("Expansion ID", tostring((item:GetExpansionID())))
+        self:AddDebugEntry("Is Crafting Reagent", tostring((item:GetIsCraftingReagent())))
     end
 
     -- Add specialized info based on item type
