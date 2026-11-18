@@ -314,14 +314,14 @@ Refresh:Watch({
 
 -- Reputation. UPDATE_FACTION comes for every point gained (a kill, a quest turned in) and for
 -- a click in the reputation window. What a verdict reads of it is a requirement in red that a
--- standing meets ("Requires Timbermaw Hold - Friendly"), through the tooltip. So the reading
+-- standing meets ("Requires Timbermaw Hold - Friendly"), through the tooltip. So what is read
 -- is where the toon stands with every faction of the client's list, not its points: the
 -- standing's number, for a friendship its rank's name, for a renown faction its level.
 --
--- The list is the reputation window's: a faction under a collapsed header is not in it, so
--- collapsing one is a change here and what happens below it is not seen.
+-- The list is the reputation window's: a faction under a collapsed header is not in it, and at
+-- a login it is empty until after the world is there (WoW Forever).
 local function ReadReputation()
-    local reading = {}
+    local standings, names = {}, {}
     local friendshipOf = C_GossipInfo and C_GossipInfo.GetFriendshipReputation
     local isRenown = C_Reputation.IsMajorFaction
     local renownOf = C_MajorFactions and C_MajorFactions.GetMajorFactionData
@@ -340,21 +340,75 @@ local function ReadReputation()
                 local renown = renownOf(factionID)
                 standing = "renown " .. tostring(renown and renown.renownLevel or 0)
             end
-            reading[("faction %d (%s)"):format(factionID, tostring(faction.name))] = standing
+            standings[factionID] = standing
+            names[factionID] = faction.name
         end
     end
 
-    return reading
+    return standings, names
+end
+
+-- Where the toon stood with each faction when it was last in the list, by faction ID, kept
+-- between sessions (CaerdonRefreshData[realm][toon].standings). A faction that is not in the
+-- list keeps what was last read of it, so one that comes into the list (the login's second
+-- piece, a header opened) is compared with that, and only one never read before is new.
+local unnamedStandings = {}
+
+local function KnownStandings()
+    local realm, toon = GetRealmName(), UnitName("player")
+    -- A toon the client has no name for yet has nothing saved to be compared with: every
+    -- faction is new to it, which is a refresh too many and not one too few.
+    if not realm or not toon or toon == UNKNOWNOBJECT then
+        return unnamedStandings
+    end
+
+    -- Looked up at every check and not kept: the saved table replaces one made before it loaded.
+    if type(CaerdonRefreshData) ~= "table" then
+        CaerdonRefreshData = {}
+    end
+    local byToon = CaerdonRefreshData[realm]
+    if type(byToon) ~= "table" then
+        byToon = {}
+        CaerdonRefreshData[realm] = byToon
+    end
+    local saved = byToon[toon]
+    if type(saved) ~= "table" then
+        saved = {}
+        byToon[toon] = saved
+    end
+    if type(saved.standings) ~= "table" then
+        saved.standings = {}
+    end
+    return saved.standings
+end
+
+-- What differs from the standings remembered, which are then the ones read. No first reading:
+-- what was judged before the session's first check was judged from the standings the last
+-- session left, unless they differ, and then that is the change.
+local function CompareReputation()
+    local known = KnownStandings()
+    local standings, names = ReadReputation()
+    local before, after
+    for factionID, standing in pairs(standings) do
+        if known[factionID] ~= standing then
+            before, after = before or {}, after or {}
+            local key = ("faction %d (%s)"):format(factionID, tostring(names[factionID]))
+            before[key], after[key] = known[factionID], standing
+            known[factionID] = standing
+        end
+    end
+    return after and Difference(before, after) or nil
 end
 
 -- The renown events are the ones Blizzard's reputation window listens for besides the first.
--- The world's arrival is there for the first reading: it comes with the PVP watch's, at a
--- login, and the windows draw once for both.
+-- The world's arrival is there for a client that sends no faction event while it loads: a
+-- standing that is not the one remembered is then found as the world comes. Forever sends one
+-- before the world is there (notes: Refresh).
 if C_Reputation and C_Reputation.GetNumFactions and C_Reputation.GetFactionDataByIndex then
     Refresh:Watch({
         name = "reputation",
         events = { "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED", "MAJOR_FACTION_UNLOCKED", "PLAYER_ENTERING_WORLD" },
-        read = ReadReputation,
+        compare = CompareReputation,
         delay = 0.5,
         leading = true,
     })

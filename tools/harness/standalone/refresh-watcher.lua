@@ -66,8 +66,10 @@ end
 
 -- Loads the real file into a client of one flavor. Both clients have a faction list; the mock
 -- has one only where a section asks for it (withFactions), so that the sections about another
--- watch count that watch's refreshes alone.
-local function Start(flavor, withFactions)
+-- watch count that watch's refreshes alone. A start is a session: what the addon saved is gone
+-- with it unless the section keeps it (keepSaved), as a reload or a login does.
+local function Start(flavor, withFactions, keepSaved)
+    if not keepSaved then CaerdonRefreshData = nil end
     clock, timers, errors, refreshes, unknownEvents = 100, {}, {}, {}, { NO_SUCH_EVENT = true }
     frame = { events = {}, unitEvents = {} }
     function frame:RegisterEvent(event)
@@ -100,7 +102,15 @@ local function Start(flavor, withFactions)
         saved = { Blacksmithing = { skillLevel = 50 } },
         warMode = false,
         instanceType = "none",
+        realm = "Farrealm",
+        toon = "Zzyxa",
     }
+    UNKNOWNOBJECT = "Unknown"
+    GetRealmName = function() return state.realm end
+    UnitName = function(unit)
+        assert(unit == "player")
+        return state.toon
+    end
     GetProfessions = function()
         local indexes = {}
         for index in ipairs(state.professions) do indexes[index] = index end
@@ -516,20 +526,33 @@ local function Faction(factionID)
     end
 end
 
+-- The mock's list as the addon remembers it for the first toon: a session that follows another.
+local function AsRemembered()
+    for _, faction in ipairs(state.factions) do
+        local standing = CaerdonRefreshData.Farrealm.Zzyxa.standings[faction.factionID]
+        if type(standing) == "number" then faction.reaction = standing end
+    end
+end
+
 for _, flavor in ipairs({ "forever", "retail" }) do
+    -- The first session of all: nothing is remembered of this toon.
     local watcher = Start(flavor, true)
     Check(frame.events.UPDATE_FACTION == true, flavor .. ": the faction event is registered")
     Check(frame.events.MAJOR_FACTION_RENOWN_LEVEL_CHANGED == true and frame.events.MAJOR_FACTION_UNLOCKED == true,
         flavor .. ": and the two renown events")
 
-    -- The login: the first reading is taken as the world arrives, with the PVP watch's.
-    Fire("PLAYER_ENTERING_WORLD", true, false)
-    Equal(#Named("reputation"), 1, flavor .. ": the world's arrival is the first reading")
-    Equal(Named("reputation")[1].detail, "first reading", flavor .. ": which says so")
-    Equal(Named("reputation")[1].at, Named("pvp")[1].at, flavor .. ": at the moment of the PVP watch's, so the windows draw once for both")
     Fire("UPDATE_FACTION")
+    Equal(#Named("reputation"), 1, flavor .. ": with nothing remembered the list is a change")
+    Equal(Named("reputation")[1].detail,
+        "faction 169 (Steamwheedle Cartel): new, 4; faction 21 (Booty Bay): new, 4; faction 576 (Timbermaw Hold): new, 3; and 1 more",
+        flavor .. ": every faction of it new")
     Advance(1)
-    Equal(#Named("reputation"), 1, flavor .. ": the faction events of a login refresh nothing more")
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": the world's arrival finds the same and refreshes nothing")
+    local saved = CaerdonRefreshData.Farrealm.Zzyxa.standings
+    Check(saved[72] == 5 and saved[576] == 3 and saved[169] == 4 and saved[21] == 4, flavor .. ": the standings are remembered by faction ID, under realm and toon")
+    Equal(saved[1118], nil, flavor .. ": a header that only groups others is not")
 
     -- Points: every kill and every quest turned in.
     for _ = 1, 5 do
@@ -539,7 +562,7 @@ for _, flavor in ipairs({ "forever", "retail" }) do
     end
     Equal(#Named("reputation"), 1, flavor .. ": points gained within a standing refresh nothing")
     local watch = Watched(watcher, "reputation")
-    Check(watch.events == 7 and watch.checks == 12 and watch.changes == 1, flavor .. ": seven events, read as each burst starts and ends, one change")
+    Check(watch.events == 7 and watch.checks == 14 and watch.changes == 1, flavor .. ": seven events, read as each burst starts and ends, one change")
 
     -- A standing reached, on a client that has it when the event comes.
     Faction(576).reaction = 4
@@ -547,6 +570,7 @@ for _, flavor in ipairs({ "forever", "retail" }) do
     Equal(#Named("reputation"), 2, flavor .. ": a standing reached refreshes at the event")
     Equal(Named("reputation")[2].detail, "faction 576 (Timbermaw Hold): 3 -> 4", flavor .. ": and names the faction and both standings")
     Equal(Named("reputation")[2].about, nil, flavor .. ": as a change about everything")
+    Equal(saved[576], 4, flavor .. ": and is the standing remembered from then on")
     Advance(1)
     Equal(#Named("reputation"), 2, flavor .. ": and not again when the burst is over")
 
@@ -576,44 +600,157 @@ for _, flavor in ipairs({ "forever", "retail" }) do
     Advance(1)
     Equal(Named("reputation")[5] and Named("reputation")[5].detail, "faction 169 (Steamwheedle Cartel): 4 -> 5", flavor .. ": a header with a standing of its own is")
 
-    -- A faction met for the first time.
+    -- A faction met for the first time: nothing is remembered of it.
     table.insert(state.factions, { factionID = 59, name = "Thorium Brotherhood", isHeader = false, isHeaderWithRep = false, reaction = 4, points = 0 })
     Fire("UPDATE_FACTION")
     Advance(1)
     Equal(Named("reputation")[6] and Named("reputation")[6].detail, "faction 59 (Thorium Brotherhood): new, 4", flavor .. ": a faction met is a change")
 
     -- The list is the reputation window's: a collapsed header takes its factions out of it.
+    -- What was last read of them stays remembered.
     local _, bootyBay = Faction(21)
     local hidden = table.remove(state.factions, bootyBay)
     Fire("UPDATE_FACTION")
     Advance(1)
-    Equal(Named("reputation")[7] and Named("reputation")[7].detail, "faction 21 (Booty Bay): gone, was 4", flavor .. ": a header collapsed is a change")
-    hidden.reaction = 5
-    Fire("UPDATE_FACTION")
-    Advance(1)
-    Equal(#Named("reputation"), 7, flavor .. ": and a standing reached below it is not seen")
+    Equal(#Named("reputation"), 6, flavor .. ": a header collapsed is no change")
+    Equal(saved[21], 4, flavor .. ": what is below it stays remembered")
     table.insert(state.factions, hidden)
     Fire("UPDATE_FACTION")
     Advance(1)
-    Equal(Named("reputation")[8] and Named("reputation")[8].detail, "faction 21 (Booty Bay): new, 5", flavor .. ": until the header is opened again")
+    Equal(#Named("reputation"), 6, flavor .. ": nor is one opened with the standings below it as they were")
+    _, bootyBay = Faction(21)
+    hidden = table.remove(state.factions, bootyBay)
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    hidden.reaction = 5
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 6, flavor .. ": a standing reached below a collapsed header is not seen")
+    table.insert(state.factions, hidden)
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[7] and Named("reputation")[7].detail, "faction 21 (Booty Bay): 4 -> 5", flavor .. ": until the header is opened, and then with both standings")
+    Advance(1)
 
     -- Another world entered (an instance, a boat) reads again and finds the same.
     Fire("PLAYER_ENTERING_WORLD", false, false)
     Advance(1)
-    Equal(#Named("reputation"), 8, flavor .. ": the world's arrival later on refreshes nothing by itself")
+    Equal(#Named("reputation"), 7, flavor .. ": the world's arrival later on refreshes nothing by itself")
     Equal(#errors, 0, flavor .. ": no error")
+
+    -- A reload: the list is whole when the faction events of the loading screen come.
+    watcher = Start(flavor, true, true)
+    AsRemembered()
+    for _ = 1, 5 do Fire("UPDATE_FACTION") end
+    Advance(2)
+    Fire("PLAYER_ENTERING_WORLD", false, true)
+    Advance(1)
+    Equal(#Named("reputation"), 0, flavor .. ": a session that finds the standings as the last one left them refreshes nothing")
+    watch = Watched(watcher, "reputation")
+    Check(watch.events == 6 and watch.checks == 4 and watch.changes == 0, flavor .. ": six events, two bursts read, no change and no first reading")
+
+    -- A login: the client fills the list in two pieces, the second after the world is there.
+    watcher = Start(flavor, true, true)
+    AsRemembered()
+    local late = { table.remove(state.factions), table.remove(state.factions) }
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Advance(2)
+    table.insert(state.factions, late[2])
+    table.insert(state.factions, late[1])
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 0, flavor .. ": the rest of the list coming after the world is no change")
+    Equal(Watched(watcher, "reputation").changes, 0, flavor .. ": for the watch either")
+
+    -- A standing that changed where the addon did not see it (another machine, the addon off).
+    watcher = Start(flavor, true, true)
+    AsRemembered()
+    Faction(72).reaction = 6
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[1] and Named("reputation")[1].detail, "faction 72 (Stormwind): 5 -> 6",
+        flavor .. ": a standing that is not the one remembered is a change at the session's first check")
+    Advance(1)
+    -- A faction met in a later session has still never been read.
+    table.insert(state.factions, { factionID = 910, name = "Brood of Nozdormu", isHeader = false, isHeaderWithRep = false, reaction = 1, points = 0 })
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[2] and Named("reputation")[2].detail, "faction 910 (Brood of Nozdormu): new, 1", flavor .. ": a faction met in a later session is new")
+    Advance(1)
+
+    -- Another toon of the account has standings of its own.
+    watcher = Start(flavor, true, true)
+    state.toon = "Otherone"
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": another toon has nothing remembered, and its list is a change")
+    Equal(CaerdonRefreshData.Farrealm.Otherone.standings[576], 3, flavor .. ": its standings are remembered under its name")
+    Equal(CaerdonRefreshData.Farrealm.Zzyxa.standings[576], 4, flavor .. ": and the first toon's are as they were")
+    -- And so has a toon of the same name on another realm.
+    state.realm, state.toon = "Nearrealm", "Zzyxa"
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 2, flavor .. ": a toon of the same name on another realm is another toon")
+    Equal(CaerdonRefreshData.Nearrealm.Zzyxa.standings[576], 3, flavor .. ": remembered under its realm")
+    Equal(CaerdonRefreshData.Farrealm.Zzyxa.standings[576], 4, flavor .. ": with the first toon's as they were")
+
+    -- A toon the client has no name for yet: nothing remembered can be asked for.
+    watcher = Start(flavor, true, true)
+    AsRemembered()
+    state.toon = nil
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": without a name every faction is new: a refresh too many, not one too few")
+    state.toon = "Unknown"
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": and once only, while the name is the client's word for none")
+    Equal(CaerdonRefreshData.Farrealm.Unknown, nil, flavor .. ": nothing is saved under that word")
+    state.toon = "Zzyxa"
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": with the name there the remembered standings are the ones compared")
+    Equal(#errors, 0, flavor .. ": no error without a name")
+
+    -- Saved data that is not what the addon wrote is replaced, not read.
+    watcher = Start(flavor, true, true)
+    CaerdonRefreshData.Farrealm.Zzyxa = "broken"
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(#Named("reputation"), 1, flavor .. ": a toon's entry that is no table is as nothing remembered")
+    Equal(CaerdonRefreshData.Farrealm.Zzyxa.standings[576], 3, flavor .. ": and is made anew")
+    Equal(CaerdonRefreshData.Farrealm.Otherone.standings[576], 3, flavor .. ": with the other toon's left alone")
+    watcher = Start(flavor, true, true)
+    CaerdonRefreshData = 7
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Equal(type(CaerdonRefreshData), "table", flavor .. ": saved data that is no table is made anew")
+    Equal(#errors, 0, flavor .. ": no error for either")
+
+    -- The saved table is looked up at every check: one loaded after a check replaces the one
+    -- that check made.
+    watcher = Start(flavor, true)
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    CaerdonRefreshData = { Farrealm = { Zzyxa = { standings = { [72] = 5, [576] = 3, [169] = 4, [21] = 3 } } } }
+    Fire("UPDATE_FACTION")
+    Equal(Named("reputation")[2] and Named("reputation")[2].detail, "faction 21 (Booty Bay): 3 -> 4", flavor .. ": the saved table is looked up at every check")
+    Advance(1)
+    Equal(CaerdonRefreshData.Farrealm.Zzyxa.standings[21], 4, flavor .. ": and written to")
 end
 
 -- Friendships and renown, which the standing's number does not tell.
 do
+    local function AddRetailFactions()
+        table.insert(state.factions, { factionID = 1358, name = "Nat Pagle", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 8400 })
+        table.insert(state.factions, { factionID = 2507, name = "Dragonscale Expedition", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 0 })
+    end
     local watcher = Start("retail", true)
-    table.insert(state.factions, { factionID = 1358, name = "Nat Pagle", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 8400 })
-    table.insert(state.factions, { factionID = 2507, name = "Dragonscale Expedition", isHeader = false, isHeaderWithRep = false, reaction = 5, points = 0 })
+    AddRetailFactions()
     state.friendships[1358] = "Buddy"
     state.renown[2507] = 11
     Fire("PLAYER_ENTERING_WORLD", true, false)
     Advance(1)
-    Equal(#Named("reputation"), 1, "retail: the first reading")
+    Equal(#Named("reputation"), 1, "retail: with nothing remembered the list is a change, at the world's arrival where no faction event came before")
 
     state.friendships[1358] = "Friend"
     Fire("UPDATE_FACTION")
@@ -638,6 +775,23 @@ do
     Advance(1)
     Equal(Watched(watcher, "reputation").changes, 5, "five changes in all")
     Equal(#errors, 0, "nothing raised")
+
+    -- A rank's name and a renown level are remembered as they were read.
+    local saved = CaerdonRefreshData.Farrealm.Zzyxa.standings
+    Check(saved[1358] == "Friend" and saved[2507] == "renown 12" and saved[2600] == "renown 1", "a rank's name and a renown level are remembered as read")
+    watcher = Start("retail", true, true)
+    AddRetailFactions()
+    table.insert(state.factions, { factionID = 2600, name = "The Severed Threads", isHeader = false, isHeaderWithRep = false, reaction = 4, points = 0 })
+    state.friendships[1358], state.renown[2507], state.renown[2600] = "Friend", 12, 1
+    Fire("UPDATE_FACTION")
+    Advance(1)
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Advance(1)
+    Equal(#Named("reputation"), 0, "and the next session that finds them so refreshes nothing")
+    state.renown[2507] = 13
+    Fire("MAJOR_FACTION_RENOWN_LEVEL_CHANGED", 2507, 13, 12)
+    Equal(Named("reputation")[1] and Named("reputation")[1].detail, "faction 2507 (Dragonscale Expedition): renown 12 -> renown 13", "a level reached in it is compared with the one remembered")
+    Advance(1)
 end
 
 -- A client with the list and neither of the other two namespaces reads standings alone.
@@ -654,11 +808,14 @@ do
     Check(watcher ~= nil, "the watcher is there")
 end
 
--- Without the list's functions there is no watch, and no first reading of nothing.
+-- Without the list's functions there is no watch, and nothing is saved.
 do
     local watcher = Start("forever")
     Check(Watched(watcher, "reputation") == nil, "a client with no faction list has no reputation watch")
     Check(frame.events.UPDATE_FACTION == nil, "and the faction event is not asked for")
+    Fire("PLAYER_ENTERING_WORLD", true, false)
+    Advance(1)
+    Equal(CaerdonRefreshData, nil, "and nothing is saved")
 end
 
 print(("%d checks, %d failed"):format(checks, failures))
