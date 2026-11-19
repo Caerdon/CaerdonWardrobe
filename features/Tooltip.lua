@@ -449,13 +449,35 @@ local function PieceLevelOf(tooltip)
     return nil
 end
 
--- An item for the link a tooltip shows: the one it had where link and level are the same.
+-- The suffix the key of such a tooltip names, where it names one, and the name the piece has
+-- with it: the auction house's own for the key. The link the tooltip shows is the item's
+-- without the suffix, and the item is told that as well (extraData.keySuffix, keyName).
+local function PieceSuffixOf(tooltip)
+    local info = tooltip.GetPrimaryTooltipInfo and tooltip:GetPrimaryTooltipInfo()
+    if type(info) ~= "table" or info.getterName ~= "GetItemKey" or type(info.getterArgs) ~= "table" then
+        return nil
+    end
+    local suffix = tonumber(info.getterArgs[3])
+    if not suffix or suffix == 0 then
+        return nil
+    end
+    local keyInfo = C_AuctionHouse and C_AuctionHouse.GetItemKeyInfo and C_AuctionHouse.GetItemKeyInfo({
+        itemID = info.getterArgs[1], itemLevel = info.getterArgs[2], itemSuffix = suffix })
+    return suffix, keyInfo and keyInfo.itemName or nil
+end
+
+-- An item for the link a tooltip shows: the one it had where the link and what its key says
+-- of the piece are the same.
 local function ItemForTooltip(tooltip, link, had)
     local level = PieceLevelOf(tooltip)
-    if had and had:GetItemLink() == link and (had.extraData and had.extraData.overrideItemLevel or nil) == level then
+    local suffix, name = PieceSuffixOf(tooltip)
+    local hadData = had and had.extraData
+    if had and had:GetItemLink() == link and (hadData and hadData.overrideItemLevel or nil) == level and
+        (hadData and hadData.keySuffix or nil) == suffix and (hadData and hadData.keyName or nil) == name then
         return had
     end
-    return CaerdonItem:CreateFromItemLink(link, level and { overrideItemLevel = level } or nil)
+    local extraData = (level or suffix) and { overrideItemLevel = level, keySuffix = suffix, keyName = name } or nil
+    return CaerdonItem:CreateFromItemLink(link, extraData)
 end
 
 local function ShowItemTooltip(tooltip)
@@ -712,14 +734,32 @@ local function IsWornGain(upgrade)
     return upgrade.worn == true and upgrade.otherSpecs == nil
 end
 
+-- A piece the toon has not the level for yet (atLevel on the entry) is an upgrade to come.
+-- Its line stands, so that Pawn's own note for the scale does not stand in its place, with
+-- the mark the addon has for "usable later" where the arrow would be and the level after the
+-- gain (author decision).
+local LATER_MARK = "|TInterface\\WorldMap\\Gear_64Grey:0:0:0:0:64:64:6:58:6:58|t"
+local function GainMark(upgrade)
+    if type(upgrade.atLevel) == "number" then
+        return LATER_MARK
+    end
+    return IsWornGain(upgrade) and WORN_ARROW or LOADOUT_ARROW
+end
+local function LaterNote(upgrade)
+    if type(upgrade.atLevel) ~= "number" then
+        return ""
+    end
+    return format("  |cff%s%s|r", NOTE_COLOUR, format(L["(at level %d)"], upgrade.atLevel))
+end
+
 local function AddUpgradeLine(tooltip, upgrade)
     local icon = upgrade.icon and format("|T%s:0|t ", tostring(upgrade.icon)) or ""
     -- No percentage against a piece the scale gives no value.
     local gain = upgrade.percent and format(L["+%d%% upgrade"], upgrade.percent) or L["upgrade"]
     local worn = IsWornGain(upgrade)
-    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
-        tostring(upgrade.name), worn and WORN_ARROW or LOADOUT_ARROW,
-        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, OtherSpecNote(upgrade)), 1, 1, 1, true)
+    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
+        tostring(upgrade.name), GainMark(upgrade),
+        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, OtherSpecNote(upgrade), LaterNote(upgrade)), 1, 1, 1, true)
 end
 
 -- The lines by themselves, with Pawn's own lines left as they are: one is left out where
@@ -817,9 +857,9 @@ local function AddReplacementLine(tooltip, gain)
     local text
     if gain.upgrade then
         local worn = IsWornGain(gain)
-        text = format("%s|cff%s%s|r%s", worn and WORN_ARROW or LOADOUT_ARROW,
+        text = format("%s|cff%s%s|r%s%s", GainMark(gain),
             worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
-            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], OtherSpecNote(gain))
+            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], OtherSpecNote(gain), LaterNote(gain))
     else
         text = format("|cff%s%s|r", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"])
     end
@@ -835,7 +875,7 @@ function TooltipMixin:GetShortGainText(gain)
         return nil
     end
     local worn = IsWornGain(gain)
-    return format("%s|cff%s%s|r", worn and WORN_ARROW or LOADOUT_ARROW, worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
+    return format("%s|cff%s%s|r", GainMark(gain), worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
         gain.percent and format("%+d%%", gain.percent) or L["upgrade"])
 end
 

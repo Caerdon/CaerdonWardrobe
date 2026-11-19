@@ -213,7 +213,7 @@ function CaerdonWardrobeConfigIcons:Register()
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
         title = "Upgrade",
-        description = "Gear better than what is equipped. Yellow: Pawn says so. Green: higher item level. Red: for another spec or gear set. On an item that also has a look to learn, the arrow sits on that icon as a small badge.",
+        description = "Gear better than what is equipped. Yellow: Pawn says so. Green: higher item level. Red: for another spec or gear set. A grey gear in its place: not until you reach its level. On an item that also has a look to learn, the arrow sits on that icon as a small badge.",
         texture = "Interface\\Buttons\\JumpUpArrow",
         coords = ARROW_COORDS,
         color = { 0.4, 1, 0.2 },

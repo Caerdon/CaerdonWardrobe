@@ -144,6 +144,9 @@ return function(H, S)
     -- options.noPawnTooltipStep: a Pawn without the function its tooltip lines are added in.
     local function Start(options)
         local game = H.StockGame(TOON, Items())
+        -- A retail client, with specializations: the stock game says it is WoW Forever.
+        game:Set("GetBuildInfo", function() return "12.1.5", "70961", "Nov 1 2026", 120105 end)
+        game:Set("WOW_PROJECT_ID", 1)
         local world = { game = game, spec = 3, lootSpec = 0, visible = {}, upgradeFor = {}, refreshes = {} }
         -- What is worn, by inventory slot (the chest slot holds the worn jerkin), and what lies
         -- in bag 0, by slot (the other spec's jerkin).
@@ -412,6 +415,7 @@ return function(H, S)
     Automatic(false)
     Equal(#world.client.errors, 0, "start: no error reached the error handler")
     Check(world.env.CaerdonAPI:GetTalentTrees() == nil, "start: this client has no talent tree groups")
+    Equal(world.env.CaerdonAPI:IsForeverClient(), false, "start: and is not WoW Forever")
     Equal(world.env.CaerdonAPI:GetPlayerSpecializationIndex(), 3, "start: and the toon plays its third spec")
 
     -- 1. Feral's and Guardian's scales both visible, playing Guardian.
@@ -531,12 +535,13 @@ return function(H, S)
     -- worn piece's 12, and its arrow is the plain item's too: neither is asked.
     world.values = { [940001] = 10, [940002] = 12 }
     do
-        local function Row(level, upgradeFor)
+        local function Row(level, upgradeFor, suffix, name)
             world.visible, world.upgradeFor = { [GUARDIAN] = true }, {}
             for _, name in ipairs(upgradeFor or {}) do world.upgradeFor[name] = true end
             world.env.CaerdonWardrobe:RefreshItems("test")
             world.client:Tick(10)
-            local item = world.env.CaerdonItem:CreateFromItemLink(world.game.Link(940001), { overrideItemLevel = level })
+            local item = world.env.CaerdonItem:CreateFromItemLink(world.game.Link(940001),
+                { overrideItemLevel = level, keySuffix = suffix, keyName = name })
             local loaded = false
             item:ContinueOnItemLoad(function() loaded = true end)
             world.client:TickUntil(function() return loaded end, 10)
@@ -566,6 +571,116 @@ return function(H, S)
         Equal(row.isUpgrade, nil, "row: so Pawn's scores stand against the level")
         row = Row(150)
         Equal(row.isUpgrade, nil, "row: a row below the worn piece's level is no upgrade")
+
+        -- A row whose key names a suffix ("of the Monkey"): the link the client gives for the
+        -- key is the item's without it, at the piece's own level. By its name it is not the
+        -- piece's: Pawn is not asked, and the level decides (200 against the worn 190).
+        row, rowItem = Row(200)
+        local linkName = rowItem:GetItemName()
+        Check(type(linkName) == "string" and linkName ~= "", "suffix: the link has a name (" .. tostring(linkName) .. ")")
+        row, rowItem = Row(200, nil, 12721, tostring(linkName) .. " of the Monkey")
+        Equal(row.pawnPrefersEquipped, false, "suffix: Pawn's scores of the link are not asked for a row named with a suffix")
+        Equal(row.isUpgrade, true, "suffix: its item level decides")
+        Equal(row.upgradeItemLevelDelta, 10, "suffix: with the gain of the row's own level")
+        Check(tostring(row.pawnComparison):find("without the suffix the row names", 1, true) ~= nil,
+            "suffix: and the export says why: " .. tostring(row.pawnComparison))
+        Equal(world.env.CaerdonEquipment:IsKnownByItsOwnLink(rowItem), false, "suffix: the row is not known by its own link")
+        gains, why = world.env.CaerdonEquipment:GetReplacementGains(rowItem, world.env.CaerdonItem:CreateFromItemID(940002))
+        Check(gains == nil and tostring(why):find("not the piece's", 1, true) ~= nil,
+            "suffix: no scored line beside the worn piece: " .. tostring(why))
+        row = Row(200, { GUARDIAN }, 12721, tostring(linkName) .. " of the Monkey")
+        Equal(row.pawnIdentifiedUpgrade, false, "suffix: Pawn's arrow for the item without the suffix is not the row's")
+        Equal(row.isUpgrade, true, "suffix: the item level still is")
+        -- A name that is not known counts as another.
+        row = Row(200, nil, 12721, nil)
+        Equal(row.pawnPrefersEquipped, false, "suffix: nor is Pawn asked while the row's name is not known")
+        Equal(row.isUpgrade, true, "suffix: the level decides then too")
+        -- A link that carries the suffix has the row's name: it is the piece, and Pawn is asked.
+        row, rowItem = Row(200, nil, 12721, linkName)
+        Equal(row.pawnPrefersEquipped, true, "suffix: a link of the row's own name is judged as ever")
+        Equal(world.env.CaerdonEquipment:IsKnownByItsOwnLink(rowItem), true, "suffix: and is known by its own link")
+        -- A key that names no suffix (0) is judged by its level alone.
+        row = Row(200, nil, 0, "another name")
+        Equal(row.pawnPrefersEquipped, true, "suffix: a key that names none is not told apart by a name")
+        -- The level still comes first, and says so.
+        row = Row(260, nil, 12721, tostring(linkName) .. " of the Monkey")
+        Check(tostring(row.pawnComparison):find("at another item level", 1, true) ~= nil,
+            "suffix: a row at another level says the level: " .. tostring(row.pawnComparison))
+
+        -- A client with talent trees (WoW Forever) has no spec to go by: the tree with the
+        -- most points is taken for what the toon plays, and what is worn is scored on the
+        -- scale Pawn ships for that tree. The druid's second tree has two scales, damage
+        -- (Feral, 2) and tank (Guardian, 3): the one Pawn shows, then the lower number.
+        local api = world.env.CaerdonAPI
+        local hadTrees, hadPrimary = api.GetTalentTrees, api.GetPrimaryTalentTree
+        local TREES = { "Balance", "Feral Combat", "Restoration" }
+        local leading = 2
+        api.GetTalentTrees = function()
+            return { { index = 1, name = TREES[1], spent = 0 }, { index = 2, name = TREES[2], spent = 11 },
+                { index = 3, name = TREES[3], spent = 0 } }
+        end
+        api.GetPrimaryTalentTree = function()
+            if leading then
+                return leading, TREES[leading], 11, 3
+            end
+        end
+        local function Gain(visible)
+            world.visible = {}
+            for _, name in ipairs(visible) do world.visible[name] = true end
+            PawnChanged(world)
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            local item = world.env.CaerdonItem:CreateFromItemLink(world.game.Link(940001))
+            local loaded = false
+            item:ContinueOnItemLoad(function() loaded = true end)
+            world.client:TickUntil(function() return loaded end, 10)
+            local found, reason = world.env.CaerdonEquipment:GetReplacementGains(item, world.env.CaerdonItem:CreateFromItemID(940002))
+            return found and found[1] or nil, reason
+        end
+        world.scaleValues = { [FERAL] = { [940001] = 30, [940002] = 12 }, [GUARDIAN] = { [940001] = 15, [940002] = 12 } }
+        local gain
+        gain, why = Gain({ GUARDIAN })
+        Equal(world.env.CaerdonEquipment:CanScoreWornGear(), true, "trees: what is worn can be scored on a client with talent trees")
+        Check(gain ~= nil and gain.worn == true and gain.percent == 25 and gain.name == "Feral Combat",
+            "trees: on the leading tree's scale that Pawn shows, named by the tree (" ..
+            tostring(gain and gain.percent) .. ", " .. tostring(gain and gain.name) .. ", " .. tostring(why) .. ")")
+        gain = Gain({ FERAL, GUARDIAN })
+        Check(gain ~= nil and gain.percent == 150, "trees: of two shown scales of the tree, the lower number's (" .. tostring(gain and gain.percent) .. ")")
+        gain = Gain({})
+        Check(gain ~= nil and gain.percent == 150, "trees: and so with neither shown (" .. tostring(gain and gain.percent) .. ")")
+        gain = Gain({ FERAL })
+        Check(gain ~= nil and gain.percent == 150, "trees: the one shown, where it is the lower number's too")
+        -- The tooltip's own list has what is worn, where Pawn names the scale for the piece.
+        world.visible, world.upgradeFor = { [GUARDIAN] = true }, { [GUARDIAN] = true }
+        PawnChanged(world)
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        local treeItem = world.env.CaerdonItem:CreateFromItemLink(world.game.Link(940001))
+        local treeList = world.env.CaerdonEquipment:GetLoadoutUpgradeList(treeItem)
+        Check(type(treeList) == "table" and #treeList == 1 and treeList[1].worn == true and treeList[1].percent == 25 and
+            treeList[1].name == "Feral Combat", "trees: the item tooltip's list has what is worn, and nothing else")
+        world.upgradeFor = {}
+        -- A tree with no scale of Pawn's (Balance has none here): nothing, and why.
+        leading = 1
+        gain, why = Gain({ GUARDIAN })
+        Check(gain == nil and tostring(why):find("no scale for the leading tree", 1, true) ~= nil,
+            "trees: nothing where Pawn has no scale for the leading tree: " .. tostring(why))
+        Equal(world.env.CaerdonEquipment:CanScoreWornGear(), false, "trees: and nothing can be scored then")
+        -- No tree leads (no points spent, or a tie): nothing.
+        leading = nil
+        gain, why = Gain({ GUARDIAN })
+        Check(gain == nil and tostring(why):find("no talent tree leads", 1, true) ~= nil,
+            "trees: nothing where no tree leads: " .. tostring(why))
+        -- Another class's scale for the same number is not the toon's.
+        leading = 1
+        world.visible = { [MAGE] = true }
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        Equal(world.env.CaerdonEquipment:CanScoreWornGear(), false, "trees: a scale of another class is not the tree's")
+        api.GetTalentTrees, api.GetPrimaryTalentTree = hadTrees, hadPrimary
+        world.scaleValues = nil
+        world.visible = { [GUARDIAN] = true }
+        PawnChanged(world)
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        gains, why = world.env.CaerdonEquipment:GetReplacementGains(rowItem, world.env.CaerdonItem:CreateFromItemID(940002))
+        Check(not tostring(why):find("talent tree", 1, true), "trees: and a client with specializations is as it was: " .. tostring(why))
     end
     world.values = nil
 
@@ -1438,6 +1553,62 @@ return function(H, S)
         Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "+150% upgrade", true),
             "worn: to the addon's line, named for the spec while no gear set is being worn")
         Equal(#shown.lines, 1, "worn: one line")
+
+        -- A piece the toon has not the level for yet is an upgrade to come: the line stands,
+        -- with the mark for "usable later" where the arrow would be and the level after the
+        -- gain, and Pawn's note still gives way to it.
+        local minLevel = piece:GetMinLevel()
+        Check(type(minLevel) == "number" and minLevel > 1, "later: the piece asks for a level (" .. tostring(minLevel) .. ")")
+        rawset(world.env, "UnitLevel", function() return 1 end)
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        local later = tostring(shown.lines[1])
+        Check(#shown.lines == 1 and later:find("Gear_64Grey", 1, true) ~= nil and not later:find("JumpUpArrow", 1, true),
+            "later: the line has the mark for later in the arrow's place (" .. later .. ")")
+        Check(later:find("+150% upgrade", 1, true) ~= nil and
+            later:find("(at level " .. tostring(minLevel) .. ")", 1, true) ~= nil, "later: with the gain, and the level after it")
+        Equal(step.scales, "", "later: Pawn's note for the scale gives way to it as well")
+        local laterList = world.env.CaerdonEquipment:GetLoadoutUpgradeList(piece)
+        Equal(laterList and laterList[1].atLevel, minLevel, "later: the entry says the level")
+        local laterGains = world.env.CaerdonEquipment:GetReplacementGains(piece, world.env.CaerdonItem:CreateFromItemID(940002))
+        Equal(laterGains and laterGains[1].atLevel, minLevel, "later: and so does the one for a comparison")
+        local short = tostring(feature:GetShortGainText({ upgrade = true, percent = 12, worn = true, atLevel = minLevel }))
+        Check(short:find("Gear_64Grey", 1, true) ~= nil and short:find("+12%", 1, true) ~= nil and
+            not short:find("JumpUpArrow", 1, true), "later: a listing's short text has the mark too (" .. short .. ")")
+        rawset(world.env, "UnitLevel", nil)
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "+150% upgrade", true), "later: at its level the line is as it was")
+        Equal(world.env.CaerdonEquipment:GetLoadoutUpgradeList(piece)[1].atLevel, nil, "later: and the entry says no level")
+
+        -- Nothing is worn in the piece's slot: it fills the slot, and the line says "upgrade"
+        -- with no percentage, in the place of Pawn's note.
+        local wornChest = world.worn[5]
+        Check(wornChest ~= nil, "empty: the jerkin's slot has a piece on")
+        world.worn[5] = nil
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "upgrade", true), "empty: a piece for a slot with nothing on has the line, with no percentage")
+        Equal(#shown.lines, 1, "empty: one line")
+        Equal(step.scales, "", "empty: and Pawn's note gives way to it")
+        local emptyList = world.env.CaerdonEquipment:GetLoadoutUpgradeList(piece)
+        Check(emptyList ~= nil and emptyList[1].emptySlot == true and emptyList[1].percent == nil and emptyList[1].worn == true,
+            "empty: the entry says the slot is empty")
+        -- Not where Pawn does not call the piece an upgrade for the scale.
+        step = Shown({ GUARDIAN }, {})
+        Check(#shown.lines == 1 and shown.lines[1] == "pawn: " .. GUARDIAN and step.scales == GUARDIAN,
+            "empty: where Pawn does not name the scale for the piece the addon has no line, and the note Pawn was handed stays")
+        world.worn[5] = wornChest
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "+150% upgrade", true), "empty: with the slot filled the line is as it was")
+        -- A slot with a piece on that Pawn has no value for is not an empty one: nothing is
+        -- said of it, and Pawn's note stays.
+        world.scaleValues[GUARDIAN][940002] = nil
+        PawnChanged(world)
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        Check(#shown.lines == 1 and shown.lines[1] == "pawn: " .. GUARDIAN and step.scales == GUARDIAN,
+            "empty: a worn piece Pawn has no value for is not an empty slot (" .. tostring(shown.lines[1]) .. ")")
+        world.scaleValues[GUARDIAN][940002] = 12
+        PawnChanged(world)
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "+150% upgrade", true), "empty: and with its value back the line is too")
         -- The same link standing for a piece of another level (an auction row by item key):
         -- nothing is scored off it.
         Check(world.env.CaerdonEquipment:GetLoadoutUpgradeList(piece) ~= nil, "row: the piece itself has its line")
@@ -2099,6 +2270,61 @@ return function(H, S)
             rawset(world.env, "PawnShouldItemLinkHaveUpgradeArrowUnbudgeted", pawnArrow)
             world.env.C_Item.GetItemInfoInstant, world.env.C_Item.GetItemInfo = instant, itemInfo
             world.env.C_TooltipInfo.GetItemByID = tooltipByID
+
+            -- A piece with no look (the band) has no source to say whether the toon can use
+            -- it: the equip slot line of its tooltip does. A type the client refuses is no
+            -- upgrade and has no level gain, whatever Pawn says and whatever its level.
+            local byLink = world.env.C_TooltipInfo.GetHyperlink
+            local typeLine = { type = EQUIP_SLOT, isValidItemType = true }
+            world.env.C_TooltipInfo.GetHyperlink = function(link)
+                local data = byLink(link)
+                local lines = { typeLine }
+                for _, line in ipairs(type(data) == "table" and data.lines or {}) do lines[#lines + 1] = line end
+                return { type = 0, lines = lines }
+            end
+            info = Info(world, { GUARDIAN }, { GUARDIAN }, 940014)
+            Equal(info.isTransmog, false, "type: the band has no look")
+            Equal(info.isUpgrade, true, "type: a piece with no look whose type the client accepts is the upgrade Pawn says it is")
+            Equal(info.canEquipForPlayer, true, "type: and one the toon can use")
+            Equal(info.typeRefused, nil, "type: and its type is not said to be refused")
+            typeLine.isValidItemType = false
+            info = Info(world, { GUARDIAN }, { GUARDIAN }, 940014)
+            Equal(info.typeRefused, true, "type: a type the client refuses is said to be")
+            Equal(info.isUpgrade, nil, "type: a type the client refuses is no upgrade (another class's relic)")
+            Equal(info.canEquipForPlayer, false, "type: the toon cannot use it")
+            Equal(info.upgradeItemLevelDelta, nil, "type: and it has no level gain")
+            typeLine.isValidItemType = nil
+            typeLine.rightColor = { GetRGB = function() return 1, 0.125, 0.125 end }
+            info = Info(world, { GUARDIAN }, { GUARDIAN }, 940014)
+            Equal(info.isUpgrade, nil, "type: so with the type in red, where the client has no field for it")
+            typeLine.rightColor = { GetRGB = function() return 1, 1, 1 end }
+            info = Info(world, { GUARDIAN }, { GUARDIAN }, 940014)
+            Equal(info.isUpgrade, true, "type: and a type in white is the toon's")
+            -- With its level not reached either, a piece of the toon's type is one for later,
+            -- and one of a type the client refuses is not: no level makes it the toon's.
+            local function StatusOf(itemID)
+                world.env.CaerdonWardrobe:RefreshItems("test")
+                local item = world.env.CaerdonItem:CreateFromItemID(itemID)
+                local ready, status
+                world.client:TickUntil(function()
+                    ready, status = item:GetCaerdonStatus()
+                    return ready
+                end, 10)
+                return ready and tostring(status) or "<not ready>"
+            end
+            rawset(world.env, "UnitLevel", function() return 1 end)
+            world.visible, world.upgradeFor = { [GUARDIAN] = true }, {}
+            typeLine.isValidItemType, typeLine.rightColor = true, nil
+            local laterStatus = StatusOf(940014)
+            Check(laterStatus == "lowSkill" or laterStatus == "upgradeLowSkill",
+                "type: a piece of the toon's type, of a level to come, is one for later (" .. laterStatus .. ")")
+            typeLine.isValidItemType = false
+            local refusedStatus = StatusOf(940014)
+            Check(refusedStatus ~= "lowSkill" and refusedStatus ~= "upgradeLowSkill" and refusedStatus ~= "upgrade" and
+                refusedStatus ~= "<not ready>", "type: one of a type the client refuses is not (" .. refusedStatus .. ")")
+            rawset(world.env, "UnitLevel", nil)
+            world.env.C_TooltipInfo.GetHyperlink = byLink
+            info = Info(world, { GUARDIAN }, {}, 940014)
             info = Info(world, { GUARDIAN }, {}, 940014)
             rawset(world.env, "C_AuctionHouse", nil)
             subSelected = nil
@@ -2282,6 +2508,42 @@ return function(H, S)
             world.env.AuctionHouseFrame.BrowseResultsFrame = hadBrowseFrame
             auction.rowsOfOwnLink, auction.resultsUpgradeHeldBack = nil, nil
             icon.ShowItemLevelUpgrades, icon.ShowUpgradeLevelDelta = hadItemLevel, hadGain
+
+            -- A row's key names a suffix: the item made for the row is told, with the name the
+            -- auction house has for the key, by each way a row's item is made.
+            local keyInfo = { itemName = "The Band of the Monkey" }
+            rawset(world.env, "C_AuctionHouse", {
+                GetItemKeyInfo = function() return keyInfo end,
+                GetItemKeyRequiredLevel = function() return 0 end,
+            })
+            local suffixKey = { itemID = 940014, itemLevel = 190, itemSuffix = 12721, battlePetSpeciesID = 0 }
+            local made = auction:MakeItemForKey(suffixKey)
+            Check(made.extraData.overrideItemLevel == 190 and made.extraData.keySuffix == 12721 and
+                made.extraData.keyName == "The Band of the Monkey",
+                "suffix: an item made for a key is told the key's suffix and the name it has with it")
+            made = auction:MakeItemForKey({ itemID = 940014, itemLevel = 190, itemSuffix = 0 })
+            Check(made.extraData.keySuffix == nil and made.extraData.keyName == nil, "suffix: a key that names none says nothing of one")
+            -- A row of the results, whose item is made from the link of the key's tooltip.
+            local keyTooltip = world.env.C_TooltipInfo.GetItemKey
+            world.env.C_TooltipInfo.GetItemKey = function() return { hyperlink = world.game.Link(940014) } end
+            local suffixRow = world.client:NewFrame("Button")
+            suffixRow.rowData = { itemKey = suffixKey }
+            auction.resultsKinds, auction.resultsUpgradeLeft = "icon", nil
+            auction:ProcessItemKeyInfo(suffixKey, keyInfo, suffixRow)
+            world.client:TickUntil(function() return asked[suffixRow] ~= nil end, 10)
+            local rowAsked = asked[suffixRow] and asked[suffixRow].item
+            Check(rowAsked ~= nil and rowAsked.extraData.keySuffix == 12721 and
+                rowAsked.extraData.keyName == "The Band of the Monkey" and rowAsked.extraData.overrideItemLevel == 190,
+                "suffix: a row of the results is asked for with its key's suffix and name")
+            Equal(rowAsked ~= nil and equipment:IsKnownByItsOwnLink(rowAsked), false, "suffix: and its link is not taken for the piece's")
+            local plainRow = world.client:NewFrame("Button")
+            plainRow.rowData = { itemKey = rowKey }
+            auction:ProcessItemKeyInfo(rowKey, { itemName = "another name" }, plainRow)
+            world.client:TickUntil(function() return asked[plainRow] ~= nil end, 10)
+            Check(asked[plainRow] ~= nil and asked[plainRow].item.extraData.keySuffix == nil and
+                asked[plainRow].item.extraData.keyName == nil, "suffix: a row whose key names none is asked for without one")
+            world.env.C_TooltipInfo.GetItemKey = keyTooltip
+            auction.resultsKinds, auction.resultsUpgradeLeft = nil, nil
             rawset(world.env, "C_AuctionHouse", nil)
             core.ClearButton = nil
             auction.resultsKinds, auction.resultsUpgradeLeft = nil, nil
@@ -2301,6 +2563,30 @@ return function(H, S)
         primary.info = { getterName = "GetItemKey", getterArgs = { 940014, 190, 0, 80 } }
         Equal(Beside(beside2, ring2), Line("8ec3e6", nil, "Guardian", "+25% upgrade", true),
             "replacing: the line where the key's level is the link's own")
+        -- A key that names a suffix: the link the tooltip shows is the item's without it, by
+        -- its name, and nothing is scored off it. A link of the key's own name is the piece.
+        local ringName = world.env.C_Item.GetItemInfo(world.game.Link(940014))
+        local keyNamed = tostring(ringName) .. " of the Monkey"
+        rawset(world.env, "C_AuctionHouse", { GetItemKeyInfo = function(key)
+            return key.itemID == 940014 and key.itemLevel == 190 and key.itemSuffix == 12721 and { itemName = keyNamed } or nil
+        end })
+        primary.info = { getterName = "GetItemKey", getterArgs = { 940014, 190, 12721, 80 } }
+        Equal(Beside(beside2, ring2), "", "replacing: nothing beside a tooltip filled by a key with a suffix its link does not carry")
+        keyNamed = ringName
+        Equal(Beside(beside2, ring2), Line("8ec3e6", nil, "Guardian", "+25% upgrade", true),
+            "replacing: the line where the link has the name the key has")
+        rawset(world.env, "C_AuctionHouse", nil)
+        Equal(Beside(beside2, ring2), "", "replacing: nothing while the name the key has is not known")
+        local keyAsks = 0
+        rawset(world.env, "C_AuctionHouse", { GetItemKeyInfo = function()
+            keyAsks = keyAsks + 1
+            return { itemName = "another name" }
+        end })
+        primary.info = { getterName = "GetItemKey", getterArgs = { 940014, 190, 0, 80 } }
+        Equal(Beside(beside2, ring2), Line("8ec3e6", nil, "Guardian", "+25% upgrade", true),
+            "replacing: the line again for a key that names no suffix")
+        Equal(keyAsks, 0, "replacing: and such a key is not asked for a name")
+        rawset(world.env, "C_AuctionHouse", nil)
         primary.info = { getterName = "GetHyperlink", getterArgs = { "a link", 260 } }
         Equal(Beside(beside2, ring2), Line("8ec3e6", nil, "Guardian", "+25% upgrade", true),
             "replacing: and for a tooltip filled another way, whatever its second argument")

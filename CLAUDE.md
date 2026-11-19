@@ -62,7 +62,7 @@ Each later step only replaces the statuses listed, so an upgrade keeps its icon,
 10. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
 11. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
-The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|x` for a season's armor that lies in a slot and may go to the Catalyst, `|e<sets>` for a piece equipment sets hold, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` for a row whose window passed a source or an item level) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 11 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
+The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|x` for a season's armor that lies in a slot and may go to the Catalyst, `|e<sets>` for a piece equipment sets hold, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` / `|k<suffix>` for a row whose window passed a source, an item level or a key's suffix) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 11 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
 
 ## Rules
 
@@ -70,6 +70,7 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 - **Retail and Forever share one code base and TOC.** Check an API, event, enum value, global string or hooked Blizzard function against both flavors' source before relying on it, then confirm in each client. Text differs between them (retail "Warbound", Forever "Account bound"), so a fixture or expected value belongs to one flavor.
 - **Feature detection, not flavor checks.** `CaerdonAPI:IsForeverClient()` is for reporting. `select(4, GetBuildInfo())` is `16001` on Forever, so a `>= 110000` gate is false there: use one only for features Forever really lacks (housing), never to pick an API path.
 - **Legacy globals:** many undocumented ones still exist on Forever, but confirm each by finding a call in Blizzard's camelot-loaded Lua. Never call `GetSpecialization`, `GetSpecializationInfo` or `GetSpecializationInfoByID` directly; use the `CaerdonAPI` wrappers.
+- **A look the toon can collect is `own`, whatever the piece asks for** (a level, a standing): selling the piece teaches it, in both clients. `lowSkill` is not for looks (notes: Transmog on Forever).
 - **Investigating an item:** extend the Copy Details export instead of adding prints. Keep additions structured and readable.
 - **New item signals** go through the item's data mixin or a signal module with a `CaerdonItemMixin` entry point, never ad-hoc API calls in feature files.
 - **An integration declares its hook points and notes each one** (`Mixin.integration`, `self:NoteHookPoint(label, owner, key)` on the line before it attaches). That is how a user's export says the other addon changed (notes: Integration Report).
@@ -97,7 +98,7 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 A mainline-family client: retail 12.x UI architecture running classic-era content, supported from the same code base and TOC. Game type `camelot`, `WOW_PROJECT_ID` 18, `## Interface: 16001`.
 
 - **Not loaded:** Blizzard_EncounterJournal, Blizzard_GarrisonUI, Blizzard_Housing*, Blizzard_ExpansionTrial. Blizzard TOCs gate with `AllowLoadGameType` (`mainline` includes camelot, `standard` is retail only); Forever overrides live in `Camelot/` folders.
-- **No specializations.** One trait tree per class in three groups; `CaerdonAPI:GetTalentTrees()` / `GetPrimaryTalentTree()`.
+- **No specializations.** One trait tree per class in three groups; `CaerdonAPI:GetTalentTrees()` / `GetPrimaryTalentTree()`. Where a feature goes by the spec being played, the tree with the most points stands in for it (notes: Upgrades), and the feature is not finished until Forever has it.
 - **Selling an item to a vendor teaches its appearance,** whatever the class. The transmog collect APIs do not reflect that.
 - **Classic armor proficiency** (mail and plate at 40) is invisible to the transmog APIs. Red tooltip text is the authority for "can equip now".
 - **Classic stats are "Equip:" lines:** spell power, attack power, crit and the like come as green "Equip:" lines of type `None`, built from the client's `TOOLTIP_ITEM_STAT_*` strings. A real effect is typed `ItemSpellTriggerOnEquip` (notes: Sellable Rules).

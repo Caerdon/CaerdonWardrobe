@@ -1908,7 +1908,12 @@ end
 -- An item in a bag or equipment slot has two tooltips: the slot's, which knows that copy
 -- (bound, locked, durability), and the bare link's, which is the one the status is computed
 -- from. The link's lines are printed only where they differ from the slot's.
-function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation)
+--
+-- itemKey: a row the auction house names by item key ({ itemID, itemLevel, itemSuffix }). Its
+-- tooltip is filled by the key and is the piece's, which the link the client gives for the
+-- key is not always (another level, a suffix the link lacks): the key's lines are printed
+-- beside the link's, with the link the key's tooltip names.
+function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation, itemKey)
     local rows = {}
     if not C_TooltipInfo then
         return rows
@@ -1955,6 +1960,20 @@ function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation)
         addSection(slotAsked and "[Tooltip Lines (Link)]" or "[Tooltip Lines (Raw)]",
             "C_TooltipInfo.GetHyperlink(link), which the status is computed from", C_TooltipInfo.GetHyperlink(itemLink),
             slotRows)
+    end
+    if type(itemKey) == "table" and C_TooltipInfo.GetItemKey then
+        local requiredLevel
+        if C_AuctionHouse and C_AuctionHouse.GetItemKeyRequiredLevel then
+            local ok, answer = pcall(C_AuctionHouse.GetItemKeyRequiredLevel, itemKey)
+            requiredLevel = ok and answer or nil
+        end
+        local ok, data = pcall(C_TooltipInfo.GetItemKey, itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
+        addSection("[Tooltip Lines (Item Key)]", format("C_TooltipInfo.GetItemKey(%s, %s, %s, %s), what the auction house shows for the row",
+            tostring(itemKey.itemID), tostring(itemKey.itemLevel), tostring(itemKey.itemSuffix), tostring(requiredLevel)),
+            ok and data or ("an error: " .. tostring(data)))
+        local keyLink = ok and type(data) == "table" and data.hyperlink
+        rows[#rows + 1] = { indent = 1, text = "Its Link: " .. tostring(type(keyLink) == "string" and
+            (keyLink:match("|H(.-)|h") or keyLink) or "none") }
     end
     return rows
 end
@@ -2402,6 +2421,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 parts[#parts + 1] = format("item level %s (the link's own: %s)", tostring(extraData.overrideItemLevel),
                     tostring(itemLink and C_Item.GetDetailedItemLevelInfo(itemLink) or "?"))
             end
+            if extraData.keySuffix then
+                parts[#parts + 1] = format("suffix %s, named \"%s\" (the link's name: \"%s\")", tostring(extraData.keySuffix),
+                    tostring(extraData.keyName), tostring(item:GetItemName()))
+            end
             if extraData.appearanceSourceID then
                 parts[#parts + 1] = "appearance source " .. tostring(extraData.appearanceSourceID)
             end
@@ -2468,7 +2491,15 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     end
 
     -- Every tooltip line with every field it carries, for troubleshooting and feature development.
-    for _, row in ipairs(self:GetTooltipReportRows(itemLink, itemLocation)) do
+    local rowKey = nil
+    do
+        -- A level beside the link is passed for a piece named by item key, and by nothing else.
+        local extraData = item.extraData
+        if extraData and extraData.overrideItemLevel and item:GetItemID() then
+            rowKey = { itemID = item:GetItemID(), itemLevel = extraData.overrideItemLevel, itemSuffix = extraData.keySuffix or 0 }
+        end
+    end
+    for _, row in ipairs(self:GetTooltipReportRows(itemLink, itemLocation, rowKey)) do
         addLine(row.indent, row.text)
     end
 
@@ -2758,6 +2789,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "hasMetRequirements", transmogInfo.hasMetRequirements)
         addKV(1, "canEquip", transmogInfo.canEquip)
         addKV(1, "canEquipForPlayer", transmogInfo.canEquipForPlayer)
+        addKV(1, "typeRefused", transmogInfo.typeRefused and
+            "true (a piece with no look, of a type the client's tooltip marks as not the toon's)" or "false")
         addKV(1, "playerCanCollectSource", transmogInfo.playerCanCollectSource)
         addKV(1, "isTransmog", transmogInfo.isTransmog)
         addKV(1, "isUpgrade", transmogInfo.isUpgrade)

@@ -267,9 +267,11 @@ return function(H, S)
     Check(gloves.verdict and gloves.verdict.status ~= vest.verdict.status,
         "record: gloves whose look is known from another item are something else than the vest ("
             .. tostring(gloves.verdict and gloves.verdict.status) .. ")")
-    Check(helm.verdict and helm.verdict.status ~= vest.verdict.status,
-        "record: the helm's red line makes it something else than the vest (" .. tostring(helm.verdict
-            and helm.verdict.status) .. ")")
+    -- Selling a piece teaches its look, so the helm, of a level the toon has not reached, is
+    -- one to learn now as the vest is.
+    Check(helm.verdict and helm.verdict.status == vest.verdict.status and vest.verdict.status == "own",
+        "record: the helm, whose level the toon has not reached, is one to learn now, as the vest is (" ..
+            tostring(helm.verdict and helm.verdict.status) .. ")")
     Check(fang.complete and vest.complete, "record: both went through in one call")
     Equal(fang.attempts, 1, "record: at the first try")
     Check(vest.verdict and vest.verdict.status == "own" and vest.verdict.binding == "BoE",

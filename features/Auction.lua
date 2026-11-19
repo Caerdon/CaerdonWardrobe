@@ -436,14 +436,31 @@ function AuctionMixin:GetListingText(rowData)
 	return text or nil
 end
 
--- An item for an item key, as a row of the results has it (ProcessItemKeyInfo): the level the
--- key names goes beside the link, which is the plain item's, and the look where the row names
--- one.
+-- What a row's key says of its piece that its link does not: a suffix, with the name the
+-- piece has with it, which is the auction house's own for the key ("Praetorian Coif of the
+-- Monkey"). The link the client gives for a key is the item's without the suffix, so the
+-- equipment code is told, and takes the link for another piece's (IsKnownByAnotherLink,
+-- types/EquipmentMixin.lua). itemKeyInfo: asked of the client where the caller has none.
+local function NoteKeySuffix(extraData, itemKey, itemKeyInfo)
+	if type(itemKey.itemSuffix) == "number" and itemKey.itemSuffix ~= 0 then
+		if not itemKeyInfo and C_AuctionHouse and C_AuctionHouse.GetItemKeyInfo then
+			itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(itemKey)
+		end
+		extraData.keySuffix = itemKey.itemSuffix
+		extraData.keyName = itemKeyInfo and itemKeyInfo.itemName or nil
+	end
+	return extraData
+end
+
+-- An item for an item key, as a row of the results has it (ProcessItemKeyInfo): the level and
+-- the suffix the key names go beside the link, which is the plain item's, and the look where
+-- the row names one.
 function AuctionMixin:MakeItemForKey(itemKey, appearanceLink)
 	local extraData = {}
 	if type(itemKey.itemLevel) == "number" and itemKey.itemLevel > 0 then
 		extraData.overrideItemLevel = itemKey.itemLevel
 	end
+	NoteKeySuffix(extraData, itemKey)
 	local link
 	if appearanceLink then
 		local appearanceSourceID = string.match(appearanceLink, ".*transmogappearance:(%d*)")
@@ -778,6 +795,7 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 			appearanceID = itemAppearanceID,
 			overrideItemLevel = itemKey.itemLevel
 		}
+		NoteKeySuffix(extraData, itemKey, itemKeyInfo)
 
 		if itemLink then
 			item = CaerdonItem:CreateFromItemLink(itemLink, extraData)
@@ -801,7 +819,7 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		end
 	else
 		-- Pass itemKey.itemLevel directly as overrideItemLevel since item links from AH don't encode the actual listing's ilvl
-		local extraData = { overrideItemLevel = itemKey.itemLevel }
+		local extraData = NoteKeySuffix({ overrideItemLevel = itemKey.itemLevel }, itemKey, itemKeyInfo)
 
 		-- C_TooltipInfo.GetItemKey().hyperlink is unstable for recipes: the first call
 		-- returns the recipe link, but after item data loads the tooltip resolves the

@@ -678,6 +678,35 @@ return function(H, S)
         Check(payload:find("  Its Button: asked for by Auction; on it now: icon yes, upgrade badge no", 1, true) ~= nil,
             "a row's piece: and what is on its button")
 
+        -- A row whose key names a suffix: the name the window passed beside the link's, the
+        -- key's own tooltip, and the links that can be made from the suffix.
+        local keyItemID = tonumber(LINK:match("item:(%d+)"))
+        local keyAsked
+        local hadKeyTooltip = env.C_TooltipInfo.GetItemKey
+        env.C_TooltipInfo.GetItemKey = function(itemID, itemLevel, itemSuffix, requiredLevel)
+            keyAsked = { itemID, itemLevel, itemSuffix, requiredLevel }
+            return { type = 0, id = itemID, hyperlink = LINK, lines = { { type = 0, leftText = "+17 Agility of the key" } } }
+        end
+        payload = feature:BuildClipboardPayload(env.CaerdonItem:CreateFromItemLink(LINK,
+            { overrideItemLevel = 57, keySuffix = 12721, keyName = "A Coif of the Monkey" }))
+        Check(payload:find("suffix 12721, named \"A Coif of the Monkey\" (the link's name: \"", 1, true) ~= nil,
+            "a suffixed row: the name the window passed, beside the link's")
+        Check(payload:find("[Tooltip Lines (Item Key)]", 1, true) ~= nil and payload:find("+17 Agility of the key", 1, true) ~= nil,
+            "a suffixed row: the lines of the key's own tooltip")
+        Check(keyAsked ~= nil and keyAsked[1] == keyItemID and keyAsked[2] == 57 and keyAsked[3] == 12721,
+            "a suffixed row: asked by the key the window gave")
+        Check(payload:find("  Its Link: item:" .. tostring(keyItemID), 1, true) ~= nil, "a suffixed row: the link the key's tooltip names")
+        -- A row with a level alone: the key's tooltip, and no links made from a suffix.
+        keyAsked = nil
+        payload = feature:BuildClipboardPayload(env.CaerdonItem:CreateFromItemLink(LINK, { overrideItemLevel = 57 }))
+        Check(payload:find("[Tooltip Lines (Item Key)]", 1, true) ~= nil and keyAsked ~= nil and keyAsked[3] == 0 and
+            not payload:find("suffix ", 1, true), "a row with no suffix: the key's tooltip, asked with no suffix")
+        -- A link alone has no key to ask by.
+        keyAsked = nil
+        payload = feature:BuildClipboardPayload(env.CaerdonItem:CreateFromItemLink(LINK))
+        Check(keyAsked == nil and not payload:find("[Tooltip Lines (Item Key)]", 1, true), "a link alone: no key to ask by")
+        env.C_TooltipInfo.GetItemKey = hadKeyTooltip
+
         -- Item sets: the bracers are of a set and worn, the girdle is of the same set and not.
         -- Its tooltip names the set, its two pieces, a bonus the toon has and one it lacks.
         local sets = Section(game.Link(920002), "[Set Bonuses]")

@@ -824,23 +824,35 @@ local function ShowLevelGain(core, originalButton, caerdonButton, anchorFrame, g
     core:UpdateUpgradeDeltaPosition(originalButton)
 end
 
+-- The mark the addon has for what the toon is not yet of a level for: the grey gear of the
+-- "lowSkill" status. An upgrade to come has it too, in the arrow's place and with no ring
+-- (author decision: one mark for "not yet", wherever it is said). Seen (WoW Forever
+-- 1.60.1.70959): a helm 38 levels off had Pawn's yellow arrow on a ring a shade greener than
+-- an upgrade's, and read as one to take now.
+local function SetLaterMark(texture)
+    texture:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
+    texture:SetTexture("Interface\\WorldMap\\Gear_64Grey")
+end
+
 -- The upgrade icon: an arrow on a ring, with the level gain when there is one to show (gain).
--- lowSkill: the toon's level is not there yet. Returns whether the gain went on the button.
+-- lowSkill: the toon's level is not there yet, and the mark for that stands in the arrow's
+-- place (SetLaterMark); the caller leaves it the size that mark has as a status's icon.
+-- Returns whether the gain went on the button.
 local function DrawUpgradeIcon(core, originalButton, caerdonButton, anchorFrame, lowSkill, transmogInfo,
                                allowMismatchedSpecUpgrades, gain)
     local mogStatus = caerdonButton.mogStatus
     local mogStatusBackground = mogStatus.mogStatusBackground
-    mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-    mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
     if lowSkill then
-        mogStatusBackground:SetVertexColor(0.4, 1, 0)
+        SetLaterMark(mogStatus)
     else
+        mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
+        mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
         mogStatusBackground:SetVertexColor(0, 1, 1)
-    end
 
-    mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-    mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-    ApplyUpgradeArrowColor(mogStatus, transmogInfo, allowMismatchedSpecUpgrades, 0.4, 1, 0.2)
+        mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
+        mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
+        ApplyUpgradeArrowColor(mogStatus, transmogInfo, allowMismatchedSpecUpgrades, 0.4, 1, 0.2)
+    end
     if not gain then
         return false
     end
@@ -1262,7 +1274,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
             upgradeOnSetIcon = status
         elseif shouldShowUpgradeIcon then
-            iconBackgroundAdjustment = 4
             upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, true,
                 transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         elseif hasLookToGain then
@@ -1470,6 +1481,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         mogStatus:SetTexture("")
         isProminent = false
         isRingIcon = false
+        showAnim = false
     end
 
     -- An upgrade whose status went to something else, in practice a look to learn
@@ -1486,7 +1498,13 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
         if statusTexture == nil or statusTexture == "" or statusTexture == 0 then
             isProminent = false
-            iconBackgroundAdjustment = 4
+            -- The arrow sits inside its ring; the mark of an upgrade to come has none.
+            if badgeStatus ~= "upgradeLowSkill" then
+                iconBackgroundAdjustment = 4
+            end
+            -- The arrow stands still, as it does under its own status: the status it is drawn
+            -- for here (a look to learn, whose icon the window does not show) is one that moves.
+            showAnim = false
             upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame,
                 badgeStatus == "upgradeLowSkill", transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         else
@@ -1513,8 +1531,11 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeBadge:Hide()
         mogStatus.upgradeBadge, mogStatus.upgradeBadgeRing = upgradeBadge, upgradeBadgeRing
     end
+    -- The badge of an upgrade to come is the mark for "not yet" alone (SetLaterMark), with no
+    -- ring, at the ring's size.
+    local laterBadge = showBadge and not plainBadge and badgeStatus == "upgradeLowSkill"
     mogStatus.caerdonBadgeActive = showBadge
-    mogStatus.caerdonBadgePlain = plainBadge
+    mogStatus.caerdonBadgePlain = plainBadge or laterBadge
     caerdonButton.caerdonHasUpgradeBadge = showBadge and not plainBadge
     caerdonButton.caerdonHasRouteBadge = plainBadge
     if plainBadge then
@@ -1522,21 +1543,27 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         upgradeBadge:SetTexCoord(0, 1, 0, 1)
         upgradeBadge:SetVertexColor(1, 1, 1)
         SetTransformIcon(upgradeBadge, routeBadge)
+    elseif laterBadge then
+        upgradeBadgeRing:SetTexture("")
+        upgradeBadge:SetVertexColor(1, 1, 1)
+        SetLaterMark(upgradeBadge)
     elseif showBadge then
         upgradeBadgeRing:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
         upgradeBadgeRing:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-        if badgeStatus == "upgradeLowSkill" then
-            upgradeBadgeRing:SetVertexColor(0.4, 1, 0)
-        else
-            upgradeBadgeRing:SetVertexColor(0, 1, 1)
-        end
+        upgradeBadgeRing:SetVertexColor(0, 1, 1)
         upgradeBadge:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
         upgradeBadge:SetTexture("Interface\\Buttons\\JumpUpArrow")
         ApplyUpgradeArrowColor(upgradeBadge, transmogInfo, allowMismatchedSpecUpgrades, 0.4, 1, 0.2)
     end
 
     if not upgradeDeltaShown and levelGain then
-        ShowLevelGain(self, originalButton, caerdonButton, deltaAnchorFrame, levelGain, 0.2, 1.0, 0.2)
+        -- Beside the badge of an upgrade to come the gain has the colour it has beside that
+        -- mark as the icon.
+        if laterBadge then
+            ShowLevelGain(self, originalButton, caerdonButton, deltaAnchorFrame, levelGain, 0.9, 0.82, 0.1)
+        else
+            ShowLevelGain(self, originalButton, caerdonButton, deltaAnchorFrame, levelGain, 0.2, 1.0, 0.2)
+        end
         upgradeDeltaShown = true
     end
 

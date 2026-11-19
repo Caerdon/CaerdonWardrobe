@@ -1918,7 +1918,7 @@ local function StatusCacheKey(item, itemLink)
         end
     end
     -- What a window knows about this copy beyond its link and passes in (an auction row's
-    -- item level, the source a set or dressing room entry stands for) decides the transmog
+    -- item level and suffix, the source a set or dressing room entry stands for) decides the transmog
     -- info, so two rows that share a link do not share an entry.
     local extraData = item.extraData
     if extraData then
@@ -1927,6 +1927,9 @@ local function StatusCacheKey(item, itemLink)
         end
         if extraData.overrideItemLevel then
             key = key .. "|l" .. tostring(extraData.overrideItemLevel)
+        end
+        if extraData.keySuffix then
+            key = key .. "|k" .. tostring(extraData.keySuffix)
         end
     end
     return key
@@ -2236,21 +2239,16 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             end
             if transmogInfo.isTransmog then
                 if transmogInfo.needsItem then
+                    -- A look the toon can collect is one to learn now, whatever the piece asks
+                    -- for (a level, a standing): selling the piece to a vendor teaches its look,
+                    -- with nothing put on, in both clients (author decision, 2026-11-19, from
+                    -- play; no export shows a sale of a piece above the toon's level, and one
+                    -- that taught nothing would bring "lowSkill" back here). Until then such a
+                    -- look was one for later, the gear, by its level or any red line.
                     if not transmogInfo.isCompletionistItem then
-                        -- print(self:GetItemLink() .. ": hasMetRequirements = " .. tostring(transmogInfo.hasMetRequirements) .. ", foundRedRequirements = " .. tostring(tooltipData.foundRedRequirements))
-                        if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-                            mogStatus = "own"
-                        else
-                            mogStatus = "lowSkill"
-                        end
-                    else
-                        if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-                            if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-                                mogStatus = "ownPlus"
-                            else
-                                mogStatus = "lowSkillPlus"
-                            end
-                        end
+                        mogStatus = "own"
+                    elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                        mogStatus = "ownPlus"
                     end
                 elseif transmogInfo.otherNeedsItem then
                     -- Another toon can learn it. isCompletionistItem here: the look is already
@@ -2297,7 +2295,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     mogStatus = "upgradeLowSkill"
                 end
             else
-                if not transmogInfo.hasMetRequirements then
+                -- A piece of a level the toon has not reached is one for later. Not a piece
+                -- whose type is not the toon's (another class's relic): no level changes that.
+                if not transmogInfo.hasMetRequirements and not transmogInfo.typeRefused then
                     mogStatus = "lowSkill"
                 else
                     mogStatus = "collected"

@@ -811,6 +811,22 @@ return function(H, S)
         { name = "the upgrade alone, where there is none", hide = { "statusIcon" } },
         { name = "the upgrade alone, a gain without the arrow",
             info = { upgradeItemLevelDelta = 3, canEquip = true, hasMetRequirements = true }, hide = { "statusIcon" } },
+        -- An upgrade the toon has not the level for yet, one that Pawn names: as a button's
+        -- icon, as the badge on a look to learn, and alone in a list's column.
+        { name = "an upgrade to come",
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgradeLowSkill", canEquip = true,
+                pawnIdentifiedUpgrade = true } },
+        { name = "an upgrade to come, alone",
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgradeLowSkill", canEquip = true,
+                pawnIdentifiedUpgrade = true }, hide = { "statusIcon" } },
+        -- One button, as a list hands a row to another item: a look to learn with the badge of
+        -- an upgrade for now (as "own"), then one with the badge of an upgrade to come (as
+        -- "ownPlus", drawn next). info by status.
+        { name = "a badge for now, then one to come",
+            info = function(status)
+                return { upgradeItemLevelDelta = 5, isUpgrade = true, canEquip = true, pawnIdentifiedUpgrade = true,
+                    upgradeStatus = status == "own" and "upgrade" or "upgradeLowSkill" }
+            end },
     }
 
     -- One button drawn with every status in turn, the way the queue draws it, with a frame
@@ -839,7 +855,12 @@ return function(H, S)
 
         for _, status in ipairs(STATUSES) do
             local options = variant.options and variant.options(world, button) or {}
-            local info = variant.info and H.DeepCopy(variant.info) or nil
+            local info
+            if type(variant.info) == "function" then
+                info = variant.info(status)
+            elseif variant.info then
+                info = H.DeepCopy(variant.info)
+            end
             world.log[#world.log + 1] = ("== %s / %s"):format(variant.name, status)
             world.recording = true
             core:SetupCaerdonButton(button, item, feature, nil, options)
@@ -871,7 +892,9 @@ return function(H, S)
                 gain = overlay.upgradeDeltaText:IsShown() and overlay.upgradeDeltaText:GetText() or nil,
                 badge = overlay.caerdonHasUpgradeBadge == true,
                 colour = world.Value(icon).colour,
+                ringColour = world.Value(icon.mogStatusBackground).colour,
                 badgeColour = icon.upgradeBadge and world.Value(icon.upgradeBadge).colour or nil,
+                badgeRingColour = icon.upgradeBadgeRing and world.Value(icon.upgradeBadgeRing).colour or nil,
                 routeBadge = overlay.caerdonHasRouteBadge == true,
                 badgeTexture = icon.upgradeBadge and icon.upgradeBadge:IsShown() and
                     (icon.upgradeBadge:GetAtlas() or icon.upgradeBadge:GetTexture()) or nil,
@@ -971,7 +994,9 @@ return function(H, S)
         Equal(otherScaleIcon.upgrade.texture, CLOTHES, "sets, other spec: with the set's icon on, that icon")
         Equal(otherScaleIcon.upgrade.badge, false, "sets, other spec: without the badge")
         Equal(results["gear set as icon, other loot spec"].upgrade.badge, false, "sets, other spec: nor for another loot spec's gear")
-        Equal(results["off-tree"].upgradeLowSkill.texture, ARROW, "sets, other spec: a piece of no set keeps that arrow")
+        Equal(results["off-tree"].upgrade.texture, ARROW, "sets, other spec: a piece of no set keeps that arrow")
+        Equal(results["off-tree"].upgradeLowSkill.texture, "Interface\\WorldMap\\Gear_64Grey",
+            "sets, other spec: and the mark of an upgrade to come where its level is not reached")
 
         -- A button for the upgrade alone: the arrow under every status where the piece is an
         -- upgrade, with its gain; nothing where it is none, but under the two statuses that
@@ -980,8 +1005,13 @@ return function(H, S)
             results["the upgrade alone, a gain without the arrow"]
         for _, status in ipairs(STATUSES) do
             if status ~= "waiting" then
-                Check(alone[status].texture == ARROW and alone[status].gain == "+5" and alone[status].badge == false,
+                -- Under the status of an upgrade to come it is that status that is drawn.
+                local mark = status == "upgradeLowSkill" and "Interface\\WorldMap\\Gear_64Grey" or ARROW
+                Check(alone[status].texture == mark and alone[status].gain == "+5" and alone[status].badge == false,
                     "alone: the arrow and its gain, and no badge, as " .. status .. " (" .. tostring(alone[status].texture) .. ")")
+                -- An upgrade's arrow stands still, also under a status whose own icon moves.
+                Equal(alone[status].playing, false, "alone: the arrow does not move, as " .. status)
+                Equal(none[status].playing, false, "alone: nor does a button with nothing on it, as " .. status)
             end
             if status ~= "upgrade" and status ~= "upgradeLowSkill" then
                 Check(none[status].hasIcon == false and none[status].gain == nil, "alone: nothing where the piece is no upgrade, as " .. status)
@@ -1000,6 +1030,52 @@ return function(H, S)
         -- what is worn: drawn whatever the setting says, in the other spec's red. What only its
         -- item level makes one is for another spec: by the setting.
         local RED, YELLOW = "1.00 0.35 0.35", "1.00 1.00 0.00"
+
+        -- An upgrade to come has the mark the addon has for "not yet", the grey gear of the
+        -- lowSkill status, in the arrow's place: with no ring, uncoloured and still, as the
+        -- icon, as the badge on a look to learn, and alone in a list's column. One for now, of
+        -- the same piece, has Pawn's yellow arrow on the upgrade's own ring.
+        local GEAR, CYAN = "Interface\\WorldMap\\Gear_64Grey", "0.00 1.00 1.00"
+        local function NoTexture(value) return value == nil or value == "" end
+        local toCome, toComeAlone = results["an upgrade to come"], results["an upgrade to come, alone"]
+        Check(toCome.upgradeLowSkill.texture == GEAR and NoTexture(toCome.upgradeLowSkill.background),
+            "to come: the gear, with no ring (" .. tostring(toCome.upgradeLowSkill.texture) .. " on " ..
+            tostring(toCome.upgradeLowSkill.background) .. ")")
+        Equal(toCome.upgradeLowSkill.texture, plain.lowSkill.texture, "to come: the same mark as a look for later has")
+        Equal(toCome.upgradeLowSkill.width, plain.lowSkill.width, "to come: at the same size")
+        Equal(toCome.upgradeLowSkill.colour, plain.lowSkill.colour, "to come: and in no colour of an arrow's")
+        Equal(toCome.upgradeLowSkill.playing, false, "to come: and still")
+        Equal(toCome.upgradeLowSkill.gain, "+5", "to come: with its gain")
+        Check(toCome.upgrade.texture == ARROW and toCome.upgrade.colour == YELLOW and toCome.upgrade.ringColour == CYAN,
+            "to come: the same piece as an upgrade for now has Pawn's yellow arrow on the upgrade's ring (" ..
+            tostring(toCome.upgrade.colour) .. " on " .. tostring(toCome.upgrade.ringColour) .. ")")
+        Check(toCome.own.badge == true and toCome.own.badgeTexture == GEAR and NoTexture(toCome.own.ringTexture) and
+            toCome.own.badgeColour == "1.00 1.00 1.00", "to come: on a look to learn the badge is the gear, with no ring (" ..
+            tostring(toCome.own.badgeTexture) .. ", " .. tostring(toCome.own.ringTexture) .. ", " .. tostring(toCome.own.badgeColour) .. ")")
+        Equal(toCome.own.playing, true, "to come: the look's own icon still moves")
+        for _, status in ipairs({ "own", "other", "collected", "sellable", "upgradeLowSkill" }) do
+            Check(toComeAlone[status].texture == GEAR and NoTexture(toComeAlone[status].background) and
+                toComeAlone[status].badge == false and toComeAlone[status].gain == "+5",
+                "to come, alone: the gear and its gain, as " .. status .. " (" .. tostring(toComeAlone[status].texture) .. ")")
+            Equal(toComeAlone[status].width, plain.lowSkill.width, "to come, alone: at the mark's own size, as " .. status)
+            Equal(toComeAlone[status].playing, false, "to come, alone: and still, as " .. status)
+        end
+        -- A button that had the badge of an upgrade for now and then has one of an upgrade to
+        -- come: the ring and the arrow's colour of the first are gone.
+        local reused = results["a badge for now, then one to come"]
+        Check(reused.own.badgeTexture == ARROW and reused.own.ringTexture == "Interface\\HUD\\UIUnitFrameBoss2x" and
+            reused.own.badgeColour == YELLOW, "to come: a button's badge for now is the yellow arrow in its ring")
+        Check(reused.ownPlus.badgeTexture == GEAR and NoTexture(reused.ownPlus.ringTexture) and
+            reused.ownPlus.badgeColour == "1.00 1.00 1.00",
+            "to come: the same button's badge to come is the gear alone, with no ring and no colour left over (" ..
+            tostring(reused.ownPlus.badgeTexture) .. ", " .. tostring(reused.ownPlus.ringTexture) .. ", " ..
+            tostring(reused.ownPlus.badgeColour) .. ")")
+        -- The badge of an upgrade for now is the arrow in its ring.
+        Check(results["upgrade"].own.badge == true and results["upgrade"].own.badgeTexture == ARROW and
+            results["upgrade"].own.ringTexture == "Interface\\HUD\\UIUnitFrameBoss2x" and
+            results["upgrade"].own.badgeRingColour == CYAN,
+            "to come: the badge of an upgrade for now is the arrow in the upgrade's ring (" ..
+            tostring(results["upgrade"].own.badgeTexture) .. ")")
         local otherShown, otherAlways = results["other spec"], results["other spec, setting off"]
         Equal(otherShown.upgrade.texture, ARROW, "loot spec: with the setting on the piece has the arrow")
         Equal(otherShown.upgrade.gain, "+2", "loot spec: and its level gain")
@@ -1046,6 +1122,7 @@ return function(H, S)
         Equal(standIn.badge, false, "rules: with no badge, the arrow being the icon")
         Equal(standIn.width, plain.upgrade.width, "rules: at the upgrade arrow's size, not the star's")
         Equal(standIn.gain, "+5", "rules: and with its level gain")
+        Equal(standIn.playing, false, "rules: and still, as an upgrade is, though a look to learn moves")
         Equal(results["in the bags"].auction.hasIcon, true, "rules: the auction icon shows in the bags")
         Equal(plain.auction.hasIcon, true, "rules: elsewhere an auction status falls back to the sell icon")
         Equal(plain.auction.texture, "Interface\\Store\\category-icon-bag", "rules: which is the bag")

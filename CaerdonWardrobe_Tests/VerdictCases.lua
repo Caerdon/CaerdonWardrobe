@@ -218,10 +218,13 @@ T.Verdict({
     confirmed = false,
 })
 
+-- Selling a piece teaches its look, so what the piece asks of the toon that wears it is no
+-- bar to learning it (author decision, 2026-11-19): the three tests below expected the gear
+-- of something for later until then.
 T.Verdict({
     id = "retail.appearance.belowLevel",
-    version = 1,
-    title = "The same below the item's level is learnable later",
+    version = 2,
+    title = "The same below the item's level is learnable now all the same",
     flavor = "retail",
     facts = "appearance",
     shape = {
@@ -237,7 +240,7 @@ T.Verdict({
             name = "druid",
             toon = { class = "DRUID" },
             pool = WOWUNIT_ITEMS,
-            expect = { status = "lowSkill" },
+            expect = { status = "own" },
         },
     },
     confirmed = false,
@@ -250,8 +253,8 @@ T.Verdict({
 -- 2026-11-16): the search took it for a second source to learn, the addon said lowSkill.
 T.Verdict({
     id = "retail.appearance.requirementNotMet",
-    version = 1,
-    title = "A source this toon could collect, on a piece with a requirement it has not met, is learnable later",
+    version = 2,
+    title = "A source this toon could collect, on a piece with a requirement it has not met, is learnable now",
     flavor = "retail",
     facts = "appearance",
     shape = {
@@ -268,7 +271,7 @@ T.Verdict({
             name = "druid",
             toon = { class = "DRUID" },
             pool = WOWUNIT_ITEMS,
-            expect = { status = "lowSkill" },
+            expect = { status = "own" },
         },
     },
     confirmed = false,
@@ -281,8 +284,8 @@ T.Verdict({
 -- other source's item was loaded; not settled).
 T.Verdict({
     id = "retail.appearance.requirementNotMetKnownLook",
-    version = 1,
-    title = "The same of a look this toon knows from another item is a second source to learn later",
+    version = 2,
+    title = "The same of a look this toon knows from another item is a second source to learn now",
     flavor = "retail",
     facts = "appearance",
     shape = {
@@ -300,7 +303,7 @@ T.Verdict({
             name = "druid",
             toon = { class = "DRUID" },
             pool = WOWUNIT_ITEMS,
-            expect = { status = "lowSkillPlus" },
+            expect = { status = "ownPlus" },
         },
     },
     confirmed = false,

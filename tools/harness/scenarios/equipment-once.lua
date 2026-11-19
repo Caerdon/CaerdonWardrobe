@@ -413,6 +413,15 @@ return function(H, S)
         local again = Loaded(world, env.CaerdonItem:CreateFromItemLink(link, { overrideItemLevel = 40 }))
         local _, _, againInfo = Status(world, again)
         Check(againInfo == highInfo, "row: a second row at the same level does")
+        -- A row whose key names a suffix is another piece again, of the same link and level.
+        local suffixed = Loaded(world, env.CaerdonItem:CreateFromItemLink(link,
+            { overrideItemLevel = 40, keySuffix = 12, keyName = "of another name" }))
+        local _, _, suffixedInfo = Status(world, suffixed)
+        Check(suffixedInfo ~= nil and suffixedInfo ~= highInfo, "row: a row with a suffix does not share the entry of the row without one")
+        local suffixedAgain = Loaded(world, env.CaerdonItem:CreateFromItemLink(link,
+            { overrideItemLevel = 40, keySuffix = 12, keyName = "of another name" }))
+        local _, _, suffixedAgainInfo = Status(world, suffixedAgain)
+        Check(suffixedAgainInfo == suffixedInfo, "row: a second row with the same suffix does")
         -- A row that says its own level is judged by that level alone: the floor in its link's
         -- tooltip, which makes the gloves an upgrade elsewhere, does not count for it.
         local listed = Loaded(world, env.CaerdonItem:CreateFromItemLink(world.game.Link(920001), { overrideItemLevel = 15 }))

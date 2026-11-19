@@ -220,7 +220,8 @@ return function(H, S)
         local info = item and item:GetItemData():GetTransmogInfo() or {}
         Equal(info.needsItem, true, "level: a piece above the toon's level is still needed")
         Equal(info.hasMetRequirements, false, "level: and its requirement is not met")
-        Equal((Status(client, item)), "lowSkill", "level: the status is lowSkill")
+        -- Selling a piece teaches its look, so the level is no bar: one to learn now.
+        Equal((Status(client, item)), "own", "level: the look of a piece above the toon's level is one to learn now")
     end
 
     -- Another toon's (the "Need" tests on a toon that cannot equip the piece).

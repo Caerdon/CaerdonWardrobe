@@ -69,8 +69,10 @@ return function(H, S)
     end
     Scenario("scenario.learnable", { sourceCollected = false, playerCanCollect = true, lookKnownElsewhere = false,
         levelMet = true }, { 910001, 910002, 910006 }, { status = "own" })
+    -- Selling a piece teaches its look, so one below the piece's level is one to learn now as
+    -- well.
     Scenario("scenario.belowLevel", { sourceCollected = false, playerCanCollect = true, lookKnownElsewhere = false,
-        levelMet = false }, { 910001, 910006 }, { status = "lowSkill" })
+        levelMet = false }, { 910001, 910006 }, { status = "own" })
     Scenario("scenario.knownLook", { sourceCollected = false, playerCanCollect = true, lookKnownUsable = true,
         sameLookShown = true }, { 910002 }, { status = "ownPlus" })
     Scenario("scenario.knownLookHidden", { sourceCollected = false, playerCanCollect = true, lookKnownUsable = true,
@@ -170,7 +172,7 @@ return function(H, S)
         Equal(twin.facts and twin.facts.lookKnownUnusable, false, "facts: and none it cannot")
         Equal(lofty.result, "unfit", "facts: a piece above the toon's level is not a case of 'has the level'")
         Equal(lofty.facts and lofty.facts.levelMet, false, "facts: the level is not met")
-        Equal(Case("scenario.belowLevel", 910006).result, "pass", "level: below the item's level it is lowSkill")
+        Equal(Case("scenario.belowLevel", 910006).result, "pass", "level: below the item's level the look is one to learn now all the same")
         Equal(Case("scenario.belowLevel", 910001).result, "unfit", "level: and the plain vest is no case of that")
 
         Equal(Kind("scenario.knownLook").state, "uncovered", "known look: with the setting off the Plus test has no case")

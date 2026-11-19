@@ -59,11 +59,18 @@ T.SightingCases = {
     },
     {
         id = "soulbound",
-        rule = "a bind on equip or bind on use item that has been bound shows no binding text",
+        rule = "a bind on equip or bind on use item that has been bound shows no binding text, unless an equipment set holds it",
         expect = { binding = "none" },
         fits = function(facts)
-            return facts.isBound and (facts.bindType == Enum.ItemBind.OnEquip or facts.bindType == Enum.ItemBind.OnUse)
+            return facts.isBound and not facts.inEquipmentSet and
+                (facts.bindType == Enum.ItemBind.OnEquip or facts.bindType == Enum.ItemBind.OnUse)
         end,
+    },
+    {
+        id = "boundInSet",
+        rule = "a bound piece that an equipment set holds shows the set's name where the binding text goes",
+        expect = { binding = "some" },
+        fits = function(facts) return facts.isBound and facts.inEquipmentSet end,
     },
     {
         id = "bindOnEquip",
@@ -159,6 +166,10 @@ local function ReadSlot(bag, slot)
     -- A caged pet's link is not an item link and has no bind type to ask for.
     if info.hyperlink:find("|Hitem:", 1, true) then
         facts.bindType = select(14, C_Item.GetItemInfo(info.hyperlink))
+    end
+    -- The client's own answer to "is this copy in an equipment set".
+    if C_Container.GetContainerItemEquipmentSetInfo then
+        facts.inEquipmentSet = Bool((C_Container.GetContainerItemEquipmentSetInfo(bag, slot)))
     end
 
     local purchase = C_Container.GetContainerItemPurchaseInfo(bag, slot, false)
