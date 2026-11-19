@@ -18,6 +18,9 @@ return {
         "BINDING_NAME_PRINTMOUSEOVERLINKDETAILS",
         -- Blizzard's /dump limit, raised around one dump and put back (CaerdonAPI).
         "DEVTOOLS_MAX_ENTRY_CUTOFF",
+        -- Pawn's tooltip step, wrapped so that the addon's upgrade lines follow Pawn's and
+        -- Pawn's note for a scale whose gear set decides is left out (features/Tooltip.lua).
+        "PawnAddValuesToTooltip",
     },
 
     -- Globals of other addons and of the embedded libraries. Not checked against a client.
@@ -43,11 +46,13 @@ return {
         NDui = "NDui",
         NarciDressingRoomItemButtonMixin = "Narcissus",
         NarciDressingRoomOverlay = "Narcissus",
+        PawnAddValuesToTooltip = "Pawn",
         PawnCommon = "Pawn",
         PawnGetItemData = "Pawn",
         PawnGetItemDataForInventorySlot = "Pawn",
         PawnGetSingleValueFromItem = "Pawn",
         PawnInvalidateBestItems = "Pawn",
+        PawnIsArmorBestTypeForPlayer = "Pawn",
         PawnIsItemAnUpgrade = "Pawn",
         PawnIsScaleVisible = "Pawn",
         PawnOptions = "Pawn",

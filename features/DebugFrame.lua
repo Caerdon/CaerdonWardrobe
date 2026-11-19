@@ -1153,13 +1153,39 @@ function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
     end
 end
 
-function DebugFrameMixin:SetCurrentItem(itemLink)
+-- What the window under the pointer asked the addon to judge for this item, where the button
+-- the tooltip belongs to is one the addon decorates: { link, extraData, drawn }. A window can
+-- pass more than a link (an auction row its item level, since the link the client gives for a
+-- row is the plain item's): the export is then of the piece as the window gave it, the one
+-- the icon was made for, and not of the link alone.
+local function AskedUnderPointer(itemLink)
+    local tooltip = GameTooltip
+    if not (tooltip and tooltip.IsShown and tooltip:IsShown() and tooltip.GetOwner and CaerdonWardrobe.GetAskedOf) then
+        return nil
+    end
+    local asked, drawn = CaerdonWardrobe:GetAskedOf(tooltip:GetOwner())
+    if not asked or type(asked.GetItemID) ~= "function" or
+        asked:GetItemID() ~= C_Item.GetItemInfoInstant(itemLink) then
+        return nil
+    end
+    return { link = asked.extraData and asked:GetItemLink() or nil, extraData = asked.extraData, drawn = drawn }
+end
+
+-- kept: what AskedUnderPointer said when the item was first taken, for a refresh of it (the
+-- pointer is somewhere else by then).
+function DebugFrameMixin:SetCurrentItem(itemLink, kept)
     if itemLink then
         self.currentItem = itemLink
         self.currentItemLocation = nil
+        local ask = kept
+        if not ask then
+            local ok, found = pcall(AskedUnderPointer, itemLink)
+            ask = ok and found or nil
+        end
+        self.currentAsk = ask
 
         -- Create a fresh item object each time
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        local item = CaerdonItem:CreateFromItemLink(ask and ask.link or itemLink, ask and ask.extraData or nil)
         if item then
             self:ProcessCurrentItem(item)
         end
@@ -2365,6 +2391,26 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     addKV(1, "Link", itemLink or "Unavailable")
     local itemString = itemLink and itemLink:match("|H(.-)|h")
     addKV(1, "Item String", itemString or "Unavailable")
+    -- What the window passed beside the link, and what is on its button: the verdict below is
+    -- of the piece as the window gave it.
+    do
+        local ask = self.currentAsk
+        local extraData = item.extraData
+        if extraData then
+            local parts = {}
+            if extraData.overrideItemLevel then
+                parts[#parts + 1] = format("item level %s (the link's own: %s)", tostring(extraData.overrideItemLevel),
+                    tostring(itemLink and C_Item.GetDetailedItemLevelInfo(itemLink) or "?"))
+            end
+            if extraData.appearanceSourceID then
+                parts[#parts + 1] = "appearance source " .. tostring(extraData.appearanceSourceID)
+            end
+            addKV(1, "Passed By The Window", #parts > 0 and table.concat(parts, ", ") or "nothing the export names")
+        end
+        if ask and ask.drawn then
+            addKV(1, "Its Button", ask.drawn)
+        end
+    end
     addKV(1, "Item ID", item:GetItemID())
     addKV(1, "Item GUID", item:GetItemGUID())
 
@@ -2396,6 +2442,17 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     addKV(1, "Sell Price", sellPrice)
     addKV(1, "Inventory Type Name", item:GetInventoryTypeName() or "None")
     addKV(1, "Min Level (API)", item:GetMinLevel())
+    -- The stats the client has for the link, by their keys: a link whose stats are still to be
+    -- rolled (a plain item the auction house names a row by) has placeholders among them.
+    do
+        local stats = itemLink and C_Item.GetItemStats and C_Item.GetItemStats(itemLink)
+        local parts = {}
+        for key, value in pairs(type(stats) == "table" and stats or {}) do
+            parts[#parts + 1] = format("%s %s", tostring(key), tostring(value))
+        end
+        table.sort(parts)
+        addKV(1, "Link Stats (API)", #parts > 0 and table.concat(parts, ", ") or "none")
+    end
     addKV(1, "Binding", item:GetBinding())
 
     local itemLocation = item:GetItemLocation()
@@ -2720,7 +2777,21 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             CaerdonEquipment:GetPawnScaleFilterDescription() or "none (every visible Pawn scale counts)")
         addKV(1, "otherSpecsWanted", CaerdonEquipment.GetOtherSpecChoiceDescription and
             CaerdonEquipment:GetOtherSpecChoiceDescription() or "no choice (no specs on this client)")
+        addKV(1, "loadoutsCompared", CaerdonEquipment.GetLoadoutDescription and
+            CaerdonEquipment:GetLoadoutDescription() or "none (only the worn gear)")
+        addKV(1, "gearSetWorn", CaerdonEquipment.GetActiveSetDescription and
+            CaerdonEquipment:GetActiveSetDescription() or "not read")
         addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
+        do
+            local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or {}
+            addKV(1, "upgradeSettings", format("arrow %s; a higher item level counts %s; and against Pawn's scores %s; also for my other specs %s; on gear set pieces %s; level gain %s",
+                icon.ShowUpgradeIcon ~= false and "on" or "off",
+                icon.ShowItemLevelUpgrades ~= false and "on" or "off",
+                icon.ItemLevelOverPawn == true and "on" or "off",
+                icon.ShowOtherSpecUpgrades == true and "on" or "off",
+                icon.ShowUpgradeOnGearSets ~= false and "on" or "off",
+                icon.ShowUpgradeLevelDelta and "on" or "off"))
+        end
         addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
         addKV(1, "sourceID", transmogInfo.sourceID)
         addKV(1, "appearanceID", transmogInfo.appearanceID)
@@ -2754,6 +2825,22 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo and transmogInfo.canEquip)
         addKV(1, "taken to (the icon)", lookRoute or "nowhere")
         addKV(1, "and to (the small mark on it)", lookSecondRoute or "nowhere else")
+    end
+
+    -- Each comparison tooltip the client puts beside an item's, as it stands, and what the
+    -- addon last made of it (features/Tooltip.lua).
+    if identifiedType == CaerdonItemType.Equipment and NS.Tooltip and NS.Tooltip.GetComparisonReport then
+        addLine(0, "")
+        addLine(0, "[Comparison Tooltips]")
+        for _, entry in ipairs(NS.Tooltip:GetComparisonReport()) do
+            addLine(1, entry.state)
+            if entry.last then
+                addLine(2, entry.last)
+            end
+            if entry.sample then
+                addLine(2, entry.sample)
+            end
+        end
     end
 
     -- Item sets (tier bonuses): what there is to tell whether putting a piece on would cost or
@@ -6697,13 +6784,14 @@ function DebugFrameMixin:RefreshCurrentItem()
     if self.currentItem then
         -- Re-create the item to ensure we get fresh data
         local itemLink = self.currentItem
+        local ask = self.currentAsk
 
         -- Clear everything to force a complete refresh
         self.currentItem = nil
         self:ClearDebugDisplay()
 
         -- Set the item again to trigger a full reload
-        self:SetCurrentItem(itemLink)
+        self:SetCurrentItem(itemLink, ask)
     end
 end
 

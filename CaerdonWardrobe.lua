@@ -788,7 +788,11 @@ local function ApplyUpgradeArrowColor(arrow, transmogInfo, allowMismatchedSpecUp
         -- Pawn only rates it higher for another talent tree's scale: same "usable but
         -- off-spec" red as a loot spec mismatch. Hiding that scale in Pawn removes the arrow.
         arrow:SetVertexColor(1, 0.35, 0.35)
-    elseif transmogInfo and transmogInfo.upgradeMatchesSpec == false and allowMismatchedSpecUpgrades then
+    elseif transmogInfo and transmogInfo.upgradeMatchesSpec == false and
+        (allowMismatchedSpecUpgrades or transmogInfo.pawnIdentifiedUpgrade) then
+        -- Gear for another loot spec. Red also where the played spec's scale calls it an
+        -- upgrade for what is worn (author decision): the icon is all a loot roll shows, and
+        -- the client itself calls a Need for such a piece "Need (Off-Spec)".
         arrow:SetVertexColor(1, 0.35, 0.35)
     elseif transmogInfo and transmogInfo.pawnIdentifiedUpgrade then
         arrow:SetVertexColor(1, 1, 0)
@@ -1127,9 +1131,12 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- player's choice (Icon.ShowUpgradeOnGearSets). Its level gain is drawn either way.
     local arrowOnPiece = not isEquipmentSetItem or CaerdonWardrobeConfig.Icon.ShowUpgradeOnGearSets ~= false
     -- An upgrade for another spec only (another spec's Pawn scale, or another loot spec's gear)
-    -- is no news on a set's piece: the set is where the player put it for that spec.
+    -- is no news on a set's piece: the set is where the player put it for that spec. Not
+    -- another loot spec's gear that the played spec's scale calls an upgrade: that is one for
+    -- what is worn (author decision), shown as any such upgrade is, in the other spec's red.
     local otherSpec = transmogInfo and
-        (transmogInfo.pawnOffTreeUpgrade or transmogInfo.upgradeMatchesSpec == false)
+        (transmogInfo.pawnOffTreeUpgrade or
+            (transmogInfo.upgradeMatchesSpec == false and not transmogInfo.pawnIdentifiedUpgrade))
     if isEquipmentSetItem and otherSpec then
         arrowOnPiece = false
     end
@@ -1405,7 +1412,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "collected" then
         local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
         if shouldShowUpgradeIcon and transmogInfo and transmogInfo.upgradeMatchesSpec == false and
-            not allowMismatchedSpecUpgrades then
+            not transmogInfo.pawnIdentifiedUpgrade and not allowMismatchedSpecUpgrades then
             shouldShowUpgradeIcon = false
         end
         local showEqualLevel = transmogInfo and
@@ -1451,6 +1458,18 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         -- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
         -- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
         -- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
+    end
+
+    -- A button that is there for the upgrade alone (displayInfo.statusIcon.shouldShow == false:
+    -- a list's column for it, beside another for the icon): the icon of any other status is
+    -- taken off again. An upgrade is then drawn as the upgrade it is, just below, and anything
+    -- else leaves the button without an icon.
+    if displayInfo and displayInfo.statusIcon and displayInfo.statusIcon.shouldShow == false and
+        status ~= "upgrade" and status ~= "upgradeLowSkill" then
+        mogStatusBackground:SetTexture("")
+        mogStatus:SetTexture("")
+        isProminent = false
+        isRingIcon = false
     end
 
     -- An upgrade whose status went to something else, in practice a look to learn
@@ -2165,6 +2184,33 @@ function CaerdonWardrobeMixin:GetDrawnParts(originalButton)
         caerdonButton.caerdonHasGain == true
 end
 
+-- For the Debug Frame: what a button was last asked to show, and what is on it now. `frame` is
+-- the button or a part of it (a tooltip's owner is often a cell of a row), so its parents are
+-- asked too, a few levels up. Returns the item the window gave, with what it passed beside the
+-- link (item.extraData: an auction row's item level, a set entry's source), and a line for the
+-- export. nil for a frame no window asked for.
+function CaerdonWardrobeMixin:GetAskedOf(frame)
+    for _ = 1, 4 do
+        if type(frame) ~= "table" then
+            return nil
+        end
+        local state = GetButtonState(frame)
+        local asked = state and state.asked
+        if asked then
+            local hasIcon, hasText, hasGain = self:GetDrawnParts(frame)
+            local caerdonButton = self:GetCaerdonButton(frame)
+            local feature = asked.feature
+            return asked.item, format("asked for by %s; on it now: icon %s, upgrade badge %s, level gain %s, text %s",
+                tostring(feature and feature.GetName and feature:GetName() or "a window"),
+                hasIcon and "yes" or "no",
+                caerdonButton and caerdonButton.caerdonHasUpgradeBadge and "yes" or "no",
+                hasGain and "yes" or "no", hasText and "yes" or "no")
+        end
+        frame = type(frame.GetParent) == "function" and frame:GetParent() or nil
+    end
+    return nil
+end
+
 function CaerdonWardrobeMixin:RegisterFeature(mixin)
     local instance = CreateFromMixins(CaerdonWardrobeFeatureMixin, mixin)
     local name = instance:GetName()
@@ -2781,7 +2827,9 @@ function CaerdonWardrobeMixin:PLAYER_EQUIPMENT_CHANGED()
     self:RefreshItems(nil, nil, "worn")
 end
 
-function CaerdonWardrobeMixin:EQUIPMENT_SWAP_FINISHED()
+function CaerdonWardrobeMixin:EQUIPMENT_SWAP_FINISHED(succeeded, setID)
+    -- The set the player chose, for the equipment code's "which set is being worn".
+    CaerdonEquipment:NoteGearSetPutOn(succeeded, setID)
     self:RefreshItems(nil, nil, "worn")
 end
 

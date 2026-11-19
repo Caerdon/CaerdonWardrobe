@@ -663,6 +663,20 @@ return function(H, S)
         local none, payload = Section(LINK, "[Mount]")
         Equal(none, nil, "a piece of armor has no mount section")
         Check(not payload:find("[Pet]", 1, true), "and no pet section")
+        Check(not payload:find("Passed By The Window", 1, true) and not payload:find("Its Button", 1, true),
+            "a link alone: the export names nothing a window passed")
+        Check(payload:find("upgradeSettings: arrow on; a higher item level counts on; and against Pawn's scores off;", 1, true) ~= nil,
+            "the upgrade settings in force are in the export")
+
+        -- A piece a window gave with more than its link (an auction row's item level): the export
+        -- says what was passed, and what is on the window's button.
+        feature.currentAsk = { drawn = "asked for by Auction; on it now: icon yes, upgrade badge no, level gain no, text no" }
+        payload = feature:BuildClipboardPayload(env.CaerdonItem:CreateFromItemLink(LINK, { overrideItemLevel = 999 }))
+        feature.currentAsk = nil
+        Check(payload:find("  Passed By The Window: item level 999 (the link's own: ", 1, true) ~= nil,
+            "a row's piece: the level the window passed, beside the link's own")
+        Check(payload:find("  Its Button: asked for by Auction; on it now: icon yes, upgrade badge no", 1, true) ~= nil,
+            "a row's piece: and what is on its button")
 
         -- Item sets: the bracers are of a set and worn, the girdle is of the same set and not.
         -- Its tooltip names the set, its two pieces, a bonus the toon has and one it lacks.

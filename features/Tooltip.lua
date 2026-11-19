@@ -69,6 +69,10 @@ function TooltipMixin:OnLoad()
     -- TODO: Add Debug enable option setting
     -- TODO: Figure out how to get Pet/Toy/Mount links working
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(...) Tooltip:OnTooltipSetItem(...) end)
+    -- For the upgrade lines (OweUpgradeLines): the tooltips of the item looked at, and the
+    -- comparison tooltips the client puts beside each of them.
+    self:PlaceUpgradeLines(GameTooltip, ItemRefTooltip)
+    self:NoteComparisonTooltips(ShoppingTooltip1, ShoppingTooltip2, ItemRefShoppingTooltip1, ItemRefShoppingTooltip2)
     -- TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Mount, function(...) Tooltip:OnTooltipSetItem(...) end)
     -- TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Toy, function(...) Tooltip:OnTooltipSetItem(...) end)
 
@@ -432,6 +436,28 @@ function TooltipMixin:OnEmbeddedItemTooltipSetItemByQuestReward(tooltip, questLo
     end
 end
 
+-- The item level of the piece a tooltip shows, where its link is not the piece's own: a
+-- tooltip the auction house fills by item key (item, level, suffix) has the plain item's link.
+-- The item made for the tooltip is told (extraData.overrideItemLevel), as the auction feature
+-- tells the item of a row, so that nothing is scored off that link
+-- (types/EquipmentMixin.lua, IsKnownByAnotherLink).
+local function PieceLevelOf(tooltip)
+    local info = tooltip.GetPrimaryTooltipInfo and tooltip:GetPrimaryTooltipInfo()
+    if type(info) == "table" and info.getterName == "GetItemKey" and type(info.getterArgs) == "table" then
+        return tonumber(info.getterArgs[2])
+    end
+    return nil
+end
+
+-- An item for the link a tooltip shows: the one it had where link and level are the same.
+local function ItemForTooltip(tooltip, link, had)
+    local level = PieceLevelOf(tooltip)
+    if had and had:GetItemLink() == link and (had.extraData and had.extraData.overrideItemLevel or nil) == level then
+        return had
+    end
+    return CaerdonItem:CreateFromItemLink(link, level and { overrideItemLevel = level } or nil)
+end
+
 local function ShowItemTooltip(tooltip)
     local itemName, itemLink, tooltipDataId = TooltipUtil.GetDisplayedItem(tooltip)
     if itemLink and itemName then
@@ -446,9 +472,7 @@ local function ShowItemTooltip(tooltip)
         --             end
         --         end
 
-        if not tooltipItem or tooltipItem:GetItemLink() ~= itemLink then
-            tooltipItem = CaerdonItem:CreateFromItemLink(itemLink)
-        end
+        tooltipItem = ItemForTooltip(tooltip, itemLink, tooltipItem)
 
         -- For ensembles with uncollected variants, hide the "Already known" text
         -- Check if this is an ensemble (consumable with transmog set)
@@ -505,6 +529,7 @@ local function ShowItemTooltip(tooltip)
         -- Reported rather than raised, so the item's own lines below are still added.
         xpcall(function() Tooltip:AddRecipeLearners(tooltip, shownItem) end, geterrorhandler())
         xpcall(function() Tooltip:AddIngredientUsers(tooltip, shownItem) end, geterrorhandler())
+        Tooltip:OweUpgradeLines(tooltip, shownItem)
 
         Tooltip:ProcessTooltip(tooltip, shownItem, false)
     end
@@ -633,6 +658,468 @@ function TooltipMixin:AddIngredientUsers(tooltip, item)
         if others ~= "" then
             tooltip:AddLine(format(L["Used in recipes of: %s"], others), 0.6, 0.6, 0.6, wrap)
         end
+    end
+end
+
+-- A piece of equipment that would be an upgrade: for what is worn (the yellow arrow), and for
+-- gear the toon keeps beside it (the red arrow: another spec, or the played spec's gear set
+-- where its piece is not the one worn; types/EquipmentMixin.lua). One line for each, saying
+-- which and by how much on that spec's Pawn scale. The comparison is the addon's own in every
+-- case (author decision: it is the one that knows the gear sets, and the one to be taught
+-- more), and Pawn's note for the same scale gives way to it (below).
+--
+-- The line is built like the one Pawn adds for a scale it shows, which sits in the same
+-- tooltip (author decision): icon, name, an arrow, "+16% upgrade", the percentage a whole
+-- number. The icon and the name are the gear set's where its piece was the one to beat, the
+-- spec's otherwise; the name is in the scale's colour as Pawn has it. The arrow and the gain
+-- are the arrow the addon draws on the piece's button, in the button's colour for that kind of
+-- upgrade (yellow for what is worn, red for other gear; the upgrade arrow in
+-- CaerdonWardrobe.lua), so that the line and the icon read as one thing.
+-- Tooltip.ShowLoadoutUpgrades turns the lines off; those for other gear are not said where
+-- their arrows are off (Icon.ShowOtherSpecUpgrades).
+local LOADOUT_ARROW = "|TInterface\\Buttons\\JumpUpArrow:0:0:0:0:32:32:0:32:0:32:255:89:89|t"
+local LOADOUT_GAIN_COLOUR = "ff5959"
+local WORN_ARROW = "|TInterface\\Buttons\\JumpUpArrow:0:0:0:0:32:32:0:32:0:32:255:255:0|t"
+local WORN_GAIN_COLOUR = "ffff00"
+-- Pawn's colour for a scale that has none of its own.
+local LOADOUT_NAME_COLOUR = "8ec3e6"
+
+local function WantsLoadoutLines(item)
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    if tooltipConfig and tooltipConfig.ShowLoadoutUpgrades == false then
+        return false
+    end
+    return item ~= nil and not item:IsItemEmpty() and item:GetCaerdonItemType() == CaerdonItemType.Equipment and
+        CaerdonEquipment.GetLoadoutUpgradeList ~= nil
+end
+
+-- Gear for another loot spec that the played spec's scale calls an upgrade for what is worn
+-- all the same (the stat that does nothing for the spec weighs nothing on it; otherSpecs on
+-- the entry): the worn gear's line, in the red its arrow has on the button and not in yellow,
+-- and after the gain whose gear the piece is, "(Balance / Restoration gear)" (author
+-- decision: the player is to know of the upgrade, and to know before a roll that it is the
+-- kind the client calls off-spec). The note is grey, as the client greys that stat's line.
+local NOTE_COLOUR = "808080"
+local function OtherSpecNote(upgrade)
+    if type(upgrade.otherSpecs) ~= "table" or #upgrade.otherSpecs == 0 then
+        return ""
+    end
+    return format("  |cff%s%s|r", NOTE_COLOUR, format(L["(%s gear)"], table.concat(upgrade.otherSpecs, " / ")))
+end
+
+-- The yellow of what is worn: not for gear of another loot spec.
+local function IsWornGain(upgrade)
+    return upgrade.worn == true and upgrade.otherSpecs == nil
+end
+
+local function AddUpgradeLine(tooltip, upgrade)
+    local icon = upgrade.icon and format("|T%s:0|t ", tostring(upgrade.icon)) or ""
+    -- No percentage against a piece the scale gives no value.
+    local gain = upgrade.percent and format(L["+%d%% upgrade"], upgrade.percent) or L["upgrade"]
+    local worn = IsWornGain(upgrade)
+    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
+        tostring(upgrade.name), worn and WORN_ARROW or LOADOUT_ARROW,
+        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, OtherSpecNote(upgrade)), 1, 1, 1, true)
+end
+
+-- The lines by themselves, with Pawn's own lines left as they are: one is left out where
+-- Pawn's line for the scale says the same percentage (saidByPawn).
+function TooltipMixin:AddLoadoutUpgrades(tooltip, item)
+    if not WantsLoadoutLines(item) then
+        return
+    end
+    for _, upgrade in ipairs(CaerdonEquipment:GetLoadoutUpgradeList(item) or {}) do
+        if not upgrade.saidByPawn then
+            AddUpgradeLine(tooltip, upgrade)
+        end
+    end
+end
+
+-- Where the lines go, and what becomes of Pawn's (author decisions: at the bottom, as Pawn's
+-- are; and no line of Pawn's that contradicts ours).
+--
+-- Pawn adds its lines after the client has filled the tooltip, in one function,
+-- PawnAddValuesToTooltip(tooltip, itemValues, upgradeInfo, ...): a line per scale it shows,
+-- with "+N% upgrade" for each scale upgradeInfo names (read in Pawn 2.14.4). The addon's own
+-- handler runs earlier, among every addon's handlers for the item, so a line added there
+-- lands in the middle of the tooltip. So the handler only notes the item, and the lines are
+-- added from that function of Pawn's, which the addon wraps: after Pawn's own, at the bottom.
+--
+-- The same wrap takes out of upgradeInfo every scale the addon has a line for that is the same
+-- comparison or a better one (what is worn; another spec), and the scales whose gear set
+-- decides in Pawn's place whether it has a line or not
+-- (CaerdonEquipment:GetPawnScalesGivenToSets): Pawn's note for such a scale is against the
+-- worn gear, ours against the set's piece, and the two side by side read as one fact with two
+-- numbers (seen: 6% and 2% for one cloak). Pawn then prints the scale's line without an
+-- upgrade note, or none where it shows upgrades only. A note of Pawn's for a scale the addon
+-- says nothing about stays.
+--
+-- Pawn's "your best" and "your second best" marks (its next two arguments, scale name ->
+-- true) go the same way for every scale the addon judges itself
+-- (CaerdonEquipment:GetPawnScalesJudged) and every scale it has a line for: Pawn takes them
+-- from the pieces it has seen worn, and "second best" beside the addon's "+14% upgrade" for
+-- the same name was seen. Pawn has no setting that hides them alone: its three tooltip modes
+-- are values and upgrades, upgrades only (with these marks), and values only.
+--
+-- Nothing of Pawn's is touched with Tooltip.ShowLoadoutUpgrades off, for an item the handler
+-- did not note, or where reading fails.
+--
+-- Not done: a hook on the tooltip's ProcessInfo to add the lines once it is filled. Pawn's
+-- item data comes from a tooltip of its own, filled like any other, so such a hook ran inside
+-- the reading it had started and never came back.
+--
+-- Without that function (another Pawn) the lines are added in the handler, to the client's
+-- own item tooltips alone, and Pawn's stay as they are.
+--
+-- A comparison tooltip (the worn piece shown beside the item looked at) gets none of those
+-- lines (author decision): what the worn piece would be for another gear set, right beside
+-- the lines of the piece in question, reads as being about that piece. Pawn's notes and marks
+-- are left out there by the same rules as anywhere. What it gets is what the client's own
+-- "If you replace this item" is about: what the piece looked at would do in the place of this
+-- worn one, by the addon's scoring (CaerdonEquipment:GetReplacementGains; author decision).
+-- A ring's own line says it is an upgrade and not for which of the two rings; here each ring
+-- has its number, a gain with the arrow and the colour of the line it belongs to, a loss in
+-- grey. One line, for the gear that is on: another gear set that has the worn piece too has
+-- its line in the item's own tooltip, not here (author decision).
+--
+-- Those lines go under the client's stat changes, as the last of them (author decision), and
+-- not with Pawn's. The client builds a comparison tooltip in
+-- TooltipComparisonManager:SetItemTooltip: it clears the tooltip, fills it with the worn
+-- piece (ProcessInfo, where the addon's handler and Pawn's step run), then adds "If you
+-- replace this item" and the changes (TooltipComparisonManager.lua, the same in both
+-- flavors). Nothing of the addon's is called after those lines, so its handler only counts
+-- the building (OweUpgradeLines), and the lines are added when a tooltip's OnUpdate next
+-- runs: a comparison tooltip's own, and that of the client's item tooltips, whose OnUpdate
+-- is where a bag button's tooltip is set again five times a second (GameTooltip_OnUpdate),
+-- so the lines are back right after the building that cleared them and before the frame is
+-- drawn. The piece looked at is the one in the tooltip that owns the comparison tooltip (the
+-- manager makes it the owner); both pieces are read off their tooltips
+-- (TooltipUtil.GetDisplayedItem).
+--
+-- Not done: a secure hook after TooltipComparisonManager:SetItemTooltip. Retail client
+-- (12.1.5.70961): each time a bag button set its tooltip, each comparison tooltip was built
+-- twice, and the hook ran after the first building and not after the second, which cleared
+-- the line it had added. Why it did not run is not known. The addon's handler ran in both.
+--
+-- What the addon last made of each comparison tooltip is kept for the Debug Frame export
+-- (NoteComparison): none of this can be seen offline, and an export is made after the
+-- pointer has left the item, when the comparison is gone.
+local upgradeItems = {}
+local clientTooltips = {}
+local comparisonTooltips = {}
+-- Comparison tooltip -> how often the client has filled it since the addon last looked.
+local pendingBuilds = {}
+local pawnAddsValues = nil
+
+local LOSS_COLOUR = "808080"
+local function AddReplacementLine(tooltip, gain)
+    local icon = gain.icon and format("|T%s:0|t ", tostring(gain.icon)) or ""
+    local text
+    if gain.upgrade then
+        local worn = IsWornGain(gain)
+        text = format("%s|cff%s%s|r%s", worn and WORN_ARROW or LOADOUT_ARROW,
+            worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
+            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], OtherSpecNote(gain))
+    else
+        text = format("|cff%s%s|r", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"])
+    end
+    tooltip:AddLine(format("|cff%s%s%s:|r  %s", gain.colour or LOADOUT_NAME_COLOUR, icon, tostring(gain.name), text),
+        1, 1, 1, true)
+end
+
+-- For a list a window draws itself (the auction house's listings of one item): a gain as the
+-- lines above have it, without the name and the word: the arrow and "+12%" in the arrow's
+-- colour. Nothing for a piece that is no upgrade.
+function TooltipMixin:GetShortGainText(gain)
+    if type(gain) ~= "table" or not gain.upgrade then
+        return nil
+    end
+    local worn = IsWornGain(gain)
+    return format("%s|cff%s%s|r", worn and WORN_ARROW or LOADOUT_ARROW, worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
+        gain.percent and format("%+d%%", gain.percent) or L["upgrade"])
+end
+
+-- The piece a tooltip shows, as an item: made from its link, and kept for that tooltip while
+-- it shows the same link. Nothing for an owner that is no tooltip.
+local shownItems = {}
+local function ItemShownIn(tooltip)
+    if type(tooltip) ~= "table" or type(tooltip.IsTooltipType) ~= "function" then
+        return nil
+    end
+    local _, link = TooltipUtil.GetDisplayedItem(tooltip)
+    if not link then
+        return nil
+    end
+    local item = ItemForTooltip(tooltip, link, shownItems[tooltip])
+    shownItems[tooltip] = item
+    return item
+end
+
+local function TooltipName(tooltip)
+    return tostring(tooltip and tooltip.GetName and tooltip:GetName() or "a tooltip")
+end
+
+-- What the addon last made of a comparison tooltip, for the export: { time, text, count (the
+-- same thing that many times in a row), lastTime, sample }. One for a tooltip: the next thing
+-- that is not the same takes its place.
+local comparisonNotes = {}
+local function NoteComparison(tooltip, text, ...)
+    if select("#", ...) > 0 then
+        text = format(text, ...)
+    end
+    local now = GetTime()
+    local note = comparisonNotes[tooltip]
+    if note and note.text == text then
+        note.count = note.count + 1
+        note.lastTime = now
+        return note
+    end
+    note = { time = now, text = text, count = 1, lastTime = now }
+    comparisonNotes[tooltip] = note
+    return note
+end
+
+-- A comparison tooltip as it stands: whether it is shown, how many lines it has against how
+-- many it had when the addon last added to it (fewer: it was built again since), and whether
+-- its last line lies inside its frame (below it: the tooltip was not sized for the line).
+-- Geometry and counts alone; no line's text is read.
+local lastBuilt = {}
+local function DescribeComparisonTooltip(tooltip)
+    local count = tooltip.NumLines and tooltip:NumLines() or 0
+    local built = lastBuilt[tooltip]
+    local parts = { format("%s, %d lines", tooltip.IsShown and tooltip:IsShown() and "shown" or "hidden", count) }
+    if built then
+        parts[#parts + 1] = format("%d when the addon last added to it (%d its own)", built.lines, built.added)
+    else
+        parts[#parts + 1] = "the addon has added nothing to it"
+    end
+    local lastLine = count > 0 and _G[TooltipName(tooltip) .. "TextLeft" .. count] or nil
+    if lastLine and lastLine.GetBottom and tooltip.GetBottom then
+        local lineBottom, frameBottom = lastLine:GetBottom(), tooltip:GetBottom()
+        if lineBottom and frameBottom then
+            parts[#parts + 1] = format("last line ends %.1f %s the frame's bottom edge (%s)", math.abs(lineBottom - frameBottom),
+                lineBottom >= frameBottom and "above" or "BELOW", lastLine:IsShown() and "line shown" or "line hidden")
+        end
+    end
+    return table.concat(parts, "; ")
+end
+
+-- How a comparison tooltip stands a moment after the addon added to it, while it is still on
+-- screen and between two of the client's buildings: read once for a note. Fewer lines than the
+-- addon left it with says something built it again after the addon's turn, which is how the
+-- lines were once added and never seen.
+local SAMPLE_DELAY = 0.1
+local function SampleComparisonTooltip(tooltip, note)
+    if note.sampled or not (C_Timer and C_Timer.After) then
+        return
+    end
+    note.sampled = true
+    C_Timer.After(SAMPLE_DELAY, function()
+        note.sample = DescribeComparisonTooltip(tooltip)
+    end)
+end
+
+-- For the Debug Frame export: each comparison tooltip as it stands now, by name, with what the
+-- addon last made of it: { { state, last (or nil), sample (or nil) } ... }.
+function TooltipMixin:GetComparisonReport()
+    local now = GetTime()
+    local report = {}
+    for tooltip in pairs(comparisonTooltips) do
+        local entry = { state = TooltipName(tooltip) .. ": " .. DescribeComparisonTooltip(tooltip) }
+        local note = comparisonNotes[tooltip]
+        if note then
+            entry.last = format("%.1f s ago: %s%s", now - note.lastTime, note.text,
+                note.count > 1 and format(" (%d times in a row, over %.1f s)", note.count, note.lastTime - note.time) or "")
+            if note.sample then
+                entry.sample = format("%.1f s after its lines were first added: %s", SAMPLE_DELAY, note.sample)
+            end
+        end
+        report[#report + 1] = entry
+    end
+    table.sort(report, function(a, b) return a.state < b.state end)
+    return report
+end
+
+-- A comparison tooltip the client has built since the addon last looked: its lines are gone
+-- with the building, and are added again under the client's.
+local function AddReplacementLines(tooltip)
+    local builds = pendingBuilds[tooltip]
+    pendingBuilds[tooltip] = nil
+    -- Hidden: the client shows it again only by building it again.
+    if not tooltip:IsShown() then
+        return
+    end
+    local worn = ItemShownIn(tooltip)
+    local looked = worn and ItemShownIn(tooltip:GetOwner()) or nil
+    if not looked then
+        NoteComparison(tooltip, "built %d times; %s", builds,
+            worn and "the tooltip it stands beside names no item" or "it shows no item")
+        return
+    end
+    local wornLink, lookedLink = worn:GetItemLink(), looked:GetItemLink()
+    if not WantsLoadoutLines(looked) or not CaerdonEquipment.GetReplacementGains then
+        NoteComparison(tooltip, "looked at %s, worn %s: built %d times; no lines wanted (the setting, or no equipment)",
+            lookedLink, wornLink, builds)
+        return
+    end
+    local before = tooltip:NumLines()
+    local gains, why = CaerdonEquipment:GetReplacementGains(looked, worn)
+    for _, gain in ipairs(gains or {}) do
+        AddReplacementLine(tooltip, gain)
+    end
+    local after = tooltip:NumLines()
+    lastBuilt[tooltip] = { lines = after, added = after - before }
+    if after == before then
+        NoteComparison(tooltip, "looked at %s, worn %s: built %d times, nothing added (%s)",
+            lookedLink, wornLink, builds, tostring(why or "no reason given"))
+        return
+    end
+    -- The tooltip took its size before these lines.
+    tooltip:Show()
+    SampleComparisonTooltip(tooltip, NoteComparison(tooltip,
+        "looked at %s, worn %s: built %d times, added %d (the tooltip had %d lines, has %d)",
+        lookedLink, wornLink, builds, after - before, before, after))
+end
+
+-- From a tooltip's OnUpdate (see above): every comparison tooltip built since the last time.
+function TooltipMixin:CatchUpComparisons()
+    if next(pendingBuilds) == nil then
+        return
+    end
+    for tooltip in pairs(comparisonTooltips) do
+        if pendingBuilds[tooltip] then
+            xpcall(AddReplacementLines, geterrorhandler(), tooltip)
+        end
+    end
+end
+
+function TooltipMixin:OweUpgradeLines(tooltip, item)
+    if comparisonTooltips[tooltip] then
+        pendingBuilds[tooltip] = (pendingBuilds[tooltip] or 0) + 1
+    end
+    if pawnAddsValues then
+        upgradeItems[tooltip] = item
+    elseif clientTooltips[tooltip] then
+        xpcall(function() Tooltip:AddLoadoutUpgrades(tooltip, item) end, geterrorhandler())
+    end
+end
+
+-- upgradeInfo without the scales named: a table of its own, and the one given where it names
+-- none of them. Never nil for a table: without upgradeInfo Pawn says other things.
+local function WithoutScales(upgradeInfo, scales)
+    local kept, dropped = {}, false
+    for _, upgrade in ipairs(upgradeInfo) do
+        if scales[upgrade.ScaleName] then
+            dropped = true
+        else
+            kept[#kept + 1] = upgrade
+        end
+    end
+    return dropped and kept or upgradeInfo
+end
+
+-- A table of marks (scale name -> true) without the scales named: one of its own, and the one
+-- given where it names none of them or is no table.
+local function WithoutMarks(marks, scales)
+    if type(marks) ~= "table" then
+        return marks
+    end
+    local kept, dropped = {}, false
+    for scaleName, mark in pairs(marks) do
+        if scales[scaleName] then
+            dropped = true
+        else
+            kept[scaleName] = mark
+        end
+    end
+    return dropped and kept or marks
+end
+
+function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, secondBestFor, ...)
+    local item = upgradeItems[tooltip]
+    upgradeItems[tooltip] = nil
+    local upgrades, setScales, judgedScales
+    if item then
+        local ok, list, scales, judged = pcall(function()
+            if not WantsLoadoutLines(item) then
+                return nil, nil, nil
+            end
+            return CaerdonEquipment:GetLoadoutUpgradeList(item), CaerdonEquipment:GetPawnScalesGivenToSets(),
+                CaerdonEquipment:GetPawnScalesJudged()
+        end)
+        if ok then
+            upgrades, setScales, judgedScales = list, scales, judged
+        end
+    end
+    if upgrades or setScales or judgedScales then
+        local ours = {}
+        for scaleName in pairs(setScales or ours) do
+            ours[scaleName] = true
+        end
+        -- Not for the played spec's own set: that line is against the set's saved piece,
+        -- and Pawn's note for the scale is against the worn one, which the yellow line is for.
+        for _, upgrade in ipairs(upgrades or {}) do
+            if not upgrade.own then
+                ours[upgrade.scale] = true
+            end
+        end
+        if type(upgradeInfo) == "table" then
+            upgradeInfo = WithoutScales(upgradeInfo, ours)
+        end
+        for scaleName in pairs(judgedScales or {}) do
+            ours[scaleName] = true
+        end
+        bestFor, secondBestFor = WithoutMarks(bestFor, ours), WithoutMarks(secondBestFor, ours)
+    end
+
+    pawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, secondBestFor, ...)
+
+    -- None of these in a comparison tooltip: what it gets comes after the client's own lines
+    -- (CatchUpComparisons).
+    if upgrades and not comparisonTooltips[tooltip] then
+        xpcall(function()
+            for _, upgrade in ipairs(upgrades) do
+                AddUpgradeLine(tooltip, upgrade)
+            end
+        end, geterrorhandler())
+    end
+end
+
+-- A tooltip whose OnUpdate adds the comparison lines that are owed: once for a tooltip.
+local updateWatched = {}
+local function WatchUpdates(tooltip)
+    if updateWatched[tooltip] or not tooltip.HookScript then
+        return
+    end
+    updateWatched[tooltip] = true
+    tooltip:HookScript("OnUpdate", function()
+        Tooltip:CatchUpComparisons()
+    end)
+end
+
+-- At load: the comparison tooltips the client puts beside its item tooltips.
+function TooltipMixin:NoteComparisonTooltips(...)
+    for index = 1, select("#", ...) do
+        local tooltip = select(index, ...)
+        if tooltip and not comparisonTooltips[tooltip] then
+            comparisonTooltips[tooltip] = true
+            WatchUpdates(tooltip)
+        end
+    end
+end
+
+-- At load: the client's own item tooltips, and the wrap of Pawn's function where Pawn has it.
+function TooltipMixin:PlaceUpgradeLines(...)
+    for index = 1, select("#", ...) do
+        local tooltip = select(index, ...)
+        if tooltip then
+            clientTooltips[tooltip] = true
+            WatchUpdates(tooltip)
+        end
+    end
+    if type(PawnAddValuesToTooltip) == "function" then
+        pawnAddsValues = PawnAddValuesToTooltip
+        PawnAddValuesToTooltip = function(...) return Tooltip:PawnAddsValues(...) end
     end
 end
 

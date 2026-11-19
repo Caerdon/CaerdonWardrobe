@@ -286,6 +286,18 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == nil then
             CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners = NS:GetDefaultConfig().Tooltip.ShowRecipeLearners
         end
+        if CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades == nil then
+            CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades = NS:GetDefaultConfig().Tooltip.ShowLoadoutUpgrades
+        end
+        if not CaerdonWardrobeConfig.Auction then
+            CaerdonWardrobeConfig.Auction = {}
+        end
+        if CaerdonWardrobeConfig.Auction.IconColumn == nil then
+            CaerdonWardrobeConfig.Auction.IconColumn = NS:GetDefaultConfig().Auction.IconColumn
+        end
+        if CaerdonWardrobeConfig.Auction.UpgradeColumn == nil then
+            CaerdonWardrobeConfig.Auction.UpgradeColumn = NS:GetDefaultConfig().Auction.UpgradeColumn
+        end
         if CaerdonWardrobeConfig.Binding.ShowWuE == nil then
             CaerdonWardrobeConfig.Binding.ShowWuE = NS:GetDefaultConfig().Binding.ShowWuE
         end
@@ -570,8 +582,16 @@ function NS:GetDefaultConfig()
             }
         },
 
+        -- The addon's own columns in the auction house's lists (features/Auction.lua).
+        Auction = {
+            IconColumn = true,
+            UpgradeColumn = true
+        },
+
         Tooltip = {
-            ShowRecipeLearners = true
+            ShowRecipeLearners = true,
+            -- The line under a piece that is an upgrade for a gear set or another spec.
+            ShowLoadoutUpgrades = true
         }
     }
 end

@@ -240,6 +240,32 @@ local function GetCandidateItemLevel(item)
     return GetComparableItemLevel(item:GetItemLink(), item:GetItemLocation())
 end
 
+-- A piece known by a link that is not its own. The auction house's list of results names a
+-- piece by its item key (item, level, suffix), and the link the client gives for that key is
+-- the plain item's: at its own level, with the stats still to be rolled ("+55 Random Stat 1").
+-- Whoever makes the item passes the level the piece has (extraData.overrideItemLevel: the
+-- auction feature for a row, the tooltip code for a tooltip filled by item key). Where the
+-- link's own level is another, nothing read off the link is the piece's, and Pawn's value of
+-- it least of all: Pawn is not asked about such a piece, its item level decides, and it has no
+-- scored line in a tooltip. Seen (retail 12.1.5.70961): a piece of 328 in the list, over a worn
+-- 276, lost its arrow to Pawn's score of the plain item at 219.
+local function IsKnownByAnotherLink(item)
+    local pieceLevel = item.extraData and item.extraData.overrideItemLevel
+    if not pieceLevel then
+        return false
+    end
+    local linkLevel = GetComparableItemLevel(item:GetItemLink(), nil)
+    return linkLevel ~= nil and linkLevel ~= pieceLevel
+end
+
+-- Whether a higher item level alone makes a piece an upgrade: all there is without Pawn, and
+-- the player's choice with it (Icon.ShowItemLevelUpgrades).
+local function ItemLevelCounts()
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or nil
+    return PawnShouldItemLinkHaveUpgradeArrowUnbudgeted == nil or not iconConfig or
+        iconConfig.ShowItemLevelUpgrades ~= false
+end
+
 -- linkTooltip: the client's tooltip for the item's link, where the caller has it (the status
 -- has just read it). The floor line is then taken from that answer and no tooltip is fetched:
 -- a bag copy's slot and its link carry the same line. A worn piece is still asked by its slot.
@@ -547,9 +573,11 @@ local equippedGearSnapshot = nil
 local equipmentSetIndex = nil
 local equipmentSetIndexTime = nil
 
--- The toon's other specs with the Pawn scale and the gear each is compared against, built at the
--- first piece that asks and kept until the next refresh (GetOtherSpecs).
-local otherSpecCache = nil
+-- The toon's loadouts beside what it wears (its other specs, and the played spec's gear set),
+-- with the Pawn scale and the gear each is compared against, built at the first piece that asks
+-- and kept until the next refresh (GetLoadouts). What is in them follows from what is worn and
+-- from the gear sets, so no refresh keeps them.
+local loadoutCache = nil
 
 -- What a spec nobody chose on the Icons page is taken as (ReadOtherSpecDefault), by spec index,
 -- until the next refresh: it is asked for with every scale Pawn names for a piece. A gear set
@@ -562,6 +590,14 @@ local otherSpecDefaults = {}
 -- gems, and the value follows from those and the scale's weights alone, so it stands until Pawn
 -- says its scales changed (OnPawnChanged).
 local otherSpecValues = {}
+
+-- Whether Pawn takes a piece's armor type for the class's own (IsArmorTypeRefused), by item
+-- link. It follows from the item, the class and the level, so a refresh about the worn gear
+-- keeps it.
+local armorTypeVerdicts = {}
+
+-- The icon of a gear set the client names none for (INV_Misc_QuestionMark).
+local QUESTION_MARK_ICON = 134400
 
 GetEquippedGearSnapshot = function()
     if equippedGearSnapshot then
@@ -612,12 +648,13 @@ function CaerdonEquipment:InvalidateCaches(changed)
     cachedPvpContext = nil
     equippedGearSnapshot = nil
     equipmentSetIndex = nil
-    otherSpecCache = nil
+    loadoutCache = nil
     wipe(otherSpecDefaults)
     if changed == "worn" and not collectionChanged then
         return
     end
 
+    wipe(armorTypeVerdicts)
     if collectionChanged or not (next(refusedItems) or next(failedSourceItemLoads)) then
         wipe(sourceInfoCache)
     else
@@ -1415,12 +1452,15 @@ end
 -- tree the toon is not using. PawnIsItemAnUpgrade is what Pawn's arrow API and tooltip both use,
 -- and it names the scales. Anything unclear returns false, which keeps Pawn's verdict.
 -- Second return value: what Pawn said, for the Debug Frame export.
-local function IsPawnUpgradeOffTreeOnly(item, offTreeScales)
+-- Third: the verdict stands for none of the scales named. Each is for a spec the player switched
+-- off, or for one whose gear set decides in Pawn's place (setSpecs, from GetShownSetSpecs).
+-- Fourth: the names of the scales it does stand for.
+local function IsPawnUpgradeOffTreeOnly(item, offTreeScales, setSpecs)
     if not (PawnGetItemData and PawnIsItemAnUpgrade and PawnCommon) then
         return false, "Pawn upgrade API missing"
     end
 
-    local ok, verdict, detail, unwanted = pcall(function()
+    local ok, verdict, detail, noneStands, standing = pcall(function()
         local candidate = PawnGetItemData(item:GetItemLink())
         if not candidate or not candidate.Link then
             return false, "Pawn has no data for the item"
@@ -1434,45 +1474,59 @@ local function IsPawnUpgradeOffTreeOnly(item, offTreeScales)
             return false, "Pawn named no scale"
         end
 
-        local names = {}
+        local names, standingNames = {}, {}
         local offTreeOnly = true
-        -- Third return value: every scale named is for a spec the player switched off.
-        local unwantedOnly = true
         local _, classFile = UnitClass("player")
         for _, upgrade in ipairs(upgradeInfo) do
-            names[#names + 1] = upgrade.LocalizedScaleName or tostring(upgrade.ScaleName)
-            if not offTreeScales[upgrade.ScaleName] then
+            local name = upgrade.LocalizedScaleName or tostring(upgrade.ScaleName)
+            names[#names + 1] = name
+            local offTree = offTreeScales[upgrade.ScaleName]
+            if not offTree then
                 offTreeOnly = false
             end
             local scale = PawnCommon.Scales and PawnCommon.Scales[upgrade.ScaleName]
-            if not scale or type(scale.SpecID) ~= "number" or IsOtherSpecWanted(classFile, scale.SpecID) then
-                unwantedOnly = false
+            local specIndex = scale and scale.SpecID
+            if type(specIndex) ~= "number" or (IsOtherSpecWanted(classFile, specIndex) and
+                not (offTree and setSpecs and setSpecs[specIndex])) then
+                standingNames[#standingNames + 1] = name
             end
         end
-        return offTreeOnly, table.concat(names, ", "), offTreeOnly and unwantedOnly
+        return offTreeOnly, table.concat(names, ", "), offTreeOnly and #standingNames == 0,
+            table.concat(standingNames, ", ")
     end)
 
     if not ok then
         return false, "error: " .. tostring(verdict)
     end
-    return verdict == true, detail, unwanted == true
+    return verdict == true, detail, noneStands == true, standing
 end
 
--- An upgrade for another of the toon's specs (Icon.ShowOtherSpecUpgrades).
+-- An upgrade for gear the toon keeps beside what it is wearing (Icon.ShowOtherSpecUpgrades).
 --
--- Pawn's own verdict is over the scales it shows, and in its automatic mode that is the played
--- spec's alone. Its values are not: PawnGetSingleValueFromItem scores an item on any scale by
--- name, shown or not (read in Pawn 2.14.4). So a piece is scored here on each other spec's scale
--- and compared with what that spec wears: the gear set assigned to the spec, or the worn gear
--- where none is assigned or the set leaves the slot alone. Worn gear is a poor stand-in (a
--- tank's ring against a healer's scale), which is why the set comes first.
+-- What is worn is measured first, by everything above this. Beside it the toon has loadouts
+-- (the author's word), each measured on its own:
+--   Another of its specs. Pawn's own verdict is over the scales it shows, and in its automatic
+--   mode that is the played spec's alone. Its values are not: PawnGetSingleValueFromItem scores
+--   an item on any scale by name, shown or not (read in Pawn 2.14.4). So a piece is scored on
+--   the other spec's scale and compared with what that spec wears: the gear set assigned to
+--   the spec, or the worn gear where none is assigned or the set leaves the slot alone. Worn
+--   gear is a poor stand-in (a tank's ring against a healer's scale), which is why the set
+--   comes first, and why it also comes before Pawn's verdict where Pawn shows that spec's
+--   scale: that verdict is against the worn gear (GetShownSetSpecs).
+--   The spec being played, where a gear set is assigned to it and the set's piece is not the
+--   one worn (a PVP set put on, or a piece put on that the set was not saved with): the set's
+--   piece is then what a piece has to beat for that spec, whatever is worn in its place
+--   (author decision: a piece that beats the set's is one to save into the set, or to buy).
+--   Where the set's piece is the worn one it has been compared already.
 --
--- No verdict for a spec: a trinket (Pawn does not score them), a slot the spec's set has empty
--- or whose piece is not to be found (the bank), a piece Pawn has no values for, and the piece
--- that is the set's own. With two slots the weaker one is the one to beat, as Pawn has it.
+-- No verdict for a loadout: a trinket (Pawn does not score them), a slot its set has empty or
+-- whose piece is not to be found (the bank), a piece Pawn has no values for, the piece that is
+-- the set's own, and what Pawn's own check refuses (IsArmorTypeRefused, IsWeaponKindRefused).
+-- With two slots the weaker one is the one to beat, as Pawn has it.
 
 -- The link of the piece at a gear set's location, as C_EquipmentSet.GetItemLocations gives it
 -- (0: nothing in the slot, 1: the set leaves the slot alone, -1: the piece is missing).
+-- Second return value: the piece is being worn.
 local function LinkAtSetLocation(location)
     if type(location) ~= "number" or location <= 1 then
         return nil
@@ -1493,51 +1547,210 @@ local function LinkAtSetLocation(location)
         end
         return nil
     elseif data.isPlayer then
-        return slot and GetInventoryItemLink("player", slot) or nil
+        return slot and GetInventoryItemLink("player", slot) or nil, true
     end
     return nil
 end
 
--- { { index, id, scale, label, setID, baseline = {} } ... }, by spec index. Empty on
--- a client without specializations, without Pawn, or for a toon with no spec chosen.
-local function GetOtherSpecs()
-    if otherSpecCache then
-        return otherSpecCache
+-- The gear set the toon last put on, by the client's set ID, kept for the toon between sessions
+-- (CaerdonRefreshData[realm][toon].chosenGearSet, beside what the refresh watcher keeps there).
+-- nil for a toon the client has no name for yet. set: the ID to keep.
+local function ChosenGearSet(set)
+    local realm, toon = GetRealmName(), UnitName("player")
+    if not realm or not toon or toon == UNKNOWNOBJECT then
+        return nil
     end
-    local specs = {}
-    otherSpecCache = specs
+    if set == nil then
+        local byToon = type(CaerdonRefreshData) == "table" and CaerdonRefreshData[realm]
+        local saved = type(byToon) == "table" and byToon[toon]
+        return type(saved) == "table" and saved.chosenGearSet or nil
+    end
+    if type(CaerdonRefreshData) ~= "table" then
+        CaerdonRefreshData = {}
+    end
+    if type(CaerdonRefreshData[realm]) ~= "table" then
+        CaerdonRefreshData[realm] = {}
+    end
+    if type(CaerdonRefreshData[realm][toon]) ~= "table" then
+        CaerdonRefreshData[realm][toon] = {}
+    end
+    CaerdonRefreshData[realm][toon].chosenGearSet = set
+    return set
+end
+
+-- The client has put a gear set on (EQUIPMENT_SWAP_FINISHED, from the core): that set is the
+-- one the player chose, until another is.
+--[[static]]
+function CaerdonEquipment:NoteGearSetPutOn(succeeded, setID)
+    if succeeded and type(setID) == "number" then
+        ChosenGearSet(setID)
+    end
+end
+
+-- The gear set being worn (the author's "active set"), or nil: { id, name, icon }, and why.
+-- The client keeps no such thing, and what is worn does not say: two sets of one toon often
+-- share most of their pieces. So it is the set the player last put on (ChosenGearSet), which
+-- stands while pieces are changed by hand: a piece put on that the set was not saved with
+-- does not change which set that is. It is checked against the client at every reading:
+--   The set chosen no longer exists, or none was ever noted (the addon was not running): the
+--   set that is on in full, else the one with the largest share of its pieces on, above half.
+--   The set chosen is not on in full and another one is: that one (the sets were changed
+--   where the addon did not see it, or by hand, piece by piece).
+-- Of equals the one named first counts (preferSetID: the played spec's own), then the first in
+-- the client's list.
+local function ReadActiveSet(preferSetID)
+    if not (C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs and C_EquipmentSet.GetEquipmentSetInfo) then
+        return nil
+    end
+    local chosenID = ChosenGearSet()
+    local chosen, chosenInFull, inFull, most, mostShare
+    for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
+        local name, icon, _, isEquipped, numItems, numEquipped = C_EquipmentSet.GetEquipmentSetInfo(setID)
+        if name ~= nil then
+            local set = { id = setID, name = name, icon = icon }
+            if setID == chosenID then
+                chosen, chosenInFull = set, isEquipped == true
+            end
+            if isEquipped == true and (not inFull or setID == preferSetID) then
+                inFull = set
+            end
+            if type(numItems) == "number" and numItems > 0 and type(numEquipped) == "number" then
+                local share = numEquipped / numItems
+                if share > 0.5 and (not most or share > mostShare or (share == mostShare and setID == preferSetID)) then
+                    most, mostShare = set, share
+                end
+            end
+        end
+    end
+    if chosen and (chosenInFull or not inFull) then
+        return chosen, "the set last put on"
+    elseif inFull then
+        return inFull, chosen and "on in full, where the set last put on is not" or "on in full"
+    elseif most then
+        return most, "most of its pieces are on"
+    end
+    return nil, "no gear set is mostly on"
+end
+
+-- The toon's loadouts beside what it wears (see above):
+-- { { index, id, scale, label, setID, setName, own, baseline = {} } ... }, by spec index, and
+-- bySpec for the same by that index. own: the spec being played, which is listed only with a
+-- gear set. For the item tooltip each also has its set's icon, its spec's name and icon and
+-- its scale's colour in Pawn. Empty on a client without specializations, without Pawn, or for
+-- a toon with no spec chosen.
+--
+-- worn (a field, not in the list): what is worn, as a loadout of the same shape, for the item
+-- tooltip alone. Its scale is the played spec's, it has no set, so each slot's piece is the
+-- worn one. It is there where the gear set being worn is the played spec's own, and carries
+-- that set's name and icon (the worn gear is taken for the set, also where a piece of it was
+-- never saved into the set), and where no gear set is being worn. Not where the set being
+-- worn has no spec or another spec's: the played spec's scale is not that gear's, the addon
+-- has no scale for it, and Pawn's own lines stand (author decision).
+-- activeSet, activeWhy: what ReadActiveSet said, for the export.
+local function GetLoadouts()
+    if loadoutCache then
+        return loadoutCache
+    end
+    local loadouts = { bySpec = {} }
+    loadoutCache = loadouts
     if not (PawnCommon and PawnCommon.Scales and PawnGetItemData and PawnGetSingleValueFromItem) then
-        return specs
+        return loadouts
     end
     if CaerdonAPI:GetTalentTrees() then
-        return specs
+        return loadouts
     end
     local current = CaerdonAPI:GetPlayerSpecializationIndex()
     if not current or current < 1 or current > 4 then
-        return specs
+        return loadouts
     end
 
     local _, classFile, classID = UnitClass("player")
-    local seen = {}
+    local setForSpec = C_EquipmentSet and C_EquipmentSet.GetEquipmentSetForSpec
     for scaleName, scale in pairs(PawnCommon.Scales) do
         local specIndex = scale.SpecID
         if scale.ClassID == classID and scale.Provider ~= nil and type(specIndex) == "number" and
-            specIndex ~= current and not seen[specIndex] and IsOtherSpecWanted(classFile, specIndex) then
-            seen[specIndex] = true
-            local setID = C_EquipmentSet and C_EquipmentSet.GetEquipmentSetForSpec and
-                C_EquipmentSet.GetEquipmentSetForSpec(specIndex) or nil
-            specs[#specs + 1] = {
-                index = specIndex,
-                id = (CaerdonAPI:GetSpecializationInfo(specIndex)),
-                scale = scaleName,
-                label = scale.LocalizedName or scaleName,
-                setID = setID,
-                baseline = {},
-            }
+            specIndex == current and not loadouts.wornRead then
+            loadouts.wornRead = true
+            local ownSetID = setForSpec and setForSpec(specIndex) or nil
+            local active, why = ReadActiveSet(ownSetID)
+            loadouts.activeSet, loadouts.activeWhy = active, why
+            if not active or active.id == ownSetID then
+                local _, specName, specIcon
+                if GetSpecializationInfoForClassID then
+                    _, specName, _, specIcon = GetSpecializationInfoForClassID(classID, specIndex)
+                end
+                loadouts.worn = {
+                    isWorn = true,
+                    index = specIndex,
+                    id = (CaerdonAPI:GetSpecializationInfo(specIndex)),
+                    scale = scaleName,
+                    label = scale.LocalizedName or scaleName,
+                    specName = specName,
+                    specIcon = specIcon,
+                    activeName = active and active.name or nil,
+                    activeIcon = active and (active.icon or QUESTION_MARK_ICON) or nil,
+                    colour = type(scale.Color) == "string" and #scale.Color == 6 and scale.Color or nil,
+                    own = false,
+                    baseline = {},
+                }
+            end
+        end
+        if scale.ClassID == classID and scale.Provider ~= nil and type(specIndex) == "number" and
+            not loadouts.bySpec[specIndex] then
+            -- The spec being played is always wanted, and is a loadout only through its set.
+            local own = specIndex == current
+            local wanted = own or IsOtherSpecWanted(classFile, specIndex)
+            local setID = wanted and setForSpec and setForSpec(specIndex) or nil
+            if wanted and (not own or setID ~= nil) then
+                local setName, setIcon
+                if setID and C_EquipmentSet.GetEquipmentSetInfo then
+                    setName, setIcon = C_EquipmentSet.GetEquipmentSetInfo(setID)
+                end
+                local _, specName, specIcon
+                if GetSpecializationInfoForClassID then
+                    _, specName, _, specIcon = GetSpecializationInfoForClassID(classID, specIndex)
+                end
+                local loadout = {
+                    index = specIndex,
+                    id = (CaerdonAPI:GetSpecializationInfo(specIndex)),
+                    scale = scaleName,
+                    label = scale.LocalizedName or scaleName,
+                    setID = setID,
+                    setName = setName,
+                    setIcon = setIcon,
+                    specName = specName,
+                    specIcon = specIcon,
+                    colour = type(scale.Color) == "string" and #scale.Color == 6 and scale.Color or nil,
+                    own = own,
+                    baseline = {},
+                }
+                loadouts.bySpec[specIndex] = loadout
+                loadouts[#loadouts + 1] = loadout
+            end
         end
     end
-    table.sort(specs, function(a, b) return a.index < b.index end)
-    return specs
+    table.sort(loadouts, function(a, b) return a.index < b.index end)
+    return loadouts
+end
+
+-- The other specs with a gear set whose scale Pawn shows (offTreeScales, the shown scales of
+-- the toon's other specs): spec index -> true, or nil. For those the set decides and Pawn's
+-- verdict, which is against the worn gear, does not (author decision): the arrow for a spec is
+-- "better than what that spec has", and with a set assigned the worn gear is not that. Showing
+-- the scale is still the player's sign that the spec is wanted, so the set is asked for it
+-- whatever Icon.ShowOtherSpecUpgrades says, as Pawn's verdict was.
+local function GetShownSetSpecs(offTreeScales)
+    local bySpec = GetLoadouts().bySpec
+    local found
+    for scaleName in pairs(offTreeScales) do
+        local scale = PawnCommon.Scales[scaleName]
+        local loadout = scale and bySpec[scale.SpecID]
+        if loadout and loadout.setID and not loadout.own then
+            found = found or {}
+            found[loadout.index] = true
+        end
+    end
+    return found
 end
 
 -- Pawn's value of the item on the scale, from the values kept (otherSpecValues), or nil.
@@ -1622,36 +1835,129 @@ local function JudgeOnHiddenOwnScale(item, scale)
     return verdict, detail
 end
 
--- What the spec has in the slot and Pawn's value of it on the spec's scale, or nil. Found once
--- per refresh. The set is asked where its pieces are as the slot is first needed, not when the
--- specs were listed: a piece moves in the bags without a refresh.
-local function OtherSpecBaseline(spec, slotID)
-    local entry = spec.baseline[slotID]
+-- What the loadout has in the slot and Pawn's value of it on its scale, or nil: { link, value,
+-- fromSet (the set's piece, not the worn gear standing in), worn (it is being worn) }. Found
+-- once per refresh. The set is asked where its pieces are as the slot is first needed, not when
+-- the loadouts were listed: a piece moves in the bags without a refresh. For a slot the set
+-- leaves alone the worn piece stands in.
+local function LoadoutBaseline(loadout, slotID)
+    local entry = loadout.baseline[slotID]
     if entry == nil then
         entry = false
-        local link
-        local locations = spec.setID and C_EquipmentSet.GetItemLocations(spec.setID) or nil
+        local link, worn, fromSet
+        local locations = loadout.setID and C_EquipmentSet.GetItemLocations(loadout.setID) or nil
         local location = locations and locations[slotID]
-        if spec.setID and location ~= 1 then
-            link = LinkAtSetLocation(location)
+        if loadout.setID and location ~= 1 then
+            link, worn = LinkAtSetLocation(location)
+            fromSet = true
         else
-            link = GetInventoryItemLink("player", slotID)
+            link, worn = GetInventoryItemLink("player", slotID), true
         end
         if link then
-            local value = OtherSpecValue(spec.scale, link)
+            local value = OtherSpecValue(loadout.scale, link)
             if value then
-                entry = { link = link, value = value }
+                entry = { link = link, value = value, fromSet = fromSet or false, worn = worn or false }
             end
         end
-        spec.baseline[slotID] = entry
+        loadout.baseline[slotID] = entry
     end
     return entry or nil
 end
 
--- The names of the other specs the piece is an upgrade for, or nil. itemSpecs: the specs the
--- client says the piece is for (C_Item.GetItemSpecInfo), which a spec has to be among when the
--- list is not empty.
-local function GetOtherSpecUpgrades(item, itemSpecs)
+-- Two things Pawn's own upgrade check refuses before it compares a value (PawnIsItemAnUpgrade,
+-- read in Pawn 2.14.4). The loadout scoring asks Pawn for values alone, so it applies them
+-- itself; for a spec whose scale Pawn shows they were Pawn's until the spec's gear set took
+-- that verdict's place.
+
+-- Armor that is not the class's type (PawnIsArmorBestTypeForPlayer: cloth on a leather wearer
+-- from the level the client penalises it). Asked of Pawn, whose rule it is, and kept by link
+-- until a refresh that is not about the worn gear: it follows from the item, the class and the
+-- level. No answer where Pawn has not read the item yet, and none is kept then.
+local function IsArmorTypeRefused(link)
+    if not PawnIsArmorBestTypeForPlayer then
+        return false
+    end
+    local verdict = armorTypeVerdicts[link]
+    if verdict == nil then
+        local data = PawnGetItemData(link)
+        if not (data and data.Link and data.UnenchantedStats) then
+            return true
+        end
+        verdict = PawnIsArmorBestTypeForPlayer(data) and true or false
+        armorTypeVerdicts[link] = verdict
+    end
+    return not verdict
+end
+
+-- A one-hander (or what goes in the off hand) against a two-hander and the other way round,
+-- and what the scale is told not to show (its DoNotShow1HUpgrades / DoNotShow2HUpgrades). Pawn
+-- goes by the worn weapon; here it is the loadout's. Without this a two-hander was compared
+-- with a main hand alone. A pair of one-handers against a two-hander is not weighed by Pawn or
+-- here: a piece is judged alone.
+local ONE_HANDED_TYPES = {
+    INVTYPE_WEAPON = true,
+    INVTYPE_WEAPONMAINHAND = true,
+    INVTYPE_WEAPONOFFHAND = true,
+    INVTYPE_SHIELD = true,
+    INVTYPE_HOLDABLE = true,
+}
+local function IsWeaponKindRefused(loadout, inventoryTypeName)
+    local oneHanded = ONE_HANDED_TYPES[inventoryTypeName] == true
+    local twoHanded = inventoryTypeName == "INVTYPE_2HWEAPON"
+    if not oneHanded and not twoHanded then
+        return false
+    end
+    local scale = PawnCommon.Scales[loadout.scale]
+    if scale and ((oneHanded and scale.DoNotShow1HUpgrades) or (twoHanded and scale.DoNotShow2HUpgrades)) then
+        return true
+    end
+    local wielded = LoadoutBaseline(loadout, INVSLOT_MAINHAND) or LoadoutBaseline(loadout, INVSLOT_OFFHAND)
+    if not wielded then
+        return false
+    end
+    local _, _, _, wieldedType = C_Item.GetItemInfoInstant(wielded.link)
+    if wieldedType == "INVTYPE_2HWEAPON" then
+        return oneHanded
+    end
+    return twoHanded
+end
+
+-- The names of the specs the client lists the piece for, where the toon's loot spec is not
+-- among them, or nil: gear for another loot spec, as the upgrade arrow has it (matchesLootSpec
+-- in GetTransmogInfo), and as the client's own group loot has it, which calls a Need for such
+-- a piece "Need (Off-Spec)". The line for what is worn says so (features/Tooltip.lua). A spec
+-- the client has no name for is left out of the names.
+local function OtherLootSpecsOf(itemSpecs)
+    local lootSpecID = itemSpecs and #itemSpecs > 0 and GetPlayerLootSpecID() or nil
+    if not lootSpecID or lootSpecID <= 0 then
+        return nil
+    end
+    local names = {}
+    for _, specID in ipairs(itemSpecs) do
+        if specID == lootSpecID then
+            return nil
+        end
+        local _, name = CaerdonAPI:GetSpecializationInfoByID(specID)
+        if name then
+            names[#names + 1] = name
+        end
+    end
+    return names
+end
+
+-- The loadouts the piece is an upgrade for, or nil: their names, the numbers for the Debug
+-- Frame export, and the same as a list for the item tooltip ({ scale, label, name and icon
+-- (the gear set's where its piece was the one to beat, else the spec's; the active set's for
+-- what is worn, with worn = true), colour, own, value, baseline } per loadout). itemSpecs: the
+-- specs the
+-- client says the piece is for (C_Item.GetItemSpecInfo), which a loadout's spec has to be among
+-- when the list is not empty. onlySpecs (spec index -> true): asked for these alone.
+-- withWorn: what is worn is asked too, first, and whatever onlySpecs says (the item tooltip).
+-- It is asked whatever itemSpecs says as well (author decision): the played spec's scale has
+-- weighed the piece, with a stat that does nothing for the spec at nothing, so an upgrade on it
+-- is one for what is worn. Its entry then has otherSpecs (OtherLootSpecsOf), and the line says
+-- whose gear the piece is.
+local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn)
     local inventoryTypeName = item:GetInventoryTypeName()
     if inventoryTypeName == "INVTYPE_TRINKET" then
         return nil
@@ -1660,54 +1966,317 @@ local function GetOtherSpecUpgrades(item, itemSpecs)
     if not inventorySlots then
         return nil
     end
-    local specs = GetOtherSpecs()
-    if #specs == 0 then
+    local loadouts = GetLoadouts()
+    if withWorn and loadouts.worn then
+        local withIt = { loadouts.worn }
+        for _, loadout in ipairs(loadouts) do
+            withIt[#withIt + 1] = loadout
+        end
+        loadouts = withIt
+    end
+    if #loadouts == 0 then
         return nil
     end
 
-    local ok, names = pcall(function()
+    local ok, names, numbers, list = pcall(function()
         local link = item:GetItemLink()
-        if not link then
+        if not link or IsArmorTypeRefused(link) then
             return nil
         end
 
-        local found
-        for _, spec in ipairs(specs) do
-            local forSpec = true
-            if itemSpecs and #itemSpecs > 0 and spec.id then
+        local found, details, entries
+        for _, loadout in ipairs(loadouts) do
+            local forSpec = loadout.isWorn or not onlySpecs or onlySpecs[loadout.index] == true
+            if forSpec and not loadout.isWorn and itemSpecs and #itemSpecs > 0 and loadout.id then
                 forSpec = false
                 for _, specID in ipairs(itemSpecs) do
-                    if specID == spec.id then
+                    if specID == loadout.id then
                         forSpec = true
                         break
                     end
                 end
             end
             if forSpec then
-                local value = OtherSpecValue(spec.scale, link)
+                local value = OtherSpecValue(loadout.scale, link)
                 local lowest
-                local judged = value ~= nil and value > 0
+                local fromSet, fromWorn = false, false
+                -- One of the set's pieces for these slots is not the one worn.
+                local setAside = false
+                local judged = value ~= nil and value > 0 and not IsWeaponKindRefused(loadout, inventoryTypeName)
                 if judged then
                     for _, slotID in ipairs(inventorySlots) do
-                        local baseline = OtherSpecBaseline(spec, slotID)
+                        local baseline = LoadoutBaseline(loadout, slotID)
                         if not baseline or baseline.link == link then
                             judged = false
                             break
+                        end
+                        if baseline.fromSet then
+                            fromSet = true
+                            if not baseline.worn then
+                                setAside = true
+                            end
+                        else
+                            fromWorn = true
                         end
                         if not lowest or baseline.value < lowest then
                             lowest = baseline.value
                         end
                     end
                 end
+                -- The played spec's set with its own pieces worn, or with the worn gear
+                -- standing in for every slot: compared already, as the worn gear.
+                if judged and loadout.own and not setAside then
+                    judged = false
+                end
                 if judged and lowest and value > lowest * PAWN_UPGRADE_THRESHOLD then
                     found = found or {}
-                    found[#found + 1] = spec.label
+                    details = details or {}
+                    entries = entries or {}
+                    found[#found + 1] = loadout.label
+                    local entry = { scale = loadout.scale, label = loadout.label, colour = loadout.colour,
+                        own = loadout.own, value = value, baseline = lowest }
+                    if loadout.isWorn then
+                        entry.worn = true
+                        entry.otherSpecs = OtherLootSpecsOf(itemSpecs)
+                        entry.name = loadout.activeName or loadout.specName or loadout.label
+                        entry.icon = loadout.activeName and loadout.activeIcon or loadout.specIcon
+                    elseif fromSet then
+                        entry.name = loadout.setName or loadout.label
+                        entry.icon = loadout.setIcon or QUESTION_MARK_ICON
+                    else
+                        entry.name = loadout.specName or loadout.label
+                        entry.icon = loadout.specIcon
+                    end
+                    entries[#entries + 1] = entry
+                    local against
+                    if fromSet then
+                        against = format("in its gear set \"%s\"%s", tostring(loadout.setName or loadout.setID),
+                            fromWorn and " and worn" or "")
+                    else
+                        against = "worn (no gear set has the slot for it)"
+                    end
+                    details[#details + 1] = format("%s%s: %.2f vs %.2f %s", loadout.label,
+                        loadout.own and " (the spec being played, its set's piece not worn)" or "",
+                        value, lowest, against)
                 end
             end
         end
-        return found and table.concat(found, ", ") or nil
+        if not found then
+            return nil
+        end
+        return table.concat(found, ", "), table.concat(details, "; "), entries
+    end)
+    if not ok or not names then
+        return nil
+    end
+    return names, numbers, list
+end
+
+-- What Pawn itself says of the piece, for the scales it shows and against the worn gear
+-- (PawnIsItemAnUpgrade, which its arrow and its tooltip lines both use; read in Pawn 2.14.4):
+-- the scales it calls it an upgrade for (scale name -> true), the percentage for each as Pawn
+-- prints it, a whole number, and whether Pawn adds upgrade notes to tooltips at all. nil where
+-- Pawn has nothing for the piece.
+local function ReadPawnUpgrades(link)
+    if not (PawnCommon and PawnGetItemData and PawnIsItemAnUpgrade) then
+        return nil
+    end
+    local ok, named, percents = pcall(function()
+        local data = PawnGetItemData(link)
+        local upgrades = data and data.Link and PawnIsItemAnUpgrade(data)
+        if type(upgrades) ~= "table" then
+            return nil
+        end
+        local scales, rounded = {}, {}
+        for _, upgrade in ipairs(upgrades) do
+            if upgrade.ScaleName then
+                scales[upgrade.ScaleName] = true
+                if type(upgrade.PercentUpgrade) == "number" then
+                    rounded[upgrade.ScaleName] = math.floor(upgrade.PercentUpgrade * 100 + 0.5)
+                end
+            end
+        end
+        return scales, rounded
+    end)
+    if not ok or not named then
+        return nil
+    end
+    return named, percents, PawnCommon.ShowUpgradesOnTooltips == true
+end
+
+-- For the item tooltip: the scales Pawn shows whose gear set decides in Pawn's place
+-- (GetShownSetSpecs), by name, or nil. Pawn's upgrade note for such a scale is against the worn
+-- gear, and the tooltip leaves it out for the addon's own line (features/Tooltip.lua). Only
+-- where the player asked for the arrows for other gear (Icon.ShowOtherSpecUpgrades).
+--[[static]]
+function CaerdonEquipment:GetPawnScalesGivenToSets()
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    if not (iconConfig and iconConfig.ShowOtherSpecUpgrades == true) then
+        return nil
+    end
+    local offTreeScales = GetPawnOffTreeScales()
+    local setSpecs = offTreeScales and GetShownSetSpecs(offTreeScales) or nil
+    if not setSpecs then
+        return nil
+    end
+    local names = {}
+    for scaleName in pairs(offTreeScales) do
+        local scale = PawnCommon.Scales[scaleName]
+        if scale and setSpecs[scale.SpecID] then
+            names[scaleName] = true
+        end
+    end
+    return names
+end
+
+-- For the item tooltip: the scales Pawn shows that the addon judges itself, by name, or nil.
+-- Pawn marks a piece as "your best" or "your second best" for a scale from the pieces it has
+-- seen worn; for these scales what the toon's best piece is, is what its gear set holds or
+-- what it wears, so the tooltip leaves those marks out (features/Tooltip.lua; author decision).
+--   The played spec's scale, where what is worn has a line of the addon's (loadouts.worn).
+--   The other specs' scales the addon measures, where the player asked for the arrows for
+--   other gear (Icon.ShowOtherSpecUpgrades).
+-- A scale of the player's own making, another class's, and a spec that is switched off stay
+-- Pawn's.
+--[[static]]
+function CaerdonEquipment:GetPawnScalesJudged()
+    if not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) then
+        return nil
+    end
+    local loadouts = GetLoadouts()
+    if not loadouts.wornRead then
+        return nil
+    end
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local others = iconConfig ~= nil and iconConfig.ShowOtherSpecUpgrades == true
+    local _, _, classID = UnitClass("player")
+    local ok, names = pcall(function()
+        local found
+        for scaleName, scale in pairs(PawnCommon.Scales) do
+            local specIndex = scale.SpecID
+            if scale.ClassID == classID and type(specIndex) == "number" and PawnIsScaleVisible(scaleName) then
+                local loadout = loadouts.bySpec[specIndex]
+                local judged
+                if loadouts.worn and loadouts.worn.index == specIndex then
+                    judged = true
+                else
+                    judged = others and loadout ~= nil and not loadout.own
+                end
+                if judged then
+                    found = found or {}
+                    found[scaleName] = true
+                end
+            end
+        end
+        return found
     end)
     return ok and names or nil
+end
+
+-- For the item tooltip: what the piece would be an upgrade for (GetLoadoutUpgrades' list), or
+-- nil. Asked of the piece by itself, whatever its icon says: a piece with the yellow arrow can
+-- be an upgrade for a gear set as well. Never for a tabard or a shirt, as the arrow.
+--   What is worn (worn = true), first: on the played spec's scale against the worn pieces,
+--   named for the active set where there is one. Only where the piece has the yellow arrow for
+--   it: Pawn shows that scale and calls the piece an upgrade on it, or Pawn shows no scale of
+--   the toon's own and the addon judges on the hidden one (JudgeOnHiddenOwnScale). Elsewhere
+--   the line would stand beside an icon that says something else.
+--   The loadouts, only where the player asked for those arrows (Icon.ShowOtherSpecUpgrades).
+--   The played spec's own set is left out where the worn entry stands: the worn piece is
+--   taken for the set's, saved into it or not (author decision).
+-- Each entry also has percent (the gain, rounded to a whole number; nil against a piece the
+-- scale gives no value) and saidByPawn: Pawn's own tooltip note for that scale has the same
+-- percentage.
+--[[static]]
+function CaerdonEquipment:GetLoadoutUpgradeList(item)
+    local link = item and item:GetItemLink()
+    if not link then
+        return nil
+    end
+    local inventoryTypeName = item:GetInventoryTypeName()
+    if inventoryTypeName == "INVTYPE_TABARD" or inventoryTypeName == "INVTYPE_BODY" then
+        return nil
+    end
+    -- The link is not the piece's own: no value of it is the piece's.
+    if IsKnownByAnotherLink(item) then
+        return nil
+    end
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local wantsLoadouts = iconConfig ~= nil and iconConfig.ShowOtherSpecUpgrades == true
+    local _, _, list = GetLoadoutUpgrades(item, C_Item.GetItemSpecInfo(link), not wantsLoadouts and {} or nil, true)
+    if not list then
+        return nil
+    end
+
+    local named, percents, inTooltip = ReadPawnUpgrades(link)
+    local _, _, hiddenOwn = GetPawnOffTreeScales()
+    local kept, wornStands = {}, false
+    for _, entry in ipairs(list) do
+        local keep = true
+        if entry.worn then
+            if PawnIsScaleVisible and PawnIsScaleVisible(entry.scale) then
+                keep = named ~= nil and named[entry.scale] == true
+            else
+                keep = hiddenOwn ~= nil and hiddenOwn.name == entry.scale
+            end
+            wornStands = keep
+        elseif entry.own and wornStands then
+            keep = false
+        end
+        if keep then
+            entry.percent = entry.baseline > 0 and math.floor((entry.value / entry.baseline - 1) * 100 + 0.5) or nil
+            entry.saidByPawn = inTooltip == true and entry.percent ~= nil and percents[entry.scale] == entry.percent
+            kept[#kept + 1] = entry
+        end
+    end
+    return #kept > 0 and kept or nil
+end
+
+-- For the Debug Frame export: the gear set taken for the one being worn and why, and whether
+-- what is worn has a line of the addon's in the tooltip. nil where nothing was read (no Pawn,
+-- no specs, no spec chosen, no scale for the played spec).
+--[[static]]
+function CaerdonEquipment:GetActiveSetDescription()
+    local loadouts = GetLoadouts()
+    if not loadouts.wornRead then
+        return nil
+    end
+    local active = loadouts.activeSet
+    local chosenID = ChosenGearSet()
+    return format("%s (%s; the set last put on: %s); the worn gear's own tooltip line: %s",
+        active and format("\"%s\"", tostring(active.name)) or "none", tostring(loadouts.activeWhy),
+        chosenID and tostring(chosenID) or "none noted",
+        loadouts.worn and "yes" or "no, the set worn is not the played spec's")
+end
+
+-- For the Debug Frame export: each loadout with what a piece is measured against for it, or
+-- nil where there is none.
+--[[static]]
+function CaerdonEquipment:GetLoadoutDescription()
+    local loadouts = GetLoadouts()
+    if #loadouts == 0 then
+        return nil
+    end
+    local parts = {}
+    for _, loadout in ipairs(loadouts) do
+        local against = loadout.setID and format("gear set \"%s\"", tostring(loadout.setName or loadout.setID)) or
+            "the worn gear (no gear set)"
+        if loadout.own then
+            -- The slots whose piece the set has and that piece is not the one worn.
+            local slots = {}
+            local locations = C_EquipmentSet.GetItemLocations(loadout.setID)
+            for slotID = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+                local link, worn = LinkAtSetLocation(locations and locations[slotID])
+                if link and not worn then
+                    slots[#slots + 1] = slotID
+                end
+            end
+            against = against .. format(" (the spec being played: where its piece is not the one worn, slots %s)",
+                #slots > 0 and table.concat(slots, ", ") or "none")
+        end
+        parts[#parts + 1] = format("%s: %s", loadout.label, against)
+    end
+    return table.concat(parts, "; ")
 end
 
 -- For the Debug Frame export: which visible Pawn scales are being ignored for this toon, or nil.
@@ -1934,6 +2503,307 @@ end
 
 function CaerdonEquipmentMixin:GetEquipmentSets()
     return CaerdonEquipment:GetEquipmentSetsOf(self.item)
+end
+
+-- The loadout that is on: what is worn, as the addon judges it (loadouts.worn); else the
+-- loadout of the gear set being worn, another spec's, where the player asked for the arrows for
+-- other gear. nil where neither is there.
+local function GetLoadoutThatIsOn()
+    local loadouts = GetLoadouts()
+    if loadouts.worn then
+        return loadouts.worn
+    end
+    if loadouts.activeSet then
+        local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+        if iconConfig ~= nil and iconConfig.ShowOtherSpecUpgrades == true then
+            for _, other in ipairs(loadouts) do
+                if other.setID == loadouts.activeSet.id then
+                    return other
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- For a comparison tooltip: what putting the piece in the place of one worn piece would do for
+-- the loadout that is on, or nil. A piece for a slot that comes twice (rings, weapons) is judged
+-- against the weaker of the two; which of them it would replace, and what it would do to the
+-- other, is what this says, one worn piece at a time.
+--   The loadout that is on is what is worn (worn = true), on the played spec's scale, where the
+--   worn gear is the addon's to judge (loadouts.worn). Where the gear set being worn is another
+--   spec's it is that set's loadout, if the player asked for the arrows for other gear and the
+--   set has this worn piece in the slot.
+--   No other loadout, though its set has this worn piece too (author decision): the client's
+--   comparison is about what is on, and what the piece would be for the other loadouts is in
+--   its own tooltip, beside this one.
+--   What is worn is asked whatever specs the client lists the piece for, as in the item's
+--   own tooltip (GetLoadoutUpgrades); another spec's set only for a piece listed for its spec.
+-- A list of that one entry: { name, icon, colour, worn, percent (rounded, signed; nil against a
+-- piece the scale gives no value), upgrade (more than Pawn's threshold above it), otherSpecs
+-- (for what is worn: the piece is gear for another loot spec, OtherLootSpecsOf) }. What Pawn's
+-- check refuses is refused here, and a trinket has no value to go by. With nil comes why
+-- there is nothing, for the export.
+--[[static]]
+function CaerdonEquipment:GetReplacementGains(item, wornItem)
+    local link = item and item:GetItemLink()
+    local wornLink = wornItem and wornItem:GetItemLink()
+    if not link or not wornLink then
+        return nil, "a piece without a link"
+    end
+    if link == wornLink then
+        return nil, "the worn piece itself"
+    end
+    if IsKnownByAnotherLink(item) then
+        return nil, "the link shown is the plain item's, not the piece's (a row the auction house names by item key): no value of it is the piece's"
+    end
+    local inventoryTypeName = item:GetInventoryTypeName()
+    if inventoryTypeName == "INVTYPE_TRINKET" or inventoryTypeName == "INVTYPE_TABARD" or
+        inventoryTypeName == "INVTYPE_BODY" then
+        return nil, "a trinket, a tabard or a shirt has no value to go by"
+    end
+    local inventorySlots = GetInventorySlotsForType(inventoryTypeName)
+    if not inventorySlots then
+        return nil, "not a piece for a slot"
+    end
+    -- The slot the worn piece is in, among those the piece would go in: by its link, else by
+    -- its item (a tooltip's link can differ from the slot's in the fields that are not the item).
+    local wornSlot
+    for _, slotID in ipairs(inventorySlots) do
+        if GetInventoryItemLink("player", slotID) == wornLink then
+            wornSlot = slotID
+            break
+        end
+    end
+    if not wornSlot then
+        local wornID = wornItem:GetItemID()
+        for _, slotID in ipairs(inventorySlots) do
+            if wornID and GetInventoryItemID("player", slotID) == wornID then
+                wornSlot = slotID
+                break
+            end
+        end
+    end
+    if not wornSlot then
+        return nil, "the worn piece shown is in no slot the piece would take"
+    end
+
+    local loadout = GetLoadoutThatIsOn()
+    if not loadout then
+        return nil, "no loadout the addon scores is on (no Pawn scale for the played spec, or the gear set worn is not that spec's)"
+    end
+
+    local ok, gains, why = pcall(function()
+        if IsArmorTypeRefused(link) then
+            return nil, "not the class's armor type, or Pawn has not read the piece yet"
+        end
+        local itemSpecs = C_Item.GetItemSpecInfo(link)
+        if not loadout.isWorn and itemSpecs and #itemSpecs > 0 and loadout.id then
+            local forSpec = false
+            for _, specID in ipairs(itemSpecs) do
+                if specID == loadout.id then
+                    forSpec = true
+                    break
+                end
+            end
+            if not forSpec then
+                return nil, "the client does not list the piece for the spec of the set that is on"
+            end
+        end
+        if IsWeaponKindRefused(loadout, inventoryTypeName) then
+            return nil, "a one-hander against a two-hander or the other way round, or a kind the scale is told not to show"
+        end
+        local baseline = LoadoutBaseline(loadout, wornSlot)
+        local value = baseline and OtherSpecValue(loadout.scale, link)
+        if not value then
+            return nil, "Pawn has no value on the scale for one of the two pieces"
+        end
+        -- Only where the loadout has this worn piece in the slot: a set that is on with another
+        -- piece of its own for the slot is measured against that one, in the item's own tooltip.
+        if GetInventoryItemLink("player", wornSlot) ~= baseline.link then
+            return nil, "the set that is on has another piece for the slot than the one worn"
+        end
+        local entry = { colour = loadout.colour, worn = loadout.isWorn or nil,
+            upgrade = value > baseline.value * PAWN_UPGRADE_THRESHOLD,
+            percent = baseline.value > 0 and math.floor((value / baseline.value - 1) * 100 + 0.5) or nil }
+        if loadout.isWorn then
+            entry.otherSpecs = OtherLootSpecsOf(itemSpecs)
+            entry.name = loadout.activeName or loadout.specName or loadout.label
+            entry.icon = loadout.activeName and loadout.activeIcon or loadout.specIcon
+        elseif baseline.fromSet then
+            entry.name = loadout.setName or loadout.label
+            entry.icon = loadout.setIcon or QUESTION_MARK_ICON
+        else
+            entry.name = loadout.specName or loadout.label
+            entry.icon = loadout.specIcon
+        end
+        return { entry }
+    end)
+    if not ok then
+        return nil, "an error: " .. tostring(gains)
+    end
+    return gains, why
+end
+
+-- Whether a piece can be scored for what is worn at all: Pawn is there, the client has
+-- specializations, and the played spec has a scale (GetLoadouts found it). For a window that
+-- would make room for such a score.
+--[[static]]
+function CaerdonEquipment:CanScoreWornGear()
+    return GetLoadouts().wornRead == true
+end
+
+-- Whether a higher item level alone gets a piece the upgrade arrow (ItemLevelCounts). For a
+-- window that makes room for upgrades only where some could be shown.
+--[[static]]
+function CaerdonEquipment:CountsItemLevel()
+    return ItemLevelCounts()
+end
+
+-- Whether the link a piece is known by is its own, so that Pawn is asked about it: not a row
+-- named by item key at another level than its link's (IsKnownByAnotherLink).
+--[[static]]
+function CaerdonEquipment:IsKnownByItsOwnLink(item)
+    return not IsKnownByAnotherLink(item)
+end
+
+-- Whether Pawn takes armor of this piece's type for the class, so that a piece of a lower
+-- class than what is worn can still be an upgrade of Pawn's (PawnIsArmorBestTypeForPlayer,
+-- read in Pawn 2.14.4). Pawn refuses the wrong type where the client has armor
+-- specializations and the toon is of their level (retail, from 27). It takes cloth and leather
+-- for any class that can wear them where there are none: Pawn's library knows WoW Forever for
+-- a client of its own and gives it the classic rules, no specialization and mail and plate
+-- from 40. Without Pawn nothing does: a lower class is no gain by item level alone. What
+-- Pawn has not read yet counts as taken.
+local function PawnTakesArmorType(link)
+    if not (PawnGetItemData and PawnShouldItemLinkHaveUpgradeArrowUnbudgeted) then
+        return false
+    end
+    if not PawnIsArmorBestTypeForPlayer then
+        return true
+    end
+    local ok, takes = pcall(function()
+        local data = PawnGetItemData(link)
+        if not (data and data.Link and data.UnenchantedStats) then
+            return true
+        end
+        return PawnIsArmorBestTypeForPlayer(data) and true or false
+    end)
+    return not ok or takes == true
+end
+
+-- Whether pieces of this item are of a kind the toon wears, as far as the item alone says. For
+-- a window that would make room for what a list of such pieces has to say (the auction house's
+-- results under a category of one kind: plate, one-handed axes).
+--   The client does not mark the kind as one the toon cannot use: the equip slot line of the
+--   item's tooltip (isValidItemType; its right text in red where a client has no such field).
+--   That is also mail on a hunter under 40 where the classic rules hold.
+--   It is not armor of a lower class than what is worn in its slot that Pawn would refuse
+--   (IsLowerArmorClassThanEquipped, PawnTakesArmorType): by item level alone such a piece is
+--   never a gain, so it is Pawn's to say, and Pawn's answer differs by client.
+-- What cannot be told (no tooltip for the item yet) counts as worn.
+--[[static]]
+function CaerdonEquipment:IsKindWorn(itemID)
+    local _, _, _, inventoryTypeName = C_Item.GetItemInfoInstant(itemID)
+    if not inventoryTypeName then
+        return true
+    end
+    local link = select(2, C_Item.GetItemInfo(itemID)) or ("item:" .. tostring(itemID))
+    local piece = {
+        GetItemLink = function() return link end,
+        GetInventoryTypeName = function() return inventoryTypeName end,
+    }
+    if IsLowerArmorClassThanEquipped(piece) and not PawnTakesArmorType(link) then
+        return false
+    end
+    local tooltip = C_TooltipInfo and C_TooltipInfo.GetItemByID and C_TooltipInfo.GetItemByID(itemID)
+    for _, line in ipairs(type(tooltip) == "table" and tooltip.lines or {}) do
+        if line.type == Enum.TooltipDataLineType.EquipSlot then
+            if line.isValidItemType == false then
+                return false
+            end
+            local color = line.rightColor
+            if line.isValidItemType == nil and type(color) == "table" and color.GetRGB then
+                local r, g, b = color:GetRGB()
+                if r > 0.9 and g < 0.25 and b < 0.25 then
+                    return false
+                end
+            end
+        end
+    end
+    return true
+end
+
+-- Whether a piece of this item could have a score for what is worn, as far as the item alone
+-- says. For a window that would make room for one (the auction house's page of one item's
+-- listings): no room for gear the toon cannot wear or would not (plate on a druid, cloth on a
+-- leather wearer, a kind of weapon the scale has no value for or is told not to show).
+-- What cannot be told yet (the client or Pawn has not read the item) counts as it could.
+--[[static]]
+function CaerdonEquipment:CanScorePieceForWorn(itemID)
+    if not self:CanScoreWornGear() then
+        return false
+    end
+    local _, _, _, inventoryTypeName = C_Item.GetItemInfoInstant(itemID)
+    if not inventoryTypeName or inventoryTypeName == "INVTYPE_TRINKET" or inventoryTypeName == "INVTYPE_TABARD" or
+        inventoryTypeName == "INVTYPE_BODY" or not GetInventorySlotsForType(inventoryTypeName) then
+        return false
+    end
+    local loadout = GetLoadoutThatIsOn()
+    if not loadout then
+        return false
+    end
+    local _, link = C_Item.GetItemInfo(itemID)
+    if not link then
+        return true
+    end
+    local ok, can = pcall(function()
+        local data = PawnGetItemData(link)
+        if not (data and data.Link) then
+            return true
+        end
+        if PawnIsArmorBestTypeForPlayer and data.UnenchantedStats and not PawnIsArmorBestTypeForPlayer(data) then
+            return false
+        end
+        if IsWeaponKindRefused(loadout, inventoryTypeName) then
+            return false
+        end
+        local value = OtherSpecValue(loadout.scale, link)
+        return value ~= nil and value > 0
+    end)
+    return not ok or can == true
+end
+
+-- For a row in a list of pieces of one kind (the auction house's listings of an item, which
+-- differ in the stats they rolled): what the piece would do for the loadout that is on, in the
+-- place of the worn piece it gains most over (the weaker of two rings). The entry
+-- GetReplacementGains has for that worn piece, or nil and why.
+--[[static]]
+function CaerdonEquipment:GetBestReplacementGain(item)
+    local inventorySlots = item and GetInventorySlotsForType(item:GetInventoryTypeName())
+    if not inventorySlots then
+        return nil, "not a piece for a slot"
+    end
+    local best, why
+    for _, slotID in ipairs(inventorySlots) do
+        local wornLink = GetInventoryItemLink("player", slotID)
+        if wornLink then
+            local worn = {
+                GetItemLink = function() return wornLink end,
+                GetItemID = function() return GetInventoryItemID("player", slotID) end,
+            }
+            local gains, reason = self:GetReplacementGains(item, worn)
+            local gain = gains and gains[1]
+            if gain and gain.percent and (not best or gain.percent > best.percent) then
+                best = gain
+            end
+            why = why or reason
+        end
+    end
+    if best then
+        return best
+    end
+    return nil, why or "nothing is worn where the piece would go"
 end
 
 local ITEM_PROFICIENCY_USE_ERROR = Enum.TransmogUseErrorType and Enum.TransmogUseErrorType.ItemProficiency or 10
@@ -2316,7 +3186,13 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
     -- The verdict on the played spec's own scale where Pawn does not show it
     -- (JudgeOnHiddenOwnScale): "upgrade", "equipped" or nil, and its numbers.
     local hiddenOwnVerdict, hiddenOwnDetail = nil, nil
-    if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted then
+    -- The other specs whose scale Pawn shows and whose gear set decides in Pawn's place
+    -- (GetShownSetSpecs), whether Pawn's verdict stands for any scale it named, and for which.
+    local pawnSetSpecs, pawnStands, pawnStandingScales = nil, nil, nil
+    -- The link is not the piece's own (IsKnownByAnotherLink): Pawn would be judging another
+    -- piece, so it is not asked, by its arrow, its scores or the loadouts, and item level decides.
+    local knownByAnotherLink = IsKnownByAnotherLink(item)
+    if PawnShouldItemLinkHaveUpgradeArrowUnbudgeted and not knownByAnotherLink then
         NotePawnItemLevelOption()
         pawnRecommended = PawnShouldItemLinkHaveUpgradeArrowUnbudgeted(item:GetItemLink(), false)
         local _, hiddenOwnScale
@@ -2324,15 +3200,21 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
         if hiddenOwnScale then
             hiddenOwnVerdict, hiddenOwnDetail = JudgeOnHiddenOwnScale(item, hiddenOwnScale)
         end
-        local offTreeUnwanted = false
+        -- Another spec with a gear set is measured against that set, further down, and not by
+        -- Pawn's verdict for its shown scale, which is against the worn gear.
+        pawnSetSpecs = pawnOffTreeScales and GetShownSetSpecs(pawnOffTreeScales) or nil
+        -- Pawn's verdict as far as it counts: not where it is only for specs the player
+        -- switched off or specs whose gear set decides.
+        pawnStands = pawnRecommended
         if pawnRecommended and pawnOffTreeScales then
-            pawnOffTreeOnly, pawnUpgradeScales, offTreeUnwanted = IsPawnUpgradeOffTreeOnly(item, pawnOffTreeScales)
+            local noneStands
+            pawnOffTreeOnly, pawnUpgradeScales, noneStands, pawnStandingScales =
+                IsPawnUpgradeOffTreeOnly(item, pawnOffTreeScales, pawnSetSpecs)
+            if noneStands then
+                pawnStands = false
+            end
         end
-        local pawnUpgrade = pawnRecommended
-        -- Only for specs the player switched off: no upgrade as far as Pawn's verdict goes.
-        if offTreeUnwanted then
-            pawnUpgrade = false
-        end
+        local pawnUpgrade = pawnStands
         -- An upgrade on the played spec's own scale, which Pawn does not show: the toon's own,
         -- whatever the shown scales of its other specs say about the piece.
         if hiddenOwnVerdict == "upgrade" then
@@ -2348,8 +3230,10 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
                 playerLootSpecID = GetPlayerLootSpecID()
             end
 
-            -- A piece for another loot spec keeps Pawn's verdict: it is judged as any piece is,
-            -- and whether it is shown is the drawing's (Icon.ShowOtherSpecUpgrades).
+            -- A piece for another loot spec keeps Pawn's verdict: the played spec's scale has
+            -- weighed it, so it is an upgrade for what is worn, and is drawn as one whatever
+            -- Icon.ShowOtherSpecUpgrades says, in the other spec's red (the drawing reads
+            -- upgradeMatchesSpec with pawnIdentifiedUpgrade).
             if uniqueUpgradeBlocked then
                 pawnUpgrade = false
             end
@@ -2367,7 +3251,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
             pawnUpgrade = false
         end
 
-        if pawnUpgrade and (pawnRecommended or hiddenOwnVerdict == "upgrade") then
+        if pawnUpgrade and (pawnStands or hiddenOwnVerdict == "upgrade") then
             if pawnOffTreeOnly then
                 pawnOffTreeUpgrade = true
             else
@@ -2395,7 +3279,7 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
     -- A higher item level that would be the upgrade, with the arrow for it switched off.
     local levelGainOnly = false
     local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or nil
-    local itemLevelCounts = not pawnAvailable or not iconConfig or iconConfig.ShowItemLevelUpgrades ~= false
+    local itemLevelCounts = ItemLevelCounts()
     local itemLevelOverPawn = pawnAvailable and itemLevelCounts and iconConfig ~= nil and
         iconConfig.ItemLevelOverPawn == true
     if not shouldShowUpgrade and upgradeItemLevelDelta and upgradeItemLevelDelta > 0 and not uniqueUpgradeBlocked and
@@ -2420,17 +3304,33 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
         end
     end
 
-    -- No upgrade for the spec being played: one for another of the toon's specs, where the
-    -- player asked for those. Flagged like an upgrade that only another spec's visible Pawn
-    -- scale sees, and drawn the same way.
-    if not shouldShowUpgrade and iconConfig and iconConfig.ShowOtherSpecUpgrades == true and
+    -- No upgrade over what is worn: one for a loadout the toon keeps beside it (another spec,
+    -- the played spec's gear set while another set's pieces are worn), where the player asked
+    -- for those. Flagged like an upgrade that only another spec's visible Pawn scale sees, and
+    -- drawn the same way. A spec with a gear set whose scale Pawn shows is asked whatever the
+    -- setting says, as Pawn's verdict for that scale was; the drawing reads the setting.
+    local wantsLoadouts = iconConfig ~= nil and iconConfig.ShowOtherSpecUpgrades == true
+    if knownByAnotherLink then
+        pawnComparison = pawnComparison or
+            "Pawn is not asked: the link is the plain item's, at another item level than the piece (a row named by item key)"
+    elseif not shouldShowUpgrade and (wantsLoadouts or pawnSetSpecs) and
         not uniqueUpgradeBlocked and not isTabard and not isShirt then
-        local otherSpecNames = GetOtherSpecUpgrades(item, sourceSpecs)
-        if otherSpecNames then
+        local loadoutNames, loadoutNumbers = GetLoadoutUpgrades(item, sourceSpecs,
+            not wantsLoadouts and pawnSetSpecs or nil)
+        if loadoutNames then
             shouldShowUpgrade = true
             pawnOffTreeUpgrade = true
-            pawnUpgradeScales = otherSpecNames
-            pawnComparison = "an upgrade for another spec, scored against that spec's gear"
+            pawnUpgradeScales = loadoutNames
+            pawnComparison = "an upgrade for gear kept beside what is worn: " .. loadoutNumbers
+        end
+    elseif pawnOffTreeUpgrade and pawnSetSpecs then
+        -- Pawn's verdict stands for a spec with no gear set, and it named specs with one too:
+        -- those are the sets' to say, so the names are the ones that hold.
+        local loadoutNames, loadoutNumbers = GetLoadoutUpgrades(item, sourceSpecs, pawnSetSpecs)
+        pawnUpgradeScales = pawnStandingScales
+        if loadoutNames then
+            pawnUpgradeScales = (pawnUpgradeScales and pawnUpgradeScales .. ", " or "") .. loadoutNames
+            pawnComparison = "also an upgrade for gear kept beside what is worn: " .. loadoutNumbers
         end
     end
 

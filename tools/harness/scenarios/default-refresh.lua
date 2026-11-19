@@ -252,6 +252,69 @@ return function(H, S)
         local takenCount, takenLast = Draws(world, taken)
         Check(takenCount == 1 and takenLast.item == takenItem and takenLast.feature == own, "taken: with that window's item")
         Check(core:AskAgainFor(client:NewFrame("Button"), plain) == false, "never asked: a button nobody asked for is not asked for")
+        -- For the Debug Frame: what a button was last asked to show, also asked of a part of it.
+        local askedItem, askedNote = core:GetAskedOf(taken)
+        Check(askedItem == takenItem, "asked of: the item the button's window gave")
+        Check(type(askedNote) == "string" and askedNote:find("on it now: icon ", 1, true) ~= nil,
+            "asked of: with what is on the button (" .. tostring(askedNote) .. ")")
+        local cell = client:NewFrame("Frame", nil, client:NewFrame("Frame", nil, taken))
+        Check(core:GetAskedOf(cell) == takenItem, "asked of: a part of the button, two levels in, answers for it")
+        Check(core:GetAskedOf(client:NewFrame("Button")) == nil, "asked of: nothing for a button nobody asked for")
+        Check(core:GetAskedOf(nil) == nil and core:GetAskedOf("a string") == nil, "asked of: nor for what is no frame")
+
+        -- The auction house's listings of one item. A row is not the core's: what it has is
+        -- in a cell of the feature's own column, and nothing here, where nothing is scored
+        -- (no Pawn). The page's button is asked for with the first listing's own link.
+        do
+            -- The feature's own file, which the scenario's addon is loaded without.
+            client:LoadAddonFile("CaerdonWardrobe", H.addonDir, "features/Auction.lua", world.namespace)
+            local auction = core:GetFeature("Auction")
+            Check(type(auction) == "table" and type(auction.OnItemBuyInitializedFrame) == "function",
+                "listings: the auction feature answers for the rows of an item's listings")
+            local link = world.game.Link(930001)
+            local rows = { { auctionID = 71, itemLink = link, itemKey = { itemID = 930001, itemLevel = 5, itemSuffix = 0 } },
+                { auctionID = 72 } }
+            local list = { tableBuilder = { GetDataProviderData = function(_, index) return rows[index] end } }
+            local big = client:NewFrame("Button", nil, window)
+            rawset(client.env, "AuctionHouseFrame", { ItemBuyFrame = { ItemDisplay = { ItemButton = big } } })
+            local row = client:NewFrame("Button", nil, window)
+            local own = client:NewFrame("Frame", nil, row)
+            own.Text, own.caerdonKind = own:CreateFontString(), "listing"
+            own.Text:SetText("left over")
+            row.cells = { own, client:NewFrame("Frame", nil, row) }
+            auction:OnItemBuyInitializedFrame(list, row, 1)
+            client:Tick(2)
+            Check(core:GetAskedOf(row) == nil, "listings: a row is not asked of the core")
+            Equal(row.caerdonDebugItemLink, link, "listings: the Debug Frame is told the listing's link")
+            Equal(own.Text:GetText(), "", "listings: the row's cell is empty where nothing is scored")
+            Equal(auction:GetListingText(rows[1]), nil, "listings: and nothing is kept to fill it with")
+            Equal(world.env.CaerdonEquipment:CanScoreWornGear(), false,
+                "listings: no piece can be scored here (no Pawn, no specs), so an item's page gets no column")
+            -- Without Pawn a higher item level is all an upgrade can go by, whatever the switch
+            -- for it says: the results' upgrade column is never held back here.
+            local iconConfig = world.env.CaerdonWardrobeConfig.Icon
+            local hadItemLevel = iconConfig.ShowItemLevelUpgrades
+            iconConfig.ShowItemLevelUpgrades = false
+            Equal(world.env.CaerdonEquipment:CountsItemLevel(), true,
+                "results: without Pawn a higher item level counts, whatever its switch says")
+            Equal(auction:CouldResultsHoldUpgrade(), true, "results: so the upgrade column could always hold something")
+            iconConfig.ShowItemLevelUpgrades = hadItemLevel
+            local asked = core:GetAskedOf(big)
+            Check(asked ~= nil and asked:GetItemLink() == link, "listings: the page's button is asked for with the first listing's own link")
+            Equal(big.caerdonDebugItemLink, link, "listings: and the Debug Frame is told that too")
+            -- The row is handed a listing the client has no link for yet.
+            auction:OnItemBuyInitializedFrame(list, row, 2)
+            Check(row.caerdonDebugItemLink == nil and row.caerdonAuctionID == nil, "listings: a row with no link yet says nothing")
+            -- Without a table builder the row's own data is read.
+            row.rowData = rows[1]
+            auction:OnItemBuyInitializedFrame({}, row, 1)
+            Equal(row.caerdonDebugItemLink, link, "listings: the row's own data serves where the list gives none")
+            -- A row without the feature's column (an item that is no equipment) is left alone.
+            local bare = client:NewFrame("Button", nil, window)
+            auction:OnItemBuyInitializedFrame(list, bare, 1)
+            Equal(bare.caerdonDebugItemLink, link, "listings: a row without the column is read all the same")
+            rawset(client.env, "AuctionHouseFrame", nil)
+        end
 
         -- The window says the button shows something else by now: cleared, and then forgotten.
         world.notTheSame = { [other] = true }
@@ -346,7 +409,7 @@ return function(H, S)
         -- Loading registers the feature; nothing is hooked before its Init, which is not run.
         -- An integration's file registers only beside its addon, so those are said to be there.
         local WINDOWS = {
-            { "Auction", "features/Auction.lua" }, { "BlackMarket", "features/BlackMarket.lua" },
+            { "BlackMarket", "features/BlackMarket.lua" },
             { "CustomerOrders", "features/CustomerOrders.lua" }, { "GroupLoot", "features/GroupLoot.lua" },
             { "GuildBank", "features/GuildBank.lua" }, { "Mail", "features/Mail.lua" },
             { "Mission", "features/Mission.lua" }, { "TradeSkill", "features/TradeSkill.lua" },
@@ -372,6 +435,24 @@ return function(H, S)
             Check(feature and feature.Refresh == default, name .. ": it has the default Refresh()")
             Check(feature and feature.OnButtonOnScreen == world.env.CaerdonWardrobeFeatureMixin.OnButtonOnScreen,
                 name .. ": and the default answer to a button coming on screen")
+        end
+
+        -- The auction window has a Refresh() of its own, for the text it draws itself on the
+        -- rows of an item's listings. Its buttons are asked for again as the default asks.
+        do
+            client:LoadAddonFile("CaerdonWardrobe", H.addonDir, "features/Auction.lua", world.namespace)
+            local auction = core:GetFeature("Auction")
+            Check(auction ~= nil and auction.Refresh ~= default, "Auction: the file registers its feature, with a Refresh() of its own")
+            Check(auction and auction.OnButtonOnScreen == world.env.CaerdonWardrobeFeatureMixin.OnButtonOnScreen,
+                "Auction: and the default answer to a button coming on screen")
+            local button, item = client:NewFrame("Button", nil, client:NewFrame("Frame")), SlotItem(world, 3)
+            Ask(world, auction, button, item)
+            client:Tick(2)
+            world.drawn = {}
+            auction:Refresh()
+            client:Tick(2)
+            Equal((Draws(world, button)), 1, "Auction: its Refresh() asks for its buttons again")
+            NoErrors(world, "Auction")
         end
 
         -- No feature file defines a Refresh() with nothing in it. Comments are not code.

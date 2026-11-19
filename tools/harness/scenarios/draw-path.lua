@@ -570,6 +570,7 @@ return function(H, S)
         function stateful:SetAtlas(atlas) Value(self).atlas, Value(self).texture = atlas, nil end
         function stateful:GetAtlas() return Value(self).atlas end
         function stateful:SetAlpha(alpha) Value(self).alpha = alpha end
+        function stateful:SetVertexColor(r, g, b) Value(self).colour = ("%.2f %.2f %.2f"):format(r, g, b) end
         function stateful:GetAlpha() return Value(self).alpha or 1 end
         function stateful:Play() Value(self).playing = true end
         function stateful:Stop() Value(self).playing = false end
@@ -652,14 +653,22 @@ return function(H, S)
             config = function(config) config.Icon.ShowOtherSpecUpgrades = true end },
         { name = "off-tree, not shown", binding = "BoA",
             info = { pawnOffTreeUpgrade = true, upgradeItemLevelDelta = 3, upgradeStatus = "upgradeLowSkill" } },
+        -- Gear for another loot spec that the played spec's scale calls an upgrade: one for
+        -- what is worn, drawn in the other spec's red whatever the setting says.
         { name = "other spec", binding = "WuE",
             info = { upgradeMatchesSpec = false, pawnIdentifiedUpgrade = true, upgradeStatus = "upgrade",
                 upgradeItemLevelDelta = 2 },
             config = function(config) config.Icon.ShowOtherSpecUpgrades = true end },
-        -- The same piece with the setting off, which is the default: neither arrow nor gain.
-        { name = "other spec, not shown", binding = "WuE",
+        { name = "other spec, setting off", binding = "WuE",
             info = { upgradeMatchesSpec = false, pawnIdentifiedUpgrade = true, upgradeStatus = "upgrade",
                 upgradeItemLevelDelta = 2 } },
+        -- Gear for another loot spec that only its item level makes an upgrade: one for another
+        -- spec, so by the setting, which is off by default: neither arrow nor gain then.
+        { name = "other spec by item level", binding = "WuE",
+            info = { upgradeMatchesSpec = false, isUpgrade = true, upgradeStatus = "upgrade", upgradeItemLevelDelta = 2 },
+            config = function(config) config.Icon.ShowOtherSpecUpgrades = true end },
+        { name = "other spec by item level, not shown", binding = "WuE",
+            info = { upgradeMatchesSpec = false, isUpgrade = true, upgradeStatus = "upgrade", upgradeItemLevelDelta = 2 } },
         { name = "pawn", info = { pawnIdentifiedUpgrade = true, upgradeStatus = "upgrade" } },
         -- A higher item level whose arrow is switched off: no upgrade, and the gain alone.
         { name = "gain without the arrow", info = { upgradeItemLevelDelta = 3, canEquip = true, hasMetRequirements = true } },
@@ -791,6 +800,17 @@ return function(H, S)
         -- A window that shows upgrades and no learnable icon: the arrow stands in for the icon.
         { name = "learnable icons off", binding = "BoE", info = { upgradeItemLevelDelta = 5, upgradeStatus = "upgrade" },
             hide = { "ownIcon", "otherIcon" } },
+        -- A button that is there for the upgrade alone (a list's column for it:
+        -- displayInfo.statusIcon off): an upgrade is drawn as the upgrade it is, whatever the
+        -- status, and anything else leaves the button without an icon. Last in the list: a case
+        -- of its own shifts no other case's widgets.
+        { name = "the upgrade alone",
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true },
+            hide = { "statusIcon" } },
+        { name = "the upgrade alone, where there is none", hide = { "statusIcon" } },
+        { name = "the upgrade alone, a gain without the arrow",
+            info = { upgradeItemLevelDelta = 3, canEquip = true, hasMetRequirements = true }, hide = { "statusIcon" } },
     }
 
     -- One button drawn with every status in turn, the way the queue draws it, with a frame
@@ -850,6 +870,8 @@ return function(H, S)
                 text = overlay.bindsOnText:GetText(),
                 gain = overlay.upgradeDeltaText:IsShown() and overlay.upgradeDeltaText:GetText() or nil,
                 badge = overlay.caerdonHasUpgradeBadge == true,
+                colour = world.Value(icon).colour,
+                badgeColour = icon.upgradeBadge and world.Value(icon.upgradeBadge).colour or nil,
                 routeBadge = overlay.caerdonHasRouteBadge == true,
                 badgeTexture = icon.upgradeBadge and icon.upgradeBadge:IsShown() and
                     (icon.upgradeBadge:GetAtlas() or icon.upgradeBadge:GetTexture()) or nil,
@@ -951,16 +973,56 @@ return function(H, S)
         Equal(results["gear set as icon, other loot spec"].upgrade.badge, false, "sets, other spec: nor for another loot spec's gear")
         Equal(results["off-tree"].upgradeLowSkill.texture, ARROW, "sets, other spec: a piece of no set keeps that arrow")
 
+        -- A button for the upgrade alone: the arrow under every status where the piece is an
+        -- upgrade, with its gain; nothing where it is none, but under the two statuses that
+        -- are the upgrade; and a gain alone where the arrow is not earned.
+        local alone, none, gainAlone = results["the upgrade alone"], results["the upgrade alone, where there is none"],
+            results["the upgrade alone, a gain without the arrow"]
+        for _, status in ipairs(STATUSES) do
+            if status ~= "waiting" then
+                Check(alone[status].texture == ARROW and alone[status].gain == "+5" and alone[status].badge == false,
+                    "alone: the arrow and its gain, and no badge, as " .. status .. " (" .. tostring(alone[status].texture) .. ")")
+            end
+            if status ~= "upgrade" and status ~= "upgradeLowSkill" then
+                Check(none[status].hasIcon == false and none[status].gain == nil, "alone: nothing where the piece is no upgrade, as " .. status)
+                Check(gainAlone[status].hasIcon == false and gainAlone[status].gain == "+3",
+                    "alone: a gain without the arrow where the arrow is not earned, as " .. status)
+            end
+        end
+        Equal(alone.waiting.hasIcon, false, "alone: no hourglass while the piece is waited for")
+
         local gainOnly = results["gain without the arrow"]
         Equal(gainOnly.collected.gain, "+3", "gain: a piece that is no upgrade shows a level gain it carries")
         Equal(gainOnly.collected.hasIcon, false, "gain: with no arrow")
         Equal(gainOnly.collected.badge, false, "gain: and no badge")
 
-        -- Gear for another loot spec, by the setting.
-        local otherShown, otherHidden = results["other spec"], results["other spec, not shown"]
+        -- Gear for another loot spec. What the played spec's scale calls an upgrade is one for
+        -- what is worn: drawn whatever the setting says, in the other spec's red. What only its
+        -- item level makes one is for another spec: by the setting.
+        local RED, YELLOW = "1.00 0.35 0.35", "1.00 1.00 0.00"
+        local otherShown, otherAlways = results["other spec"], results["other spec, setting off"]
         Equal(otherShown.upgrade.texture, ARROW, "loot spec: with the setting on the piece has the arrow")
         Equal(otherShown.upgrade.gain, "+2", "loot spec: and its level gain")
         Equal(otherShown.own.badge, true, "loot spec: or the badge on another icon")
+        Equal(otherShown.upgrade.colour, RED, "loot spec: in red")
+        Equal(otherAlways.upgrade.texture, ARROW, "loot spec: with the setting off too, where the played spec's scale calls it an upgrade")
+        Equal(otherAlways.upgrade.gain, "+2", "loot spec: with its level gain")
+        Equal(otherAlways.upgrade.colour, RED, "loot spec: in red there too, not Pawn's yellow")
+        Equal(otherAlways.own.badge, true, "loot spec: and the badge on another icon")
+        Equal(otherAlways.own.badgeColour, RED, "loot spec: red as well")
+        -- Under every status it is drawn as it is with the setting on.
+        for _, status in ipairs(STATUSES) do
+            local on, off = otherShown[status], otherAlways[status]
+            if on and off then
+                Check(on.texture == off.texture and on.badge == off.badge and on.gain == off.gain and
+                    on.colour == off.colour and on.badgeColour == off.badgeColour and on.hasIcon == off.hasIcon,
+                    "loot spec: drawn with the setting off as with it on, as " .. status)
+            end
+        end
+        Equal(results["pawn"].upgrade.colour, YELLOW, "loot spec: an upgrade of Pawn's for the spec's own gear stays yellow")
+        local otherLevel, otherHidden = results["other spec by item level"], results["other spec by item level, not shown"]
+        Equal(otherLevel.upgrade.texture, ARROW, "loot spec: an upgrade by item level alone has the arrow with the setting on")
+        Equal(otherLevel.upgrade.colour, RED, "loot spec: in red")
         Equal(otherHidden.upgrade.hasIcon, false, "loot spec: with it off, no arrow")
         Equal(otherHidden.upgrade.gain, nil, "loot spec: no level gain")
         Equal(otherHidden.own.badge, false, "loot spec: and no badge")

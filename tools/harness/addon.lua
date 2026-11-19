@@ -97,7 +97,9 @@ local function LoadXml(client, addonName, folder, relative, namespace, skip, loa
             end
             position = scriptEnd + 1
         else
-            if not Skipped(relative, skip) and attributes:find("[mM]ixin%s*=") then
+            -- A virtual frame is a template: nothing is made of it as the file loads.
+            if not Skipped(relative, skip) and attributes:find("[mM]ixin%s*=") and
+                not attributes:find('virtual%s*=%s*"true"') then
                 CreateXmlFrame(client, attributes, body)
             end
             position = frameEnd + 1
