@@ -15,6 +15,8 @@ local ROW_HEIGHT = 26
 local DROPDOWN_ROW_HEIGHT = 34
 local BLOCK_GAP = 16
 local GRID_COLUMN_WIDTH = 185
+local LIST_ICON_SIZE = 18
+local LIST_NAME_WIDTH = 150
 local CHECKBOX_INSET = 4 -- the template's box art starts a few pixels inside its frame
 
 local defaultConfig
@@ -143,6 +145,12 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     self.controls = {}
     self.hasBlock = false
     self.bodyX = SECTION_BODY_X
+    -- A page is laid out once, from the top down, at fixed places. Where a part of it changes
+    -- its height while the game runs (AddDropdownList), what comes after is laid out on a
+    -- frame that hangs below that part (self.flow) and moves with it: nextPoint counts from
+    -- that frame's top, heightAbove is what was laid out before it.
+    self.heightAbove = 0
+    self.flexible = {}
 
     local frame = CreateFrame("Frame")
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -171,6 +179,7 @@ function CaerdonWardrobeConfigPanelMixin:Init()
 
     self.frame = frame
     self.scrollChild = scrollChild
+    self.flow = scrollChild
     self.scrollFrame = scrollFrame
 
     -- The main page's category, registered by CaerdonWardrobeConfigMixin:OnLoad before any page.
@@ -178,9 +187,8 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(category, frame, self:GetTitle());
 end
 
--- Call after the last control: gives the scroll child its real height and loads the values.
+-- Call after the last control: loads the values and gives the scroll child its real height.
 function CaerdonWardrobeConfigPanelMixin:FinishLayout()
-    self.scrollChild:SetHeight(-self.nextPoint + 24)
     self:RefreshControls()
 end
 
@@ -189,6 +197,17 @@ function CaerdonWardrobeConfigPanelMixin:RefreshControls()
         control.caerdonRefresh()
     end
     self:UpdateDependents()
+    self:UpdateHeight()
+end
+
+-- The scroll child's height: what was laid out, and each part whose height changes as it is
+-- now.
+function CaerdonWardrobeConfigPanelMixin:UpdateHeight()
+    local height = self.heightAbove - self.nextPoint + 24
+    for _, part in ipairs(self.flexible) do
+        height = height + part:GetHeight()
+    end
+    self.scrollChild:SetHeight(height)
 end
 
 -- A control with dependsOn is only usable while that checkbox is checked and usable itself.
@@ -207,7 +226,7 @@ function CaerdonWardrobeConfigPanelMixin:RegisterControl(control)
 end
 
 function CaerdonWardrobeConfigPanelMixin:CreateText(font, text, x, y, width)
-    local parent = self.scrollChild
+    local parent = self.flow
     local fontString = parent:CreateFontString(nil, "OVERLAY", font)
     fontString:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     fontString:SetJustifyH("LEFT")
@@ -240,7 +259,7 @@ function CaerdonWardrobeConfigPanelMixin:AddTitle(title, intro)
 end
 
 function CaerdonWardrobeConfigPanelMixin:StartBlock()
-    local parent = self.scrollChild
+    local parent = self.flow
     if self.hasBlock then
         self.nextPoint = self.nextPoint - BLOCK_GAP / 2
         local line = parent:CreateTexture(nil, "BACKGROUND")
@@ -259,7 +278,7 @@ end
 --            inset (pixels the icon is smaller than its background), background = { same fields },
 --            label (text in the icon's place, for things that are drawn as text) }
 function CaerdonWardrobeConfigPanelMixin:AddIconHeader(spec)
-    local parent = self.scrollChild
+    local parent = self.flow
     self:StartBlock()
 
     local top = self.nextPoint
@@ -319,7 +338,7 @@ end
 
 function CaerdonWardrobeConfigPanelMixin:CreateCheckbox(info, x, y, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
 
     local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, parent,
         "InterfaceOptionsCheckButtonTemplate")
@@ -413,7 +432,7 @@ end
 
 -- "All" and "None" at the right end of a label row, for a grid that is one decision per window.
 function CaerdonWardrobeConfigPanelMixin:AddAllNoneButtons(y, checkboxes)
-    local parent = self.scrollChild
+    local parent = self.flow
 
     local function createButton(text, value, right)
         local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
@@ -441,7 +460,7 @@ end
 -- info.formatUnknown(value) gives the text for a saved value that is not one of the entries.
 function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
     local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
 
     local label = self:CreateText("GameFontHighlight", info.text, x, self.nextPoint - 9)
@@ -514,10 +533,146 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     return dropdown
 end
 
+-- A list that is not known until the page shows and changes while the game runs (a row per
+-- gear set of the toon): one small line of text, then a row per entry with its icon, its name
+-- and a dropdown. What comes after it on the page hangs below it and moves as it grows.
+--   spec = { key, width (of the dropdowns),
+--            rows = function() -> { { icon, text, value, title (what the dropdown shows) } ... },
+--                   or nil where there is nothing to choose from: the list then takes no room
+--            header = function(count) -> the line above the rows; with no rows, what the list
+--                   is for
+--            choices = function(row) -> { { title, value, tooltip, disabled } ... }, as a
+--                   dropdown opens. disabled: greyed and not to be clicked, and its tooltip,
+--                   which says why, still shows
+--            choose = function(row, value): the player's click }
+-- opts = { indent = levels }
+function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
+    opts = opts or {}
+    local parent = self.flow
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
+    local width = CONTENT_RIGHT - x
+
+    local list = CreateFrame("Frame", "CaerdonWardrobe" .. spec.key, parent)
+    list.key = spec.key
+    list:SetPoint("TOPLEFT", parent, "TOPLEFT", x, self.nextPoint)
+    list:SetSize(width, 1)
+
+    local header = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    header:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -3)
+    header:SetJustifyH("LEFT")
+    header:SetJustifyV("TOP")
+    header:SetWidth(width)
+    header:SetWordWrap(true)
+    list.header = header
+    list.rows = {}
+
+    local function Row(index)
+        local row = list.rows[index]
+        if row then
+            return row
+        end
+        row = CreateFrame("Frame", nil, list)
+        row:SetSize(width, DROPDOWN_ROW_HEIGHT)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(LIST_ICON_SIZE, LIST_ICON_SIZE)
+        row.icon:SetPoint("LEFT", row, "LEFT", INDENT_STEP, 0)
+        -- One width for every name, so that the dropdowns stand in a column.
+        row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+        row.name:SetWidth(LIST_NAME_WIDTH)
+        row.name:SetJustifyH("LEFT")
+        row.name:SetWordWrap(false)
+
+        local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. spec.key .. index, row, "UIDropDownMenuTemplate")
+        dropdown:SetPoint("LEFT", row.name, "RIGHT", -8, -2)
+        if UIDropDownMenu_SetWidth then
+            UIDropDownMenu_SetWidth(dropdown, spec.width or 150)
+        end
+        row.dropdown = dropdown
+        row.text = dropdown.Text or _G[dropdown:GetName() .. "Text"]
+        dropdown.initialize = function()
+            local entry = row.entry
+            for _, choice in ipairs(entry and spec.choices(entry) or {}) do
+                local menuInfo = UIDropDownMenu_CreateInfo and UIDropDownMenu_CreateInfo() or {}
+                menuInfo.text = choice.title
+                menuInfo.value = choice.value
+                menuInfo.checked = choice.value == entry.value
+                if choice.tooltip then
+                    menuInfo.tooltipTitle = choice.title
+                    menuInfo.tooltipText = choice.tooltip
+                    menuInfo.tooltipOnButton = true
+                end
+                if choice.disabled then
+                    menuInfo.disabled = true
+                    menuInfo.tooltipWhileDisabled = true
+                else
+                    menuInfo.func = function()
+                        spec.choose(entry, choice.value)
+                        list.caerdonRefresh()
+                    end
+                end
+                UIDropDownMenu_AddButton(menuInfo)
+            end
+        end
+        list.rows[index] = row
+        return row
+    end
+
+    list.caerdonRefresh = function()
+        local entries = spec.rows()
+        local y = 0
+        if entries then
+            header:SetText(spec.header(#entries))
+            header:Show()
+            y = -3 - TextHeight(header, 10) - 3
+        else
+            header:Hide()
+        end
+        local count = entries and #entries or 0
+        for index = 1, count do
+            local entry = entries[index]
+            local row = Row(index)
+            row.entry = entry
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", list, "TOPLEFT", 0, y)
+            row.icon:SetTexture(entry.icon)
+            row.name:SetText(entry.text)
+            row.text:SetText(entry.title or "")
+            row:Show()
+            y = y - DROPDOWN_ROW_HEIGHT
+        end
+        for index = count + 1, #list.rows do
+            list.rows[index].entry = nil
+            list.rows[index]:Hide()
+        end
+        -- Never no height at all: a frame without one has no place, and what hangs below
+        -- is placed by this one's lower edge.
+        list:SetHeight(math.max(1, -y))
+    end
+
+    local rest = CreateFrame("Frame", nil, parent)
+    rest:SetPoint("TOPLEFT", list, "BOTTOMLEFT", -x, 0)
+    rest:SetSize(CONTENT_RIGHT, 1)
+    self.heightAbove = self.heightAbove - self.nextPoint
+    table.insert(self.flexible, list)
+    self.flow = rest
+    self.nextPoint = 0
+
+    self:RegisterControl(list)
+    return list
+end
+
+-- For a control a page builds from parts of its own: the player's click on it, written as a
+-- checkbox's or a dropdown's is, with the one refresh a click brings.
+function CaerdonWardrobeConfigPanelMixin:SetOption(info, value)
+    SetValue(info, value)
+    Changed()
+end
+
 -- A frame built elsewhere, placed in the flow of the page. opts = { indent = levels }
 function CaerdonWardrobeConfigPanelMixin:AddFrame(frame, height, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
     local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
     frame:SetParent(parent)
     frame:ClearAllPoints()
@@ -529,7 +684,7 @@ end
 -- A button on its own row. opts = { indent = levels, width = pixels, tooltip = text }
 function CaerdonWardrobeConfigPanelMixin:AddButton(text, onClick, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
     local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
 
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")

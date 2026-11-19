@@ -2814,6 +2814,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             CaerdonEquipment:GetLoadoutDescription() or "none (only the worn gear)")
         addKV(1, "gearSetWorn", CaerdonEquipment.GetActiveSetDescription and
             CaerdonEquipment:GetActiveSetDescription() or "not read")
+        addKV(1, "gearSetScales", CaerdonEquipment.GetGearSetScaleDescription and
+            CaerdonEquipment:GetGearSetScaleDescription() or "none (no gear sets, or no Pawn)")
         addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
         do
             local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or {}

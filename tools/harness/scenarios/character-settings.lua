@@ -3,7 +3,8 @@
 --
 -- Most options are the player's and one table for every toon (CaerdonWardrobeConfig). An
 -- option marked perCharacter describes the toon, and the page keeps it with the toon. Today
--- that is one: which of the toon's specs "Also for my other specs" is for. Here:
+-- that is two: which of the toon's specs "Also for my other specs and gear sets" is for, and
+-- the Pawn scale each of its gear sets is scored on. Here:
 --   1. The Icons page offers a switch per spec of the toon's class, under a label that names
 --      the toon and says the choice is kept per character.
 --   2. A spec nobody chose shows what the equipment code takes it as: on with a gear set
@@ -16,6 +17,13 @@
 --   4. The page shows what the toon's table says each time it is displayed, so another toon's
 --      table (the client loads one per character) shows that toon's choice.
 --   5. Saved data that is no table reads as "never chosen" and is replaced by the first click.
+--   6. The Icons page has a row per gear set of the toon, with the scale the set is tied to
+--      and a list of the scales it can be tied to. The rows are the toon's sets as they are
+--      each time the page shows, and the rest of the page moves with their number. A choice
+--      is written to the toon's table and refreshes the icons once. A set that is deleted
+--      takes its tie with it.
+--   7. A page with such a list has the height of what is above it, the list as it is now and
+--      what is below.
 --
 -- What the equipment code makes of the choice is scenarios/pawn-scales.lua. That the client
 -- keeps one table per character is the client's part and is not proven by this.
@@ -43,7 +51,25 @@ return function(H, S)
         game:Set("C_EquipmentSet.GetEquipmentSetForSpec", function(specIndex)
             return world.setForSpec and world.setForSpec[specIndex] or nil
         end)
-        game:Set("PawnCommon.Scales", { [GUARDIAN] = { ClassID = 3, SpecID = 3, Provider = "MrRobot" } })
+        world.scales = { [GUARDIAN] = { ClassID = 3, SpecID = 3, Provider = "MrRobot" } }
+        game:Set("PawnCommon.Scales", world.scales)
+        -- Pawn's part that scores an item on a scale: a list of scales to choose from is only
+        -- offered where it is there.
+        game:Set("PawnGetItemData", function() return nil end)
+        game:Set("PawnGetSingleValueFromItem", function() return nil end)
+        -- The toon's gear sets, and the client's function that deletes one.
+        game:Set("C_EquipmentSet.GetEquipmentSetIDs", function() return world.setIDs or {} end)
+        game:Set("C_EquipmentSet.GetEquipmentSetInfo", function(setID)
+            local name = world.setNames and world.setNames[setID]
+            if name then
+                return name, nil, setID, false, 10, 0
+            end
+        end)
+        game:Set("C_EquipmentSet.DeleteEquipmentSet", function(setID) world.deleted = setID end)
+        -- A dropdown's menu, as far as the entries it is given.
+        world.menu = {}
+        game:Set("UIDropDownMenu_CreateInfo", function() return {} end)
+        game:Set("UIDropDownMenu_AddButton", function(info) world.menu[#world.menu + 1] = info end)
         game:Set("PawnIsScaleVisible", function(name) return world.visible[name] == true end)
         game:Set("GetSpecialization", function() return 3 end)
         game:Set("GetSpecializationInfoForClassID", function(_, index) return 100 + index, SPECS[index] end)
@@ -283,6 +309,248 @@ return function(H, S)
     Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSpecs.DRUID3, false, "depends: and the toon's choice stays")
     Click(world, shared, true)
     Equal(specs[1]:IsEnabled(), true, "depends: with it on again they can")
+
+    -- 6. The toon's gear sets, each with the Pawn scale it is scored on.
+    Equal(shared.Text:GetText(), "Also for my other specs and gear sets", "gear sets: the option for the red arrow names them")
+    local FERAL, OWN, MAGE = "\"MrRobot\":DRUID2", "My tanking", "\"MrRobot\":MAGE1"
+    world.scales[GUARDIAN].LocalizedName = "Druid: Guardian"
+    world.scales[FERAL] = { ClassID = 3, SpecID = 2, Provider = "MrRobot", LocalizedName = "Druid: Feral" }
+    world.scales[OWN] = {}
+    world.scales[MAGE] = { ClassID = 8, SpecID = 1, Provider = "MrRobot", LocalizedName = "Mage: Arcane" }
+    local equipment = env.CaerdonEquipment
+    local list = env.CaerdonWardrobegearSetScale
+    Check(list ~= nil, "gear sets: the page has the list")
+    local scrollChild = list:GetParent()
+    local function RowsShown()
+        local count = 0
+        for _, row in ipairs(list.rows) do
+            count = count + (row:IsShown() and 1 or 0)
+        end
+        return count
+    end
+    local function Open(row)
+        world.menu = {}
+        row.dropdown.initialize()
+        local titles, checked = {}, {}
+        for index, entry in ipairs(world.menu) do
+            titles[index] = tostring(entry.text)
+            if entry.checked then
+                checked[#checked + 1] = tostring(entry.text)
+            end
+        end
+        return world.menu, table.concat(titles, " | "), table.concat(checked, " | ")
+    end
+    local function Choose(entry)
+        world.refreshes = {}
+        entry.func()
+    end
+    local ROW, LINE = 34, 16
+
+    -- The list changes its height, so what the page holds after it hangs below it.
+    Equal(env.CaerdonWardrobeshowUpgradeIcon:GetParent(), scrollChild, "gear sets: what is above the list is laid out on the page")
+    local below = env.CaerdonWardrobeshowQuestItems:GetParent()
+    Check(below ~= nil and below ~= scrollChild and below:GetParent() == scrollChild,
+        "gear sets: what is below it is laid out on a frame of its own, which hangs below the list")
+
+    -- No gear sets: one line that says what the list is for.
+    rawset(env, "CaerdonWardrobeCharacterConfig", nil)
+    world.setForSpec = { [3] = 31 }
+    world.page.OnRefresh()
+    Equal(RowsShown(), 0, "gear sets: a toon with none has no row")
+    Equal(list.header:IsShown(), true, "gear sets: and one line")
+    Check(Says(list.header:GetText(), "Zzyxa has no gear sets."), "gear sets: which says so: " .. tostring(list.header:GetText()))
+    Equal(list:GetHeight(), LINE, "gear sets: the list is that line high")
+    local emptyHeight = scrollChild:GetHeight()
+
+    -- Two sets: one no spec is tied to, and Guardian's.
+    world.setIDs, world.setNames = { 41, 31 }, { [31] = "Bear", [41] = "Arena" }
+    world.page.OnRefresh()
+    Equal(RowsShown(), 2, "gear sets: a row for each set")
+    Equal(list.header:GetText(), "Zzyxa's gear sets, and the Pawn scale each is scored on (kept per character):",
+        "gear sets: under a line that names the toon and says the choice is its own")
+    Equal(list.rows[1].name:GetText(), "Arena", "gear sets: in the client's order")
+    Equal(list.rows[1].text:GetText(), "Not tied", "gear sets: a set nobody tied, and no spec's, is not tied")
+    Equal(list.rows[2].name:GetText(), "Bear", "gear sets: the second set")
+    Equal(list.rows[2].text:GetText(), "By its specialization (Guardian)", "gear sets: a spec's set goes by the spec until it is tied")
+    Equal(scrollChild:GetHeight(), emptyHeight + 2 * ROW, "gear sets: the page grows by a row for each set")
+    Equal(env.CaerdonWardrobeCharacterConfig, nil, "gear sets: showing them writes nothing")
+
+    -- The scales to choose from.
+    local menu, titles, checked = Open(list.rows[1])
+    Equal(titles, "Not tied | Druid: Feral | Druid: Guardian (used by Bear) | My tanking",
+        "gear sets: the class's scales in the order of its specs, then the player's own, and no other class's")
+    -- A scale is one gear set's: Guardian's is Bear's, through the spec the client ties it to.
+    Check(menu[3].disabled == true and menu[3].func == nil, "gear sets: a scale another set is scored on cannot be chosen")
+    Equal(menu[3].tooltipWhileDisabled, true, "gear sets: and still says why")
+    Check(Says(menu[3].tooltipText, "Bear is scored on this one as the set assigned to Guardian in the character window"),
+        "gear sets: through the spec it is assigned to: " .. tostring(menu[3].tooltipText))
+    Check(menu[2].disabled == nil and type(menu[2].func) == "function", "gear sets: a scale no set has can be")
+    Equal(checked, "Not tied", "gear sets: the entry in effect is the one marked")
+    Check(Says(menu[1].tooltipText, "your gear is scored for the specialization you are playing."),
+        "gear sets: what an untied set goes by: " .. tostring(menu[1].tooltipText))
+    Check(Says(menu[2].tooltipText, "While you wear this gear set, upgrades are scored on this scale") and
+        Says(menu[2].tooltipText, "Kept for this character only."), "gear sets: what a tie does, and where it is kept")
+
+    -- A choice.
+    Choose(menu[2])
+    own = env.CaerdonWardrobeCharacterConfig
+    Equal(type(own) == "table" and own.Icon.GearSetScales[41], FERAL, "choice: written to the toon's table, by the set's ID")
+    Equal(env.CaerdonWardrobeConfig.Icon.GearSetScales, nil, "choice: and not to the player's settings")
+    Equal(#world.refreshes, 1, "choice: one refresh")
+    Equal(world.refreshes[1], "settings", "choice: named for the settings")
+    Equal(list.rows[1].text:GetText(), "Druid: Feral", "choice: the row shows it at once")
+    Equal(list.rows[2].text:GetText(), "By its specialization (Guardian)", "choice: the other row is as it was")
+    Check(Says(equipment:GetGearSetScaleDescription(), "\"Arena\" (41) tied to Druid: Feral"),
+        "choice: and the equipment code reads it: " .. tostring(equipment:GetGearSetScaleDescription()))
+    menu, titles, checked = Open(list.rows[1])
+    Equal(checked, "Druid: Feral", "choice: the scale chosen is the one marked then")
+    -- The spec's own set, to a scale of the player's own; and back.
+    menu, titles = Open(list.rows[2])
+    Equal(menu[1].text, "By its specialization (Guardian)", "choice: a spec's set has that as its first entry")
+    Check(Says(menu[1].tooltipText, "assigned to Guardian in the character window"), "choice: with why")
+    Equal(titles, "By its specialization (Guardian) | Druid: Feral (used by Arena) | Druid: Guardian | My tanking",
+        "one set a scale: the scale Arena was tied to is not offered to Bear")
+    Check(menu[2].disabled == true and menu[2].func == nil, "one set a scale: it cannot be chosen")
+    Check(Says(menu[2].tooltipText, "Arena is scored on this one. Choose another scale for Arena first."),
+        "one set a scale: and says whose it is: " .. tostring(menu[2].tooltipText))
+    Check(menu[3].disabled == nil, "one set a scale: the scale of a set's own spec is not another set's")
+    Choose(menu[4])
+    Equal(own.Icon.GearSetScales[31], OWN, "choice: a scale of the player's own")
+    Equal(list.rows[2].text:GetText(), "My tanking", "choice: shown by its name")
+    menu, titles, checked = Open(list.rows[1])
+    Equal(titles, "Not tied | Druid: Feral | Druid: Guardian | My tanking (used by Bear)",
+        "one set a scale: tied elsewhere, Bear has that scale and no longer its spec's")
+    Equal(checked, "Druid: Feral", "one set a scale: a set's own scale stays the one marked")
+    menu = Open(list.rows[2])
+    Choose(menu[1])
+    Equal(own.Icon.GearSetScales[31], nil, "choice: the first entry takes the tie away")
+    Equal(#world.refreshes, 1, "choice: with one refresh")
+    Equal(list.rows[2].text:GetText(), "By its specialization (Guardian)", "choice: and the set goes by its spec again")
+
+    -- Two sets that came by one scale all the same: each row keeps its own, and neither is
+    -- greyed in its own menu.
+    own.Icon.GearSetScales[31] = FERAL
+    world.page.OnRefresh()
+    menu, titles, checked = Open(list.rows[2])
+    Check(menu[2].disabled == nil and checked == "Druid: Feral",
+        "one set a scale: a scale two sets have is each one's own in its menu: " .. titles)
+    menu, titles, checked = Open(list.rows[1])
+    Check(menu[2].disabled == nil and checked == "Druid: Feral", "one set a scale: in the other's too: " .. titles)
+    own.Icon.GearSetScales[31] = nil
+
+    -- A scale that is gone from Pawn: said, and no entry is the one chosen.
+    own.Icon.GearSetScales[31] = "Old scale"
+    world.page.OnRefresh()
+    Equal(list.rows[2].text:GetText(), "Old scale (no longer in Pawn)", "gone: the row says the scale is gone")
+    menu, titles, checked = Open(list.rows[2])
+    Equal(checked, "", "gone: and no entry is marked")
+    menu, titles = Open(list.rows[1])
+    Equal(titles, "Not tied | Druid: Feral | Druid: Guardian (used by Bear) | My tanking",
+        "gone: a set whose scale is gone has its spec's scale again")
+    own.Icon.GearSetScales[31] = nil
+
+    -- A client with talent trees has no spec for a set to go by.
+    local api = env.CaerdonAPI
+    local hadTrees = api.GetTalentTrees
+    api.GetTalentTrees = function() return { { index = 1 }, { index = 2 }, { index = 3 } } end
+    world.page.OnRefresh()
+    Equal(list.rows[2].text:GetText(), "Not tied", "trees: no set goes by a specialization there")
+    menu = Open(list.rows[2])
+    Check(Says(menu[1].tooltipText, "your gear is scored for the talent tree you have the most points in."),
+        "trees: and an untied set goes by the leading tree: " .. tostring(menu[1].tooltipText))
+    menu, titles = Open(list.rows[1])
+    Equal(titles, "Not tied | Druid: Feral | Druid: Guardian | My tanking", "trees: no set has a scale through a spec there")
+    menu, titles = Open(list.rows[2])
+    Equal(titles, "Not tied | Druid: Feral (used by Arena) | Druid: Guardian | My tanking",
+        "trees: and a tie takes a scale there as it does with specs")
+    api.GetTalentTrees = hadTrees
+
+    -- Another toon's table, and its sets.
+    rawset(env, "CaerdonWardrobeCharacterConfig", { Icon = { GearSetScales = { [31] = FERAL } } })
+    world.page.OnRefresh()
+    Equal(list.rows[1].text:GetText(), "Not tied", "another toon: the first toon's tie is not shown")
+    Equal(list.rows[2].text:GetText(), "Druid: Feral", "another toon: its own is")
+    world.setIDs = { 31 }
+    world.page.OnRefresh()
+    Equal(RowsShown(), 1, "another toon: with one set, one row")
+    Equal(list.rows[1].name:GetText(), "Bear", "another toon: for that set")
+    Equal(list.rows[1].text:GetText(), "Druid: Feral", "another toon: with its scale")
+    Equal(scrollChild:GetHeight(), emptyHeight + ROW, "another toon: and the page is a row shorter")
+
+    -- A set that is deleted takes its tie with it: the client gives its ID to the next set made.
+    env.C_EquipmentSet.DeleteEquipmentSet(31)
+    Equal(world.deleted, 31, "deleted: the client's own function ran")
+    Equal(env.CaerdonWardrobeCharacterConfig.Icon.GearSetScales[31], nil, "deleted: and the set's tie is gone")
+    Check(Says(equipment:GetGearSetScaleDescription(), "(a deleted set's tie goes with it: yes)"),
+        "deleted: the export says the client's function is watched: " .. tostring(equipment:GetGearSetScaleDescription()))
+    world.page.OnRefresh()
+    Equal(list.rows[1].text:GetText(), "By its specialization (Guardian)", "deleted: a new set with that ID starts untied")
+
+    -- Without Pawn there is nothing to choose: the list takes no room.
+    rawset(env, "PawnGetSingleValueFromItem", false)
+    world.page.OnRefresh()
+    Equal(RowsShown(), 0, "no Pawn: no row")
+    Equal(list.header:IsShown(), false, "no Pawn: and no line")
+    Equal(list:GetHeight(), 1, "no Pawn: the list keeps a height, for what hangs below it")
+    Equal(scrollChild:GetHeight(), emptyHeight - LINE + 1, "no Pawn: and the page is as high as without it")
+    rawset(env, "PawnGetSingleValueFromItem", nil)
+    rawset(env, "CaerdonWardrobeCharacterConfig", nil)
+    world.setIDs, world.setNames = nil, nil
+    world.page.OnRefresh()
+    Equal(scrollChild:GetHeight(), emptyHeight, "no Pawn: with Pawn again, as before")
+
+    -- 7. A page's height with such a list: a page of this scenario's own, with one row above
+    -- the list and one below. 16 above the first row, 26 a row, 24 below the last.
+    do
+        local panel = env.CreateFromMixins(env.CaerdonWardrobeConfigPanelMixin)
+        function panel:GetTitle() return "A page" end
+        panel:Init()
+        local entries, chosen = nil, {}
+        panel:AddCheckbox({ key = "pageAbove", text = "Above", configSection = "Icon", configValue = "ShowUpgradeIcon" })
+        local own = panel:AddDropdownList({
+            key = "pageList",
+            rows = function() return entries end,
+            header = function(count) return count .. " rows" end,
+            choices = function(row)
+                return { { title = "One", value = 1 }, { title = "Two", value = 2 },
+                    { title = "Three", value = 3, disabled = true, tooltip = "Why not" } }
+            end,
+            choose = function(row, value) chosen[#chosen + 1] = row.text .. "=" .. tostring(value) end,
+        })
+        panel:AddCheckbox({ key = "pageBelow", text = "Below", configSection = "Icon", configValue = "ShowUpgradeIcon" })
+        panel:FinishLayout()
+        local child = own:GetParent()
+        Equal(child:GetHeight(), 16 + 26 + 1 + 26 + 24, "page: above, a list with nothing to choose from, below")
+        entries = {}
+        panel:RefreshControls()
+        Equal(own.header:GetText(), "0 rows", "page: the line is asked for with the number of rows")
+        Equal(child:GetHeight(), 16 + 26 + LINE + 26 + 24, "page: a list with its line alone")
+        entries = { { text = "First", value = 2, title = "Two" }, { text = "Second", title = "" }, { text = "Third", title = "" } }
+        panel:RefreshControls()
+        Equal(child:GetHeight(), 16 + 26 + LINE + 3 * ROW + 26 + 24, "page: and with three rows")
+        world.menu = {}
+        own.rows[1].dropdown.initialize()
+        Equal(#world.menu, 3, "page: a row's menu has the choices it was given")
+        Check(world.menu[1].checked == false and world.menu[2].checked == true, "page: with the row's value marked")
+        Check(world.menu[3].disabled == true and world.menu[3].func == nil, "page: a choice that cannot be made is greyed and has no click")
+        Check(world.menu[3].tooltipWhileDisabled == true and world.menu[3].tooltipText == "Why not",
+            "page: and keeps its tooltip, which says why")
+        Check(world.menu[1].disabled == nil and world.menu[1].tooltipWhileDisabled == nil and
+            type(world.menu[1].func) == "function", "page: the others are as they were")
+        world.menu[1].func()
+        Equal(chosen[1], "First=1", "page: a click is handed the row and the value")
+        entries = { { text = "First", title = "" } }
+        panel:RefreshControls()
+        Equal(child:GetHeight(), 16 + 26 + LINE + ROW + 26 + 24, "page: and with one again")
+        Check(own.rows[2]:IsShown() == false and own.rows[3]:IsShown() == false, "page: the rows of what is gone are not shown")
+        -- A page with no such list is as high as what was laid out.
+        local plain = env.CreateFromMixins(env.CaerdonWardrobeConfigPanelMixin)
+        function plain:GetTitle() return "A plain page" end
+        plain:Init()
+        local only = plain:AddCheckbox({ key = "pagePlain", text = "Only", configSection = "Icon", configValue = "ShowUpgradeIcon" })
+        plain:FinishLayout()
+        Equal(only:GetParent():GetHeight(), 16 + 26 + 24, "page: one with no list is as high as what was laid out")
+    end
 
     Equal(#world.client.errors, 0, "end: no error reached the error handler")
     for _, message in ipairs(world.client.errors) do

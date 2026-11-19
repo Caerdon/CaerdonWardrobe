@@ -1026,6 +1026,9 @@ local thirdPartyHooks = {}
 do
     local section = "hooksecurefunc targets"
     local function hasMethod(client, hook)
+        -- A function of one of the client's namespaces (C_EquipmentSet.DeleteEquipmentSet) is
+        -- no Lua of Blizzard's: the listing names it.
+        if client.api[hook.path .. "." .. hook.method] then return true end
         if not definesGlobal(client, hook.root) then return false end
         if hook.path ~= hook.root then
             -- A child reached through parentKeys: the frame tree is not resolved, so any

@@ -1297,11 +1297,20 @@ end
 -- { name, label }, for JudgeOnHiddenOwnScale, and every other spec's shown scale is ignored
 -- even though that leaves none. Without it a piece was judged by item level alone, or by the
 -- other specs' scales as if they were the toon's own.
+--
+-- A gear set tied to a Pawn scale by the player (TiedSetScale, below) comes before spec and
+-- tree: while that set is the one worn, its scale is the toon's own, shown in Pawn or not, and
+-- every other scale of the class is another's. A scale tied to a gear set that is not the one
+-- worn is that set's, whatever kind of scale it is, unless it is the toon's own as well.
+local GetTiedScales
+
 local function GetPawnOffTreeScales()
     if not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) then
         return nil
     end
 
+    -- The scale the worn gear set is tied to, and the scales tied to the toon's other sets.
+    local tiedOwn, tiedElsewhere = GetTiedScales()
     local treeIndex, treeCount, specIndex
     if CaerdonAPI:GetTalentTrees() then
         local _
@@ -1313,25 +1322,38 @@ local function GetPawnOffTreeScales()
             specIndex = nil
         end
     end
-    if not treeIndex and not specIndex then
+    if not treeIndex and not specIndex and not tiedOwn and not tiedElsewhere then
         return nil
     end
 
     local ok, offTree, detail, hiddenOwn = pcall(function()
         local _, classFile, classID = UnitClass("player")
         local specIDs = treeIndex and PawnSpecIDsForTalentTree(classFile, treeIndex, treeCount) or
-            { [specIndex] = true }
+            (specIndex and { [specIndex] = true }) or {}
         local ignored, ignoredNames, keptNames = {}, {}, {}
         -- The played spec's scale that Pawn ships (a provider's), where Pawn does not show it.
         local hidden
         for scaleName, scale in pairs(PawnCommon.Scales) do
             local label = scale.LocalizedName or scaleName
+            local classScale = scale.ClassID == classID and type(scale.SpecID) == "number"
+            -- The toon's own: the scale its worn gear set is tied to, where it is tied to one;
+            -- else a scale of the spec being played or of the leading tree.
+            local own
+            if tiedOwn then
+                own = scaleName == tiedOwn
+            else
+                own = classScale and specIDs[scale.SpecID] == true
+            end
             if PawnIsScaleVisible(scaleName) then
-                if scale.ClassID == classID and type(scale.SpecID) == "number" and not specIDs[scale.SpecID] then
+                if not own and (classScale or (tiedElsewhere ~= nil and tiedElsewhere[scaleName] == true)) then
                     ignored[scaleName] = true
                     ignoredNames[#ignoredNames + 1] = label
                 else
                     keptNames[#keptNames + 1] = label
+                end
+            elseif tiedOwn then
+                if own then
+                    hidden = { name = scaleName, label = label, tied = true }
                 end
             elseif specIndex and scale.ClassID == classID and scale.SpecID == specIndex and scale.Provider ~= nil and
                 (not hidden or scaleName < hidden.name) then
@@ -1340,6 +1362,15 @@ local function GetPawnOffTreeScales()
         end
         table.sort(ignoredNames)
         table.sort(keptNames)
+        if hidden and hidden.tied then
+            -- The player's own choice for the gear worn: scored beside whatever else counts.
+            local scored = format("kept: %s; and %s is scored though Pawn hides it (the worn gear set is tied to it)",
+                #keptNames > 0 and table.concat(keptNames, ", ") or "none shown", hidden.label)
+            if #ignoredNames == 0 then
+                return nil, scored, hidden
+            end
+            return ignored, format("ignored: %s; %s", table.concat(ignoredNames, ", "), scored), hidden
+        end
         if #keptNames == 0 and hidden then
             local scored = format("kept: none shown, so %s is scored though Pawn hides it", hidden.label)
             if #ignoredNames == 0 then
@@ -1521,8 +1552,12 @@ local function IsPawnUpgradeOffTreeOnly(item, offTreeScales, setSpecs)
             end
             local scale = PawnCommon.Scales and PawnCommon.Scales[upgrade.ScaleName]
             local specIndex = scale and scale.SpecID
-            if type(specIndex) ~= "number" or (IsOtherSpecWanted(classFile, specIndex) and
-                not (offTree and setSpecs and setSpecs[specIndex])) then
+            -- A gear set decides in Pawn's place for the scale: by the scale's spec, or by
+            -- its name where the player tied a set to it (a scale of the player's own has no
+            -- spec).
+            local decided = offTree and setSpecs ~= nil and (setSpecs[upgrade.ScaleName] == true or
+                (type(specIndex) == "number" and setSpecs[specIndex] == true))
+            if not decided and (type(specIndex) ~= "number" or IsOtherSpecWanted(classFile, specIndex)) then
                 standingNames[#standingNames + 1] = name
             end
         end
@@ -1667,6 +1702,130 @@ local function ReadActiveSet(preferSetID)
     return nil, "no gear set is mostly on"
 end
 
+-- The Pawn scale the player tied a gear set to (author decision). Gear sets are the one thing
+-- both clients have: retail can tie a set to a specialization and WoW Forever to nothing, and
+-- in neither can a set say which weights it is for (a PVP set, a set for the other half of a
+-- toon that plays two trees). So a set is tied to a scale by the player, set by set, and that
+-- is kept with the toon (CaerdonWardrobeCharacterConfig.Icon.GearSetScales: set ID -> scale
+-- name). A set nobody tied is as it was: the scale of the spec the client ties it to, or none.
+-- nil for a set nobody tied, and for a scale Pawn no longer has (second return value: that
+-- scale's name, for the export).
+local function TiedSetScale(setID)
+    local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
+    local tied = type(icon) == "table" and type(icon.GearSetScales) == "table" and icon.GearSetScales[setID]
+    if type(tied) ~= "string" or tied == "" then
+        return nil
+    end
+    if not (PawnCommon and PawnCommon.Scales and PawnCommon.Scales[tied]) then
+        return nil, tied
+    end
+    return tied
+end
+
+-- A gear set that is deleted takes its tie with it: the client gives a deleted set's ID to the
+-- next set made, which would come by a scale nobody chose for it. Both clients delete through
+-- this one function (the confirm dialog's OnAccept). A set deleted where the addon was not
+-- running keeps its tie, and the settings page shows it on the set that has the ID now.
+-- The client refuses a secure hook on some functions and does not say which, so it is tried
+-- protected: a refusal must not stop this file, and the export says how it went.
+local deleteHooked = false
+if C_EquipmentSet and type(C_EquipmentSet.DeleteEquipmentSet) == "function" then
+    deleteHooked = pcall(hooksecurefunc, C_EquipmentSet, "DeleteEquipmentSet", function(setID)
+        local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
+        local ties = type(icon) == "table" and icon.GearSetScales
+        if type(ties) == "table" and setID ~= nil then
+            ties[setID] = nil
+        end
+    end)
+end
+
+-- The gear sets tied to a scale, as loadouts (both clients; after the client's own ties have
+-- been read, and what the set worn is).
+--   The set being worn (loadouts.activeSet): what is worn is its loadout, on its scale, named
+--   for the set. It is then not also a loadout kept beside what is worn; the played spec's own
+--   set stays listed, since that one is only asked where its piece is not the one worn.
+--   Any other set that no spec is tied to (specSets: set ID -> true): a loadout of its own,
+--   measured against the set's pieces. A set a spec is tied to is that spec's loadout already,
+--   on the tied scale (GetLoadouts), and the spec's switch still says whether it is wanted.
+--   A spec with no set of its own, whose scale a set is tied to, is no loadout beside that set.
+-- wornScaleTied and tiedScales are for Pawn's verdict (GetPawnOffTreeScales).
+local function AddTiedSets(loadouts, specSets)
+    if not (C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs and C_EquipmentSet.GetEquipmentSetInfo) then
+        return
+    end
+    local active = loadouts.activeSet
+    for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
+        local scaleName = TiedSetScale(setID)
+        if scaleName then
+            local scale = PawnCommon.Scales[scaleName]
+            local colour = type(scale.Color) == "string" and #scale.Color == 6 and scale.Color or nil
+            if active and active.id == setID then
+                local was = loadouts.worn
+                loadouts.wornRead = true
+                loadouts.wornScaleTied = scaleName
+                loadouts.worn = {
+                    isWorn = true,
+                    index = was and was.index or (100 + setID),
+                    id = was and was.id or nil,
+                    scale = scaleName,
+                    label = scale.LocalizedName or scaleName,
+                    activeName = active.name,
+                    activeIcon = active.icon or QUESTION_MARK_ICON,
+                    colour = colour,
+                    own = false,
+                    tied = true,
+                    baseline = {},
+                }
+                for index = #loadouts, 1, -1 do
+                    local other = loadouts[index]
+                    if other.setID == setID and not other.own then
+                        table.remove(loadouts, index)
+                        if loadouts.bySpec[other.index] == other then
+                            loadouts.bySpec[other.index] = nil
+                        end
+                    end
+                end
+            elseif not (specSets and specSets[setID]) then
+                local setName, setIcon = C_EquipmentSet.GetEquipmentSetInfo(setID)
+                loadouts[#loadouts + 1] = {
+                    index = 100 + setID,
+                    scale = scaleName,
+                    label = scale.LocalizedName or scaleName,
+                    setID = setID,
+                    setName = setName,
+                    setIcon = setIcon,
+                    colour = colour,
+                    own = false,
+                    tied = true,
+                    baseline = {},
+                }
+            end
+        end
+    end
+    local tiedScales
+    for _, loadout in ipairs(loadouts) do
+        if loadout.tied and loadout.setID then
+            tiedScales = tiedScales or {}
+            tiedScales[loadout.scale] = true
+        end
+    end
+    loadouts.tiedScales = tiedScales
+    -- A set tied to a scale speaks for that scale. A spec with no set of its own, whose scale
+    -- it is, was measured against the worn gear for want of anything better: not beside the
+    -- set, which would say the same piece twice, by two measures.
+    local wornTied = loadouts.wornScaleTied
+    for index = #loadouts, 1, -1 do
+        local other = loadouts[index]
+        if not other.setID and not other.tied and
+            (other.scale == wornTied or (tiedScales ~= nil and tiedScales[other.scale] == true)) then
+            table.remove(loadouts, index)
+            if loadouts.bySpec[other.index] == other then
+                loadouts.bySpec[other.index] = nil
+            end
+        end
+    end
+end
+
 -- What is worn, as a loadout, on a client with talent trees (WoW Forever), which has no
 -- specialization to go by. The tree with the most points is taken for what the toon plays
 -- (author decision, for a start: a toon that plays two trees is not told, and a gear set
@@ -1674,10 +1833,13 @@ end
 -- clients). Its scale is the one Pawn ships for the class and that tree
 -- (PawnSpecIDsForTalentTree). A feral druid's tree has two, damage and tank: of several the
 -- one Pawn shows, then the lower number.
--- The worn gear is that tree's whatever gear set is on, and there is no other loadout:
--- another tree's scale that Pawn shows colours the arrow as it did (GetPawnOffTreeScales).
--- Nothing where no tree leads (no points spent, or two trees tie) or Pawn has no such scale.
+-- The worn gear is that tree's whatever gear set is on, unless the player tied that set to a
+-- scale (AddTiedSets, which GetLoadouts calls next), and there is no other loadout but the
+-- sets so tied: another tree's scale that Pawn shows colours the arrow as it did
+-- (GetPawnOffTreeScales). Nothing where no tree leads (no points spent, or two trees tie) or
+-- Pawn has no such scale.
 local function ReadTalentTreeLoadout(loadouts, classFile, classID)
+    loadouts.activeSet, loadouts.activeWhy = ReadActiveSet(nil)
     local treeIndex, treeName, _, treeCount = CaerdonAPI:GetPrimaryTalentTree()
     if not treeIndex then
         return
@@ -1706,7 +1868,6 @@ local function ReadTalentTreeLoadout(loadouts, classFile, classID)
         return
     end
     loadouts.wornRead = true
-    loadouts.activeSet, loadouts.activeWhy = ReadActiveSet(nil)
     loadouts.worn = {
         isWorn = true,
         index = treeIndex,
@@ -1746,6 +1907,8 @@ local function GetLoadouts()
     local _, classFile, classID = UnitClass("player")
     if CaerdonAPI:GetTalentTrees() then
         ReadTalentTreeLoadout(loadouts, classFile, classID)
+        AddTiedSets(loadouts, nil)
+        table.sort(loadouts, function(a, b) return a.index < b.index end)
         return loadouts
     end
     local current = CaerdonAPI:GetPlayerSpecializationIndex()
@@ -1754,6 +1917,14 @@ local function GetLoadouts()
     end
 
     local setForSpec = C_EquipmentSet and C_EquipmentSet.GetEquipmentSetForSpec
+    -- The sets the client ties to a spec: each is that spec's loadout and no other.
+    local specSets = {}
+    for specIndex = 1, 4 do
+        local specSet = setForSpec and setForSpec(specIndex) or nil
+        if specSet then
+            specSets[specSet] = true
+        end
+    end
     for scaleName, scale in pairs(PawnCommon.Scales) do
         local specIndex = scale.SpecID
         if scale.ClassID == classID and scale.Provider ~= nil and type(specIndex) == "number" and
@@ -1812,13 +1983,44 @@ local function GetLoadouts()
                     own = own,
                     baseline = {},
                 }
+                -- The spec's set is tied to a scale by the player: that scale, and not the
+                -- one Pawn ships for the spec.
+                local tiedName = setID and TiedSetScale(setID) or nil
+                if tiedName then
+                    local tiedScale = PawnCommon.Scales[tiedName]
+                    loadout.scale, loadout.label = tiedName, tiedScale.LocalizedName or tiedName
+                    loadout.colour = type(tiedScale.Color) == "string" and #tiedScale.Color == 6 and tiedScale.Color or nil
+                    loadout.tied = true
+                end
                 loadouts.bySpec[specIndex] = loadout
                 loadouts[#loadouts + 1] = loadout
             end
         end
     end
+    -- No scale of Pawn's for the spec being played: the set worn has not been read yet.
+    if not loadouts.wornRead then
+        loadouts.activeSet, loadouts.activeWhy = ReadActiveSet(setForSpec and setForSpec(current) or nil)
+    end
+    AddTiedSets(loadouts, specSets)
     table.sort(loadouts, function(a, b) return a.index < b.index end)
     return loadouts
+end
+
+GetTiedScales = function()
+    local loadouts = GetLoadouts()
+    local own, tied = loadouts.wornScaleTied, loadouts.tiedScales
+    -- A scale that is the worn set's own is not another set's for Pawn's verdict.
+    if own and tied and tied[own] then
+        local others
+        for scaleName in pairs(tied) do
+            if scaleName ~= own then
+                others = others or {}
+                others[scaleName] = true
+            end
+        end
+        tied = others
+    end
+    return own, tied
 end
 
 -- The other specs with a gear set whose scale Pawn shows (offTreeScales, the shown scales of
@@ -1827,8 +2029,12 @@ end
 -- "better than what that spec has", and with a set assigned the worn gear is not that. Showing
 -- the scale is still the player's sign that the spec is wanted, so the set is asked for it
 -- whatever Icon.ShowOtherSpecUpgrades says, as Pawn's verdict was.
+--
+-- A gear set tied to such a scale by the player decides in the same way: by its own index
+-- for the loadouts asked, and by the scale's name for Pawn's verdict (IsPawnUpgradeOffTreeOnly).
 local function GetShownSetSpecs(offTreeScales)
-    local bySpec = GetLoadouts().bySpec
+    local loadouts = GetLoadouts()
+    local bySpec = loadouts.bySpec
     local found
     for scaleName in pairs(offTreeScales) do
         local scale = PawnCommon.Scales[scaleName]
@@ -1836,6 +2042,13 @@ local function GetShownSetSpecs(offTreeScales)
         if loadout and loadout.setID and not loadout.own then
             found = found or {}
             found[loadout.index] = true
+        end
+    end
+    for _, loadout in ipairs(loadouts) do
+        if loadout.tied and loadout.setID and not loadout.own and offTreeScales[loadout.scale] then
+            found = found or {}
+            found[loadout.index] = true
+            found[loadout.scale] = true
         end
     end
     return found
@@ -2355,6 +2568,140 @@ function CaerdonEquipment:GetActiveSetDescription()
         active and format("\"%s\"", tostring(active.name)) or "none", tostring(loadouts.activeWhy),
         chosenID and tostring(chosenID) or "none noted",
         loadouts.worn and "yes" or "no, the set worn is not the played spec's")
+end
+
+-- For the Debug Frame export: each gear set of the toon's with the scale the player tied it
+-- to, or nil where the toon has no sets or Pawn is not there.
+--[[static]]
+function CaerdonEquipment:GetGearSetScaleDescription()
+    if not (PawnCommon and PawnCommon.Scales and C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs and
+        C_EquipmentSet.GetEquipmentSetInfo) then
+        return nil
+    end
+    local parts = {}
+    for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
+        local name = C_EquipmentSet.GetEquipmentSetInfo(setID)
+        local tied, lost = TiedSetScale(setID)
+        local scale = tied and PawnCommon.Scales[tied]
+        local what
+        if tied then
+            what = format("tied to %s", tostring(scale.LocalizedName or tied))
+        elseif lost then
+            what = format("tied to \"%s\", which Pawn no longer has: not tied", tostring(lost))
+        else
+            what = "not tied"
+        end
+        parts[#parts + 1] = format("\"%s\" (%s) %s", tostring(name), tostring(setID), what)
+    end
+    if #parts == 0 then
+        return nil
+    end
+    return format("%s (a deleted set's tie goes with it: %s)", table.concat(parts, "; "),
+        deleteHooked and "yes" or "no, the client's delete function could not be hooked")
+end
+
+-- For the settings page: the toon's gear sets in the client's order, each with the scale the
+-- player tied it to, or nil where the client has no gear sets to ask for.
+--   { id, name, icon, tied = the scale's name, tiedLabel, lost = a tied scale Pawn no longer
+--     has, specName, specIndex = the spec the client ties the set to }
+-- Second: whether the client has talent trees in the place of specs.
+--[[static]]
+function CaerdonEquipment:GetGearSets()
+    if not (C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs and C_EquipmentSet.GetEquipmentSetInfo) then
+        return nil
+    end
+    local byTree = CaerdonAPI:GetTalentTrees() and true or false
+    local specNames, specIndexes = {}, {}
+    if not byTree and C_EquipmentSet.GetEquipmentSetForSpec and GetSpecializationInfoForClassID then
+        local _, _, classID = UnitClass("player")
+        for specIndex = 1, 4 do
+            local setID = C_EquipmentSet.GetEquipmentSetForSpec(specIndex)
+            if setID then
+                local _, specName = GetSpecializationInfoForClassID(classID, specIndex)
+                specNames[setID] = specName
+                specIndexes[setID] = specIndex
+            end
+        end
+    end
+    local sets = {}
+    for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
+        local name, icon = C_EquipmentSet.GetEquipmentSetInfo(setID)
+        if name ~= nil then
+            local tied, lost = TiedSetScale(setID)
+            local scale = tied and PawnCommon.Scales[tied]
+            sets[#sets + 1] = {
+                id = setID,
+                name = name,
+                icon = icon or QUESTION_MARK_ICON,
+                tied = tied,
+                tiedLabel = scale and (scale.LocalizedName or tied) or nil,
+                lost = lost,
+                specName = specNames[setID],
+                specIndex = specIndexes[setID],
+            }
+        end
+    end
+    return sets, byTree
+end
+
+-- For the settings page: the Pawn scales a gear set of this toon can be tied to, or nil where
+-- Pawn is not there to score on one. The scales Pawn ships for the toon's class, in the order
+-- of their specs; then every other scale that is not another class's, by name (the player's
+-- own: one made from nothing is for no class, a copy of a class's scale keeps its class).
+--   { name, label, spec }
+-- A scale is one gear set's (author decision), as a spec is one set's in the client. Asked
+-- for a set (its ID), a scale another set is scored on says so: takenBy is that set's name,
+-- by the player's tie or, for a set nobody tied, through the spec the client ties it to
+-- (takenBySpec, that spec's name). The page does not offer those. This is the page's rule and
+-- not the scoring's: two sets still come by one scale where a spec is assigned in the
+-- character window after a tie was made, and each is then scored on it (AddTiedSets).
+--[[static]]
+function CaerdonEquipment:GetGearSetScaleChoices(forSetID)
+    if not (PawnCommon and PawnCommon.Scales and PawnGetItemData and PawnGetSingleValueFromItem) then
+        return nil
+    end
+    local _, _, classID = UnitClass("player")
+    local choices = {}
+    local takenByScale, takenBySpec = {}, {}
+    if forSetID ~= nil then
+        for _, set in ipairs(CaerdonEquipment:GetGearSets() or {}) do
+            if set.id ~= forSetID then
+                if set.tied then
+                    takenByScale[set.tied] = takenByScale[set.tied] or set
+                elseif set.specIndex then
+                    takenBySpec[set.specIndex] = takenBySpec[set.specIndex] or set
+                end
+            end
+        end
+    end
+    for scaleName, scale in pairs(PawnCommon.Scales) do
+        if type(scaleName) == "string" and type(scale) == "table" and
+            (scale.ClassID == nil or scale.ClassID == classID) then
+            local spec = scale.ClassID == classID and scale.Provider ~= nil and type(scale.SpecID) == "number" and
+                scale.SpecID or nil
+            local tied = takenByScale[scaleName]
+            local bySpec = not tied and spec and takenBySpec[spec] or nil
+            local holder = tied or bySpec
+            choices[#choices + 1] = {
+                name = scaleName,
+                label = scale.LocalizedName or scaleName,
+                spec = spec,
+                takenBy = holder and holder.name or nil,
+                takenBySpec = bySpec and bySpec.specName or nil,
+            }
+        end
+    end
+    table.sort(choices, function(a, b)
+        if (a.spec ~= nil) ~= (b.spec ~= nil) then
+            return a.spec ~= nil
+        elseif a.spec ~= b.spec then
+            return a.spec < b.spec
+        elseif a.label ~= b.label then
+            return a.label < b.label
+        end
+        return a.name < b.name
+    end)
+    return choices
 end
 
 -- For the Debug Frame export: each loadout with what a piece is measured against for it, or

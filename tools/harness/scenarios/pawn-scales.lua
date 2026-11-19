@@ -1656,6 +1656,171 @@ return function(H, S)
         step = Shown({ GUARDIAN }, { GUARDIAN })
         Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "+150% upgrade", true), "worn: no set with half its pieces on or fewer")
 
+        -- A gear set tied to a Pawn scale by the player, kept with the toon. Arena is a set
+        -- no spec is tied to. On Feral's scale the piece is worth 20, the worn jerkin 10 and
+        -- the jerkin in the bags 4; on Guardian's 30, 12 and 5.
+        do
+            local function Tie(ties)
+                rawset(world.env, "CaerdonWardrobeCharacterConfig", ties and { Icon = { GearSetScales = ties } } or nil)
+            end
+            local wornJerkin = world.env.CaerdonItem:CreateFromItemID(940002)
+            world.scaleValues[FERAL] = { [940001] = 20, [940002] = 10, [940003] = 4 }
+            PawnChanged(world)
+            -- Worn in full and not tied: nothing of the addon's for what is worn, as above.
+            world.setWorn = { [31] = { 10, 4 }, [41] = { 10, 10 } }
+            step = Shown({ GUARDIAN }, { GUARDIAN })
+            Equal(table.concat(shown.lines, " | "), "pawn: " .. GUARDIAN, "tied: a set no spec is tied to, worn and not tied, has no line")
+            Equal(equipment:CanScoreWornGear(), true, "tied: the played spec has its scale")
+            -- Tied to Feral's scale: what is worn is that set's loadout, on that scale, named
+            -- for the set, though Pawn hides the scale.
+            Tie({ [41] = FERAL })
+            step = Shown({ GUARDIAN }, { GUARDIAN })
+            Equal(shown.lines[#shown.lines], Line("8ec3e6", 134400, "Arena", "+100% upgrade", true),
+                "tied: the set worn is scored on the scale it is tied to, though Pawn hides that scale")
+            Equal(info.pawnIdentifiedUpgrade, true, "tied: and the arrow is the worn gear's own, by that scale")
+            Equal(info.pawnOffTreeUpgrade, false, "tied: not another loadout's")
+            local tiedGain = equipment:GetReplacementGains(piece, wornJerkin)
+            Check(tiedGain ~= nil and tiedGain[1].worn == true and tiedGain[1].percent == 100 and tiedGain[1].name == "Arena",
+                "tied: the comparison has the same")
+            local described = tostring(equipment:GetGearSetScaleDescription())
+            Check(described:find("\"Arena\" (41) tied to Druid: Feral", 1, true) ~= nil and
+                described:find("\"Bear\" (31) not tied", 1, true) ~= nil, "tied: the export names each set and its scale: " .. described)
+            Check(tostring(equipment:GetActiveSetDescription()):find("the worn gear's own tooltip line: yes", 1, true) ~= nil,
+                "tied: and says the worn gear has its line")
+            -- Shown in Pawn as well: the same, by Pawn's own word for the scale.
+            step = Shown({ FERAL, GUARDIAN }, { FERAL })
+            Equal(shown.lines[#shown.lines], Line("8ec3e6", 134400, "Arena", "+100% upgrade", true), "tied: the same where Pawn shows the scale")
+            Equal(info.pawnIdentifiedUpgrade, true, "tied: the arrow too")
+            -- No upgrade on the tied scale: the played spec's scale is another's while that
+            -- set is worn, so its verdict is not the worn gear's.
+            world.scaleValues[FERAL][940001] = 6
+            PawnChanged(world)
+            step = Shown({ GUARDIAN }, { GUARDIAN })
+            Equal(info.pawnIdentifiedUpgrade, false, "tied: a piece that is no upgrade on the tied scale is not the worn gear's upgrade")
+            Equal(info.pawnOffTreeUpgrade, true, "tied: Pawn's verdict for the played spec's scale is another loadout's then")
+            world.scaleValues[FERAL][940001] = 20
+            PawnChanged(world)
+            -- A scale Pawn no longer has ties nothing, and the export says so.
+            Tie({ [41] = "a scale that is gone" })
+            step = Shown({ GUARDIAN }, { GUARDIAN })
+            Equal(table.concat(shown.lines, " | "), "pawn: " .. GUARDIAN, "tied: a scale Pawn no longer has ties nothing")
+            Check(tostring(equipment:GetGearSetScaleDescription()):find("tied to \"a scale that is gone\", which Pawn no longer has", 1, true) ~= nil,
+                "tied: and the export says so")
+
+            -- Not the set worn (Bear is on in full): a loadout of its own, measured against
+            -- the set's own piece, the jerkin in the bags. On Guardian's scale the piece is no
+            -- upgrade for what is worn here (10 against 12).
+            Tie({ [41] = FERAL })
+            world.setWorn = { [31] = { 10, 10 }, [41] = { 10, 2 } }
+            world.setLocations[41] = { [5] = 9001 }
+            world.scaleValues[GUARDIAN][940001] = 10
+            PawnChanged(world)
+            icon.ShowOtherSpecUpgrades = true
+            info = Info(world, { GUARDIAN }, {})
+            Equal(info.isUpgrade, true, "tied: a piece that beats the tied set's own piece is an upgrade for that set")
+            Equal(info.pawnOffTreeUpgrade, true, "tied: another loadout's, in its red")
+            local tiedList = equipment:GetLoadoutUpgradeList(piece)
+            Check(tiedList ~= nil and #tiedList == 1 and tiedList[1].name == "Arena" and tiedList[1].percent == 400 and
+                tiedList[1].worn == nil, "tied: the tooltip's list names the set, with the gain over its piece")
+            Tie(nil)
+            info = Info(world, { GUARDIAN }, {})
+            Equal(info.isUpgrade, nil, "tied: no such upgrade where the set is not tied")
+            -- Pawn shows the tied scale and calls the piece an upgrade over the worn gear, and
+            -- the set's own piece is the better one (40): the set decides, as a spec's does.
+            world.scaleValues[FERAL][940003] = 40
+            PawnChanged(world)
+            info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+            Equal(info.pawnOffTreeUpgrade, true, "tied: untied, Pawn's verdict for the other spec's shown scale stands")
+            Tie({ [41] = FERAL })
+            info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+            Equal(info.isUpgrade, nil, "tied: tied, the set decides for its scale in Pawn's place")
+            -- A scale of the player's own has no spec. Tied to a set that is not worn, it is
+            -- that set's: Pawn's verdict for it is not the worn gear's, and the set decides.
+            world.scaleValues[OWN] = { [940001] = 20, [940002] = 10, [940003] = 40 }
+            PawnChanged(world)
+            Tie(nil)
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Equal(info.pawnIdentifiedUpgrade, true, "tied: untied, a scale of the player's own counts for the worn gear")
+            Tie({ [41] = OWN })
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Equal(info.pawnIdentifiedUpgrade, false, "tied: tied to a set that is not worn, it does not")
+            Equal(info.isUpgrade, nil, "tied: and the set's better piece decides")
+            world.scaleValues[OWN][940003] = 4
+            PawnChanged(world)
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true, "tied: with a weaker piece in the set it is that set's upgrade")
+            world.scaleValues[OWN] = nil
+            world.scaleValues[FERAL][940003] = 4
+
+            -- A set a spec is tied to keeps to that spec's loadout, on the tied scale: it is
+            -- not a second loadout beside it.
+            Tie({ [31] = FERAL })
+            world.setWorn = { [31] = { 10, 3 }, [41] = { 10, 10 } }
+            PawnChanged(world)
+            info = Info(world, { GUARDIAN }, {})
+            local loadoutText = tostring(equipment:GetLoadoutDescription())
+            local _, bears = loadoutText:gsub("\"Bear\"", "")
+            Check(bears == 1 and loadoutText:find("Druid: Feral", 1, true) ~= nil,
+                "tied: a spec's own set is that spec's loadout on the tied scale, once: " .. loadoutText)
+
+            -- Another spec's set is the one worn, and tied: what is worn is its loadout, and it
+            -- is not listed a second time as that spec's.
+            world.setIDs, world.setNames = { 21, 41, 31 }, { [21] = "Cat", [31] = "Bear", [41] = "Arena" }
+            world.setForSpec = { [2] = 21, [3] = 31 }
+            world.setLocations[21] = { [5] = 9002 }
+            world.setWorn = { [21] = { 10, 10 }, [31] = { 10, 3 }, [41] = { 10, 2 } }
+            Tie({ [21] = FERAL })
+            info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+            tiedList = equipment:GetLoadoutUpgradeList(piece)
+            Check(tiedList ~= nil and #tiedList == 1 and tiedList[1].name == "Cat" and tiedList[1].worn == true and
+                tiedList[1].percent == 100, "tied: another spec's set, worn and tied, is what is worn and nothing beside it (" ..
+                tostring(tiedList and #tiedList) .. ")")
+            world.setIDs, world.setNames = { 41, 31 }, { [31] = "Bear", [41] = "Arena" }
+            world.setForSpec = { [3] = 31 }
+            world.setLocations[21] = nil
+
+            -- A client with talent trees: the set worn, tied, comes before the leading tree.
+            local api = world.env.CaerdonAPI
+            local hadTrees, hadPrimary = api.GetTalentTrees, api.GetPrimaryTalentTree
+            api.GetTalentTrees = function() return { { index = 1 }, { index = 2 }, { index = 3 } } end
+            api.GetPrimaryTalentTree = function() return 2, "Feral Combat", 11, 3 end
+            world.setWorn = { [31] = { 10, 2 }, [41] = { 10, 10 } }
+            world.setLocations[41] = {}
+            world.scaleValues[GUARDIAN][940001] = 30
+            Tie(nil)
+            PawnChanged(world)
+            world.visible = { [FERAL] = true }
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            tiedGain = equipment:GetReplacementGains(piece, wornJerkin)
+            Check(tiedGain ~= nil and tiedGain[1].percent == 100 and tiedGain[1].name == "Feral Combat",
+                "tied, trees: untied, what is worn is the leading tree's (" .. tostring(tiedGain and tiedGain[1].name) .. ")")
+            Tie({ [41] = GUARDIAN })
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            tiedGain = equipment:GetReplacementGains(piece, wornJerkin)
+            Check(tiedGain ~= nil and tiedGain[1].percent == 150 and tiedGain[1].name == "Arena",
+                "tied, trees: the set worn, tied, is scored on its own scale and named for the set (" ..
+                tostring(tiedGain and tiedGain[1].percent) .. ", " .. tostring(tiedGain and tiedGain[1].name) .. ")")
+            -- And a tied set that is not the one worn is a loadout there too.
+            world.setWorn = { [31] = { 10, 10 }, [41] = { 10, 2 } }
+            world.setLocations[41] = { [5] = 9001 }
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            local named = false
+            for _, entry in ipairs(equipment:GetLoadoutUpgradeList(piece) or {}) do
+                named = named or (entry.name == "Arena" and entry.worn == nil and entry.percent == 500)
+            end
+            Equal(named, true, "tied, trees: a tied set that is not worn is a loadout of its own")
+            api.GetTalentTrees, api.GetPrimaryTalentTree = hadTrees, hadPrimary
+
+            Tie(nil)
+            icon.ShowOtherSpecUpgrades = false
+            world.scaleValues[FERAL] = nil
+            world.setLocations[41] = {}
+            world.setWorn = { [31] = { 10, 5 }, [41] = { 10, 3 } }
+            PawnChanged(world)
+            step = Shown({ GUARDIAN }, { GUARDIAN })
+            Equal(shown.lines[1], Line("8ec3e6", nil, "Guardian", "+150% upgrade", true), "tied: and with nothing tied all is as it was")
+        end
+
         -- Two sets of one toon often share most of their pieces, and shares then name the wrong
         -- one: Feral's set has nine of ten on, Guardian's eight. Until the player is seen to
         -- put a set on, Feral's is taken for the one worn, and it is another spec's: no line.
