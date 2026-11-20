@@ -2812,6 +2812,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             CaerdonEquipment:GetPawnScaleFilterDescription() or "none (every visible Pawn scale counts)")
         addKV(1, "pawnScalesShown", CaerdonEquipment.GetShownPawnScalesDescription and
             CaerdonEquipment:GetShownPawnScalesDescription() or "not asked (no Pawn)")
+        addKV(1, "offHandScale", CaerdonEquipment.GetOffHandScaleDescription and
+            CaerdonEquipment:GetOffHandScaleDescription() or "not asked (no Pawn)")
         addKV(1, "otherSpecsWanted", CaerdonEquipment.GetOtherSpecChoiceDescription and
             CaerdonEquipment:GetOtherSpecChoiceDescription() or "no choice (no specs on this client)")
         addKV(1, "loadoutsCompared", CaerdonEquipment.GetLoadoutDescription and

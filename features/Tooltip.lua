@@ -768,15 +768,28 @@ local function PairNote(upgrade)
     return text and format("  |cff%s%s|r", NOTE_COLOUR, text) or ""
 end
 
+-- A weapon whose hands are judged apart (hand on the entry; author decision: where the
+-- class's scale has a half for the off hand's weapon, a one-hander has a verdict for each
+-- hand): the note says which hand the gain is in.
+local function HandNote(upgrade)
+    local text
+    if upgrade.hand == "off" then
+        text = L["(in the off hand)"]
+    elseif upgrade.hand == "main" then
+        text = L["(in the main hand)"]
+    end
+    return text and format("  |cff%s%s|r", NOTE_COLOUR, text) or ""
+end
+
 local function AddUpgradeLine(tooltip, upgrade)
     local icon = upgrade.icon and format("|T%s:0|t ", tostring(upgrade.icon)) or ""
     -- No percentage against a piece the scale gives no value.
     local gain = upgrade.percent and format(L["+%d%% upgrade"], upgrade.percent) or L["upgrade"]
     local worn = IsWornGain(upgrade)
-    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
+    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
         tostring(upgrade.name), GainMark(upgrade),
-        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, PairNote(upgrade), OtherSpecNote(upgrade),
-        LaterNote(upgrade)), 1, 1, 1, true)
+        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, PairNote(upgrade), HandNote(upgrade),
+        OtherSpecNote(upgrade), LaterNote(upgrade)), 1, 1, 1, true)
 end
 
 -- The lines by themselves, with Pawn's own lines left as they are: one is left out where
@@ -1097,23 +1110,36 @@ end
 function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, secondBestFor, ...)
     local item = upgradeItems[tooltip]
     upgradeItems[tooltip] = nil
-    local upgrades, setScales, judgedScales
+    local upgrades, setScales, judgedScales, offHandScale, notWeighed
     if item then
-        local ok, list, scales, judged = pcall(function()
+        local ok, list, scales, judged, offHand, unlike = pcall(function()
             if not WantsLoadoutLines(item) then
-                return nil, nil, nil
+                return nil, nil, nil, nil, nil
             end
             return CaerdonEquipment:GetLoadoutUpgradeList(item), CaerdonEquipment:GetPawnScalesGivenToSets(),
-                CaerdonEquipment:GetPawnScalesJudged()
+                CaerdonEquipment:GetPawnScalesJudged(),
+                CaerdonEquipment.GetOffHandScaleJudged and CaerdonEquipment:GetOffHandScaleJudged(item) or nil,
+                CaerdonEquipment.GetScalesNotWeighed and CaerdonEquipment:GetScalesNotWeighed(item) or nil
         end)
         if ok then
-            upgrades, setScales, judgedScales = list, scales, judged
+            upgrades, setScales, judgedScales, offHandScale, notWeighed = list, scales, judged, offHand, unlike
         end
     end
-    if upgrades or setScales or judgedScales then
+    if upgrades or setScales or judgedScales or offHandScale or notWeighed then
         local ours = {}
         for scaleName in pairs(setScales or ours) do
             ours[scaleName] = true
+        end
+        -- A thrown weapon for a toon that shoots, or the other way round: not weighed on a
+        -- scale that weighs ranged damage, so Pawn's note for such a scale gives way.
+        for scaleName in pairs(notWeighed or {}) do
+            ours[scaleName] = true
+        end
+        -- The scale for the off hand's weapon, where the addon has judged that hand itself:
+        -- Pawn's note for it is against the weaker of both weapons, and gives way whether the
+        -- addon's verdict is an upgrade, with its line, or none.
+        if offHandScale then
+            ours[offHandScale] = true
         end
         -- Not for the played spec's own set: that line is against the set's saved piece,
         -- and Pawn's note for the scale is against the worn one, which the yellow line is for.

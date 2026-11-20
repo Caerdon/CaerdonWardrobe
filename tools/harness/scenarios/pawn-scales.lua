@@ -35,6 +35,10 @@
 --      Weapons are weighed by the hands they take (12b): a two-hander against both the pieces
 --      it would replace, a one-hander against a two-hander with the best piece carried for
 --      the other hand, a one-hander against the weaker hand for a toon that holds two weapons.
+--      On a scale that leaves the off hand's weapon to a scale of its own (12c), that hand is
+--      judged on it against its own piece, beside the main hand's verdict.
+--      A thrown weapon and a weapon that shoots are not weighed against each other on a scale
+--      that gives ranged damage a weight (12d), by the addon or by Pawn's word.
 --  13. A unique-equipped piece that is an upgrade by its own rule is not drawn as another
 --      spec's where Pawn's verdict for that spec does not stand.
 --  14. The item tooltip names each loadout a piece is an upgrade for and by how much (with
@@ -122,6 +126,26 @@ return function(H, S)
                 bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
             [940028] = { name = "Off-Hand Blade", quality = 3, level = 190, minLevel = 80, type = "Weapon",
                 subType = "Daggers", stack = 1, equipLoc = "INVTYPE_WEAPONOFFHAND", price = 800, classID = 2, subClassID = 15,
+                bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
+            -- For the ranged slot: weapons that shoot and thrown ones, one of them ten levels
+            -- above the others (12d).
+            [940031] = { name = "Scale Tester's Bow", quality = 3, level = 190, minLevel = 80, type = "Weapon",
+                subType = "Bows", stack = 1, equipLoc = "INVTYPE_RANGED", price = 800, classID = 2, subClassID = 2,
+                bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
+            [940032] = { name = "Worn Bow", quality = 3, level = 190, minLevel = 80, type = "Weapon",
+                subType = "Bows", stack = 1, equipLoc = "INVTYPE_RANGED", price = 800, classID = 2, subClassID = 2,
+                bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
+            [940033] = { name = "Scale Tester's Star", quality = 3, level = 190, minLevel = 80, type = "Weapon",
+                subType = "Thrown", stack = 1, equipLoc = "INVTYPE_THROWN", price = 800, classID = 2, subClassID = 16,
+                bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
+            [940034] = { name = "Scale Tester's Gun", quality = 3, level = 190, minLevel = 80, type = "Weapon",
+                subType = "Guns", stack = 1, equipLoc = "INVTYPE_RANGEDRIGHT", price = 800, classID = 2, subClassID = 3,
+                bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
+            [940035] = { name = "Worn Star", quality = 3, level = 190, minLevel = 80, type = "Weapon",
+                subType = "Thrown", stack = 1, equipLoc = "INVTYPE_THROWN", price = 800, classID = 2, subClassID = 16,
+                bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
+            [940036] = { name = "Star of a Higher Level", quality = 3, level = 200, minLevel = 80, type = "Weapon",
+                subType = "Thrown", stack = 1, equipLoc = "INVTYPE_THROWN", price = 800, classID = 2, subClassID = 16,
                 bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } } },
         }
     end
@@ -1745,6 +1769,361 @@ return function(H, S)
         Equal(info.pawnIdentifiedUpgrade, true, "main hand's scale: a shield carried is the one-hander's partner against a two-hander")
         Check(Said():find("15.00 vs 12.00", 1, true) ~= nil and Said():find("Scale Tester's Shield", 1, true) ~= nil,
             "main hand's scale: " .. Said())
+        -- 12c. The off hand's own scale. Pawn's scales for a rogue's trees put no weapon in the
+        -- off hand and come with one more for that hand's weapon: a scale of the class with no
+        -- tree, which leaves out the main hand's weapons. Guardian's scale has such a half
+        -- here, hidden in Pawn. Maces are worn that are worth 10 and 4 on Guardian's scale; on
+        -- the off hand's the main hand's is worth 3 and the off hand's 6.
+        do
+            local OFFHAND = "\"MrRobot\":DRUID"
+            world.scales[OFFHAND] = { ClassID = CLASS_ID, Provider = "MrRobot", LocalizedName = "Druid: Off Hand",
+                Values = { MainHandDps = -1000000 } }
+            world.worn[16], world.worn[17] = MACE, THIRD
+            world.inBag[3], world.inBag[5] = nil, nil
+            world.scaleValues[OFFHAND] = { [MACE] = 3, [THIRD] = 6, [CARRIED_MACE] = 8, [OFF_BLADE] = 5, [STAFF] = 0,
+                [SHIELD] = 0, [WORN_STAFF] = 0 }
+            -- A weapon for the off hand alone is worth nothing on the main hand's scale, as Pawn has it.
+            world.scaleValues[GUARDIAN][OFF_BLADE] = 0
+            PawnChanged(world)
+            local feature = world.namespace.Tooltip
+            local function Piece(id) return world.env.CaerdonItem:CreateFromItemID(id) end
+            local NOTE_OFF, NOTE_MAIN = "  |cff808080(in the off hand)|r", "  |cff808080(in the main hand)|r"
+
+            -- A one-hander worth 9 on Guardian's scale and 8 on the off hand's: no upgrade for
+            -- the main hand (10), and one for the off hand, against that hand's piece alone (6;
+            -- by the main hand's scale that piece is worth 4, and Pawn would have measured the
+            -- weaker of both on the off hand's, the main hand's 3).
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.pawnIdentifiedUpgrade, true, "off hand: a one-hander that beats the off hand's piece on that hand's scale is the yellow upgrade")
+            Equal(info.pawnUpgradeScales, "Druid: Off Hand", "off hand: by that scale, which Pawn hides")
+            Equal(equipment:GetOffHandScaleDescription(),
+                "Druid: Off Hand, beside Druid: Guardian (not shown in Pawn; the toon holds a weapon in each hand: yes)",
+                "off hand: the export names the scale found for the off hand")
+            Equal(info.pawnComparison, "Druid: Guardian: 9.00 vs 10.00 equipped; for the off hand, Druid: Off Hand (not shown in Pawn): 8.00 vs 6.00 equipped",
+                "off hand: the export has each hand's numbers")
+            Check(Said():find("the addon's own comparison: no upgrade, Druid: Guardian: 9.00 vs 10.00 equipped; Pawn for that scale: no upgrade; " ..
+                "for the off hand, Druid: Off Hand (not shown in Pawn): 8.00 vs 6.00 equipped: an upgrade; " ..
+                "Pawn for that scale: not asked, it does not show the scale; an upgrade of Pawn's on its other scales: none", 1, true) ~= nil,
+                "off hand: and each hand's verdict, with Pawn's beside it: " .. Said())
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].worn == true and list[1].hand == "off" and list[1].percent == 33 and
+                list[1].scale == OFFHAND and list[1].pair == nil, "off hand: the tooltip's one entry is the off hand's, on that hand's scale")
+            Equal(TooltipLines(world, CARRIED_MACE), Line("8ec3e6", nil, "Guardian", "+33% upgrade", true) .. NOTE_OFF,
+                "off hand: its line is named as what is worn and says which hand")
+            local offGain = equipment:GetReplacementGains(item, Piece(THIRD))
+            local mainGain = equipment:GetReplacementGains(item, Piece(MACE))
+            Check(offGain ~= nil and offGain[1].worn == true and offGain[1].percent == 33 and offGain[1].upgrade == true,
+                "off hand: the off hand's comparison has the gain on that hand's scale")
+            Check(mainGain ~= nil and mainGain[1].percent == -10 and mainGain[1].upgrade == false, "off hand: the main hand's the loss on its own")
+            best = equipment:GetBestReplacementGain(item)
+            Check(best ~= nil and best.percent == 33, "off hand: a listing's gain is the better hand's")
+
+            -- An upgrade for each hand: 12 on Guardian's scale. A line a hand.
+            world.scaleValues[GUARDIAN][CARRIED_MACE] = 12
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.pawnIdentifiedUpgrade, true, "both hands: an upgrade for each is the yellow upgrade")
+            Equal(info.pawnUpgradeScales, "Druid: Guardian, Druid: Off Hand", "both hands: by both scales")
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 2 and list[1].hand == "main" and list[1].percent == 20 and list[1].scale == GUARDIAN and
+                list[2].hand == "off" and list[2].percent == 33 and list[2].worn == true, "both hands: an entry a hand, the main hand's first")
+            Equal(TooltipLines(world, CARRIED_MACE), Line("8ec3e6", nil, "Guardian", "+20% upgrade", true) .. NOTE_MAIN .. " | " ..
+                Line("8ec3e6", nil, "Guardian", "+33% upgrade", true) .. NOTE_OFF, "both hands: and a line a hand, each saying which")
+
+            -- For the main hand alone: 5 on the off hand's scale, below that hand's 6.
+            world.scaleValues[OFFHAND][CARRIED_MACE] = 5
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.pawnUpgradeScales, "Druid: Guardian", "main hand: an upgrade for the main hand alone is by its scale")
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].hand == "main" and list[1].percent == 20, "main hand: one entry, which says the hand")
+            Check(Said():find("for the off hand, Druid: Off Hand (not shown in Pawn): 5.00 vs 6.00 equipped: no upgrade", 1, true) ~= nil,
+                "main hand: the export has the off hand's verdict too: " .. Said())
+
+            -- Within Pawn's half a percent of the off hand's piece is no upgrade for that hand.
+            world.scaleValues[OFFHAND][CARRIED_MACE] = 6.02
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].hand == "main", "main hand: a piece within Pawn's threshold of the off hand's is none for that hand")
+            world.scaleValues[OFFHAND][CARRIED_MACE] = 5
+            PawnChanged(world)
+
+            -- For neither hand (9 and 5), while Pawn shows the off hand's scale and calls the
+            -- piece an upgrade on it: that hand is the addon's to judge, so no arrow, and
+            -- Pawn's note for that scale gives way though the addon has no line. A note of
+            -- Pawn's for a scale of the player's own stays.
+            world.scaleValues[GUARDIAN][CARRIED_MACE] = 9
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN, OFFHAND }, { OFFHAND }, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "neither hand: Pawn's word for the off hand's scale does not count where the addon judged that hand")
+            Check(Said():find("for the off hand, Druid: Off Hand: 5.00 vs 6.00 equipped: no upgrade; Pawn for that scale: an upgrade; " ..
+                "an upgrade of Pawn's on its other scales: none", 1, true) ~= nil, "neither hand: the export has both judges: " .. Said())
+            Equal(equipment:GetOffHandScaleJudged(item), OFFHAND, "neither hand: the scale is named as judged for the piece")
+            do
+                local shown = { lines = {} }
+                function shown:AddLine(line) self.lines[#self.lines + 1] = line end
+                world.pawnStep = nil
+                feature:OweUpgradeLines(shown, Piece(CARRIED_MACE))
+                world.env.PawnAddValuesToTooltip(shown, "values", { { ScaleName = OFFHAND, PercentUpgrade = 0.3 },
+                    { ScaleName = OWN, PercentUpgrade = 0.1 } })
+                Equal(world.pawnStep and world.pawnStep.scales, OWN, "neither hand: Pawn's note for the off hand's scale gives way, another scale's stays")
+                Equal(table.concat(shown.lines, " | "), "pawn: " .. OWN, "neither hand: and the addon adds no line")
+            end
+            -- Pawn's verdict on a scale of the player's own still gives the arrow.
+            info, item = Info(world, { GUARDIAN, OFFHAND, OWN }, { OFFHAND, OWN }, CARRIED_MACE)
+            Equal(info.pawnIdentifiedUpgrade, true, "neither hand: Pawn's verdict on another scale of the toon's still stands")
+            -- A piece the off hand's scale is not asked about (the jerkin): Pawn's word for
+            -- that scale counts as it did, and nothing is named as judged.
+            info, item = Info(world, { GUARDIAN, OFFHAND }, { OFFHAND }, 940001)
+            Equal(info.pawnIdentifiedUpgrade, true, "neither hand: for a piece that is no weapon Pawn's word for that scale stands")
+            Equal(equipment:GetOffHandScaleJudged(item), nil, "neither hand: and the scale is not named as judged")
+
+            -- Pawn's "your best" and "your second best" marks for the off hand's scale go the
+            -- way of those for the scale it is the half of: left out wherever what is worn is
+            -- judged on it, on the off hand's own piece too, which has no verdict, and on a
+            -- piece that is no weapon. A scale of the player's own keeps its marks. (A
+            -- comparison tooltip goes through the same step: section 10.)
+            do
+                local shown = { lines = {} }
+                function shown:AddLine(line) self.lines[#self.lines + 1] = line end
+                local best, second = { [OFFHAND] = true, [OWN] = true }, { [OFFHAND] = true, [OWN] = true }
+                local function Marks(visible, id)
+                    info, item = Info(world, visible, {}, id)
+                    world.pawnStep = nil
+                    feature:OweUpgradeLines(shown, Piece(id))
+                    world.env.PawnAddValuesToTooltip(shown, "values", nil, best, second)
+                    return world.pawnStep or {}
+                end
+                local function Kept(step)
+                    return type(step.best) == "table" and step.best[OFFHAND] == true and
+                        type(step.second) == "table" and step.second[OFFHAND] == true
+                end
+                local step = Marks({ GUARDIAN, OFFHAND, OWN }, THIRD)
+                Check(type(step.best) == "table" and step.best[OFFHAND] == nil and step.best[OWN] == true,
+                    "marks: \"your best\" for the off hand's scale is left out on that hand's own piece, a custom scale's kept")
+                Check(type(step.second) == "table" and step.second[OFFHAND] == nil and step.second[OWN] == true,
+                    "marks: \"your second best\" the same way")
+                Check(best[OFFHAND] == true and second[OFFHAND] == true, "marks: Pawn's own tables are left as they were")
+                Equal(equipment:GetOffHandScaleJudged(item), nil, "marks: though that piece has no verdict for the off hand")
+                step = Marks({ GUARDIAN, OFFHAND }, MACE)
+                Check(type(step.second) == "table" and step.second[OFFHAND] == nil, "marks: on the main hand's piece")
+                step = Marks({ GUARDIAN, OFFHAND }, 940001)
+                Check(type(step.best) == "table" and step.best[OFFHAND] == nil, "marks: and on a piece that is no weapon")
+                local judged = equipment:GetPawnScalesJudged() or {}
+                Check(judged[OFFHAND] == true and judged[GUARDIAN] == true, "marks: the off hand's scale is named beside the scale it is the half of")
+                -- Not named while Pawn hides it: there is no mark of Pawn's for it then.
+                info = Info(world, { GUARDIAN }, {}, THIRD)
+                Equal((equipment:GetPawnScalesJudged() or {})[OFFHAND], nil, "marks: not named while Pawn hides the scale")
+                -- Pawn's marks stay where no off hand is judged: a toon that holds one weapon,
+                -- either scale told not to show one-handers, a scale that takes the off hand's
+                -- weapon itself (the other scale is then no half of it), and what is worn
+                -- judged by Pawn alone (the spec's scale hidden, one of the player's own shown).
+                world.dual = nil
+                Check(Kept(Marks({ GUARDIAN, OFFHAND }, THIRD)), "marks: kept for a toon that holds one weapon")
+                world.dual = true
+                world.scales[OFFHAND].DoNotShow1HUpgrades = true
+                Check(Kept(Marks({ GUARDIAN, OFFHAND }, THIRD)), "marks: kept where the off hand's scale is told not to show one-handers")
+                world.scales[OFFHAND].DoNotShow1HUpgrades = nil
+                world.scales[GUARDIAN].DoNotShow1HUpgrades = true
+                Check(Kept(Marks({ GUARDIAN, OFFHAND }, THIRD)), "marks: kept where the loadout's own scale is")
+                world.scales[GUARDIAN].DoNotShow1HUpgrades = nil
+                world.scales[GUARDIAN].Values = nil
+                Check(Kept(Marks({ GUARDIAN, OFFHAND }, THIRD)), "marks: kept beside a scale that takes the off hand's weapon itself")
+                world.scales[GUARDIAN].Values = { IsOffHand = -1000000 }
+                Check(Kept(Marks({ OWN, OFFHAND }, THIRD)), "marks: kept where what is worn is Pawn's alone to judge")
+                Check(not Kept(Marks({ GUARDIAN, OFFHAND }, THIRD)), "marks: and left out again as it stood")
+            end
+
+            -- A weapon for the off hand alone has that hand's verdict only: 5 against 6, then 9.
+            info, item = Info(world, { GUARDIAN }, {}, OFF_BLADE)
+            Equal(info.isUpgrade, nil, "off-hand weapon: none where it is worth less than the off hand's piece")
+            Check(Said():find("no verdict on Druid: Guardian", 1, true) ~= nil and
+                Said():find("5.00 vs 6.00 equipped: no upgrade", 1, true) ~= nil, "off-hand weapon: the main hand's scale has no verdict on it: " .. Said())
+            world.scaleValues[OFFHAND][OFF_BLADE] = 9
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, OFF_BLADE)
+            Equal(info.pawnIdentifiedUpgrade, true, "off-hand weapon: the yellow upgrade where it is worth more")
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].hand == "off" and list[1].percent == 50, "off-hand weapon: with the off hand's entry")
+            Equal(equipment:CanScorePieceForWorn(OFF_BLADE), true, "off-hand weapon: a list of such pieces can be scored, by the off hand's scale")
+            world.scaleValues[OFFHAND][OFF_BLADE] = 0
+            PawnChanged(world)
+            world.env.CaerdonWardrobe:RefreshItems("test")
+            Equal(equipment:CanScorePieceForWorn(OFF_BLADE), false, "off-hand weapon: not where neither scale gives it a value")
+
+            -- The main hand's own piece is not judged for the off hand, whatever it would be
+            -- worth there: a link does not tell a second copy from the piece worn.
+            world.scaleValues[OFFHAND][MACE] = 20
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, MACE)
+            Equal(info.isUpgrade, nil, "worn piece: the main hand's own piece is no upgrade for the off hand")
+            Check(Said():find("no verdict (the main hand's piece itself)", 1, true) ~= nil, "worn piece: " .. Said())
+            info, item = Info(world, { GUARDIAN }, {}, THIRD)
+            Check(Said():find("no verdict (the off hand's piece itself)", 1, true) ~= nil, "worn piece: nor is the off hand's own judged against itself: " .. Said())
+            world.scaleValues[OFFHAND][MACE] = 3
+            PawnChanged(world)
+
+            -- Nothing in the off hand, beside a one-handed weapon: a hand to fill. The line
+            -- says "upgrade" with no percentage.
+            world.worn[17] = nil
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.pawnIdentifiedUpgrade, true, "empty hand: a one-hander for an off hand with nothing in it is the yellow upgrade")
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].hand == "off" and list[1].emptySlot == true and list[1].percent == nil,
+                "empty hand: its entry has no percentage")
+            Check(TooltipLines(world, CARRIED_MACE):find("upgrade|r" .. NOTE_OFF, 1, true) ~= nil and
+                not TooltipLines(world, CARRIED_MACE):find("%% upgrade"), "empty hand: nor has its line: " .. TooltipLines(world, CARRIED_MACE))
+            Check(Said():find("for the off hand, Druid: Off Hand (not shown in Pawn): 5.00 into a hand with nothing in it: an upgrade", 1, true) ~= nil,
+                "empty hand: " .. Said())
+            -- A piece the off hand's scale gives nothing fills no hand.
+            world.scaleValues[OFFHAND][CARRIED_MACE] = 0
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "empty hand: not a piece the off hand's scale gives no value")
+            world.scaleValues[OFFHAND][CARRIED_MACE] = 5
+            PawnChanged(world)
+            -- Not with no weapon in the main hand either, nor under a two-hander.
+            world.worn[16] = nil
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "empty hand: not with nothing in the main hand")
+            Check(Said():find("no verdict (nothing in the off hand, and no one-handed weapon in the main hand)", 1, true) ~= nil, "empty hand: " .. Said())
+            world.worn[16] = WORN_STAFF
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "empty hand: nor under a two-hander, where the one-hander is weighed against it (9 against 12)")
+            Check(Said():find("9.00 vs 12.00 equipped in both hands", 1, true) ~= nil and
+                Said():find("no one-handed weapon in the main hand", 1, true) ~= nil, "empty hand: " .. Said())
+            world.worn[16], world.worn[17] = MACE, THIRD
+            world.scaleValues[OFFHAND][CARRIED_MACE] = 8
+            PawnChanged(world)
+
+            -- A toon that holds one weapon has no off hand to judge.
+            world.dual = nil
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "one weapon: no verdict for the off hand of a toon that holds one weapon")
+            Check(not Said():find("for the off hand", 1, true), "one weapon: " .. Said())
+            Check(tostring(equipment:GetOffHandScaleDescription()):find("the toon holds a weapon in each hand: no, so no hand is judged apart", 1, true) ~= nil,
+                "one weapon: and the export says why: " .. tostring(equipment:GetOffHandScaleDescription()))
+            world.dual = true
+            -- Nor a scale told not to show one-handers, either of the two.
+            world.scales[OFFHAND].DoNotShow1HUpgrades = true
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "refused: none where the off hand's scale is told not to show one-handers")
+            world.scales[OFFHAND].DoNotShow1HUpgrades = nil
+            world.scales[GUARDIAN].DoNotShow1HUpgrades = true
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "refused: nor where the loadout's own scale is")
+            world.scales[GUARDIAN].DoNotShow1HUpgrades = nil
+
+            -- Which scale is the off hand's: one of the class, of no tree, from a provider,
+            -- that leaves out the main hand's weapons. Anything else is not.
+            local function Found()
+                info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+                return info.pawnIdentifiedUpgrade == true
+            end
+            Check(Found(), "which scale: as it stands the off hand is judged")
+            local scale = world.scales[OFFHAND]
+            scale.SpecID = 1
+            Check(not Found(), "which scale: not a scale for a tree")
+            scale.SpecID = nil
+            scale.ClassID = 8
+            Check(not Found(), "which scale: not another class's")
+            scale.ClassID = CLASS_ID
+            scale.Provider = nil
+            Check(not Found(), "which scale: not one of the player's own making")
+            scale.Provider = "MrRobot"
+            scale.Values = { MainHandDps = 2 }
+            Check(not Found(), "which scale: not one that gives the main hand's weapons a value")
+            scale.Values = { MainHandDps = -1000000, IsOffHand = -1000000 }
+            Check(not Found(), "which scale: not one that leaves out the off hand's too")
+            Equal(equipment:GetOffHandScaleDescription(),
+                "none: Druid: Guardian puts no weapon in the off hand, and Pawn has no scale of the class for that hand's weapon",
+                "which scale: the export says none was found")
+            scale.Values = { MainHandDps = -1000000 }
+            -- Of two, the one from the provider of the loadout's own scale, though the other
+            -- is first by name: on that one the piece would be worth nothing.
+            local ELSEWHERE = "\"Classic\":DRUID"
+            world.scales[ELSEWHERE] = { ClassID = CLASS_ID, Provider = "Classic", LocalizedName = "Druid: Off Hand (Classic)",
+                Values = { MainHandDps = -1000000 } }
+            world.scaleValues[ELSEWHERE] = { [MACE] = 3, [THIRD] = 6, [CARRIED_MACE] = 0 }
+            PawnChanged(world)
+            Check(Found() and info.pawnUpgradeScales == "Druid: Off Hand", "which scale: of two, the one from the loadout's own provider: " ..
+                tostring(info.pawnUpgradeScales))
+            world.scales[ELSEWHERE], world.scaleValues[ELSEWHERE] = nil, nil
+            -- A scale that puts a weapon in the off hand has no such half: either hand's
+            -- weaker piece is the one to beat, as before (9 against the off hand's 4).
+            world.scales[GUARDIAN].Values = nil
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].percent == 125 and list[1].hand == nil and list[1].scale == GUARDIAN,
+                "which scale: a scale that takes the off hand's weapon itself is judged as it was")
+            Equal(equipment:GetOffHandScaleDescription(), "none: Druid: Guardian puts a weapon in the off hand itself",
+                "which scale: and the export says so")
+            world.scales[GUARDIAN].Values = { IsOffHand = -1000000 }
+
+            -- A gear set tied to the scale and not worn is a loadout with the same two halves:
+            -- its off hand's piece (the blade, in the bags) is the one to beat there. What is
+            -- worn has the better pieces on both scales (10, and an off hand's worth 20).
+            local hadConfig = rawget(world.env, "CaerdonWardrobeCharacterConfig")
+            local hadLocations = world.locationData
+            world.inBag[7] = OFF_BLADE
+            world.scaleValues[OFFHAND][THIRD], world.scaleValues[OFFHAND][OFF_BLADE] = 20, 6
+            world.setIDs, world.setNames, world.setWorn = { 51 }, { [51] = "Daggers" }, { [51] = { 10, 2 } }
+            world.setLocations = { [51] = { [17] = 9117 } }
+            world.locationData = { [9117] = { isBags = true, bag = 0, slot = 7 } }
+            rawset(world.env, "CaerdonWardrobeCharacterConfig", { Icon = { GearSetScales = { [51] = GUARDIAN } } })
+            PawnChanged(world)
+            icon.ShowOtherSpecUpgrades = true
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true and info.pawnIdentifiedUpgrade == false,
+                "set's off hand: a one-hander that beats a tied set's off hand's piece is that set's upgrade, in its red")
+            Check(tostring(info.pawnComparison):find("Druid: Guardian, for the off hand on Druid: Off Hand: 8.00 vs 6.00 in its gear set \"Daggers\"", 1, true) ~= nil,
+                "set's off hand: with its numbers: " .. tostring(info.pawnComparison))
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].name == "Daggers" and list[1].hand == "off" and list[1].percent == 33 and list[1].worn == nil,
+                "set's off hand: the tooltip's entry names the set and the hand")
+            -- A set with nothing for the off hand asks for no piece there (its main hand's
+            -- piece is the mace worn), though the off hand worn is empty too: what is worn
+            -- has the one line.
+            world.locationData[9116] = { isPlayer = true, slot = 16 }
+            world.setLocations = { [51] = { [16] = 9116 } }
+            world.worn[17] = nil
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            list = equipment:GetLoadoutUpgradeList(item) or {}
+            Check(#list == 1 and list[1].worn == true and list[1].emptySlot == true,
+                "set's off hand: a set with nothing in the off hand asks for no piece (" .. #list .. ")")
+            world.worn[17] = THIRD
+
+            -- The played spec's own gear set is a loadout where its piece is not the one worn,
+            -- for the off hand as for any slot: the blade in the bags (6) is the set's.
+            rawset(world.env, "CaerdonWardrobeCharacterConfig", hadConfig)
+            world.setForSpec = { [3] = 51 }
+            world.setLocations = { [51] = { [16] = 9116, [17] = 9117 } }
+            info, item = Info(world, { GUARDIAN }, {}, CARRIED_MACE)
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true,
+                "own set's off hand: a one-hander that beats the off hand's piece of the played spec's set, which is not the one worn")
+            -- Not where the set's piece for the off hand is the one worn, by whoever judges
+            -- what is worn (here Pawn alone: the spec's scale is hidden, one of the player's
+            -- own shown). The piece would beat that piece on the off hand's scale (8 against 6).
+            world.locationData[9118] = { isPlayer = true, slot = 17 }
+            world.setLocations = { [51] = { [16] = 9116, [17] = 9118 } }
+            world.scaleValues[OFFHAND][THIRD] = 6
+            PawnChanged(world)
+            info, item = Info(world, { OWN }, {}, CARRIED_MACE)
+            Equal(info.isUpgrade, nil, "own set's off hand: nothing where the set's piece for the off hand is the one worn")
+            world.setForSpec = nil
+            icon.ShowOtherSpecUpgrades = false
+            world.setIDs, world.setNames, world.setWorn, world.setLocations = nil, nil, nil, nil
+            world.locationData = hadLocations
+            rawset(world.env, "CaerdonWardrobeCharacterConfig", hadConfig)
+            world.inBag[7] = nil
+
+            world.scales[OFFHAND] = nil
+            world.scaleValues[OFFHAND] = nil
+            world.worn[16], world.worn[17] = WORN_STAFF, nil
+            PawnChanged(world)
+        end
+
         world.scales[GUARDIAN].Values = nil
         world.dual = nil
         world.inBag[3], world.inBag[5] = nil, nil
@@ -1755,6 +2134,198 @@ return function(H, S)
         container.GetContainerNumSlots, container.GetContainerItemLink = hadSlots, hadLink
         itemApi.GetItemInventoryType = hadType
         game:Set("CanDualWield", function() return false end)
+        PawnChanged(world)
+    end
+
+    -- 12d. A thrown weapon and a weapon that shoots are not weighed against each other on a
+    -- scale that gives ranged damage a weight, a hunter's: with a thrown weapon in the slot
+    -- the class cannot shoot. A bow is worn in the ranged slot, worth 10 on Guardian's scale,
+    -- which Pawn shows and which weighs ranged damage here.
+    do
+        local BOW, WORN_BOW, STAR, GUN, WORN_STAR, HIGH_STAR = 940031, 940032, 940033, 940034, 940035, 940036
+        local NOT_WEIGHED = "a thrown weapon and a weapon that shoots are not weighed against each other"
+        local hadOthers = icon.ShowOtherSpecUpgrades
+        icon.ShowOtherSpecUpgrades = false
+        world.worn[18] = WORN_BOW
+        world.scales[GUARDIAN].Values = { RangedDps = 6 }
+        local values = { [WORN_BOW] = 10, [BOW] = 12, [STAR] = 14, [GUN] = 12, [WORN_STAR] = 10, [HIGH_STAR] = 14 }
+        world.scaleValues = { [GUARDIAN] = values, [FERAL] = values, [OWN] = values }
+        PawnChanged(world)
+        local feature = world.namespace.Tooltip
+        local item, list
+        local function Said() return tostring(equipment:GetWornVerdictDescription(item)) end
+        local function Piece(id) return world.env.CaerdonItem:CreateFromItemID(id) end
+        -- What Pawn's tooltip step is told for the piece, where Pawn names these scales.
+        local function PawnTold(id, names)
+            local shown, given = { lines = {} }, {}
+            function shown:AddLine(line) self.lines[#self.lines + 1] = line end
+            for _, name in ipairs(names) do
+                given[#given + 1] = { ScaleName = name, PercentUpgrade = 0.4 }
+            end
+            world.pawnStep = nil
+            feature:OweUpgradeLines(shown, Piece(id))
+            world.env.PawnAddValuesToTooltip(shown, "values", given)
+            return world.pawnStep and world.pawnStep.scales, table.concat(shown.lines, " | ")
+        end
+
+        -- Like against like: a bow against the bow worn, and a gun, which has another equip
+        -- location and shoots as well.
+        info, item = Info(world, { GUARDIAN }, {}, BOW)
+        Equal(info.pawnIdentifiedUpgrade, true, "ranged: a bow that beats the bow worn is the yellow upgrade")
+        list = equipment:GetLoadoutUpgradeList(item) or {}
+        Check(#list == 1 and list[1].worn == true and list[1].percent == 20, "ranged: with its line")
+        info, item = Info(world, { GUARDIAN }, {}, GUN)
+        Equal(info.pawnIdentifiedUpgrade, true, "ranged: and so is a gun")
+
+        -- A thrown weapon worth more than the bow, which Pawn calls an upgrade: not weighed,
+        -- no arrow, and Pawn's word for the scale does not count.
+        info, item = Info(world, { GUARDIAN }, { GUARDIAN }, STAR)
+        Equal(info.isUpgrade, nil, "ranged: a thrown weapon is no upgrade over a bow on a scale that weighs ranged damage")
+        Equal(info.pawnIdentifiedUpgrade, false, "ranged: by Pawn's word either")
+        Check(Said():find("the addon's own comparison: no upgrade, Druid: Guardian: not weighed, " .. NOT_WEIGHED ..
+            " (14.00, and 10.00 equipped); Pawn for that scale: an upgrade; an upgrade of Pawn's on its other scales: none", 1, true) ~= nil,
+            "ranged: the export says it was not weighed, with both values: " .. Said())
+        Equal(equipment:GetLoadoutUpgradeList(item), nil, "ranged: it has no line in the tooltip")
+        local told, lines = PawnTold(STAR, { GUARDIAN, OWN })
+        Equal(told, OWN, "ranged: Pawn's note for the scale gives way, one for a scale that weighs no ranged damage stays")
+        Equal(lines, "pawn: " .. OWN, "ranged: and the addon adds no line")
+        local gains, why = equipment:GetReplacementGains(item, Piece(WORN_BOW))
+        Check(gains == nil and tostring(why):find(NOT_WEIGHED, 1, true) ~= nil, "ranged: the worn bow's comparison has no gain: " .. tostring(why))
+        Equal((equipment:GetBestReplacementGain(item)), nil, "ranged: nor has a listing")
+        Equal(equipment:CanScorePieceForWorn(STAR), false, "ranged: a thrown weapon is no piece to make room for")
+        Equal(equipment:CanScorePieceForWorn(BOW), true, "ranged: a bow is")
+
+        -- A higher item level gives it no arrow either.
+        info, item = Info(world, { GUARDIAN }, {}, HIGH_STAR)
+        Equal(info.isUpgrade, nil, "ranged: nor is a thrown weapon of a higher item level")
+        Check(info.pawnPrefersEquipped == true and tostring(info.pawnComparison):find("not weighed, " .. NOT_WEIGHED, 1, true) ~= nil,
+            "ranged: and the export says why: " .. tostring(info.pawnComparison))
+
+        -- Pawn's word on another scale it shows: it stands where that scale gives ranged
+        -- damage no weight, and does not where it does.
+        Chosen({ DRUID2 = true })
+        info, item = Info(world, { GUARDIAN, FERAL }, { GUARDIAN, FERAL }, STAR)
+        Equal(info.pawnOffTreeUpgrade, true, "ranged: Pawn's word for another spec's scale that weighs no ranged damage stands")
+        world.scales[FERAL].Values = { RangedMaxDamage = 1 }
+        info, item = Info(world, { GUARDIAN, FERAL }, { GUARDIAN, FERAL }, STAR)
+        Equal(info.isUpgrade, nil, "ranged: and does not count for one that does")
+        Check(Said():find("on its other scales: none; not counted, " .. NOT_WEIGHED .. ": Druid: Feral", 1, true) ~= nil,
+            "ranged: which the export names: " .. Said())
+        told = PawnTold(STAR, { GUARDIAN, FERAL })
+        Equal(told, "", "ranged: Pawn's notes for both give way")
+        -- Not for a scale Pawn does not show: Feral's note is nobody's then, and nothing is named.
+        info, item = Info(world, { GUARDIAN }, { GUARDIAN }, STAR)
+        local notWeighed = equipment:GetScalesNotWeighed(item) or {}
+        Check(notWeighed[GUARDIAN] == true and notWeighed[FERAL] == nil, "ranged: the scales named are the ones Pawn shows")
+        world.scales[FERAL].Values = nil
+        Chosen(nil)
+
+        -- A scale of the player's own that gives ranged damage no weight: Pawn's verdict on
+        -- it gives the arrow as it did.
+        info, item = Info(world, { GUARDIAN, OWN }, { GUARDIAN, OWN }, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "ranged: Pawn's verdict on a scale of the player's own that weighs no ranged damage stands")
+
+        -- With no scale of the addon's for what is worn (Guardian's is hidden, one of the
+        -- player's own is shown): Pawn's word alone, and not where that scale weighs ranged
+        -- damage, nor a higher item level's.
+        info, item = Info(world, { OWN }, { OWN }, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "no judge: Pawn's verdict stands on a scale that weighs no ranged damage")
+        world.scales[OWN].Values = { RangedMinDamage = 2 }
+        info, item = Info(world, { OWN }, { OWN }, STAR)
+        Equal(info.isUpgrade, nil, "no judge: and does not count on one that does")
+        Check(Said():find("Pawn's verdict alone", 1, true) ~= nil and Said():find(NOT_WEIGHED, 1, true) ~= nil,
+            "no judge: the export says so: " .. Said())
+        -- Pawn's note for that scale gives way there too, with nothing else of the addon's
+        -- in the tooltip.
+        told = PawnTold(STAR, { OWN })
+        Equal(told, "", "no judge: Pawn's note for the scale gives way")
+        info, item = Info(world, { OWN }, {}, HIGH_STAR)
+        Equal(info.isUpgrade, nil, "no judge: nor does a higher item level")
+        Check(tostring(info.pawnComparison):find(NOT_WEIGHED, 1, true) ~= nil, "no judge: " .. tostring(info.pawnComparison))
+        -- A bow of a higher item level would have the arrow there.
+        info, item = Info(world, { OWN }, { OWN }, BOW)
+        Equal(info.pawnIdentifiedUpgrade, true, "no judge: a bow is Pawn's to call an upgrade")
+        world.scales[OWN].Values = nil
+
+        -- A scale that gives ranged damage no weight, a warrior's: the two are compared as any
+        -- pieces for the slot. No weight at all, a weight of nothing, and one told to ignore.
+        world.scales[GUARDIAN].Values = nil
+        info, item = Info(world, { GUARDIAN }, {}, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "no ranged weight: a thrown weapon is weighed against a bow")
+        list = equipment:GetLoadoutUpgradeList(item) or {}
+        Check(#list == 1 and list[1].percent == 40, "no ranged weight: with its gain")
+        Equal(equipment:GetScalesNotWeighed(item), nil, "no ranged weight: and no scale is named as not weighed")
+        world.scales[GUARDIAN].Values = { RangedDps = 0 }
+        info, item = Info(world, { GUARDIAN }, {}, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "no ranged weight: nor is a weight of nothing one")
+        world.scales[GUARDIAN].Values = { RangedDps = -1000000 }
+        info, item = Info(world, { GUARDIAN }, {}, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "no ranged weight: nor one told to ignore the stat")
+        world.scales[GUARDIAN].Values = { RangedDps = 6 }
+
+        -- The other way round: a thrown weapon is worn. A bow is not weighed against it, and
+        -- a thrown weapon is.
+        world.worn[18] = WORN_STAR
+        info, item = Info(world, { GUARDIAN }, { GUARDIAN }, BOW)
+        Equal(info.isUpgrade, nil, "thrown worn: a bow is not weighed against it")
+        Check(Said():find("not weighed, " .. NOT_WEIGHED .. " (12.00, and 10.00 equipped)", 1, true) ~= nil, "thrown worn: " .. Said())
+        info, item = Info(world, { GUARDIAN }, {}, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "thrown worn: a thrown weapon is")
+        -- Nothing in the slot: there is no other kind, and the piece fills it.
+        world.worn[18] = nil
+        info, item = Info(world, { GUARDIAN }, {}, STAR)
+        Equal(info.pawnIdentifiedUpgrade, true, "ranged slot empty: a thrown weapon fills it")
+        Equal(equipment:GetScalesNotWeighed(item), nil, "ranged slot empty: and is not weighed against nothing")
+        world.worn[18] = WORN_BOW
+
+        -- A client with no ranged slot has a bow in the main hand. Against a staff worn there,
+        -- which is no ranged weapon of either kind, it is weighed as it was.
+        do
+            local paperDoll = world.env.C_PaperDollInfo
+            local hadRanged = paperDoll.IsRangedSlotShown
+            paperDoll.IsRangedSlotShown = function() return false end
+            world.worn[16], world.worn[18] = 940023, nil
+            values[940023] = 10
+            PawnChanged(world)
+            info, item = Info(world, { GUARDIAN }, {}, BOW)
+            Equal(info.pawnIdentifiedUpgrade, true, "no ranged slot: a bow is weighed against a main hand's piece that is no ranged weapon")
+            Equal(equipment:GetScalesNotWeighed(item), nil, "no ranged slot: and Pawn's word for it counts as it did")
+            paperDoll.IsRangedSlotShown = hadRanged
+            world.worn[16], world.worn[18] = nil, WORN_BOW
+            PawnChanged(world)
+        end
+
+        -- A gear set tied to the scale and not worn, with a thrown weapon for the slot (in the
+        -- bags): a loadout is asked by its own piece. A thrown weapon is its upgrade and not
+        -- the worn gear's; a bow is the worn gear's and not the set's.
+        local hadConfig = rawget(world.env, "CaerdonWardrobeCharacterConfig")
+        local hadLocations = world.locationData
+        world.inBag[7] = WORN_STAR
+        world.setIDs, world.setNames, world.setWorn = { 52 }, { [52] = "Stars" }, { [52] = { 10, 2 } }
+        world.setLocations = { [52] = { [18] = 9218 } }
+        world.locationData = { [9218] = { isBags = true, bag = 0, slot = 7 } }
+        rawset(world.env, "CaerdonWardrobeCharacterConfig", { Icon = { GearSetScales = { [52] = GUARDIAN } } })
+        PawnChanged(world)
+        icon.ShowOtherSpecUpgrades = true
+        info, item = Info(world, { GUARDIAN }, { GUARDIAN }, STAR)
+        Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true and info.pawnIdentifiedUpgrade == false,
+            "set's thrown weapon: a thrown weapon is the upgrade of a set that has one, in its red")
+        Check(tostring(info.pawnComparison):find("14.00 vs 10.00 in its gear set \"Stars\"", 1, true) ~= nil,
+            "set's thrown weapon: with its numbers: " .. tostring(info.pawnComparison))
+        info, item = Info(world, { GUARDIAN }, {}, BOW)
+        list = equipment:GetLoadoutUpgradeList(item) or {}
+        Check(info.pawnIdentifiedUpgrade == true and #list == 1 and list[1].worn == true,
+            "set's thrown weapon: a bow is the worn gear's upgrade and not the set's (" .. #list .. ")")
+        icon.ShowOtherSpecUpgrades = false
+        world.setIDs, world.setNames, world.setWorn, world.setLocations = nil, nil, nil, nil
+        world.locationData = hadLocations
+        rawset(world.env, "CaerdonWardrobeCharacterConfig", hadConfig)
+        world.inBag[7] = nil
+
+        world.scales[GUARDIAN].Values = nil
+        world.worn[18] = nil
+        world.scaleValues = nil
+        icon.ShowOtherSpecUpgrades = hadOthers
         PawnChanged(world)
     end
 
