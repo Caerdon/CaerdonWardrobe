@@ -3178,29 +3178,44 @@ return function(H, S)
             -- The client gives the list a layout of its own again: wrapped anew.
             resultsList.tableBuilderLayoutFunction = base
             Equal(Results(), "icon results price name", "column: a fresh layout of the client's gets the columns again")
-            -- Each column has its switch. Without the icon's the icon lies on the price column,
-            -- which follows the gain's column where that is there.
+            -- The gain's column has its switch. The icon's has none: it is there while one of
+            -- the addon's icons is switched on for the auction house, each in its own block of
+            -- the Icons page. Without it the gain's column begins at the row's edge.
             local auctionConfig = world.env.CaerdonWardrobeConfig.Auction
-            Check(type(auctionConfig) == "table" and auctionConfig.IconColumn == true and auctionConfig.UpgradeColumn == true,
-                "column: both switches are on by default")
-            auctionConfig.IconColumn = false
-            Equal(Results(), "results price name", "column: the icon's column switched off, the gain's stays")
+            Check(type(auctionConfig) == "table" and auctionConfig.IconColumn == nil and auctionConfig.UpgradeColumn == true,
+                "column: the gain's switch is on by default, and the icon's column has no setting")
+            Check(icon.ShowLearnable.Auction == true and icon.ShowLearnableByOther.Auction == true and icon.ShowOldExpansion.Auction == true,
+                "column: the three icons are on for the auction house by default")
+            local function IconsInAuction(own, other, old)
+                icon.ShowLearnable.Auction, icon.ShowLearnableByOther.Auction, icon.ShowOldExpansion.Auction = own, other, old
+            end
+            IconsInAuction(false, false, false)
+            Equal(Results(), "results price name", "column: with no icon switched on for the auction house the icon's column is gone, the gain's stays")
             Check(auction.resultsKinds == "results" and auction.resultsUpgradeLeft == 2,
                 "column: the upgrade's column begins at the row's edge then (" .. tostring(auction.resultsUpgradeLeft) .. ")")
-            auctionConfig.IconColumn, auctionConfig.UpgradeColumn = true, false
+            IconsInAuction(true, false, false)
+            Equal(Results(), "icon results price name", "column: the star's switch alone brings the icon's column")
+            IconsInAuction(false, true, false)
+            Equal(Results(), "icon results price name", "column: so does the switch of the icons for another toon")
+            IconsInAuction(false, false, true)
+            Equal(Results(), "icon results price name", "column: and that of an older expansion's mark")
+            IconsInAuction(false, nil, false)
+            Equal(Results(), "results price name", "column: a switch never set is not on")
+            IconsInAuction(true, true, true)
+            auctionConfig.UpgradeColumn = false
             Equal(Results(), "icon price name", "column: the gain's column switched off, the icon's stays")
-            auctionConfig.IconColumn = false
+            IconsInAuction(false, false, false)
             auction:OnBrowseSetupTableBuilder(results)
-            Check(resultsList.tableBuilderLayoutFunction == base, "column: with both off the list has the client's own layout back")
+            Check(resultsList.tableBuilderLayoutFunction == base, "column: with neither wanted the list has the client's own layout back")
             Check(auction.resultsKinds == "" and auction.resultsUpgradeLeft == nil, "column: and the rows are told that neither column is there")
             -- A refresh lays the list out anew only where the columns wanted have changed.
             Equal(auction:OnBrowseSetupTableBuilder(results, true), false, "column: a refresh with nothing changed leaves the list alone")
-            auctionConfig.IconColumn = true
+            IconsInAuction(true, true, true)
             Equal(auction:OnBrowseSetupTableBuilder(results, true), true, "column: a switch changed since is seen by a refresh")
             Equal(auction:OnBrowseSetupTableBuilder(results, true), false, "column: and only once")
             resultsList.tableBuilderLayoutFunction = base
             Equal(auction:OnBrowseSetupTableBuilder(results, true), true, "column: so is a layout of the client's own where columns are wanted")
-            auctionConfig.IconColumn, auctionConfig.UpgradeColumn = true, true
+            auctionConfig.UpgradeColumn = true
             -- A category of one kind the toon does not wear has no gain column: asked of the
             -- first row the search found. Armor here is of several kinds; its second part, of
             -- one (class 4, subclass 4), and so are that part's own parts.
@@ -3348,8 +3363,10 @@ return function(H, S)
             typeLine.rightColor = { GetRGB = function() return 1, 1, 1 end }
             info = Info(world, { GUARDIAN }, { GUARDIAN }, 940014)
             Equal(info.isUpgrade, true, "type: and a type in white is the toon's")
-            -- With its level not reached either, a piece of the toon's type is one for later,
-            -- and one of a type the client refuses is not: no level makes it the toon's.
+            -- With its level not reached either, a piece of the toon's type that would be an
+            -- upgrade is one to come, and one of a type the client refuses is not: no level
+            -- makes it the toon's. A piece with no look that is no upgrade has no gear: the gear
+            -- is the star's stand-in, and there is nothing to learn from it.
             local function StatusOf(itemID)
                 world.env.CaerdonWardrobe:RefreshItems("test")
                 local item = world.env.CaerdonItem:CreateFromItemID(itemID)
@@ -3363,9 +3380,22 @@ return function(H, S)
             rawset(world.env, "UnitLevel", function() return 1 end)
             world.visible, world.upgradeFor = { [GUARDIAN] = true }, {}
             typeLine.isValidItemType, typeLine.rightColor = true, nil
+            -- Worth 15 on the scale against the weaker ring's 12: an upgrade to come.
+            local toComeStatus = StatusOf(940014)
+            Equal(toComeStatus, "upgradeLowSkill", "type: a piece with no look, of a level to come, that would be an upgrade is an upgrade to come")
+            -- Worth less than what is worn and than what the other spec's set holds: no upgrade
+            -- for anything, nothing to learn, and so no gear.
+            local feralValues = world.scaleValues[FERAL]
+            local hadFeral = feralValues and feralValues[940014]
+            world.scaleValues[GUARDIAN][940014] = 5
+            if feralValues then feralValues[940014] = 5 end
+            PawnChanged(world)
             local laterStatus = StatusOf(940014)
-            Check(laterStatus == "lowSkill" or laterStatus == "upgradeLowSkill",
-                "type: a piece of the toon's type, of a level to come, is one for later (" .. laterStatus .. ")")
+            Check(laterStatus ~= "lowSkill" and laterStatus ~= "lowSkillPlus" and laterStatus ~= "upgradeLowSkill" and laterStatus ~= "upgrade" and
+                laterStatus ~= "<not ready>", "type: one that is no upgrade has no gear: there is nothing to learn from it (" .. laterStatus .. ")")
+            world.scaleValues[GUARDIAN][940014] = 15
+            if feralValues then feralValues[940014] = hadFeral end
+            PawnChanged(world)
             typeLine.isValidItemType = false
             local refusedStatus = StatusOf(940014)
             Check(refusedStatus ~= "lowSkill" and refusedStatus ~= "upgradeLowSkill" and refusedStatus ~= "upgrade" and
@@ -3420,8 +3450,32 @@ return function(H, S)
             auction:AskResultsRow(resultRow, rowItem, "key", rowKey)
             Check(asked[resultRow] ~= nil and cleared[upgradePart] == true and asked[upgradePart] == nil,
                 "parts: without the upgrade's column its part is cleared, and the icon's stays")
-            -- The icon's column switched off: no icon of the addon's on the row.
-            auctionConfig.IconColumn = false
+            -- An icon with no switch of its own goes with the star's in the auction house:
+            -- owned decor, a conduit that is an upgrade. Another icon does not, and none of them
+            -- is touched while the star is on. The grey gear needs no word from the window: the
+            -- core draws it where the star is.
+            do
+                local function Info(status, part)
+                    return auction:GetDisplayInfo(resultRow, rowItem, auction, part or asked[resultRow].locationInfo, {}, status)
+                end
+                IconsInAuction(false, true, true)
+                for _, status in ipairs({ "housingOwned", "upgradeNonEquipment" }) do
+                    local info = Info(status)
+                    Check(info.statusIcon ~= nil and info.statusIcon.shouldShow == false and info.ownIcon.shouldShow == false,
+                        "parts: with the star off for the auction house, " .. status .. " has no icon there")
+                end
+                Check(Info("other").statusIcon == nil and Info("other").otherIcon.shouldShow == true and Info("oldexpansion").statusIcon == nil and
+                    Info("oldexpansion").oldExpansionIcon.shouldShow == true, "parts: an icon with a switch of its own goes by that")
+                Check(Info("housingOwned", { locationKey = "elsewhere" }).statusIcon ~= nil, "parts: on the item's own button of the auction house too")
+                Check(Info("lowSkill").statusIcon == nil and Info("lowSkill").ownIcon.shouldShow == false,
+                    "parts: the grey gear is left to the star's own rule")
+                IconsInAuction(true, false, false)
+                Check(Info("upgradeNonEquipment").statusIcon == nil and Info("housingOwned").statusIcon == nil and Info("housingOwned").ownIcon.shouldShow == true,
+                    "parts: with the star on they are drawn as anywhere")
+                IconsInAuction(true, true, true)
+            end
+            -- No icon switched on for the auction house: no icon of the addon's on the row.
+            IconsInAuction(false, false, false)
             auction.resultsKinds, auction.resultsUpgradeLeft = "results", 2
             auction:AskResultsRow(resultRow, rowItem, "key", rowKey)
             Check(cleared[resultRow] == true and asked[resultRow] == nil and asked[upgradePart] ~= nil,
@@ -3432,9 +3486,9 @@ return function(H, S)
             -- Nor before the feature has laid the list out, with the switch off.
             auction.resultsKinds = nil
             auction:AskResultsRow(resultRow, rowItem, "key", rowKey)
-            Check(cleared[resultRow] == true, "parts: the icon's switch holds before the list is laid out too")
-            auctionConfig.IconColumn = true
-            -- The switch on again and the list not laid out anew yet: no icon where the list
+            Check(cleared[resultRow] == true, "parts: that holds before the list is laid out too")
+            IconsInAuction(true, true, true)
+            -- A switch on again and the list not laid out anew yet: no icon where the list
             -- has no column for it.
             auction.resultsKinds, auction.resultsUpgradeLeft = "results", 2
             auction:AskResultsRow(resultRow, rowItem, "key", rowKey)

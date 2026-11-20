@@ -1239,10 +1239,15 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     elseif status == "readable" then
         isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-services")
     elseif status == "lowSkill" or status == "lowSkillPlus" then
-        mogStatus:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
-        mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
-        if status == "lowSkillPlus" then
-            mogStatus:SetVertexColor(0.4, 1, 0)
+        -- Something this toon can learn once it has the level or the skill: the star's stand-in
+        -- until then, so it is shown where the star is and has no switch of its own (author
+        -- decision).
+        if displayInfo and displayInfo.ownIcon.shouldShow then
+            mogStatus:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
+            mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
+            if status == "lowSkillPlus" then
+                mogStatus:SetVertexColor(0.4, 1, 0)
+            end
         end
         -- mogStatus:SetTexture("Interface\\QUESTFRAME\\SkillUp-BG")
         -- mogStatus:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")

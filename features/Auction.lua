@@ -162,10 +162,16 @@ end
 --   (CaerdonEquipment:CanScorePieceForWorn: not gear the toon would not wear), as the
 --   client's own selling page changes its columns by the item.
 --
--- What a column holds is there with the column and not without it (author decision). Each
--- kind has its switch (Auction.IconColumn, Auction.UpgradeColumn), and the upgrade columns
--- need the upgrade arrow on as well (Icon.ShowUpgradeIcon). With the icon's column off the
--- results have no icon of the addon's. Without the upgrade column, by its switch or because
+-- What a column holds is there with the column and not without it (author decision).
+--
+-- The icon's column has no switch of its own (author decision): every icon that can be on a
+-- row has one for the auction house, in its own block on the Icons page (AuctionIcons), and
+-- the column is there while one of them is on. A switch for the column beside those said the
+-- same thing twice. With none of them on the results have no icon of the addon's.
+--
+-- The upgrade columns have a switch (Auction.UpgradeColumn, in the Upgrade block of the Icons
+-- page, under the arrow's), and need the upgrade arrow on as well (Icon.ShowUpgradeIcon).
+-- Without the upgrade column, by its switch or because
 -- the category has none (another category, a search across everything, gear the toon does not
 -- wear), a row has no arrow and no gain, and an item's listings no percentage. Nothing is put
 -- on the client's own columns instead: the icon lay on the price, and the gain on the
@@ -229,9 +235,28 @@ local function WantsUpgrades()
 	return iconConfig ~= nil and iconConfig.ShowUpgradeIcon ~= false
 end
 
+-- Which of the addon's icons the player has switched on for the auction house, each in its
+-- own block on the Icons page: the star of what this toon can learn, the icons of what is for
+-- another toon, the mark of an older expansion.
+local function AuctionIcons()
+	local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+	local function On(section)
+		local windows = type(iconConfig) == "table" and iconConfig[section]
+		return type(windows) == "table" and windows.Auction and true or false
+	end
+	return On("ShowLearnable"), On("ShowLearnableByOther"), On("ShowOldExpansion")
+end
+
+-- An icon with no switch of its own goes with the star's in the auction house: decor the toon
+-- owns and can have more of, a conduit that is an upgrade. (The grey gear of something to
+-- learn later is the star's stand-in in every window, by the core's drawing.) So every icon
+-- that can be on a row is one of the three switches', and the three say whether the column
+-- would hold anything.
+local FOLLOWS_THE_STAR = { housingOwned = true, upgradeNonEquipment = true }
+
 local function WantsIconColumn()
-	local auctionConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Auction
-	return not (auctionConfig and auctionConfig.IconColumn == false)
+	local own, other, old = AuctionIcons()
+	return own or other or old
 end
 
 local function WantsUpgradeColumn()
@@ -890,21 +915,22 @@ function AuctionMixin:GetTooltipData(item, locationInfo)
 end
 
 function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+	local own, other, old = AuctionIcons()
 	local info = {
 		bindingStatus = {
 			shouldShow = false
 		},
 		ownIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Auction
+			shouldShow = own
 		},
 		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Auction
+			shouldShow = other
 		},
 		questIcon = {
 			shouldShow = false
 		},
 		oldExpansionIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowOldExpansion.Auction
+			shouldShow = old
 		},
         sellableIcon = {
             shouldShow = false
@@ -917,6 +943,9 @@ function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, option
 		info.upgradeIcon = { shouldShow = false }
 		info.levelGain = { shouldShow = false }
 	elseif part == "upgrade" then
+		info.statusIcon = { shouldShow = false }
+	end
+	if not own and FOLLOWS_THE_STAR[mogStatus] then
 		info.statusIcon = { shouldShow = false }
 	end
 	return info

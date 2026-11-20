@@ -2295,13 +2295,13 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     mogStatus = "upgradeLowSkill"
                 end
             else
-                -- A piece of a level the toon has not reached is one for later. Not a piece
-                -- whose type is not the toon's (another class's relic): no level changes that.
-                if not transmogInfo.hasMetRequirements and not transmogInfo.typeRefused then
-                    mogStatus = "lowSkill"
-                else
-                    mogStatus = "collected"
-                end
+                -- A piece with no look (a ring, a trinket, a relic, a thrown weapon) that is no
+                -- upgrade: nothing to learn and nothing to gain. Not "lowSkill" where the toon
+                -- has not its level yet (author decision): the gear is the star's stand-in for
+                -- what can be learned later, and this piece has nothing to learn at any level.
+                -- One that would be an upgrade then has the status above. A piece with a look
+                -- that is known has no gear in that state either.
+                mogStatus = "collected"
             end
 
             local equipmentSets = itemData:GetEquipmentSets()

@@ -1114,6 +1114,13 @@ return function(H, S)
         Equal(off.own.badge, false, "rules: nor its badge")
         Equal(off.own.gain, nil, "rules: nor a level gain")
         Equal(off.own.text, "|cFF00FF00BoE|r", "rules: its text stays")
+        -- The grey gear is the star's stand-in for something to learn later: drawn where the
+        -- star is, and not where a window shows no learnable icon.
+        Equal(results["plain"].lowSkill.texture, "Interface\\WorldMap\\Gear_64Grey", "rules: the gear of something to learn later, where the star is shown")
+        Equal(results["plain"].lowSkillPlus.hasIcon, true, "rules: and its green form")
+        Equal(off.lowSkill.hasIcon, false, "rules: no gear where a window shows no learnable icon")
+        Equal(off.lowSkillPlus.hasIcon, false, "rules: nor its green form")
+        Equal(results["look at the Catalyst, icons switched off"].lowSkill.hasIcon, false, "rules: with the star's icon alone switched off too")
         Equal(results["text switched off"].own.text, "", "rules: text switched off is no text")
         Equal(results["text switched off"].own.hasText, false, "rules: and says so")
         Equal(results["no window"].own.hasIcon, false, "rules: a draw with no window has no rules to show an icon by")

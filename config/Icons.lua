@@ -6,6 +6,10 @@ local L = NS.L
 -- One block per icon the addon draws: what it means, where it shows, and its rules. A window
 -- only gets a checkbox where the choice is real: the icon can occur there and someone could
 -- reasonably not want it.
+--
+-- A line the addon adds to an item's tooltip explains one of these icons, and its switch is in
+-- that icon's block: someone who sees the line and wants it gone looks beside the icon's own
+-- switches (seen: the upgrade arrow and the level gain were switched off in search of it).
 
 local STORE_ICON_COORDS = { 16 / 64, 48 / 64, 16 / 64, 48 / 64 }
 local ARROW_COORDS = { -1 / 32, 33 / 32, -1 / 32, 33 / 32 }
@@ -242,13 +246,23 @@ function CaerdonWardrobeConfigIcons:Register()
         { key = "learnableInBankAndBags", text = "Bags and bank", tooltip = "Show the icon on items in your bags and bank.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "BankAndBags" },
         { key = "learnableInGuildBank", text = "Guild bank", tooltip = "Show the icon on items in the guild bank.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "GuildBank" },
         { key = "learnableInMerchant", text = "Vendor", tooltip = "Show the icon on items a vendor sells. An item you already carry a copy of is not marked.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "Merchant" },
-        { key = "learnableInAuction", text = "Auction house", tooltip = "Show the icon on auction house listings.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "Auction" },
+        { key = "learnableInAuction", text = "Auction house", tooltip = "Show the icon on auction house listings. The list of auctions has a narrow column for this addon's icons while any of them is switched on for the auction house.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "Auction" },
     })
     self:AddLabel("Always shown everywhere else: loot, rolls, mail, quest rewards and the like.")
     local sameLook = self:AddCheckbox({ key = "sameLookDifferentItem", text = "Also items that share a look I already have (green star)", tooltip = "Marks every item that gives an appearance you already know from a different item, for collecting each source of a look. These get the green star.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentItem" })
     self:AddCheckbox({ key = "sameLookDifferentLevel", text = "Including when a lower-level toon could use this one", tooltip = "Also marks an item whose look you know when its level requirement is lower than the item you learned it from, so a lower-level toon could use it for transmog.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentLevel" },
         { indent = 1, dependsOn = sameLook })
     self:AddCheckbox({ key = "showBagUpgrades", text = "Bags for an empty bag slot, or bigger than one I have equipped", tooltip = "Marks a bag that fits one of your bag slots when that slot is empty or holds a bag it improves on: a smaller bag of the same kind, a profession bag no bigger than an ordinary bag, or a profession bag smaller than a reagent bag. A profession bag is only marked for an empty slot when you have a profession that uses it, a quiver or ammo pouch when you have a bow, crossbow or gun equipped. Quivers are only compared with their own kind.", configSection = "Icon", configValue = "ShowBagUpgrades" })
+
+    ---------------------------------------------------------------------------------------------
+    -- The star's stand-in. No switch: it is shown where the star is.
+    self:AddIconHeader({
+        title = "Learnable later",
+        description = "Something this toon can learn, but not yet: it asks for a level or a skill the toon does not have. " ..
+            "It stands in for the star until then, green where the star would be, and is shown wherever the star above is.",
+        texture = "Interface\\WorldMap\\Gear_64Grey",
+        coords = { 6 / 64, 58 / 64, 6 / 64, 58 / 64 }
+    })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -298,6 +312,8 @@ function CaerdonWardrobeConfigIcons:Register()
         { title = "Skill up with",           value = "skill", tooltip = "Only when a recipe of that toon's still gives skill for it, a recipe it has not learned yet included." },
         { title = "Use in a recipe it knows", value = "any",   tooltip = "Also when that toon knows a recipe that takes it, even one that no longer gives skill." }
     }, { indent = 1, dependsOn = sendIngredients })
+    -- The tooltip lines that name the toon the mail icon is for.
+    self:AddCheckbox({ key = "showRecipeLearners", text = "Name the toon a recipe or an ingredient is for in its tooltip", tooltip = "Adds a line to the tooltip of a recipe naming your other toons on this realm that have the profession and have not learned it, and to the tooltip of an ingredient this toon has no use for naming the toons whose recipes take it.", configSection = "Tooltip", configValue = "ShowRecipeLearners" })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -311,6 +327,11 @@ function CaerdonWardrobeConfigIcons:Register()
     })
     local showUpgrade = self:AddCheckbox({ key = "showUpgradeIcon", text = "Show the upgrade arrow", tooltip = "Shows the arrow when Pawn calls an item an upgrade or, without a Pawn verdict, when its item level is higher than what is equipped.", configSection = "Icon", configValue = "ShowUpgradeIcon" })
     self:AddCheckbox({ key = "showUpgradeInBankAndBags", text = "In bags and bank", tooltip = "Show the arrow on items in your bags and bank. Everywhere else it follows the option above.", configSection = "Icon", configSubsection = "ShowUpgrades", configValue = "BankAndBags" },
+        { indent = 1, dependsOn = showUpgrade })
+    -- The auction house's column for the arrow: one more place the arrow shows, so its switch
+    -- is here under the arrow's, which it needs, and named as the place above it is. What the
+    -- column is, is the tooltip's to say.
+    self:AddCheckbox({ key = "auctionUpgradeColumn", text = "In the auction house", tooltip = "Adds a column for the upgrade arrow and the item level gain while you browse weapons or armor you could wear, and one for each auction's upgrade percentage on the page of such a piece. Off: the auction house shows neither. The list of auctions has the column only while your settings leave something to put in it.", configSection = "Auction", configValue = "UpgradeColumn" },
         { indent = 1, dependsOn = showUpgrade })
     -- Without Pawn the item level is all the arrow goes by: both are shown as they then are, on.
     local function WithoutPawn()
@@ -327,6 +348,9 @@ function CaerdonWardrobeConfigIcons:Register()
     self:AddCheckbox({ key = "showUpgradeOnGearSets", text = "On gear set pieces", tooltip = "Show the arrow on items that belong to a saved gear set. With the gear set icon on, it sits on that icon as a small badge. Off: a gear set piece never shows the arrow.", configSection = "Icon", configValue = "ShowUpgradeOnGearSets" },
         { indent = 1, dependsOn = showUpgrade })
     self:AddCheckbox({ key = "showUpgradeLevelDelta", text = "Show the item level gain", tooltip = "Displays the item level difference, such as +5, on an upgrade.", configSection = "Icon", configValue = "ShowUpgradeLevelDelta" })
+    -- The tooltip lines that say what the arrow is for. A switch of their own, not one under the
+    -- arrow's: they are shown whether the arrow is or not.
+    self:AddCheckbox({ key = "showLoadoutUpgrades", text = "Say what an upgrade is for, and by how much, in its tooltip", tooltip = "Adds a line to the tooltip of gear that is an upgrade: for what you are wearing, for one of your gear sets, or for another specialization. It names the gear set or spec and how much better the piece is on that spec's Pawn scale, with the arrow the piece has in your bags. Shown at the bottom with Pawn's lines, in place of Pawn's own upgrade note and its \"your best\" marks for the same spec. The lines for other gear follow \"Also for my other specs and gear sets\" above.", configSection = "Tooltip", configValue = "ShowLoadoutUpgrades" })
     self:AddDropdown({ key = "sameLevelItems", text = "Same item level as equipped:", configSection = "Icon", configValue = "SameLevelBehavior" }, {
         { title = "No Icon", value = "none", tooltip = "Keep same-level pieces quiet (no neutral or sellable icons)." },
         { title = "Sellable", value = "sellable", tooltip = "Treat same-level pieces as sellable duplicates." },

@@ -292,9 +292,6 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if not CaerdonWardrobeConfig.Auction then
             CaerdonWardrobeConfig.Auction = {}
         end
-        if CaerdonWardrobeConfig.Auction.IconColumn == nil then
-            CaerdonWardrobeConfig.Auction.IconColumn = NS:GetDefaultConfig().Auction.IconColumn
-        end
         if CaerdonWardrobeConfig.Auction.UpgradeColumn == nil then
             CaerdonWardrobeConfig.Auction.UpgradeColumn = NS:GetDefaultConfig().Auction.UpgradeColumn
         end
@@ -582,9 +579,9 @@ function NS:GetDefaultConfig()
             }
         },
 
-        -- The addon's own columns in the auction house's lists (features/Auction.lua).
+        -- The addon's own columns in the auction house's lists (features/Auction.lua). The
+        -- icon's has no setting: it is there while an icon is switched on for the auction house.
         Auction = {
-            IconColumn = true,
             UpgradeColumn = true
         },
 

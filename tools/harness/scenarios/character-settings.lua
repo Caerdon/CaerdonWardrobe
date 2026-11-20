@@ -283,6 +283,40 @@ return function(H, S)
     Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSpecs.DRUID2, before.Icon.OtherSpecs.DRUID2, "shared: which is as it was")
     Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSpecs.DRUID4, false, "shared: with the other spec's choice in it")
 
+    -- The lines the addon adds to a tooltip have their switches on this page, each in the block
+    -- of the icon its line explains, and each writes to the tooltip's own settings. The upgrade
+    -- lines' switch is its own: it can be changed while the arrow is off.
+    do
+        local lines, learners = env.CaerdonWardrobeshowLoadoutUpgrades, env.CaerdonWardrobeshowRecipeLearners
+        Check(lines ~= nil and learners ~= nil, "tooltip lines: both switches are on the Icons page")
+        Equal(lines and lines:GetChecked(), true, "tooltip lines: the upgrade lines are on as the settings start")
+        Click(world, lines, false)
+        Equal(env.CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades, false, "tooltip lines: a click writes to the tooltip's settings")
+        Equal(env.CaerdonWardrobeConfig.Icon.ShowLoadoutUpgrades, nil, "tooltip lines: and not among the icon's")
+        Equal(#world.refreshes, 1, "tooltip lines: with one refresh")
+        Click(world, lines, true)
+        Click(world, learners, false)
+        Equal(env.CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners, false, "tooltip lines: the toon's name the same way")
+        Click(world, learners, true)
+        local arrow = env.CaerdonWardrobeshowUpgradeIcon
+        Click(world, arrow, false)
+        Equal(lines:IsEnabled(), true, "tooltip lines: the upgrade lines' switch does not hang on the arrow's")
+        Equal(gearSets:IsEnabled(), false, "tooltip lines: as an option under the arrow does")
+        -- The auction house's upgrade column is one more place of the arrow's: its switch is
+        -- under the arrow's here, and writes to the auction house's settings.
+        local column = env.CaerdonWardrobeauctionUpgradeColumn
+        Check(column ~= nil and column:IsEnabled() == false, "upgrade column: its switch is on this page and hangs on the arrow's")
+        Equal(column and column.Text:GetText(), "In the auction house", "upgrade column: named as a place of the arrow's, like the one above it")
+        Click(world, arrow, true)
+        Equal(column and column:IsEnabled(), true, "upgrade column: usable with the arrow on")
+        Click(world, column, false)
+        Equal(env.CaerdonWardrobeConfig.Auction.UpgradeColumn, false, "upgrade column: a click writes to the auction house's settings")
+        Click(world, column, true)
+        Equal(env.CaerdonWardrobeauctionIconColumn, nil, "icon column: it has no switch")
+        -- The grey gear has a block that says what it is, and no switch.
+        Check(Texts(world)["Learnable later"] == true, "gear: the page says what the grey gear is")
+    end
+
     -- 4. Another toon's table, as the client loads one per character.
     rawset(env, "CaerdonWardrobeCharacterConfig", { Icon = { OtherSpecs = { DRUID1 = false } } })
     world.page.OnRefresh()
