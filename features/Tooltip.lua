@@ -752,14 +752,31 @@ local function LaterNote(upgrade)
     return format("  |cff%s%s|r", NOTE_COLOUR, format(L["(at level %d)"], upgrade.atLevel))
 end
 
+-- A weapon weighed for both hands (pair on the entry; author decision: a pair of one-handers
+-- is weighed against a two-hander, which Pawn does not do). The note says what the gain is
+-- over or with: a two-hander against both the pieces it would replace, a one-hander together
+-- with the best piece carried for the other hand, by its name.
+local function PairNote(upgrade)
+    local text
+    if upgrade.pair == "both" then
+        text = L["(for both hands)"]
+    elseif upgrade.pair == "alone" then
+        text = L["(with the other hand empty)"]
+    elseif upgrade.pair == "partner" and type(upgrade.partner) == "string" then
+        text = format(L["(with %s)"], upgrade.partner:match("%[(.-)%]") or upgrade.partner)
+    end
+    return text and format("  |cff%s%s|r", NOTE_COLOUR, text) or ""
+end
+
 local function AddUpgradeLine(tooltip, upgrade)
     local icon = upgrade.icon and format("|T%s:0|t ", tostring(upgrade.icon)) or ""
     -- No percentage against a piece the scale gives no value.
     local gain = upgrade.percent and format(L["+%d%% upgrade"], upgrade.percent) or L["upgrade"]
     local worn = IsWornGain(upgrade)
-    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
+    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
         tostring(upgrade.name), GainMark(upgrade),
-        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, OtherSpecNote(upgrade), LaterNote(upgrade)), 1, 1, 1, true)
+        worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, PairNote(upgrade), OtherSpecNote(upgrade),
+        LaterNote(upgrade)), 1, 1, 1, true)
 end
 
 -- The lines by themselves, with Pawn's own lines left as they are: one is left out where
@@ -857,11 +874,13 @@ local function AddReplacementLine(tooltip, gain)
     local text
     if gain.upgrade then
         local worn = IsWornGain(gain)
-        text = format("%s|cff%s%s|r%s%s", GainMark(gain),
+        text = format("%s|cff%s%s|r%s%s%s", GainMark(gain),
             worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
-            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], OtherSpecNote(gain), LaterNote(gain))
+            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], PairNote(gain), OtherSpecNote(gain),
+            LaterNote(gain))
     else
-        text = format("|cff%s%s|r", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"])
+        text = format("|cff%s%s|r%s", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"],
+            PairNote(gain))
     end
     tooltip:AddLine(format("|cff%s%s%s:|r  %s", gain.colour or LOADOUT_NAME_COLOUR, icon, tostring(gain.name), text),
         1, 1, 1, true)

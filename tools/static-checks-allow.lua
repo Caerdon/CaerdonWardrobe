@@ -51,6 +51,7 @@ return {
         PawnGetItemData = "Pawn",
         PawnGetItemDataForInventorySlot = "Pawn",
         PawnGetSingleValueFromItem = "Pawn",
+        PawnIgnoreStatValue = "Pawn",
         PawnInvalidateBestItems = "Pawn",
         PawnIsArmorBestTypeForPlayer = "Pawn",
         PawnIsItemAnUpgrade = "Pawn",

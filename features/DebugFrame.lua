@@ -2806,8 +2806,12 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "pawnOffTreeUpgrade", transmogInfo.pawnOffTreeUpgrade)
         addKV(1, "pawnUpgradeScales", transmogInfo.pawnUpgradeScales)
         addKV(1, "pawnComparison", transmogInfo.pawnComparison)
+        addKV(1, "wornVerdict", CaerdonEquipment.GetWornVerdictDescription and
+            CaerdonEquipment:GetWornVerdictDescription(item) or "not asked (no Pawn)")
         addKV(1, "pawnScaleFilter", CaerdonEquipment.GetPawnScaleFilterDescription and
             CaerdonEquipment:GetPawnScaleFilterDescription() or "none (every visible Pawn scale counts)")
+        addKV(1, "pawnScalesShown", CaerdonEquipment.GetShownPawnScalesDescription and
+            CaerdonEquipment:GetShownPawnScalesDescription() or "not asked (no Pawn)")
         addKV(1, "otherSpecsWanted", CaerdonEquipment.GetOtherSpecChoiceDescription and
             CaerdonEquipment:GetOtherSpecChoiceDescription() or "no choice (no specs on this client)")
         addKV(1, "loadoutsCompared", CaerdonEquipment.GetLoadoutDescription and
