@@ -2898,12 +2898,14 @@ return function(H, S)
                     return levelInfo(reference)
                 end
                 local pawnValue = world.env.PawnGetSingleValueFromItem
+                -- The scale such a piece has a value on (the set's, until the two sets share one).
+                local floorScale = FERAL
                 rawset(world.env, "PawnGetSingleValueFromItem", function(itemData, scaleName)
                     -- On the set's scale; on the played spec's such a piece is worth next to
                     -- nothing, so that none of them is an upgrade for what is worn.
                     local byBonus = game.LevelByBonus(itemData.Link)
                     if byBonus then
-                        return nil, scaleName == FERAL and byBonus - 200 or 1
+                        return nil, scaleName == floorScale and byBonus - 200 or 1
                     end
                     return pawnValue(itemData, scaleName)
                 end)
@@ -3347,6 +3349,138 @@ return function(H, S)
                     info = Info(world, { GUARDIAN }, {}, 940212)
                     told = Told(940212, { { ScaleName = GUARDIAN, PercentUpgrade = 0.3 }, { ScaleName = MAGE, PercentUpgrade = 0.1 } })
                     Equal(told, MAGE, "pvp note: Pawn's note for the spec's own scale gives way, the worn gear being judged on the set's")
+                end
+                -- Two gear sets on one scale: the set marked for PVP tied to the scale Pawn
+                -- ships for the played spec, whose own set (Bear) is scored on it too. The
+                -- toon has no scale of its own for PVP; the mark is what tells the two apart.
+                do
+                    local tooltips = world.namespace.Tooltip
+                    local function Lines(id, pawnInfo)
+                        local shown = { lines = {} }
+                        function shown:AddLine(line) self.lines[#self.lines + 1] = line end
+                        world.pawnStep = nil
+                        tooltips:OweUpgradeLines(shown, world.env.CaerdonItem:CreateFromItemID(id))
+                        world.env.PawnAddValuesToTooltip(shown, "values", pawnInfo)
+                        return table.concat(shown.lines, " || "), world.pawnStep and world.pawnStep.scales
+                    end
+                    local hadBear, hadGuardian = world.setLocations[31], world.scaleValues[GUARDIAN]
+                    floorScale = GUARDIAN
+                    Tie({ [41] = GUARDIAN })
+                    Mark({ [41] = true })
+                    -- Arena worn (the Arena Jerkin, 50 and 85 at its floor); Bear's own piece
+                    -- lies in the bags (the Prowler's Jerkin, 60).
+                    world.inBag[1] = 940003
+                    world.setLocations[31] = { [5] = 9001 }
+                    world.scaleValues[GUARDIAN] = { [940003] = 60 }
+                    PawnChanged(world)
+                    local item
+                    local YELLOW = "|TInterface\\Buttons\\JumpUpArrow:0:0:0:0:32:32:0:32:0:32:255:255:0|t|cffffff00"
+                    local RED = "|TInterface\\Buttons\\JumpUpArrow:0:0:0:0:32:32:0:32:0:32:255:89:89|t|cffff5959"
+                    local AT_PVP = "  |cff808080(at PvP levels)|r"
+                    local BEAR, ARENA = "|cff8ec3e6|T132276:0|t Bear:|r  ", "|cff8ec3e6|T134400:0|t Arena:|r  "
+                    local PAWN = { { ScaleName = GUARDIAN, PercentUpgrade = 0.52 } }
+                    -- A piece for the open world (76): none over the worn piece at its floor,
+                    -- one for Bear's own piece at its own level.
+                    info, item = Info(world, { GUARDIAN }, { GUARDIAN }, 940212)
+                    Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true and info.pawnIdentifiedUpgrade == false,
+                        "one scale, the marked set worn: a piece for the open world is no upgrade for what is worn and one for the spec's own set, in red")
+                    Equal(equipment:GetWornVerdictDescription(item),
+                        "the addon's own comparison: no upgrade, Druid: Guardian: 76.00 vs 85.00 equipped; Pawn for that scale: an upgrade; " ..
+                        "an upgrade of Pawn's on its other scales: none; a PVP set, scored at PVP levels",
+                        "one scale, the marked set worn: what is worn is scored at its floor, on the spec's scale")
+                    Equal(equipment:GetPawnScaleFilterDescription(), nil, "one scale, the marked set worn: the scale is the toon's own, and none is another's")
+                    Check(tostring(equipment:GetGearSetScaleDescription()):find("\"Arena\" (41) tied to Druid: Guardian, marked as a PVP set", 1, true) ~= nil,
+                        "one scale: the export says what the marked set is tied to: " .. tostring(equipment:GetGearSetScaleDescription()))
+                    local lines, told = Lines(940212, PAWN)
+                    Equal(lines, BEAR .. RED .. "+27% upgrade|r", "one scale, the marked set worn: the spec's own set has the line, at its own level")
+                    Equal(told, "", "one scale, the marked set worn: and Pawn's note for the scale gives way")
+                    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = true
+                    Equal((Lines(940212, PAWN)), "pawn: " .. GUARDIAN .. " || " .. BEAR .. RED .. "+27% upgrade|r || " ..
+                        ARENA .. "|cff808080-11%|r" .. AT_PVP,
+                        "one scale, the marked set worn: with Pawn's notes kept, the worn set's number stands beside the other set's line")
+                    -- No upgrade for the spec's own set either (its piece worth 80): Pawn's
+                    -- note is against what is worn, and the worn gear's number answers it.
+                    world.scaleValues[GUARDIAN][940003] = 80
+                    PawnChanged(world)
+                    info = Info(world, { GUARDIAN }, { GUARDIAN }, 940212)
+                    Equal((Lines(940212, PAWN)), "pawn: " .. GUARDIAN .. " || " .. ARENA .. "|cff808080-11%|r" .. AT_PVP,
+                        "one scale, the marked set worn: the worn gear's number alone where the spec's own set has none to gain either")
+                    world.scaleValues[GUARDIAN][940003] = 60
+                    PawnChanged(world)
+                    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = false
+                    -- Pawn's "your best" for the scale, which it puts on the worn piece shown
+                    -- beside the one looked at: left out, the scale being the one the worn
+                    -- gear is judged on (a tied set is no spec's by its number).
+                    do
+                        Equal((equipment:GetPawnScalesJudged() or {})[GUARDIAN], true,
+                            "one scale, the marked set worn: the scale the worn gear is judged on is one the addon judges")
+                        local shown = { lines = {} }
+                        function shown:AddLine(line) self.lines[#self.lines + 1] = line end
+                        world.pawnStep = nil
+                        tooltips:OweUpgradeLines(shown, world.env.CaerdonItem:CreateFromItemID(940211))
+                        world.env.PawnAddValuesToTooltip(shown, "values", nil, { [GUARDIAN] = true, [MAGE] = true }, { [GUARDIAN] = true })
+                        Check(world.pawnStep.best[GUARDIAN] == nil and world.pawnStep.best[MAGE] == true and world.pawnStep.second[GUARDIAN] == nil,
+                            "one scale, the marked set worn: Pawn's \"your best\" for that scale is left out on the worn piece, another scale's kept")
+                    end
+                    -- A PVP piece with a higher floor (59, and 98 at its floor): the worn
+                    -- gear's upgrade, at PVP levels.
+                    info, item = Info(world, { GUARDIAN }, {}, 940213)
+                    Check(info.isUpgrade == true and info.pawnOffTreeUpgrade ~= true and info.pawnIdentifiedUpgrade == true,
+                        "one scale, the marked set worn: a piece with a higher floor is the worn gear's upgrade")
+                    Equal((Lines(940213, {})), ARENA .. YELLOW .. "+15% upgrade|r" .. AT_PVP, "one scale, the marked set worn: in yellow, at PVP levels")
+
+                    -- The other way round: Bear worn (the Prowler's Jerkin), Arena's piece
+                    -- in the bags.
+                    world.worn[5] = 940003
+                    world.inBag[1] = 940211
+                    world.setLocations[31] = { [5] = 9005 }
+                    world.setLocations[41] = { [5] = 9001 }
+                    world.setWorn = { [31] = { 10, 10 }, [41] = { 10, 2 } }
+                    PawnChanged(world)
+                    info, item = Info(world, { GUARDIAN }, { GUARDIAN }, 940212)
+                    Check(info.isUpgrade == true and info.pawnOffTreeUpgrade ~= true and info.pawnIdentifiedUpgrade == true,
+                        "one scale, the spec's set worn: a piece for the open world is the worn gear's upgrade, at own levels")
+                    Equal(equipment:GetWornVerdictDescription(item),
+                        "the addon's own comparison: an upgrade, Druid: Guardian: 76.00 vs 60.00 equipped; Pawn for that scale: an upgrade; " ..
+                        "an upgrade of Pawn's on its other scales: none",
+                        "one scale, the spec's set worn: with no word of PVP levels")
+                    Equal(equipment:GetPawnScaleFilterDescription(), nil,
+                        "one scale, the spec's set worn: the scale stays the toon's own though the other set is tied to it")
+                    Check(tostring(equipment:GetLoadoutDescription()):find("Druid: Guardian: gear set \"Arena\", scored at PVP levels", 1, true) ~= nil,
+                        "one scale, the spec's set worn: the marked set is a loadout beside it: " .. tostring(equipment:GetLoadoutDescription()))
+                    lines, told = Lines(940212, PAWN)
+                    Equal(lines, BEAR .. YELLOW .. "+27% upgrade|r", "one scale, the spec's set worn: the yellow line, and none for the marked set (76 against 85)")
+                    Equal(told, "", "one scale, the spec's set worn: Pawn's note gives way to it")
+                    -- The PVP piece: none for what is worn (59 against 60), one for the
+                    -- marked set at its floors (98 against 85).
+                    info, item = Info(world, { GUARDIAN }, {}, 940213)
+                    Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true and info.pawnIdentifiedUpgrade == false,
+                        "one scale, the spec's set worn: a PVP piece is the marked set's upgrade, in red")
+                    lines, told = Lines(940213, { { ScaleName = GUARDIAN, PercentUpgrade = 0.1 } })
+                    Equal(lines, ARENA .. RED .. "+15% upgrade|r" .. AT_PVP, "one scale, the spec's set worn: with the marked set's line, at PVP levels")
+                    Equal(told, "", "one scale, the spec's set worn: and no note of Pawn's for the scale")
+                    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = true
+                    Equal((Lines(940213, { { ScaleName = GUARDIAN, PercentUpgrade = 0.1 } })),
+                        "pawn: " .. GUARDIAN .. " || " .. ARENA .. RED .. "+15% upgrade|r" .. AT_PVP .. " || " .. BEAR .. "|cff808080-2%|r",
+                        "one scale, the spec's set worn: with Pawn's notes kept, the worn gear's number beside the marked set's line")
+                    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = false
+                    -- The arrows for other gear off: the marked set is not asked.
+                    icon.ShowOtherSpecUpgrades = false
+                    info = Info(world, { GUARDIAN }, {}, 940213)
+                    Equal(info.isUpgrade, nil, "one scale, the spec's set worn: with the arrows for other gear off the marked set has none")
+                    icon.ShowOtherSpecUpgrades = true
+
+                    -- Back to Arena worn on Feral's scale.
+                    world.worn[5] = 940211
+                    world.inBag[1] = 940211
+                    world.setLocations[31] = hadBear
+                    world.setLocations[41] = { [5] = 9005 }
+                    world.scaleValues[GUARDIAN] = hadGuardian
+                    world.setWorn = { [31] = { 10, 4 }, [41] = { 10, 10 } }
+                    floorScale = FERAL
+                    Tie({ [41] = FERAL })
+                    Mark({ [41] = true })
+                    PawnChanged(world)
                 end
                 Mark(nil)
                 info = Info(world, { GUARDIAN }, {}, 940212)

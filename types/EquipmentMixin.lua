@@ -3429,6 +3429,10 @@ end
 -- seen worn; for these scales what the toon's best piece is, is what its gear set holds or
 -- what it wears, so the tooltip leaves those marks out (features/Tooltip.lua; author decision).
 --   The played spec's scale, where what is worn has a line of the addon's (loadouts.worn).
+--   The scale the worn gear is judged on (GetWornJudge), whatever kind of scale it is: a
+--   gear set the player tied to a scale is worn on that scale, and is no spec's by its
+--   number. Seen (retail 12.1.5.70961): a set marked for PVP worn, tied to the played spec's
+--   scale, and "Guardian: your best" on the worn ring beside the piece looked at.
 --   The other specs' scales the addon measures, where the player asked for the arrows for
 --   other gear (Icon.ShowOtherSpecUpgrades).
 --   The scale for the off hand's weapon (OffHandScale), where what is worn is judged on it
@@ -3469,6 +3473,10 @@ function CaerdonEquipment:GetPawnScalesJudged()
             end
         end
         local judge = GetWornJudge()
+        if judge and PawnIsScaleVisible(judge.scale) then
+            found = found or {}
+            found[judge.scale] = true
+        end
         local half = judge and HandsApart(judge, "INVTYPE_WEAPON")
         if half and PawnIsScaleVisible(half.name) then
             found = found or {}
@@ -3621,8 +3629,9 @@ end
 -- are for. The tooltip adds a grey line for an entry whose scale Pawn calls the piece an
 -- upgrade on (author decision: the player who has both shown is to see the addon's number
 -- where the two disagree, and the note that says why: "(at PvP levels)", the piece a weapon
--- was weighed with). The played spec's own set is left out where the worn gear has an entry
--- on its scale: Pawn's note is against what is worn, and so is that entry.
+-- was weighed with). The played spec's own set is left out where the worn gear has a verdict
+-- on its scale, an upgrade or none: Pawn's note is against what is worn, and that verdict is
+-- the answer to it.
 --[[static]]
 function CaerdonEquipment:GetLoadoutLossList(item)
     local link = item and item:GetItemLink()
@@ -3644,19 +3653,14 @@ function CaerdonEquipment:GetLoadoutLossList(item)
     local function IsJudged(entry)
         return judge ~= nil and judge.scale == (entry.loadoutScale or entry.scale)
     end
-    local wornScales = {}
-    for _, entry in ipairs(losses) do
-        if entry.worn and IsJudged(entry) then
-            wornScales[entry.scale] = true
-        end
-    end
+    local wornVerdict = judge and JudgeWorn(item, judge) or nil
     local kept = {}
     for _, entry in ipairs(losses) do
         local keep
         if entry.worn then
             keep = IsJudged(entry)
         else
-            keep = not (entry.own and wornScales[entry.scale])
+            keep = not (entry.own and wornVerdict ~= nil and judge.scale == entry.scale)
         end
         if keep and type(entry.value) == "number" then
             entry.percent = entry.baseline and entry.baseline > 0 and
@@ -3944,12 +3948,17 @@ end
 -- of their specs; then every other scale that is not another class's, by name (the player's
 -- own: one made from nothing is for no class, a copy of a class's scale keeps its class).
 --   { name, label, spec }
--- A scale is one gear set's (author decision), as a spec is one set's in the client. Asked
--- for a set (its ID), a scale another set is scored on says so: takenBy is that set's name,
--- by the player's tie or, for a set nobody tied, through the spec the client ties it to
--- (takenBySpec, that spec's name). The page does not offer those. This is the page's rule and
--- not the scoring's: two sets still come by one scale where a spec is assigned in the
--- character window after a tie was made, and each is then scored on it (AddTiedSets).
+-- A scale is one gear set's (author decision), as a spec is one set's in the client, and one
+-- more's where one of the two is marked for PVP (author decision): the mark is what tells
+-- them apart, a toon need not have weights of its own for PVP, and a copy of the spec's
+-- scale made in Pawn for the set had the same weights. Asked for a set (its ID), a scale
+-- another set of the same kind (marked, or not) is scored on says so: takenBy is that set's
+-- name, by the player's tie or, for a set nobody tied, through the spec the client ties it to
+-- (takenBySpec, that spec's name). The page does not offer those. A scale a set of the other
+-- kind is scored on is offered, and says whose it is too (sharedWith). This is the page's
+-- rule and not the scoring's: two sets of a kind still come by one scale where a spec is
+-- assigned in the character window after a tie was made, or a mark is taken away, and each
+-- is then scored on it (AddTiedSets).
 --[[static]]
 function CaerdonEquipment:GetGearSetScaleChoices(forSetID)
     if not (PawnCommon and PawnCommon.Scales and PawnGetItemData and PawnGetSingleValueFromItem) then
@@ -3958,13 +3967,18 @@ function CaerdonEquipment:GetGearSetScaleChoices(forSetID)
     local _, _, classID = UnitClass("player")
     local choices = {}
     local takenByScale, takenBySpec = {}, {}
+    local sharedByScale, sharedBySpec = {}, {}
     if forSetID ~= nil then
+        local marked = IsPvpSet(forSetID)
         for _, set in ipairs(CaerdonEquipment:GetGearSets() or {}) do
             if set.id ~= forSetID then
+                local sameKind = IsPvpSet(set.id) == marked
+                local byScale = sameKind and takenByScale or sharedByScale
+                local bySpec = sameKind and takenBySpec or sharedBySpec
                 if set.tied then
-                    takenByScale[set.tied] = takenByScale[set.tied] or set
+                    byScale[set.tied] = byScale[set.tied] or set
                 elseif set.specIndex then
-                    takenBySpec[set.specIndex] = takenBySpec[set.specIndex] or set
+                    bySpec[set.specIndex] = bySpec[set.specIndex] or set
                 end
             end
         end
@@ -3977,12 +3991,14 @@ function CaerdonEquipment:GetGearSetScaleChoices(forSetID)
             local tied = takenByScale[scaleName]
             local bySpec = not tied and spec and takenBySpec[spec] or nil
             local holder = tied or bySpec
+            local sharer = sharedByScale[scaleName] or (spec and sharedBySpec[spec]) or nil
             choices[#choices + 1] = {
                 name = scaleName,
                 label = scale.LocalizedName or scaleName,
                 spec = spec,
                 takenBy = holder and holder.name or nil,
                 takenBySpec = bySpec and bySpec.specName or nil,
+                sharedWith = sharer and sharer.name or nil,
             }
         end
     end

@@ -491,8 +491,8 @@ return function(H, S)
     Equal(scrollChild:GetHeight(), emptyHeight + 3 * ROW, "gear sets: the page grows by a row for each")
     Equal(env.CaerdonWardrobeCharacterConfig, nil, "gear sets: showing them writes nothing")
     Check(Tick("Arena"):IsEnabled() == false and Ticked("Arena") == false, "gear sets: a set with no scale has no switch to click")
-    Check(Row("Arena").mark ~= nil and Row("Arena").mark:IsShown() == false,
-        "pvp mark: a set that is not scored has none, whatever it holds")
+    Check(Row("Arena").mark ~= nil and Row("Arena").mark:IsShown() == (world.pvpFloor ~= nil and world.pvpFloor[41] == true),
+        "pvp mark: a set that is not scored yet is offered it by what it holds, as any set")
     Equal(Row("Bear").mark:IsShown(), false, "pvp mark: nor has a set with no piece that has a PVP floor")
     Check(Tick("Bear"):IsEnabled() == true and Ticked("Bear") == true, "gear sets: its spec's set has the spec's, on for the set")
 
@@ -572,6 +572,54 @@ return function(H, S)
     Equal(Row("Arena").mark:IsShown(), false, "pvp mark: and then it is gone with the piece")
     world.pvpFloor = { [41] = true }
     world.page.OnRefresh()
+    -- Two sets on one scale, where one of them is marked for PVP: the toon has no scale of
+    -- its own for PVP, and the set takes the one its spec's set is scored on.
+    do
+        local hadRefreshes = world.refreshes
+        local menu, titles = Open(list.rows[1])
+        Equal(titles, "Not tied | Druid: Feral | Druid: Guardian (used by Bear) | My tanking",
+            "shared scale: not marked, a scale another set has is not offered")
+        Check(Says(menu[3].tooltipText, "A scale is for one gear set, or for two where one of them is marked PvP"),
+            "shared scale: and its entry says when it would be: " .. tostring(menu[3].tooltipText))
+        Click(world, Row("Arena").mark, true)
+        Check(Says(Hover(world, Row("Arena").mark), "A set marked PvP can use the scale another gear set is scored on"),
+            "shared scale: the mark's tooltip says what it allows: " .. Hover(world, Row("Arena").mark))
+        menu, titles = Open(list.rows[1])
+        Equal(titles, "Not tied | Druid: Feral | Druid: Guardian (also used by Bear) | My tanking",
+            "shared scale: marked for PVP, the scale of the spec's own set is offered, with whose it is")
+        Check(menu[3].disabled == nil and type(menu[3].func) == "function", "shared scale: and can be chosen")
+        Check(Says(menu[3].tooltipText, "Bear is scored on this scale too.") and Says(menu[3].tooltipText, "the same weights serve both"),
+            "shared scale: its entry says why that works: " .. tostring(menu[3].tooltipText))
+        Choose(menu[3])
+        Equal(own.Icon.GearSetScales[41], "\"MrRobot\":DRUID3", "shared scale: the tie is written as any other")
+        Equal(list.rows[1].text:GetText(), "Druid: Guardian", "shared scale: and shown by the scale's name")
+        Check(Says(equipment:GetGearSetScaleDescription(), "\"Arena\" (41) tied to Druid: Guardian, marked as a PVP set"),
+            "shared scale: the equipment code reads it: " .. tostring(equipment:GetGearSetScaleDescription()))
+        -- The other set sees the same from its side, and keeps its own scale.
+        menu, titles = Open(list.rows[2])
+        Equal(titles, "By its specialization (Guardian) | Druid: Feral | Druid: Guardian (also used by Arena) | My tanking",
+            "shared scale: the spec's own set is told who else has its scale")
+        Check(menu[3].disabled == nil, "shared scale: and could be tied to it as well")
+        -- A second set marked for PVP could not take it: one of each kind.
+        world.setIDs, world.setNames[51] = { 41, 31, 51 }, "Duels"
+        world.pvpFloor[51] = true
+        own.Icon.PvpSets[51] = true
+        world.page.OnRefresh()
+        menu, titles = Open(list.rows[3])
+        Equal(titles, "Not tied | Druid: Feral | Druid: Guardian (used by Arena) | My tanking",
+            "shared scale: a second marked set is not offered the scale the first has")
+        Check(menu[3].disabled == true, "shared scale: it cannot be chosen")
+        world.setIDs, world.setNames[51], world.pvpFloor[51], own.Icon.PvpSets[51] = { 41, 31 }, nil, nil, nil
+        world.page.OnRefresh()
+        -- The mark taken away: the set keeps its scale, which is never greyed for its own row.
+        Click(world, Row("Arena").mark, false)
+        menu, titles = Open(list.rows[1])
+        Equal(titles, "Not tied | Druid: Feral | Druid: Guardian | My tanking", "shared scale: unmarked again, the set's own scale stays its entry")
+        Choose(menu[2])
+        Equal(own.Icon.GearSetScales[41], "\"MrRobot\":DRUID2", "shared scale: and it can be tied elsewhere again")
+        world.page.OnRefresh()
+        world.refreshes = hadRefreshes
+    end
     Check(Says(equipment:GetGearSetScaleDescription(), "\"Arena\" (41) tied to Druid: Feral"),
         "choice: and the equipment code reads it: " .. tostring(equipment:GetGearSetScaleDescription()))
     menu, titles, checked = Open(list.rows[1])

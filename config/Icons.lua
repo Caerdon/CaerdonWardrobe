@@ -118,22 +118,34 @@ end
 
 -- A scale another gear set is scored on is not offered: a scale is one set's, as a spec is one
 -- set's in the character window. Its entry is greyed, names the set, and says what to do.
+-- Two sets can have one scale where one of them is marked for PvP (below): the mark tells
+-- them apart, and the toon needs no scale of its own for PvP.
+local ONE_SET = "A scale is for one gear set, or for two where one of them is marked PvP, and "
 local function TakenTooltip(scale)
     if scale.takenBySpec then
-        return "A scale is for one gear set, and " .. scale.takenBy .. " is scored on this one as the set assigned to " ..
+        return ONE_SET .. scale.takenBy .. " is scored on this one as the set assigned to " ..
             scale.takenBySpec .. " in the character window. Choose another scale for " .. scale.takenBy ..
             " first, or take the specialization from it there."
     end
-    return "A scale is for one gear set, and " .. scale.takenBy .. " is scored on this one. Choose another scale for " ..
+    return ONE_SET .. scale.takenBy .. " is scored on this one. Choose another scale for " ..
         scale.takenBy .. " first."
 end
 
+-- A scale that a set of the other kind is scored on: offered, with whose it is as well.
+local function SharedTooltip(scale)
+    return scale.sharedWith .. " is scored on this scale too. One of the two is marked PvP and scored at PvP levels, " ..
+        "the other at the levels its pieces have in the open world, so the same weights serve both.\n\n" .. TIED_TOOLTIP
+end
+
 -- The mark at the end of a gear set's row: the set is one for PVP, and is scored at the levels
--- its pieces' PVP floors raise them to, wherever the toon is. Offered for a set that is scored
--- at all (a spec's, or one with a scale) and holds a piece with a floor.
+-- its pieces' PVP floors raise them to, wherever the toon is. Offered for a set that holds a
+-- piece with a floor, scored yet or not: the mark is what lets it take the scale another set
+-- has, so it has to be there before the scale is chosen.
 local PVP_TOOLTIP = "Score this gear set as it is in PvP. Its pieces, and a piece you compare with them, count at the item level " ..
     "their PvP floor raises them to in arenas, battlegrounds and War Mode, wherever you are. " ..
     "Without it a piece is scored at the level it has in the open world." ..
+    "\n\nA set marked PvP can use the scale another gear set is scored on, such as your specialization's: " ..
+    "you need no Pawn scale of its own for PvP." ..
     "\n\nKept for this character only."
 
 -- Where a row's switch is kept: a spec's (its own row, or the row of the gear set the client
@@ -211,6 +223,9 @@ function CaerdonWardrobeConfigIcons:AddLoadoutList(dependsOn)
                 if scale.takenBy and scale.name ~= row.value then
                     choices[#choices + 1] = { title = scale.label .. " (used by " .. scale.takenBy .. ")",
                         value = scale.name, disabled = true, tooltip = TakenTooltip(scale) }
+                elseif scale.sharedWith then
+                    choices[#choices + 1] = { title = scale.label .. " (also used by " .. scale.sharedWith .. ")",
+                        value = scale.name, tooltip = SharedTooltip(scale) }
                 else
                     choices[#choices + 1] = { title = scale.label, value = scale.name, tooltip = TIED_TOOLTIP }
                 end
@@ -225,7 +240,7 @@ function CaerdonWardrobeConfigIcons:AddLoadoutList(dependsOn)
             text = "PvP",
             get = function(row)
                 local set = row.set
-                if not (set and (set.specIndex or set.tied)) then
+                if not set then
                     return nil
                 end
                 local marked = CaerdonEquipment:IsPvpGearSet(set.id)
@@ -406,7 +421,7 @@ function CaerdonWardrobeConfigIcons:Register()
     -- said in so many words: the switch says it, and the text under it why (author decision:
     -- the player is to be able to see both, to judge the addon's numbers by, and is to be told
     -- on the page, not in a text that shows on hover, why the two can differ).
-    self:AddCheckbox({ key = "keepPawnUpgradeNotes", text = "Keep Pawn's own upgrade notes beside them", tooltip = "Off: Pawn's upgrade note and its \"your best\" marks are left out wherever this addon has a verdict of its own. Pawn's values stay.\n\nOn: they are shown as Pawn makes them, with this addon's lines below. A piece Pawn calls an upgrade and this addon does not then has this addon's number beneath, in grey.", configSection = "Tooltip", configValue = "KeepPawnUpgradeNotes" },
+    self:AddCheckbox({ key = "keepPawnUpgradeNotes", text = "Keep Pawn's own upgrade notes beside them", tooltip = "Off: Pawn's own upgrade notes and \"your best\" marks are hidden wherever this addon has a verdict of its own, and this addon's lines are shown in their place. Those lines use your Pawn weights, but compare with different gear (see below), so their percentages will often differ from the ones Pawn would show.\n\nOn: Pawn's notes are shown as well, above this addon's lines. Expect different numbers for the same scale; the arrow on the item follows this addon's. A piece Pawn calls an upgrade and this addon does not has this addon's number beneath, in grey.", configSection = "Tooltip", configValue = "KeepPawnUpgradeNotes" },
         { indent = 1, dependsOn = showLoadoutUpgrades })
     self:AddLabel("Pawn's notes are left out because the two do not measure the same thing, and the arrow on an item goes by this addon's numbers. Pawn compares a piece with what you are wearing, at its own item level. This addon compares it:\n" ..
         "- with the gear set of that spec, or the set you tied to the scale, where that is not what you have on\n" ..

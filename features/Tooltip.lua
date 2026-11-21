@@ -1226,19 +1226,18 @@ function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, 
             end
         end, geterrorhandler())
     end
-    -- Pawn's notes kept: the addon's number where Pawn names an upgrade on a scale and the
-    -- addon has none to name for it.
+    -- Pawn's notes kept: the addon's number for the gear it calls the piece no upgrade for,
+    -- where Pawn names an upgrade on that gear's scale. Whatever line the addon has for other
+    -- gear on the same scale (two gear sets can be scored on one): Pawn's note is one, and
+    -- reads as being about each.
     if losses then
         xpcall(function()
-            local pawnNamed, addonNamed = {}, {}
+            local pawnNamed = {}
             for _, upgrade in ipairs(upgradeInfo) do
                 pawnNamed[upgrade.ScaleName] = true
             end
-            for _, upgrade in ipairs(upgrades or {}) do
-                addonNamed[upgrade.scale] = true
-            end
             for _, loss in ipairs(losses) do
-                if pawnNamed[loss.scale] and not addonNamed[loss.scale] then
+                if pawnNamed[loss.scale] then
                     AddLossLine(tooltip, loss)
                 end
             end
