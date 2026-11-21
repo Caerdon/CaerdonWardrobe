@@ -556,6 +556,78 @@ return function(H, S)
     Equal(info.pawnIdentifiedUpgrade, true, "both: an upgrade for both is Pawn's upgrade")
     Equal(info.pawnOffTreeUpgrade, false, "both: not flagged")
 
+    -- The worn gear's data can be gone from the client's cache (it holds about two thousand
+    -- items and drops the least recently used, worn or not). The client then answers the
+    -- piece's ID and link and nothing else. No verdict is made from that: the piece is asked
+    -- for, the verdict is put off, and it is made once the data is back.
+    do
+        local item
+        local gone, never, asked = true, false, 0
+        rawset(world.env, "GetInventoryItemID", function(_, slot) return world.worn[slot] end)
+        local cached, request = world.env.C_Item.IsItemDataCachedByID, world.env.C_Item.RequestLoadItemDataByID
+        world.env.C_Item.IsItemDataCachedByID = function(id)
+            if gone and id == world.worn[5] then
+                return false
+            end
+            return cached(id)
+        end
+        world.env.C_Item.RequestLoadItemDataByID = function(id)
+            if id == world.worn[5] then
+                asked = asked + 1
+                if not never then
+                    -- Back a moment later, never in the same call.
+                    world.env.C_Timer.After(0, function() gone = false end)
+                end
+                return
+            end
+            return request(id)
+        end
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        world.client:Tick(10)
+        gone = true
+        item = world.env.CaerdonItem:CreateFromItemID(940001)
+        item:ContinueOnItemLoad(function() end)
+        world.visible, world.upgradeFor = { [FERAL] = true, [GUARDIAN] = true }, { [GUARDIAN] = true }
+        local without = item:GetItemData():GetTransmogInfo()
+        Check(without.isNotReady == true and without.isUpgrade == nil and without.pawnIdentifiedUpgrade == nil,
+            "worn gear without data: no verdict is made, and the piece's info says not ready")
+        Equal(asked, 1, "worn gear without data: the worn piece is asked for")
+        Equal((item:GetCaerdonStatus()), false, "worn gear without data: the status is not ready, so the queue asks again")
+        Equal(asked, 1, "worn gear without data: and it is asked for once, not at every try")
+        world.client:Tick(3)
+        Equal(gone, false, "worn gear without data: the data comes back")
+        local with = item:GetItemData():GetTransmogInfo()
+        Check(with.isNotReady ~= true and with.isUpgrade == true and with.pawnIdentifiedUpgrade == true,
+            "worn gear without data: with it back the verdict is made (an upgrade)")
+        Check(table.concat((function()
+            local lines = {}
+            for _, line in ipairs(world.env.CaerdonCounters:GetReportLines()) do
+                lines[#lines + 1] = tostring(line.text)
+            end
+            return lines
+        end)(), " / "):find("a piece that is compared with: asked for, the verdict put off: 1 times", 1, true) ~= nil,
+            "worn gear without data: the counters say that it happened")
+
+        -- A piece the client never gives is not waited for for ever: after a few seconds it
+        -- is taken as it is, and the verdicts are made as they were before.
+        gone, never, asked = true, true, 0
+        local clock, shift = world.env.GetTime, 0
+        rawset(world.env, "GetTime", function() return clock() + shift end)
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        world.client:Tick(10)
+        local waiting = item:GetItemData():GetTransmogInfo()
+        Equal(waiting.isNotReady, true, "never given: at first the verdict is put off")
+        shift = 10
+        local given = item:GetItemData():GetTransmogInfo()
+        Check(given.isNotReady ~= true and given.isUpgrade == true, "never given: after a while it is made without the piece's data")
+        Equal(asked, 1, "never given: asked for once")
+        rawset(world.env, "GetTime", clock)
+        gone, never = false, false
+        world.env.C_Item.IsItemDataCachedByID, world.env.C_Item.RequestLoadItemDataByID = cached, request
+        rawset(world.env, "GetInventoryItemID", function() return nil end)
+        info = Info(world, { FERAL, GUARDIAN }, { FERAL, GUARDIAN })
+    end
+
     local filter = world.env.CaerdonEquipment:GetPawnScaleFilterDescription()
     Equal(filter, "ignored: Druid: Feral; kept: Druid: Guardian", "export: the filter names the scales")
     Equal(world.env.CaerdonEquipment:GetShownPawnScalesDescription(), "Druid: Feral, Druid: Guardian",
@@ -2929,6 +3001,44 @@ return function(H, S)
                     tostring(list and list[1] and list[1].percent) .. ", " .. tostring(list and list[1] and list[1].pvp))
                 world.inBag[1] = 940211
                 info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+
+                -- A gear set's piece in the bags whose data is gone from the client's cache:
+                -- asked for, the verdict put off, and nothing kept of the piece meanwhile.
+                do
+                    local goneSet, askedSet = false, 0
+                    local cached, request = world.env.C_Item.IsItemDataCachedByID, world.env.C_Item.RequestLoadItemDataByID
+                    world.env.C_Item.IsItemDataCachedByID = function(id)
+                        if goneSet and id == 940211 then
+                            return false
+                        end
+                        return cached(id)
+                    end
+                    world.env.C_Item.RequestLoadItemDataByID = function(id)
+                        if id == 940211 then
+                            askedSet = askedSet + 1
+                            world.env.C_Timer.After(0, function() goneSet = false end)
+                            return
+                        end
+                        return request(id)
+                    end
+                    world.env.CaerdonWardrobe:RefreshItems("test")
+                    world.client:Tick(10)
+                    goneSet = true
+                    local piece = world.env.CaerdonItem:CreateFromItemID(940213)
+                    piece:ContinueOnItemLoad(function() end)
+                    local put = piece:GetItemData():GetTransmogInfo()
+                    Check(put.isNotReady == true and put.comparedGearMissing == true,
+                        "set piece without data: the verdict against it is put off")
+                    Equal(askedSet, 1, "set piece without data: the piece is asked for")
+                    world.client:Tick(3)
+                    local made = piece:GetItemData():GetTransmogInfo()
+                    list = equipment:GetLoadoutUpgradeList(piece)
+                    Check(made.isNotReady ~= true and list ~= nil and list[1] ~= nil and list[1].percent == 15 and list[1].pvp == true,
+                        "set piece without data: with it back the comparison is made, at the floors (98 against 85): " ..
+                        tostring(list and list[1] and list[1].percent))
+                    world.env.C_Item.IsItemDataCachedByID, world.env.C_Item.RequestLoadItemDataByID = cached, request
+                    info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+                end
 
                 -- The export sets the worn gear's levels and floors beside the client's averages.
                 rawset(world.env, "GetAverageItemLevel", function() return 274, 244.5625, 291.8125 end)

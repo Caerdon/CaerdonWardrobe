@@ -605,6 +605,72 @@ end
 -- ItemLocation creation and API calls across all bag items.
 local equippedGearSnapshot = nil
 
+-- The data of the gear a piece is compared with has to be in the client's cache.
+--
+-- The client keeps the data of about two thousand items and drops the least recently used
+-- (measured, retail 12.1.5.70961; notes: Upgrades). Being worn keeps nothing: a login passes
+-- more items through the cache than it holds, and the worn pieces, loaded early, are gone by
+-- the time a window draws. For a piece whose data is gone the client answers its link and its
+-- ID and nothing else: 0 for its level by slot, a line or two for its tooltip, nil for item
+-- info, level and stats by link, and Pawn only what its own cache still has. Everything a
+-- comparison knows about the worn gear (level, PVP floor, uniqueness, Pawn's value) is read
+-- once a refresh and kept, so read in such a moment it was missing for the whole refresh.
+--
+-- So a verdict is not made from it: where a piece that is compared with has no data, it is
+-- asked for and the verdict being made is put off (GetTransmogInfo answers isNotReady, and the
+-- queue asks again; the data is back two frames after it is asked for), and nothing made of
+-- the piece is kept. A piece asked for and still without data after a few seconds is one the
+-- client does not give (some items never load): it is taken as it is from then on, as before.
+--
+-- comparedGearMissing: set by whoever finds such a piece while a verdict is made.
+local comparedGearMissing = false
+local gearAskedAt, gearGivenUp = {}, {}
+local GEAR_DATA_PATIENCE = 3
+
+local function ComparedPieceThere(itemID, link)
+    -- Gone is the client saying so (false). No answer at all is not that.
+    if not itemID or not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(itemID) ~= false then
+        if itemID then
+            gearAskedAt[itemID], gearGivenUp[itemID] = nil, nil
+        end
+        return true
+    end
+    if gearGivenUp[itemID] then
+        return true
+    end
+    local askedAt = gearAskedAt[itemID]
+    if not askedAt then
+        gearAskedAt[itemID] = GetTime()
+        C_Item.RequestLoadItemDataByID(itemID)
+        CaerdonCounters:NoteWithoutData("a piece that is compared with: asked for, the verdict put off", link or ("item:" .. itemID), true)
+    elseif GetTime() - askedAt > GEAR_DATA_PATIENCE then
+        gearGivenUp[itemID] = true
+        CaerdonCounters:NoteWithoutData("a piece that is compared with: never given by the client, taken as it is", link or ("item:" .. itemID), true)
+        return true
+    end
+    comparedGearMissing = true
+    return false
+end
+
+-- Every worn piece. Asked before a verdict is begun, and at most once a frame while it holds.
+local wornThereAt = nil
+
+local function WornGearThere()
+    local now = GetTime()
+    if wornThereAt == now then
+        return true
+    end
+    local there = true
+    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+        local itemID = GetInventoryItemID("player", slot)
+        if itemID and not ComparedPieceThere(itemID, GetInventoryItemLink("player", slot)) then
+            there = false
+        end
+    end
+    wornThereAt = there and now or nil
+    return there
+end
+
 -- Which equipment sets name which copy and which item link, and the GetTime() it was built at
 -- (see BuildEquipmentSetIndex).
 local equipmentSetIndex = nil
@@ -2436,6 +2502,10 @@ local function LoadoutBaseline(loadout, slotID, offScale)
             fromSet = true
         else
             link, worn = GetInventoryItemLink("player", slotID), true
+        end
+        if link and not worn and not ComparedPieceThere(tonumber(link:match("item:(%d+)")), link) then
+            -- A set's piece in the bags whose data is gone: asked for, and nothing kept.
+            return nil
         end
         if link then
             local value = LoadoutValue(loadout, offScale or loadout.scale, link)
@@ -4654,6 +4724,13 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
         return
     end
 
+    -- Not before the worn gear's data is in the client's cache (ComparedPieceThere).
+    comparedGearMissing = false
+    if not WornGearThere() then
+        -- The table a reader may look into for its debug lines is there, and empty.
+        return { isNotReady = true, comparedGearMissing = true, forDebugUseOnly = {} }
+    end
+
     local debugEnabled = CaerdonWardrobeConfig.Debug.Enabled
     local isBindOnPickup = item:GetBinding() == CaerdonItemBind.BindOnPickup
     local isCompletionistItem = false
@@ -5301,7 +5378,8 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
         -- WoW Forever for the Arclight Spanner 6219 (Weapon / Miscellaneous), whose source only
         -- turns up through the dress-up fallback; C_TransmogCollection.GetItemInfo is nil for it.
         noCollectionCategory = noCollectionCategory,
-        isNotReady = isNotReady,
+        isNotReady = isNotReady or comparedGearMissing,
+        comparedGearMissing = comparedGearMissing or nil,
         matchesLootSpec = matchesLootSpec,
         isRecraftable = isRecraftable,
         forDebugUseOnly = debugEnabled and {
