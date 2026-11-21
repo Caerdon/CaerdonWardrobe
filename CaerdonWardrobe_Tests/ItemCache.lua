@@ -362,10 +362,47 @@ local function Run()
         loaded, there, tail, tostring(firstWornGone))
 end
 
-function T.ItemCacheCommand()
+-- /cwtest cache evict: other items are loaded until the worn pieces' data has left the cache,
+-- and it is left so. That is the state a login can leave behind, made on purpose: what the
+-- addon does when a window is opened next is then seen, not waited for. Nothing is saved.
+local function Evict()
+    local worn = WornItems()
+    local function Gone()
+        local gone = 0
+        for _, piece in ipairs(worn) do
+            if not Cached(piece.id) then
+                gone = gone + 1
+            end
+        end
+        return gone
+    end
+    T.Print("item cache: loading other items until the worn pieces' data is gone; keep the bags closed")
+    local streamID, loaded = 120000, 0
+    while Gone() < #worn and loaded < 6000 do
+        local batch, looked = {}, 0
+        while #batch < BATCH and looked < 20000 do
+            if C_Item.DoesItemExistByID(streamID) and not Cached(streamID) then
+                batch[#batch + 1] = streamID
+            end
+            streamID = streamID + 1
+            looked = looked + 1
+        end
+        if #batch == 0 then
+            break
+        end
+        loaded = loaded + #Load(batch, 0.5)
+    end
+    T.Print("item cache: %d of %d worn pieces are without data after %d other items. Open the bags now.", Gone(), #worn, loaded)
+end
+
+function T.ItemCacheCommand(rest)
     if T.IsBusy() then
         T.Print("something else is running (%s)", tostring(T.ActiveJob()))
         return
     end
-    T.Start("item cache", Run)
+    if rest and rest:match("^%s*evict") then
+        T.Start("item cache: evict", Evict)
+    else
+        T.Start("item cache", Run)
+    end
 end

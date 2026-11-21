@@ -1197,11 +1197,41 @@ function CaerdonAPIMixin:OpenDebugForHoveredItem()
         return
     end
 
-    if context.bag ~= nil and context.slot ~= nil then
-        debugFeature.frame:Show()
-        debugFeature:SetCurrentItemFromBagAndSlot(context.bag, context.slot)
-        return
+    -- A bag and slot worked out from the frame under the mouse is a guess: any frame with an
+    -- ID, a parent with an ID or a field of a likely name passes for a bag button
+    -- (ExtractBagAndSlot). It is taken only where the slot holds an item, and the item the
+    -- tooltip shows where it shows one; otherwise the tooltip's own copy or link is. What was
+    -- found is kept for the export (debugFeature.openedFrom), so that a wrong guess can be read.
+    local shownLink, shownGuid
+    do
+        local _, link = SafeCallMethod(GameTooltip, "GetItem")
+        shownLink = IsItemLink(link) and link or nil
+        local data = GameTooltip and type(GameTooltip.GetPrimaryTooltipData) == "function" and GameTooltip:IsShown() and
+            GameTooltip:GetPrimaryTooltipData() or nil
+        shownGuid = data and data.guid ~= "" and data.guid or nil
     end
+    local focus = (GetMouseFoci() or {})[1]
+    local openedFrom = ("the frame under the mouse: %s"):format(
+        focus and tostring(SafeCallMethod(focus, "GetDebugName") or SafeCallMethod(focus, "GetName") or "unnamed") or "none")
+    if context.bag ~= nil and context.slot ~= nil then
+        local held = C_Container.GetContainerItemID(context.bag, context.slot)
+        local shownID = shownLink and GetItemIDFromLink(shownLink) or nil
+        openedFrom = ("%s; it named bag %s slot %s, which holds %s; the tooltip shows %s"):format(openedFrom, tostring(context.bag),
+            tostring(context.slot), held and ("item " .. held) or "nothing", shownID and ("item " .. shownID) or "no item")
+        if held and (not shownID or shownID == held) then
+            debugFeature.openedFrom = openedFrom .. "; the slot was taken"
+            debugFeature.frame:Show()
+            debugFeature:SetCurrentItemFromBagAndSlot(context.bag, context.slot)
+            return
+        end
+        openedFrom = openedFrom .. "; the slot was not taken"
+        context.bag, context.slot = nil, nil
+        context.guid = context.guid or shownGuid
+        if not IsItemLink(context.itemLink) then
+            context.itemLink = shownLink
+        end
+    end
+    debugFeature.openedFrom = openedFrom
 
     if context.guid then
         local handled = false

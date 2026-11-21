@@ -1075,6 +1075,8 @@ function DebugFrameMixin:Init()
                         bag, slot = nil, nil
                     end
 
+                    -- Not opened by the keystroke: what that found last is not this item's.
+                    self.openedFrom = nil
                     if bag ~= nil and slot ~= nil then
                         self:SetCurrentItemFromBagAndSlot(bag, slot)
                     else
@@ -1195,6 +1197,11 @@ end
 function DebugFrameMixin:SetCurrentItemFromBagAndSlot(bag, slot)
     if bag == nil or slot == nil then return end
     local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+    -- A slot with nothing in it is no item to show: the frame keeps what it had.
+    if item and item:IsItemEmpty() then
+        print(("Caerdon Wardrobe Debug: bag %s slot %s holds no item."):format(tostring(bag), tostring(slot)))
+        return
+    end
     if item then
         -- Prefer showing the hyperlink if available; otherwise show a placeholder until load completes
         self.currentItem = item:GetItemLink() or ("Bag " .. tostring(bag) .. ", Slot " .. tostring(slot))
@@ -1709,7 +1716,8 @@ function DebugFrameMixin:CopyCurrentItemDetails()
     end
 
     if item:IsItemEmpty() then
-        performCopy()
+        -- Nothing to describe: the frame holds a slot with no item in it.
+        print("Caerdon Wardrobe Debug: there is no item to copy (" .. tostring(self.openedFrom or "an empty slot") .. ").")
         return
     end
 
@@ -2434,6 +2442,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Its Button", ask.drawn)
         end
     end
+    if self.openedFrom then
+        addKV(1, "Opened From", self.openedFrom)
+    end
     addKV(1, "Item ID", item:GetItemID())
     addKV(1, "Item GUID", item:GetItemGUID())
 
@@ -2584,7 +2595,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         locationKey = "debugframe-copy-" .. tostring(item:GetItemID() or "unknown"),
         isDebugFrame = true
     }
-    local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(self, locationInfo)
+    local isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo = item:GetCaerdonStatus(self, locationInfo)
     addKV(1, "Status Ready", isReady)
     addKV(1, "Mog Status", mogStatus)
     addKV(1, "Binding Status", bindingStatus)
@@ -2782,6 +2793,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     if transmogInfo then
         addLine(0, "")
         addLine(0, "[Transmog (Caerdon Processed)]")
+        if transmogInfo.comparedGearMissing then
+            -- Asked afresh for the export, and put off: every line below is empty for that reason.
+            addLine(1, "not ready: the data of the gear it is compared with is not in the client's cache just now (asked for; copy again)")
+        end
         addKV(1, "needsItem", transmogInfo.needsItem)
         addKV(1, "otherNeedsItem", transmogInfo.otherNeedsItem)
         addKV(1, "isCompletionistItem", transmogInfo.isCompletionistItem)
@@ -2858,6 +2873,21 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         -- A gear set's piece is not marked, whatever the lines below find for it.
         local lookSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
         addKV(1, "in a gear set (not marked while it is)", lookSets and table.concat(lookSets, ", ") or false)
+        -- What the client answered when the verdict above was made, which may be a while ago
+        -- and other than what it answers now.
+        local verdictWhy = statusTransmogInfo and statusTransmogInfo.transformLookWhy
+        if verdictWhy then
+            addLine(1, ("when the verdict above was made (%.1f s ago):"):format(GetTime() - (statusTransmogInfo.transformLookAt or GetTime())))
+            for _, lookLine in ipairs(verdictWhy) do
+                addLine(2, lookLine)
+            end
+            if #verdictWhy == 0 then
+                addLine(2, "nothing was noted")
+            end
+            addLine(1, "asked afresh now:")
+        else
+            addLine(1, "when the verdict above was made: nothing was asked about a look (or the verdict is not ready)")
+        end
         for _, lookLine in ipairs(lookLines) do
             addLine(1, lookLine)
         end

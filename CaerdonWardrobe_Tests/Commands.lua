@@ -172,7 +172,8 @@ local HELP = {
     "/cwtest timing idle [seconds] - time standing still",
     "/cwtest timing open - with the bags closed: one refresh, then open the bags when told; times what the opening draws",
     "/cwtest probe <item ID> ... - record everything about some items",
-    "/cwtest cache - measure how long item data stays in the client's cache (two minutes, standing still, bags closed)",
+    "/cwtest cache - measure what makes item data leave the client's cache (a minute and a half, standing still, bags closed)",
+    "/cwtest cache evict - load other items until the worn pieces' data has left the cache, and leave it so",
     "/cwtest record <item ID or link> ... | slot <bag> <slot> | bags | list | clear - record the client's answers behind a verdict, for the offline harness",
     "/cwtest sources - appearance sources of what was drawn this session whose item the client does not have",
     "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
@@ -269,8 +270,8 @@ COMMANDS.probe = function(rest)
     end
 end
 
-COMMANDS.cache = function()
-    T.ItemCacheCommand()
+COMMANDS.cache = function(rest)
+    T.ItemCacheCommand(rest)
 end
 
 COMMANDS.record = function(rest)
