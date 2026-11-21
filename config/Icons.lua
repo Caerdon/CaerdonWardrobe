@@ -401,7 +401,18 @@ function CaerdonWardrobeConfigIcons:Register()
     self:AddCheckbox({ key = "showUpgradeLevelDelta", text = "Show the item level gain", tooltip = "Displays the item level difference, such as +5, on an upgrade.", configSection = "Icon", configValue = "ShowUpgradeLevelDelta" })
     -- The tooltip lines that say what the arrow is for. A switch of their own, not one under the
     -- arrow's: they are shown whether the arrow is or not.
-    self:AddCheckbox({ key = "showLoadoutUpgrades", text = "Say what an upgrade is for, and by how much, in its tooltip", tooltip = "Adds a line to the tooltip of gear that is an upgrade: for what you are wearing, for one of your gear sets, or for another specialization. It names the gear set or spec and how much better the piece is on that spec's Pawn scale, with the arrow the piece has in your bags. Shown at the bottom with Pawn's lines, in place of Pawn's own upgrade note and its \"your best\" marks for the same spec. The lines for other gear follow \"Also for gear I am not wearing\" above.", configSection = "Tooltip", configValue = "ShowLoadoutUpgrades" })
+    local showLoadoutUpgrades = self:AddCheckbox({ key = "showLoadoutUpgrades", text = "Say what an upgrade is for, and by how much, in its tooltip", tooltip = "Adds a line to the tooltip of gear that is an upgrade: for what you are wearing, for one of your gear sets, or for another specialization. It names the gear set or spec and how much better the piece is on that spec's Pawn scale, with the arrow the piece has in your bags. Shown at the bottom with Pawn's lines, in place of Pawn's own upgrade note and its \"your best\" marks for the same spec. The lines for other gear follow \"Also for gear I am not wearing\" above.", configSection = "Tooltip", configValue = "ShowLoadoutUpgrades" })
+    -- Pawn's own notes for the same gear are left out by default, which nothing on this page
+    -- said in so many words: the switch says it, and the text under it why (author decision:
+    -- the player is to be able to see both, to judge the addon's numbers by, and is to be told
+    -- on the page, not in a text that shows on hover, why the two can differ).
+    self:AddCheckbox({ key = "keepPawnUpgradeNotes", text = "Keep Pawn's own upgrade notes beside them", tooltip = "Off: Pawn's upgrade note and its \"your best\" marks are left out wherever this addon has a verdict of its own. Pawn's values stay.\n\nOn: they are shown as Pawn makes them, with this addon's lines below. A piece Pawn calls an upgrade and this addon does not then has this addon's number beneath, in grey.", configSection = "Tooltip", configValue = "KeepPawnUpgradeNotes" },
+        { indent = 1, dependsOn = showLoadoutUpgrades })
+    self:AddLabel("Pawn's notes are left out because the two do not measure the same thing, and the arrow on an item goes by this addon's numbers. Pawn compares a piece with what you are wearing, at its own item level. This addon compares it:\n" ..
+        "- with the gear set of that spec, or the set you tied to the scale, where that is not what you have on\n" ..
+        "- at PvP levels, where you marked the set for PvP\n" ..
+        "- by what both hands would hold: a one-hander together with the best one-hander in your bags against a two-hander, and a two-hander against both weapons it would replace, which Pawn does not compare",
+        { indent = 2 })
     self:AddDropdown({ key = "sameLevelItems", text = "Same item level as equipped:", configSection = "Icon", configValue = "SameLevelBehavior" }, {
         { title = "No Icon", value = "none", tooltip = "Keep same-level pieces quiet (no neutral or sellable icons)." },
         { title = "Sellable", value = "sellable", tooltip = "Treat same-level pieces as sellable duplicates." },

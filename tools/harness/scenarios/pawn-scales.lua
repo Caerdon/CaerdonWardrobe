@@ -1272,12 +1272,15 @@ return function(H, S)
     -- Where the line goes, and what becomes of Pawn's note. Pawn adds its lines in one function
     -- after the client has filled the tooltip. The addon's handler only notes the item; that
     -- function, wrapped, adds the addon's line after Pawn's own, and is not told of an upgrade
-    -- for a scale whose gear set decides: Pawn's note for it is against the worn gear.
+    -- for a scale whose gear set decides (Pawn's note for it is against the worn gear), nor
+    -- for the scale the worn gear is judged on where the addon calls the piece no upgrade
+    -- (Guardian here). Another class's scale is Pawn's alone.
     local shown = { lines = {} }
     function shown:AddLine(line) self.lines[#self.lines + 1] = line end
     local tooltipFeature = world.namespace.Tooltip
     local piece = world.env.CaerdonItem:CreateFromItemID(940001)
-    local pawnInfo = { { ScaleName = FERAL, PercentUpgrade = 5 }, { ScaleName = GUARDIAN, PercentUpgrade = 0.1 } }
+    local pawnInfo = { { ScaleName = FERAL, PercentUpgrade = 5 }, { ScaleName = GUARDIAN, PercentUpgrade = 0.1 },
+        { ScaleName = MAGE, PercentUpgrade = 0.1 } }
     local function PawnStep(tooltip, upgradeInfo, ...)
         world.pawnStep = nil
         tooltip.lines = {}
@@ -1288,18 +1291,18 @@ return function(H, S)
     Equal(#shown.lines, 0, "placing: the addon's handler adds nothing by itself")
     Equal(rawget(shown, "ProcessInfo"), nil, "placing: and hooks nothing on the tooltip")
     local step = PawnStep(shown, pawnInfo, "best", "second", true)
-    Equal(step.scales, GUARDIAN, "pawn's note: the scale whose gear set decides is not among what Pawn is told")
-    Equal(#pawnInfo, 2, "pawn's note: Pawn's own table is left as it was")
+    Equal(step.scales, MAGE, "pawn's note: the scale whose gear set decides is not among what Pawn is told, nor the worn gear's where the addon says no upgrade")
+    Equal(#pawnInfo, 3, "pawn's note: Pawn's own table is left as it was")
     Equal(step.values, "values", "pawn's note: the item's values go through")
     Equal(step.extra, "best second true", "pawn's note: and so does everything after them")
-    Equal(shown.lines[1], "pawn: " .. GUARDIAN, "placing: Pawn's own lines come first")
+    Equal(shown.lines[1], "pawn: " .. MAGE, "placing: Pawn's own lines come first")
     Equal(shown.lines[2], Line("8ec3e6", 134400, "Cat", "+50% upgrade"), "placing: the addon's line follows them")
     Equal(#shown.lines, 2, "placing: and that is all")
     -- A filling the handler did not see (Pawn's own windows) is Pawn's alone.
     step = PawnStep(shown, pawnInfo)
-    Equal(step.scales, FERAL .. " " .. GUARDIAN, "placing: what the handler noted is used once")
+    Equal(step.scales, FERAL .. " " .. GUARDIAN .. " " .. MAGE, "placing: what the handler noted is used once")
     Check(step.given == pawnInfo, "placing: and Pawn is then told what it said itself")
-    Equal(#shown.lines, 2, "placing: with no line of the addon's")
+    Equal(#shown.lines, 3, "placing: with no line of the addon's")
     -- Pawn has the same percentage as the addon: the set's line still stands in its place.
     world.env.PawnCommon.ShowUpgradesOnTooltips = true
     world.pawnPercent = { [FERAL] = 0.5 }
@@ -1324,8 +1327,14 @@ return function(H, S)
         tooltipFeature:NoteComparisonTooltips(beside)
         tooltipFeature:OweUpgradeLines(beside, piece)
         step = PawnStep(beside, pawnInfo)
-        Equal(table.concat(beside.lines, " | "), "pawn: " .. GUARDIAN, "comparison: no line of the addon's in a comparison tooltip")
-        Equal(step.scales, GUARDIAN, "comparison: Pawn's note for the scale whose set decides is out there too")
+        Equal(table.concat(beside.lines, " | "), "pawn: " .. MAGE, "comparison: no line of the addon's in a comparison tooltip")
+        Equal(step.scales, MAGE, "comparison: Pawn's notes for the scale whose set decides and for the worn gear's are out there too")
+        -- Pawn's notes kept: Pawn's lines alone there, with no number of the addon's.
+        world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = true
+        tooltipFeature:OweUpgradeLines(beside, piece)
+        step = PawnStep(beside, pawnInfo)
+        Equal(#beside.lines, 3, "comparison: with Pawn's notes kept, Pawn's lines alone")
+        world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = false
         tooltipFeature:OweUpgradeLines(shown, piece)
         step = PawnStep(shown, pawnInfo)
         Equal(#shown.lines, 2, "comparison: the tooltip of the item itself still has its line")
@@ -1401,26 +1410,71 @@ return function(H, S)
     info = Info(world, { FERAL, GUARDIAN }, { FERAL })
     tooltipFeature:OweUpgradeLines(shown, piece)
     step = PawnStep(shown, pawnInfo)
-    Equal(step.scales, GUARDIAN, "pawn's note: taken out where the set's piece is the better one too")
+    Equal(step.scales, MAGE, "pawn's note: taken out where the set's piece is the better one too")
     Equal(#shown.lines, 1, "placing: with no line of the addon's for a piece that is no upgrade for the set")
     world.scaleValues[FERAL][940003] = 20
     PawnChanged(world)
     info = Info(world, { FERAL, GUARDIAN }, { FERAL })
-    -- The line's setting off, or the arrows for other gear off: Pawn's lines are Pawn's.
+    -- The line's setting off: Pawn's lines are Pawn's. The arrows for other gear off: its
+    -- note for the other spec's scale is Pawn's again, and the one for the worn gear's scale
+    -- still gives way, the verdict on what is worn being the addon's with them off too.
     world.env.CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades = false
     tooltipFeature:OweUpgradeLines(shown, piece)
     step = PawnStep(shown, pawnInfo)
-    Check(step.given == pawnInfo and #shown.lines == 2, "pawn's note: untouched with the line's setting off")
+    Check(step.given == pawnInfo and #shown.lines == 3, "pawn's note: untouched with the line's setting off")
     world.env.CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades = true
+    -- Pawn's notes kept on the player's word: Pawn is told what it said itself, marks and
+    -- all, and the addon's line is added as ever.
+    Equal(world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes, false, "kept notes: off unless the player says so")
+    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = true
+    do
+        local best, second = { [FERAL] = true, [GUARDIAN] = true }, { [FERAL] = true }
+        tooltipFeature:OweUpgradeLines(shown, piece)
+        step = PawnStep(shown, pawnInfo, best, second)
+        Check(step.given == pawnInfo, "kept notes: Pawn is told of every upgrade it named")
+        Check(step.best == best and step.second == second, "kept notes: and of its \"your best\" marks")
+        Equal(#shown.lines, 5, "kept notes: Pawn's three lines, the addon's one, and its number for the worn gear: " .. table.concat(shown.lines, " || "))
+        Equal(shown.lines[4], Line("8ec3e6", 134400, "Cat", "+50% upgrade"), "kept notes: the addon's line is added after them as ever")
+        -- Pawn names an upgrade on the worn gear's scale and the addon calls the piece none:
+        -- the addon's number stands under Pawn's note, in grey.
+        Equal(shown.lines[5], "|cff8ec3e6Guardian:|r  |cff808080-17%|r", "kept notes: the addon's number for what is worn, in grey, where Pawn says upgrade")
+        -- Pawn names no upgrade on that scale: nothing to set a number against.
+        tooltipFeature:OweUpgradeLines(shown, piece)
+        step = PawnStep(shown, { pawnInfo[1], pawnInfo[3] })
+        Equal(#shown.lines, 3, "kept notes: no number of the addon's for a scale Pawn names no upgrade on")
+        -- The same for a gear set: its better piece makes the piece no upgrade for the set,
+        -- and Pawn's note for the set's scale is against what is worn.
+        world.scaleValues[FERAL][940003] = 40
+        PawnChanged(world)
+        info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+        tooltipFeature:OweUpgradeLines(shown, piece)
+        step = PawnStep(shown, pawnInfo)
+        Equal(table.concat(shown.lines, " || ", 4), "|cff8ec3e6Guardian:|r  |cff808080-17%|r || |cff8ec3e6|T134400:0|t Cat:|r  |cff808080-25%|r",
+            "kept notes: the addon's numbers for what is worn and for the gear set, in grey")
+        -- With the arrows for other gear off, the gear set is not asked.
+        icon.ShowOtherSpecUpgrades = false
+        tooltipFeature:OweUpgradeLines(shown, piece)
+        step = PawnStep(shown, pawnInfo)
+        Equal(table.concat(shown.lines, " || ", 4), "|cff8ec3e6Guardian:|r  |cff808080-17%|r", "kept notes: with the arrows for other gear off, the worn gear's number alone")
+        icon.ShowOtherSpecUpgrades = true
+        world.scaleValues[FERAL][940003] = 20
+        PawnChanged(world)
+        info = Info(world, { FERAL, GUARDIAN }, { FERAL })
+    end
+    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = false
+    tooltipFeature:OweUpgradeLines(shown, piece)
+    step = PawnStep(shown, pawnInfo)
+    Equal(step.scales, MAGE, "kept notes: off again, they give way again")
     icon.ShowOtherSpecUpgrades = false
     tooltipFeature:OweUpgradeLines(shown, piece)
     step = PawnStep(shown, pawnInfo)
-    Check(step.given == pawnInfo and #shown.lines == 2, "pawn's note: untouched with the arrows for other gear off")
+    Equal(step.scales, FERAL .. " " .. MAGE, "pawn's note: with the arrows for other gear off, the other spec's note is Pawn's and the worn gear's is still out")
+    Equal(#shown.lines, 2, "pawn's note: and the addon has no line for other gear then")
     icon.ShowOtherSpecUpgrades = true
     -- The set's own piece: Pawn's note is out, and the piece is no upgrade for its own set.
     tooltipFeature:OweUpgradeLines(shown, world.env.CaerdonItem:CreateFromItemID(940003))
     step = PawnStep(shown, pawnInfo)
-    Equal(step.scales, GUARDIAN, "pawn's note: the set's own piece is no upgrade for the set either")
+    Equal(step.scales, MAGE, "pawn's note: the set's own piece is no upgrade for the set either")
     info = Info(world, { FERAL, GUARDIAN }, {})
     Equal(info.pawnOffTreeUpgrade, true, "shown, with a set: the set is asked whether or not Pawn calls it an upgrade over the worn piece")
     info = Info(world, { FERAL, GUARDIAN }, { FERAL }, 940003)
@@ -3242,9 +3296,63 @@ return function(H, S)
                 Check(tostring(equipment:GetWornVerdictDescription(world.env.CaerdonItem:CreateFromItemID(940214))):find(
                     "; a PVP set, scored at the pieces' own levels here", 1, true) ~= nil,
                     "pvp set: also where a piece with no link for its floor made it the own levels")
+                -- Pawn's own note for the scale the worn set is judged on is by the pieces' own
+                -- levels and says "upgrade" (76 against 50), under an icon and a comparison that
+                -- say otherwise (76 against 85 at the floor): it gives way.
+                do
+                    local tooltips = world.namespace.Tooltip
+                    local function Names(id)
+                        local names = {}
+                        for name in pairs(equipment:GetWornScalesJudged(world.env.CaerdonItem:CreateFromItemID(id)) or {}) do
+                            names[#names + 1] = name
+                        end
+                        table.sort(names)
+                        return table.concat(names, " + ")
+                    end
+                    -- What Pawn's tooltip step is told, and the lines the tooltip ends with.
+                    local function Told(id, pawnInfo)
+                        local shown = { lines = {} }
+                        function shown:AddLine(line) self.lines[#self.lines + 1] = line end
+                        world.pawnStep = nil
+                        tooltips:OweUpgradeLines(shown, world.env.CaerdonItem:CreateFromItemID(id))
+                        world.env.PawnAddValuesToTooltip(shown, "values", pawnInfo)
+                        return world.pawnStep and world.pawnStep.scales, shown.lines
+                    end
+                    -- With it, the played spec's own scale: the worn gear is judged on the
+                    -- set's scale, and Pawn's note for the spec's is that gear on a scale it
+                    -- is not judged by.
+                    Equal(Names(940212), FERAL .. " + " .. GUARDIAN,
+                        "pvp note: worn and no upgrade at the floors, the scale it is judged on is named as the addon's, and the spec's own")
+                    local told, lines = Told(940212, { { ScaleName = FERAL, PercentUpgrade = 0.52 }, { ScaleName = MAGE, PercentUpgrade = 0.1 } })
+                    Equal(told, MAGE, "pvp note: Pawn's note for that scale gives way, another scale's stays")
+                    Check(table.concat(lines, " | "):find("upgrade", 1, true) == nil, "pvp note: and the addon adds no line of its own for a piece that is no upgrade")
+                    -- Pawn's notes kept: the addon's number under Pawn's note, with the note
+                    -- that says what it is by.
+                    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = true
+                    told, lines = Told(940212, { { ScaleName = FERAL, PercentUpgrade = 0.52 }, { ScaleName = MAGE, PercentUpgrade = 0.1 } })
+                    Equal(told, FERAL .. " " .. MAGE, "pvp note, kept: Pawn is told of both")
+                    Equal(lines[3], "|cff8ec3e6|T134400:0|t Arena:|r  |cff808080-11%|r  |cff808080(at PvP levels)|r",
+                        "pvp note, kept: the addon's number at PVP levels, in grey, and it says so")
+                    Equal(#lines, 3, "pvp note, kept: and nothing else")
+                    world.env.CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = false
+                    -- A piece that is an upgrade at the floors has the addon's own line, which
+                    -- takes Pawn's place by itself: nothing is named here.
+                    info = Info(world, { GUARDIAN }, {}, 940213)
+                    Equal(Names(940213), GUARDIAN, "pvp note: an upgrade at the floors is not named here for its scale (its own line takes Pawn's place)")
+                    -- Compared at own levels after all (no link for its floor), where it is an
+                    -- upgrade: the addon's own line again.
+                    info = Info(world, { GUARDIAN }, {}, 940224)
+                    Equal(Names(940224), GUARDIAN, "pvp note: an upgrade at own levels is not named for the set's scale either")
+                    -- Pawn's note for the played spec's own scale gives way too.
+                    info = Info(world, { GUARDIAN }, {}, 940212)
+                    told = Told(940212, { { ScaleName = GUARDIAN, PercentUpgrade = 0.3 }, { ScaleName = MAGE, PercentUpgrade = 0.1 } })
+                    Equal(told, MAGE, "pvp note: Pawn's note for the spec's own scale gives way, the worn gear being judged on the set's")
+                end
                 Mark(nil)
                 info = Info(world, { GUARDIAN }, {}, 940212)
                 Equal(info.pawnIdentifiedUpgrade, true, "pvp set: and not marked, it is one over the worn piece at its own level")
+                Equal((equipment:GetWornScalesJudged(world.env.CaerdonItem:CreateFromItemID(940212)) or {})[FERAL], nil,
+                    "pvp note: not marked, the piece is an upgrade at own levels and has the addon's line, so its scale is not named here")
 
                 world.worn[5] = hadWorn
                 world.inBag[1], world.setLocations[41], world.locationData[9005] = hadBag, hadLocation, nil
@@ -3392,9 +3500,9 @@ return function(H, S)
         PawnChanged(world)
         step = Shown({ GUARDIAN }, {})
         Equal(info.pawnOffTreeUpgrade, true, "worn: a piece between the worn one and the set's saved one has the red arrow")
-        Equal(shown.lines[2], Line("8ec3e6", 132276, "Bear", "+100% upgrade"), "worn: and the set's line in red")
-        Equal(step.scales, GUARDIAN, "worn: a note of Pawn's for the played spec's scale does not give way to the set's line, which is another comparison")
-        Equal(#shown.lines, 2, "worn: so both are there")
+        Equal(shown.lines[1], Line("8ec3e6", 132276, "Bear", "+100% upgrade"), "worn: and the set's line in red")
+        Equal(step.scales, "", "worn: a note of Pawn's for the played spec's scale gives way: over what is worn the addon calls the piece no upgrade")
+        Equal(#shown.lines, 1, "worn: so the set's line is the only one")
         world.scaleValues[GUARDIAN][940001] = 30
         PawnChanged(world)
         icon.ShowOtherSpecUpgrades = false
@@ -3468,6 +3576,11 @@ return function(H, S)
         Equal(equipment:GetWornVerdictDescription(piece),
             "the addon's own comparison: no verdict on Druid: Guardian, so Pawn's stands; Pawn for that scale: an upgrade; an upgrade of Pawn's on its other scales: none",
             "worn: and the export says whose it is")
+        Equal(step.scales, GUARDIAN, "worn: Pawn's note for the scale stays where the verdict is Pawn's")
+        icon.ShowOtherSpecUpgrades = true
+        step = Shown({ GUARDIAN }, { GUARDIAN })
+        Equal(step.scales, GUARDIAN, "worn: also with the arrows for other gear on, the scale being the one judged and not another of the spec's")
+        icon.ShowOtherSpecUpgrades = false
         world.scaleValues[GUARDIAN][940001] = 30
         PawnChanged(world)
         -- Armor that is not the class's type is not the addon's to call an upgrade, as it is

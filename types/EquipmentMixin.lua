@@ -3228,7 +3228,9 @@ end
 -- weighed the piece, with a stat that does nothing for the spec at nothing, so an upgrade on it
 -- is one for what is worn. Its entry then has otherSpecs (OtherLootSpecsOf), and the line says
 -- whose gear the piece is.
-local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn)
+-- losses: a table that is given the entries of the verdicts that are no upgrade (scored, and
+-- worth no more than what the piece would replace), for GetLoadoutLossList.
+local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn, losses)
     local inventoryTypeName = item:GetInventoryTypeName()
     if inventoryTypeName == "INVTYPE_TRINKET" then
         return nil
@@ -3258,17 +3260,8 @@ local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn)
         local found, details, entries
         -- The loadouts named so far: one with an upgrade for each hand is named once.
         local named = {}
-        -- One verdict of a loadout's that is an upgrade: its entry and its numbers. scaleName:
-        -- the scale it was made on. hand: for a weapon whose hands are judged apart, which
-        -- hand's it is ("main", "off"), and for the off hand that scale's label.
-        local function Add(loadout, scaleName, value, lowest, emptySlot, fromSet, fromWorn, pair, hand, handLabel)
-            found = found or {}
-            details = details or {}
-            entries = entries or {}
-            if not named[loadout] then
-                named[loadout] = true
-                found[#found + 1] = loadout.label
-            end
+        -- A verdict's entry for the tooltip: whose it is, by what name and icon, and its numbers.
+        local function Entry(loadout, scaleName, value, lowest, emptySlot, fromSet, pair, hand)
             local entry = { scale = scaleName, label = loadout.label, colour = loadout.colour,
                 own = loadout.own, value = value, baseline = not emptySlot and lowest or nil,
                 emptySlot = emptySlot or nil, hand = hand, pvp = loadout.pvp and not loadout.plain or nil }
@@ -3294,6 +3287,20 @@ local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn)
                 entry.name = loadout.specName or loadout.label
                 entry.icon = loadout.specIcon
             end
+            return entry
+        end
+        -- One verdict of a loadout's that is an upgrade: its entry and its numbers. scaleName:
+        -- the scale it was made on. hand: for a weapon whose hands are judged apart, which
+        -- hand's it is ("main", "off"), and for the off hand that scale's label.
+        local function Add(loadout, scaleName, value, lowest, emptySlot, fromSet, fromWorn, pair, hand, handLabel)
+            found = found or {}
+            details = details or {}
+            entries = entries or {}
+            if not named[loadout] then
+                named[loadout] = true
+                found[#found + 1] = loadout.label
+            end
+            local entry = Entry(loadout, scaleName, value, lowest, emptySlot, fromSet, pair, hand)
             entries[#entries + 1] = entry
             local against
             if fromSet then
@@ -3334,11 +3341,18 @@ local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn)
                 if verdict == "upgrade" then
                     Add(loadout, loadout.scale, value, lowest, emptySlot, fromSet, fromWorn, pair,
                         apart and not pair and "main" or nil)
+                elseif verdict == "equipped" and losses and pair ~= "unlike" then
+                    -- Not a ranged weapon of another kind than the loadout's: that is not
+                    -- weighed, and has no number to give.
+                    losses[#losses + 1] = Entry(loadout, loadout.scale, value, lowest, nil, fromSet, pair,
+                        apart and not pair and "main" or nil)
                 end
                 local off = apart and JudgeOffHand(loadout, link, inventoryTypeName) or nil
                 if off and off.verdict == "upgrade" then
                     Add(loadout, off.scale, off.value, off.toBeat, off.emptySlot, off.fromSet, off.fromWorn, nil,
                         "off", off.label)
+                elseif off and off.verdict == "equipped" and losses then
+                    losses[#losses + 1] = Entry(loadout, off.scale, off.value, off.toBeat, nil, off.fromSet, nil, "off")
                 end
             end
         end
@@ -3598,6 +3612,117 @@ function CaerdonEquipment:GetWornVerdictDescription(item)
     return format("the addon's own comparison: %s; Pawn for that scale: %s%s; an upgrade of Pawn's on its other scales: %s%s%s",
         own, pawn, offHand, #others > 0 and table.concat(others, ", ") or "none",
         #notCounted > 0 and format("; not counted, %s: %s", UNLIKE_RANGED, table.concat(notCounted, ", ")) or "", pvp)
+end
+
+-- For the item tooltip, where the player keeps Pawn's own notes beside the addon's lines
+-- (Tooltip.KeepPawnUpgradeNotes): what the addon makes of a piece it calls no upgrade, as
+-- entries like GetLoadoutUpgradeList's (scale, name, icon, colour, percent, pvp, pair, hand),
+-- or nil. For what is worn, on the scale it is judged on, and for the gear the upgrade lines
+-- are for. The tooltip adds a grey line for an entry whose scale Pawn calls the piece an
+-- upgrade on (author decision: the player who has both shown is to see the addon's number
+-- where the two disagree, and the note that says why: "(at PvP levels)", the piece a weapon
+-- was weighed with). The played spec's own set is left out where the worn gear has an entry
+-- on its scale: Pawn's note is against what is worn, and so is that entry.
+--[[static]]
+function CaerdonEquipment:GetLoadoutLossList(item)
+    local link = item and item:GetItemLink()
+    if not link then
+        return nil
+    end
+    local inventoryTypeName = item:GetInventoryTypeName()
+    if inventoryTypeName == "INVTYPE_TABARD" or inventoryTypeName == "INVTYPE_BODY" then
+        return nil
+    end
+    if IsKnownByAnotherLink(item) then
+        return nil
+    end
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local wantsLoadouts = iconConfig ~= nil and iconConfig.ShowOtherSpecUpgrades == true
+    local losses = {}
+    GetLoadoutUpgrades(item, C_Item.GetItemSpecInfo(link), not wantsLoadouts and {} or nil, true, losses)
+    local judge = GetWornJudge()
+    local function IsJudged(entry)
+        return judge ~= nil and judge.scale == (entry.loadoutScale or entry.scale)
+    end
+    local wornScales = {}
+    for _, entry in ipairs(losses) do
+        if entry.worn and IsJudged(entry) then
+            wornScales[entry.scale] = true
+        end
+    end
+    local kept = {}
+    for _, entry in ipairs(losses) do
+        local keep
+        if entry.worn then
+            keep = IsJudged(entry)
+        else
+            keep = not (entry.own and wornScales[entry.scale])
+        end
+        if keep and type(entry.value) == "number" then
+            entry.percent = entry.baseline and entry.baseline > 0 and
+                math.floor((entry.value / entry.baseline - 1) * 100 + 0.5) or nil
+            kept[#kept + 1] = entry
+        end
+    end
+    return #kept > 0 and kept or nil
+end
+
+-- For the item tooltip: the scales Pawn shows whose upgrade note gives way because of how the
+-- addon judges what is worn, by name, or nil.
+--   The scale the worn gear is judged on (GetWornJudge), where the addon's comparison says
+--   the piece is no upgrade (author decision: no line of Pawn's that contradicts the addon's
+--   verdict, whatever gear is worn). Pawn's verdict for that scale does not count for the
+--   icon either once the addon has one of its own (ownJudgedScales in GetTransmogInfo), and
+--   Pawn's note says "upgrade" wherever it says anything. Left in, it said "+35% upgrade"
+--   for a ring the icon and the comparison called worse (seen, retail 12.1.5.70961: a set
+--   marked for PVP worn, an open-world ring, 5917 against 4370 as Pawn has the worn one and
+--   7798 at its floor). Where the addon calls the piece an upgrade its own line takes Pawn's
+--   place already; where it has no verdict, Pawn's stands and so does its note.
+--   The other scales Pawn shows for the same spec, where the player asked for the arrows for
+--   other gear: with a set worn that is tied to a scale of its own, Pawn's note for the
+--   spec's other scale is the worn gear on a scale it is not judged by. The spec's own set
+--   has a line for that scale where the piece is an upgrade for it (seen, the same ring:
+--   Pawn's note for the spec's scale beside the addon's line for the spec's set).
+--[[static]]
+function CaerdonEquipment:GetWornScalesJudged(item)
+    local link = item and item:GetItemLink()
+    if not link or not (PawnCommon and PawnCommon.Scales and PawnIsScaleVisible) or IsKnownByAnotherLink(item) then
+        return nil
+    end
+    local judge = GetWornJudge()
+    if not judge then
+        return nil
+    end
+    local names
+    -- "equipped": scored, and no upgrade. An upgrade has the addon's own line, which takes
+    -- Pawn's place by itself (GetLoadoutUpgradeList's worn entry).
+    if JudgeWorn(item, judge) == "equipped" then
+        names = { [judge.scale] = true }
+    end
+    -- The spec's other scales: of the spec being played (its own gear has a loadout), and of
+    -- the spec the judged scale is Pawn's for, where it is a copy of one.
+    local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    if iconConfig and iconConfig.ShowOtherSpecUpgrades == true then
+        local specs = {}
+        for _, loadout in ipairs(GetLoadouts()) do
+            if loadout.own and loadout.index then
+                specs[loadout.index] = true
+            end
+        end
+        local judged = PawnCommon.Scales[judge.scale]
+        if judged and judged.SpecID then
+            specs[judged.SpecID] = true
+        end
+        local _, _, classID = UnitClass("player")
+        for scaleName, scale in pairs(PawnCommon.Scales) do
+            if scaleName ~= judge.scale and scale.ClassID == classID and scale.SpecID and specs[scale.SpecID] and
+                PawnIsScaleVisible(scaleName) then
+                names = names or {}
+                names[scaleName] = true
+            end
+        end
+    end
+    return names
 end
 
 -- For the item tooltip: the scale for the off hand's weapon on which the addon has a verdict

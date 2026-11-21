@@ -289,6 +289,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades == nil then
             CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades = NS:GetDefaultConfig().Tooltip.ShowLoadoutUpgrades
         end
+        if CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes == nil then
+            CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = NS:GetDefaultConfig().Tooltip.KeepPawnUpgradeNotes
+        end
         if not CaerdonWardrobeConfig.Auction then
             CaerdonWardrobeConfig.Auction = {}
         end
@@ -592,7 +595,10 @@ function NS:GetDefaultConfig()
         Tooltip = {
             ShowRecipeLearners = true,
             -- The line under a piece that is an upgrade for a gear set or another spec.
-            ShowLoadoutUpgrades = true
+            ShowLoadoutUpgrades = true,
+            -- Pawn's own upgrade notes and "your best" marks beside those lines, as Pawn
+            -- makes them. Off: they give way where the addon has a verdict of its own.
+            KeepPawnUpgradeNotes = false
         }
     }
 end

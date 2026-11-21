@@ -706,6 +706,14 @@ local WORN_GAIN_COLOUR = "ffff00"
 -- Pawn's colour for a scale that has none of its own.
 local LOADOUT_NAME_COLOUR = "8ec3e6"
 
+-- Tooltip.KeepPawnUpgradeNotes: Pawn's own upgrade notes and marks stay as Pawn makes them,
+-- beside the addon's lines (author decision: off by default, a tooltip gives one answer; on
+-- for the player who wants to see both and judge the addon's numbers by Pawn's).
+local function KeepsPawnNotes()
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    return tooltipConfig ~= nil and tooltipConfig.KeepPawnUpgradeNotes == true
+end
+
 local function WantsLoadoutLines(item)
     local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
     if tooltipConfig and tooltipConfig.ShowLoadoutUpgrades == false then
@@ -830,6 +838,18 @@ end
 -- upgrade note, or none where it shows upgrades only. A note of Pawn's for a scale the addon
 -- says nothing about stays.
 --
+-- Pawn's note for the scale the worn gear is judged on gives way too where the addon calls
+-- the piece no upgrade, and for the spec's other scales (CaerdonEquipment:
+-- GetWornScalesJudged; author decision: no line of Pawn's that contradicts the addon's
+-- verdict): the icon and the comparison are the addon's there, and Pawn's "+35% upgrade"
+-- stood under a piece both called worse.
+--
+-- All of it is the default and not the only way: with Tooltip.KeepPawnUpgradeNotes on, Pawn
+-- is told what it said itself, notes and marks, and the addon's lines are added as ever.
+-- Where Pawn then names an upgrade on a scale and the addon calls the piece none, the addon
+-- adds its own number in grey (AddLossLine, CaerdonEquipment:GetLoadoutLossList), so that the
+-- two views stand side by side and Pawn's is not read as both.
+--
 -- Pawn's "your best" and "your second best" marks (its next two arguments, scale name ->
 -- true) go the same way for every scale the addon judges itself
 -- (CaerdonEquipment:GetPawnScalesJudged) and every scale it has a line for: Pawn takes them
@@ -837,8 +857,9 @@ end
 -- the same name was seen. Pawn has no setting that hides them alone: its three tooltip modes
 -- are values and upgrades, upgrades only (with these marks), and values only.
 --
--- Nothing of Pawn's is touched with Tooltip.ShowLoadoutUpgrades off, for an item the handler
--- did not note, or where reading fails.
+-- Nothing of Pawn's is touched with Tooltip.ShowLoadoutUpgrades off or
+-- Tooltip.KeepPawnUpgradeNotes on, for an item the handler did not note, or where reading
+-- fails.
 --
 -- Not done: a hook on the tooltip's ProcessInfo to add the lines once it is filled. Pawn's
 -- item data comes from a tooltip of its own, filled like any other, so such a hook ran inside
@@ -903,6 +924,17 @@ local function AddReplacementLine(tooltip, gain)
     end
     tooltip:AddLine(format("|cff%s%s%s:|r  %s", gain.colour or LOADOUT_NAME_COLOUR, icon, tostring(gain.name), text),
         1, 1, 1, true)
+end
+
+-- With Pawn's own notes kept (Tooltip.KeepPawnUpgradeNotes): the addon's number for a piece
+-- it calls no upgrade on a scale Pawn calls it one on, in the grey a loss has above, with the
+-- notes that say what the number is by. Without it Pawn's "+35% upgrade" stood there alone
+-- and read as the addon's view too.
+local function AddLossLine(tooltip, loss)
+    local icon = loss.icon and format("|T%s:0|t ", tostring(loss.icon)) or ""
+    tooltip:AddLine(format("|cff%s%s%s:|r  |cff%s%s|r%s%s%s", loss.colour or LOADOUT_NAME_COLOUR, icon, tostring(loss.name),
+        LOSS_COLOUR, loss.percent and format("%+d%%", loss.percent) or L["no upgrade"],
+        PairNote(loss), HandNote(loss), PvpNote(loss)), 1, 1, 1, true)
 end
 
 -- For a list a window draws itself (the auction house's listings of one item): a gain as the
@@ -1116,24 +1148,42 @@ end
 function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, secondBestFor, ...)
     local item = upgradeItems[tooltip]
     upgradeItems[tooltip] = nil
-    local upgrades, setScales, judgedScales, offHandScale, notWeighed
+    local upgrades, setScales, judgedScales, offHandScale, notWeighed, wornScales, losses
+    local keepsNotes = KeepsPawnNotes()
     if item then
-        local ok, list, scales, judged, offHand, unlike = pcall(function()
+        local ok, list, scales, judged, offHand, unlike, worn = pcall(function()
             if not WantsLoadoutLines(item) then
-                return nil, nil, nil, nil, nil
+                return nil, nil, nil, nil, nil, nil
+            end
+            if keepsNotes then
+                -- Nothing of Pawn's gives way: the lists that say what would are not asked.
+                return CaerdonEquipment:GetLoadoutUpgradeList(item), nil, nil, nil, nil, nil
             end
             return CaerdonEquipment:GetLoadoutUpgradeList(item), CaerdonEquipment:GetPawnScalesGivenToSets(),
                 CaerdonEquipment:GetPawnScalesJudged(),
                 CaerdonEquipment.GetOffHandScaleJudged and CaerdonEquipment:GetOffHandScaleJudged(item) or nil,
-                CaerdonEquipment.GetScalesNotWeighed and CaerdonEquipment:GetScalesNotWeighed(item) or nil
+                CaerdonEquipment.GetScalesNotWeighed and CaerdonEquipment:GetScalesNotWeighed(item) or nil,
+                CaerdonEquipment.GetWornScalesJudged and CaerdonEquipment:GetWornScalesJudged(item) or nil
         end)
         if ok then
-            upgrades, setScales, judgedScales, offHandScale, notWeighed = list, scales, judged, offHand, unlike
+            upgrades, setScales, judgedScales, offHandScale, notWeighed, wornScales = list, scales, judged, offHand, unlike, worn
         end
     end
-    if upgrades or setScales or judgedScales or offHandScale or notWeighed then
+    if keepsNotes and item and type(upgradeInfo) == "table" and #upgradeInfo > 0 and not comparisonTooltips[tooltip] then
+        local ok, list = pcall(function()
+            return WantsLoadoutLines(item) and CaerdonEquipment.GetLoadoutLossList and
+                CaerdonEquipment:GetLoadoutLossList(item) or nil
+        end)
+        losses = ok and list or nil
+    end
+    if (upgrades or setScales or judgedScales or offHandScale or notWeighed or wornScales) and not keepsNotes then
         local ours = {}
         for scaleName in pairs(setScales or ours) do
+            ours[scaleName] = true
+        end
+        -- The scale the worn gear is judged on, where the addon calls the piece no upgrade
+        -- (an upgrade has its line, below), and the spec's other scales.
+        for scaleName in pairs(wornScales or {}) do
             ours[scaleName] = true
         end
         -- A thrown weapon for a toon that shoots, or the other way round: not weighed on a
@@ -1148,7 +1198,9 @@ function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, 
             ours[offHandScale] = true
         end
         -- Not for the played spec's own set: that line is against the set's saved piece,
-        -- and Pawn's note for the scale is against the worn one, which the yellow line is for.
+        -- and Pawn's note for the scale is against the worn one. Where the addon has a
+        -- verdict on the worn one the note has given way already (the yellow line's entry,
+        -- or wornScales above); this leaves it where the addon has none.
         for _, upgrade in ipairs(upgrades or {}) do
             if not upgrade.own then
                 ours[upgrade.scale] = true
@@ -1171,6 +1223,24 @@ function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, 
         xpcall(function()
             for _, upgrade in ipairs(upgrades) do
                 AddUpgradeLine(tooltip, upgrade)
+            end
+        end, geterrorhandler())
+    end
+    -- Pawn's notes kept: the addon's number where Pawn names an upgrade on a scale and the
+    -- addon has none to name for it.
+    if losses then
+        xpcall(function()
+            local pawnNamed, addonNamed = {}, {}
+            for _, upgrade in ipairs(upgradeInfo) do
+                pawnNamed[upgrade.ScaleName] = true
+            end
+            for _, upgrade in ipairs(upgrades or {}) do
+                addonNamed[upgrade.scale] = true
+            end
+            for _, loss in ipairs(losses) do
+                if pawnNamed[loss.scale] and not addonNamed[loss.scale] then
+                    AddLossLine(tooltip, loss)
+                end
             end
         end, geterrorhandler())
     end
