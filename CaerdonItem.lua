@@ -1264,11 +1264,12 @@ end
 -- Catalyst: nil when there is none. sourceID: the piece's own source, where the caller has
 -- it. upgradeDisabled: its tooltip's upgrade line is greyed out. See
 -- CaerdonTransformLooks:GetItemInfo for the fields.
-function CaerdonItemMixin:GetTransformLookInfo(sourceID, upgradeDisabled)
+-- trace: a list the answers behind it are written to, a line each (for the export).
+function CaerdonItemMixin:GetTransformLookInfo(sourceID, upgradeDisabled, trace)
     if self:IsItemEmpty() then
         return nil
     end
-    return CaerdonTransformLooks:GetItemInfo(self, sourceID, upgradeDisabled)
+    return CaerdonTransformLooks:GetItemInfo(self, sourceID, upgradeDisabled, trace)
 end
 
 -- Whether vendors sell the item, as far as anything says: nil when nothing does (QuestieDB is
@@ -2009,6 +2010,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     local mogStatus = ""
     local isReady = true
+    -- The look a piece gains at the Catalyst could not be told: the data of the set's piece is
+    -- not in the client's cache just now (CaerdonTransformLooks, pending). No verdict then.
+    local lookPending = false
     -- The equipment branch's transmog info, kept with the verdict and returned.
     local statusTransmogInfo = nil
 
@@ -2225,9 +2229,18 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 if CaerdonWardrobeConfig.Icon.ShowLooksAfterChange == false or itemData:GetEquipmentSets() then
                     return nil
                 end
+                -- What the client answered is kept with the verdict (transformLookWhy, and
+                -- when): the export asks afresh, and what the client says then is not what
+                -- it said when the verdict was made.
+                local why = {}
                 local transformLook = self:GetTransformLookInfo(transmogInfo.sourceID,
-                    bindingResult.upgradeLevelDisabled)
+                    bindingResult.upgradeLevelDisabled, why)
                 transmogInfo.transformLook = transformLook
+                transmogInfo.transformLookWhy, transmogInfo.transformLookAt = why, GetTime()
+                if transformLook and transformLook.pending then
+                    lookPending = true
+                    return nil
+                end
                 -- The Catalyst's answer is for this toon. A look gained by raising the piece
                 -- counts where the toon's class can use it.
                 local route, secondRoute = CaerdonTransformLooks:GetRoute(transformLook,
@@ -2568,6 +2581,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 mogStatus = isSellable and "auction" or "auctionGoods"
             end
         end
+    end
+
+    if lookPending then
+        -- Not ready, and nothing kept: the queue asks again, and the data is here by then.
+        if CaerdonCounters.on then CaerdonCounters:Mark("look data not ready") end
+        return false
     end
 
     -- Everything up to here follows from the link and the toon, and is kept per link. What

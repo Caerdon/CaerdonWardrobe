@@ -213,6 +213,11 @@ return function(H, S)
             local client = game.client
             Asked("load", ItemIDOf(id))
             client.env.C_Timer.After(0, function()
+                -- world.never: items the client says it has no data to give for.
+                if world.never and world.never[ItemIDOf(id)] then
+                    client:Fire("ITEM_DATA_LOAD_RESULT", ItemIDOf(id), false)
+                    return
+                end
                 world.unloaded[ItemIDOf(id)] = nil
                 client:Fire("ITEM_DATA_LOAD_RESULT", ItemIDOf(id), ITEMS[ItemIDOf(id)] ~= nil)
             end)
@@ -279,6 +284,13 @@ return function(H, S)
         game:Set("C_TransmogCollection.GetItemInfo", function(reference)
             local id = ItemIDOf(reference)
             if not BY_ITEM[id] or world.unloaded[id] then return nil end
+            -- world.noSource: set pieces the client names no source for by a converted link.
+            if world.noSource and world.noSource[id] and reference ~= world.game.Link(id) then return nil end
+            -- world.otherSource: set pieces the client names another item's source for.
+            if world.otherSource and world.otherSource[id] and reference ~= world.game.Link(id) then
+                local sourceID = world.otherSource[id]
+                return SOURCES[sourceID].look, sourceID
+            end
             local bearer = Bearer(reference) or ITEMS[id]
             local sourceID = BY_ITEM[id][bearer.mod or 0]
             if sourceID then return SOURCES[sourceID].look, sourceID end
@@ -546,15 +558,95 @@ return function(H, S)
         Again()
         Equal((Judge(world, InBag(world, 930008))), "transform", "boots: which finds the icon there")
 
-        -- A set piece the client has no data for: asked for once, and judged when it is here.
-        status = Judge(world, InBag(world, 930011))
-        Equal(status, "sellable", "mantle: nothing is said while the set piece has no data")
-        world.client:Tick(40, 1)
+        -- A set piece the client has no data for: asked for, no verdict made meanwhile, and
+        -- the piece judged when the data is here. It is not offered for sale in between.
+        local mantle = Loaded(world, InBag(world, 930011))
+        Equal((mantle:GetCaerdonStatus()), false, "mantle: no verdict while the set piece has no data")
+        Equal(world.asked["load 940011"], 1, "mantle: the set piece's data is asked for")
+        Equal((mantle:GetCaerdonStatus()), false, "mantle: still none while it is on its way")
+        Equal(world.asked["load 940011"], 1, "mantle: and it is asked for once while it is")
         status, _, info = Judge(world, InBag(world, 930011))
         Equal(status, "transform", "mantle: with the data here it is one to keep")
         Equal(Look(info, "catalyst") and Look(info, "catalyst").sourceID, 6042, "mantle: the set shoulders' Normal source")
-        Equal(world.asked["load 940011"], 1, "the set piece's data is asked for once")
+        local refreshes = world.env.CaerdonCounters:GetReport().refreshes.total
+        world.client:Tick(40, 1)
+        Equal(world.env.CaerdonCounters:GetReport().refreshes.total, refreshes, "mantle: the data's coming draws nothing again by itself")
+
+        -- The client drops the data again (it keeps about two thousand items): the next time
+        -- the piece is judged the set piece is asked for again, and the piece is not for sale.
+        world.unloaded[940011] = true
+        Again()
+        mantle = Loaded(world, InBag(world, 930011))
+        Equal((mantle:GetCaerdonStatus()), false, "mantle, the data gone again: no verdict")
+        Equal(world.asked["load 940011"], 2, "mantle, the data gone again: asked for again")
+        Equal((Judge(world, InBag(world, 930011))), "transform", "mantle, the data gone again: one to keep once it is back")
+
+        -- A set piece the client has no data to give for: judged without, as before, and
+        -- not asked about again.
+        world.unloaded[940011], world.never = true, { [940011] = true }
+        Again()
+        mantle = Loaded(world, InBag(world, 930011))
+        Equal((mantle:GetCaerdonStatus()), false, "mantle, no data to be had: no verdict while it is asked for")
+        status = Judge(world, InBag(world, 930011))
+        Equal(status, "sellable", "mantle, no data to be had: judged without it once the client has said so")
+        local asked = world.asked["load 940011"]
+        Again()
+        Equal((Judge(world, InBag(world, 930011))), "sellable", "mantle, no data to be had: and so the next time")
+        Equal(world.asked["load 940011"], asked, "mantle, no data to be had: not asked for again")
+        world.never = nil
+
+        -- The data is here and the client names no source of the set piece for the converted
+        -- link: this set's piece is not the one the Catalyst gives. With no other set that
+        -- has the icon, nothing is said, whatever the set piece's looks are.
+        world.unloaded[940011], world.noSource = nil, { [940011] = true }
+        Again()
+        status, _, info = Judge(world, InBag(world, 930011))
+        Equal(status, "sellable", "mantle, no source named: nothing is said")
+        Equal(Look(info, "catalyst"), nil, "mantle, no source named: and no look is made up from the set piece's own")
+        local text = Explained(world, 930011)
+        Check(text:find("the client names no source of item 940011 for the converted piece's link: not this set's piece", 1, true) ~= nil and
+            text:find("no other set of this class has a shoulder piece with the icon, so nothing is said", 1, true) ~= nil,
+            "mantle, no source named: the export says why: " .. text)
+        world.noSource = nil
+        -- Nor is a source of another item taken for the set piece's.
+        world.otherSource = { [940011] = 6142 }
+        Again()
+        status, _, info = Judge(world, InBag(world, 930011))
+        Equal(status, "sellable", "mantle, another item's source named: nothing is said")
+        Equal(Look(info, "catalyst"), nil, "mantle, another item's source named: and it is not taken for the piece's look")
+        world.otherSource = nil
         NoErrors(world, "later answers")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- 3b. Two sets with the converted piece's icon
+    --------------------------------------------------------------------------------------
+    -- A season's PVP set has the class set's icons, with looks of its own that the piece's
+    -- bonuses name none of. The set listed first is then not the one: the client names no
+    -- source of its piece for the converted link, and the next set with the icon is asked.
+    do
+        local oldIcon = ITEMS[941011].icon
+        ITEMS[941011].icon = ITEMS[940011].icon
+        local world = Start("retail", true)
+        world.unloaded[940011], world.noSource = nil, { [940011] = true }
+        local status, _, info = Judge(world, InBag(world, 930011))
+        Equal(status, "transform", "two sets with the icon: the piece is one to keep, by the second set's look")
+        Equal(Look(info, "catalyst") and Look(info, "catalyst").itemID, 941011, "two sets with the icon: the set piece is the one the client names a source of")
+        Equal(Look(info, "catalyst") and Look(info, "catalyst").sourceID, 6142, "two sets with the icon: and the look is that source")
+        local text = Explained(world, 930011)
+        Check(text:find("the client names no source of item 940011 for the converted piece's link: not this set's piece", 1, true) ~= nil and
+            text:find("shoulder piece is item 941011 with 4 sources", 1, true) ~= nil and
+            text:find("converted, it has source 6142", 1, true) ~= nil,
+            "two sets with the icon: the export names the set passed over and the one taken: " .. text)
+        -- Where the first set's piece is the one the client names a source of, it is taken
+        -- and the second is not asked.
+        world.noSource = nil
+        world.env.CaerdonWardrobe:RefreshItems()
+        world.client:Tick(20)
+        status, _, info = Judge(world, InBag(world, 930011))
+        Equal(Look(info, "catalyst") and Look(info, "catalyst").itemID, 940011, "two sets with the icon: the first set's piece where the client names its source")
+        NoErrors(world, "two sets with the icon")
+        ITEMS[941011].icon = oldIcon
     end
 
     --------------------------------------------------------------------------------------

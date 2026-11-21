@@ -66,7 +66,8 @@ local convertibleByLink = {}
 -- The sets of the toon's class, newest first. Built when the first copy is one the Catalyst
 -- takes, and kept: the client's sets do not change in a session.
 local families
--- Item ID -> true while a set piece's data is asked for, false once the client answered.
+-- Item ID -> true while a set piece's data is asked for, false once the client has given it,
+-- "refused" where the client said it has none to give.
 local awaitedItems = {}
 local refreshPending = false
 -- Item GUID -> how often the icons were drawn again for it: the copies judged while the
@@ -321,9 +322,16 @@ local SETS_DESCRIBED = 4
 -- one with the most sources is the set's piece (a piece per difficulty, where another item
 -- shares one of its looks); items with as many sources and the same looks are as good as
 -- each other; with other looks nothing says which it is.
-local function FindSetPiece(slot, icon, trace)
+--
+-- More than one set of the class can have a piece with the icon: the season's PVP set shares
+-- its looks' icons with the class set (seen: a belt whose converted piece is the class set's,
+-- where the PVP set, listed first, has two belts with that icon). So this is the first such
+-- set from `startAt` on, with its place in the list, and the caller goes on to the next where
+-- the client names none of the piece's sources for the converted link (CatalystLooks).
+local function FindSetPiece(slot, icon, trace, startAt)
     local list = families or BuildFamilies()
-    for _, family in ipairs(list) do
+    for familyIndex = startAt or 1, #list do
+        local family = list[familyIndex]
         local matches = {}
         for _, piece in ipairs(family.slots[slot] or {}) do
             if PieceIcons(piece)[icon] then
@@ -331,7 +339,7 @@ local function FindSetPiece(slot, icon, trace)
             end
         end
         if #matches == 1 then
-            return matches[1], family, "by the converted piece's icon"
+            return matches[1], family, "by the converted piece's icon", familyIndex
         elseif #matches > 1 then
             table.sort(matches, function(a, b)
                 if #a.sources ~= #b.sources then
@@ -355,8 +363,12 @@ local function FindSetPiece(slot, icon, trace)
                 others[#others + 1] = ("item %d with %d sources"):format(matches[index].itemID, #matches[index].sources)
             end
             return first, family, ("by the converted piece's icon, among %d items of the set that have it (the others: %s)")
-                :format(#matches, table.concat(others, ", "))
+                :format(#matches, table.concat(others, ", ")), familyIndex
         end
+    end
+    if (startAt or 1) > 1 then
+        -- Sets with the icon were found and passed over; the caller says so.
+        return nil
     end
     Note(trace, "catalyst: no set of this class has a %s piece with the icon %s (%d sets looked at)", slot,
         tostring(icon), #list)
@@ -391,19 +403,29 @@ local function RefreshSoon(reason, detail)
     end)
 end
 
--- A set piece the client has no data for yet: asked for once a session, and the icons are
--- drawn again when it is here.
+-- A set piece the client has no data for: asked for, and the verdict that needs it is put off
+-- (the status answers not ready and the queue asks again; the data is back two frames after
+-- it is asked for). Asked for every time it is found missing, not once a session: the client
+-- keeps the data of about two thousand items and drops the least recently used (notes:
+-- Upgrades), so a set piece that was here is gone again after a window full of items has
+-- drawn. Asked once, the piece then had no look to gain for the rest of the session and was
+-- offered for sale. Returns whether the data is on its way; false where the client has said
+-- it has none to give, and the piece is then judged without, as before.
 local function AwaitItem(itemID)
-    if awaitedItems[itemID] ~= nil then
-        return
+    local state = awaitedItems[itemID]
+    if state == true then
+        return true
+    elseif state == "refused" then
+        return false
     end
     awaitedItems[itemID] = true
+    CaerdonCounters:NoteWithoutData("the Catalyst's set piece: asked for, the verdict put off", "item:" .. itemID, true)
     CaerdonItemEventListener:AddCallback(itemID, function()
         awaitedItems[itemID] = false
-        RefreshSoon("converted piece", "item " .. itemID)
     end, function()
-        awaitedItems[itemID] = false
+        awaitedItems[itemID] = "refused"
     end)
+    return true
 end
 
 -- Whether a copy with this link is one to ask the client about, and its slot. A link's own
@@ -465,45 +487,60 @@ local function CatalystLooks(item, itemLink, itemID, track, trace)
         return nil
     end
 
-    local piece, family, how = FindSetPiece(slot, icon, trace)
-    if not piece then
-        return nil
-    end
-    Note(trace, "catalyst: set %s (patch %s), %s piece is item %d with %d sources, found %s", tostring(family.key),
-        tostring(family.patchID), slot, piece.itemID, #piece.sources, how)
-    if piece.itemID == itemID then
-        Note(trace, "catalyst: the piece is the set's own")
-        return nil
-    end
-    if trace then
-        -- Every look of the set piece, to tell whether the one named below is the right one.
-        for _, candidate in ipairs(piece.sources) do
-            local candidateState, candidateInfo = LookState(candidate)
-            if candidateState then
-                Note(trace, "catalyst: the set piece's source %d (modifier %s, %s look) of appearance %s: %s", candidate,
-                    tostring(candidateInfo.itemModID), TierName(TIER_BY_MOD_ID[candidateInfo.itemModID]),
-                    tostring(candidateInfo.visualID), candidateState)
+    -- The set's piece is the one with the icon that the client names a source of for this
+    -- piece's link with its item in it: the converted piece keeps the bonuses of the one put
+    -- in, so that source is its look. A set whose piece the client names none for is not the
+    -- one (the PVP set's belt has the class set's icon and looks of other modifiers), and the
+    -- next set with the icon is asked.
+    local piece, family, how, sourceID
+    local startAt = 1
+    while true do
+        local familyIndex
+        piece, family, how, familyIndex = FindSetPiece(slot, icon, trace, startAt)
+        if not piece then
+            if startAt > 1 then
+                Note(trace, "catalyst: no other set of this class has a %s piece with the icon, so nothing is said", slot)
+            end
+            return nil
+        end
+        Note(trace, "catalyst: set %s (patch %s), %s piece is item %d with %d sources, found %s", tostring(family.key),
+            tostring(family.patchID), slot, piece.itemID, #piece.sources, how)
+        if piece.itemID == itemID then
+            Note(trace, "catalyst: the piece is the set's own")
+            return nil
+        end
+        if trace then
+            -- Every look of the set piece, to tell whether the one named below is the right one.
+            for _, candidate in ipairs(piece.sources) do
+                local candidateState, candidateInfo = LookState(candidate)
+                if candidateState then
+                    Note(trace, "catalyst: the set piece's source %d (modifier %s, %s look) of appearance %s: %s", candidate,
+                        tostring(candidateInfo.itemModID), TierName(TIER_BY_MOD_ID[candidateInfo.itemModID]),
+                        tostring(candidateInfo.visualID), candidateState)
+                end
             end
         end
-    end
 
-    -- The converted piece keeps this piece's bonuses: its look is the client's answer for this
-    -- link with the set piece's item in it.
-    local converted = itemLink:gsub("item:%d+", "item:" .. piece.itemID, 1)
-    local _, sourceID = C_TransmogCollection.GetItemInfo(converted)
-    if not sourceID then
-        if not C_Item.IsItemDataCachedByID(piece.itemID) then
-            AwaitItem(piece.itemID)
-            Note(trace, "catalyst: the client has no data for item %d yet (asked for)", piece.itemID)
-        else
-            Note(trace, "catalyst: the client names no source for the converted piece's link")
+        local converted = itemLink:gsub("item:%d+", "item:" .. piece.itemID, 1)
+        local _
+        _, sourceID = C_TransmogCollection.GetItemInfo(converted)
+        if not sourceID and not C_Item.IsItemDataCachedByID(piece.itemID) then
+            local pending = AwaitItem(piece.itemID)
+            Note(trace, "catalyst: the client has no data for item %d %s", piece.itemID,
+                pending and "just now (asked for; the verdict waits for it)" or "and has said it has none to give")
+            return nil, nil, pending
         end
-        return nil
-    end
-    if C_TransmogCollection.GetSourceItemID(sourceID) ~= piece.itemID then
-        Note(trace, "catalyst: source %d, named for the converted piece's link, is not one of item %d", sourceID,
-            piece.itemID)
-        return nil
+        if sourceID and C_TransmogCollection.GetSourceItemID(sourceID) == piece.itemID then
+            break
+        end
+        if sourceID then
+            Note(trace, "catalyst: source %d, named for the converted piece's link, is not one of item %d: not this set's piece",
+                sourceID, piece.itemID)
+        else
+            Note(trace, "catalyst: the client names no source of item %d for the converted piece's link: not this set's piece",
+                piece.itemID)
+        end
+        startAt = familyIndex + 1
     end
     -- The client's icon is the converted piece's own. Where the source worked out from the
     -- link has another icon and one source alone of the set piece has the client's, that
@@ -562,6 +599,8 @@ end
 --                 tier = 1 to 4 for Raid Finder to Mythic, where known,
 --                 itemID = the set piece, for the Catalyst's },
 --               ... },
+--     pending = true where the client is without the data of the set's piece just now: it is
+--               asked for, and the caller makes no verdict from this answer,
 --     needsLook = how the first look that is missing is gained,
 --     needsSource = how the first source is gained whose look is known from another item }
 --
@@ -595,9 +634,13 @@ function CaerdonTransformLooks:GetItemInfo(item, sourceID, upgradeDisabled, trac
     else
         Note(trace, "upgrade: the piece has no source of its own")
     end
-    local converted, convertedAndRaised = CatalystLooks(item, itemLink, itemID, track, trace)
+    local converted, convertedAndRaised, pending = CatalystLooks(item, itemLink, itemID, track, trace)
     looks[#looks + 1] = converted
     looks[#looks + 1] = convertedAndRaised
+    if pending then
+        -- The Catalyst's look cannot be told yet: nothing is said about the piece until it can.
+        return { looks = looks, pending = true }
+    end
     if #looks == 0 then
         return nil
     end
@@ -694,8 +737,13 @@ function CaerdonTransformLooks:Explain(item, sourceID, upgradeDisabled)
     local trace = {}
     local info = self:GetItemInfo(item, sourceID, upgradeDisabled, trace)
     NoteClientsConvertedPiece(item, info, trace)
-    trace[#trace + 1] = ("a look to gain: %s; a source to gain: %s"):format(
-        tostring(info and info.needsLook or "none"), tostring(info and info.needsSource or "none"))
+    if info and info.pending then
+        -- Asked afresh, the answer is on its way: this is not "none".
+        trace[#trace + 1] = "a look to gain: not known just now (the set piece's data is asked for; copy again)"
+    else
+        trace[#trace + 1] = ("a look to gain: %s; a source to gain: %s"):format(
+            tostring(info and info.needsLook or "none"), tostring(info and info.needsSource or "none"))
+    end
     return trace, info
 end
 
