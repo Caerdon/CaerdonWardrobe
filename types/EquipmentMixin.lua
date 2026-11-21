@@ -641,6 +641,10 @@ local function ComparedPieceThere(itemID, link)
     local askedAt = gearAskedAt[itemID]
     if not askedAt then
         gearAskedAt[itemID] = GetTime()
+        -- The buttons whose verdict waits for it are asked again when it is here.
+        if CaerdonWardrobe and CaerdonWardrobe.RetryWhenLoaded then
+            CaerdonWardrobe:RetryWhenLoaded(itemID)
+        end
         C_Item.RequestLoadItemDataByID(itemID)
         CaerdonCounters:NoteWithoutData("a piece that is compared with: asked for, the verdict put off", link or ("item:" .. itemID), true)
     elseif GetTime() - askedAt > GEAR_DATA_PATIENCE then

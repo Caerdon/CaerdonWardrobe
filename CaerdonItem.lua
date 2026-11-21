@@ -1946,6 +1946,7 @@ function CaerdonItemMixin:GetStatusCacheKey()
     return StatusCacheKey(self, itemLink)
 end
 
+-- Where it is not ready, the second value says what it waits for (for the counters).
 -- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo. transmogInfo is what
 -- GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it is shared
 -- by every copy the cache entry stands for, so read it and do not ask the item data again.
@@ -1988,7 +1989,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
         if CaerdonCounters.on then CaerdonCounters:Mark("tooltip not ready") end
-        return false -- Don't cache: result will change once tooltip data loads
+        return false, "its tooltip" -- Don't cache: result will change once tooltip data loads
     end
 
     local itemID = self:GetItemID()
@@ -2081,7 +2082,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         if consumableInfo.isNotReady then
             -- Transmog source data not yet available; defer to avoid caching a wrong result.
             isReady = false
-            return isReady
+            return isReady, "the collection's answer"
         end
         if consumableInfo.needsItem then
             -- Use canEquip instead of validForCharacter to handle ensembles with cross-class sources
@@ -2130,7 +2131,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             if housingInfo.isPending then
                 -- Defer icon decisions until housing data finishes loading so we don't show locks erroneously.
                 isReady = false
-                return isReady
+                return isReady, "housing data"
             end
 
             local isServiceItem = housingInfo.isServiceItem
@@ -2161,7 +2162,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         if transmogInfo then
             if transmogInfo.isNotReady then
                 isReady = false
-                return isReady
+                return isReady, transmogInfo.comparedGearMissing and "the data of gear it is compared with" or
+                    "the collection's answer"
             end
             statusTransmogInfo = transmogInfo
             if transmogInfo.canEquipForPlayer == nil then
@@ -2586,7 +2588,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     if lookPending then
         -- Not ready, and nothing kept: the queue asks again, and the data is here by then.
         if CaerdonCounters.on then CaerdonCounters:Mark("look data not ready") end
-        return false
+        return false, "the Catalyst's answer"
     end
 
     -- Everything up to here follows from the link and the toon, and is kept per link. What

@@ -2031,6 +2031,88 @@ end
 
 -- How often one request is tried again while its tooltip still says "Retrieving item information".
 local NOT_READY_MAX_RETRIES = 10
+-- How long the requests that were not ready wait to be tried again where nothing says sooner.
+local NOT_READY_RETRY_SECONDS = 1.0
+-- And how long after the data a verdict was put off for has come (RetryWhenLoaded): long
+-- enough for the items asked for together to arrive together, short enough not to be seen.
+local NOT_READY_SOON_SECONDS = 0.05
+
+-- Asks again for every button whose verdict was not ready.
+-- early: the data a verdict was put off for has come (RetryNotReadySoon). Such a try is not
+-- counted against the limit: the limit is for a tooltip that never loads, and a verdict that
+-- waits for several items in turn (the worn gear, then a set's piece) is tried once for each.
+function CaerdonWardrobeMixin:RunNotReadyRetries(early)
+    local pending = self.pendingTooltipRetries
+    self.pendingTooltipRetries = nil
+    if not pending then
+        return
+    end
+    for key, info in pairs(pending) do
+        -- Only while the button still shows this item: the same key can stand for
+        -- another item by now (the next vendor page), and running the old request
+        -- again would clear that item's icon.
+        local itemID = not info.item:IsItemEmpty() and info.item:GetItemID() or nil
+        if self:GetButtonLocationKey(info.button) == info.expectedKey and
+            (itemID == nil or self:GetButtonItemID(info.button) == itemID) then
+            -- Tells UpdateButton this is the same request again, not a new one.
+            local retryState = GetButtonState(info.button)
+            if retryState then
+                retryState.retryingNotReady = true
+                if early and retryState.notReadyRetries and retryState.notReadyRetries > 0 then
+                    retryState.notReadyRetries = retryState.notReadyRetries - 1
+                end
+            end
+            self:UpdateButton(info.button, info.item, info.feature, info.locationInfo, info.options)
+        end
+    end
+end
+
+-- The data a verdict was put off for is here, or on its way: the buttons that wait are asked
+-- again in a moment, and not after the second the timer would take. Called by whoever asked
+-- the client for the data, when it came.
+function CaerdonWardrobeMixin:RetryNotReadySoon()
+    if self.notReadySoon then
+        return
+    end
+    self.notReadySoon = true
+    C_Timer.After(NOT_READY_SOON_SECONDS, function()
+        self.notReadySoon = nil
+        if self.tooltipRetryTimer then
+            self.tooltipRetryTimer:Cancel()
+            self.tooltipRetryTimer = nil
+        end
+        self:RunNotReadyRetries(true)
+    end)
+end
+
+-- A verdict was put off for this item's data, which has been asked for: when the client has
+-- it, the buttons that wait are asked again (RetryNotReadySoon). The event is listened to only
+-- while something is waited for: it comes for every item anybody loads.
+function CaerdonWardrobeMixin:RetryWhenLoaded(itemID)
+    if not itemID then
+        return
+    end
+    if not self.awaitedItemData then
+        self.awaitedItemData = {}
+    end
+    if next(self.awaitedItemData) == nil then
+        self:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    end
+    self.awaitedItemData[itemID] = true
+end
+
+function CaerdonWardrobeMixin:ITEM_DATA_LOAD_RESULT(itemID)
+    local awaited = self.awaitedItemData
+    if not (awaited and awaited[itemID]) then
+        return
+    end
+    awaited[itemID] = nil
+    if next(awaited) == nil then
+        self:UnregisterEvent("ITEM_DATA_LOAD_RESULT")
+    end
+    -- Loaded or refused, the verdict that waited can be made now.
+    self:RetryNotReadySoon()
+end
 
 -- The key a button is filed under while a request for it is being worked on: the feature's name
 -- plus the bag slot, or the key the feature passed. nil when the feature passed none. UpdateButton
@@ -2087,32 +2169,26 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                 options = options,
                 expectedKey = locationKey,
             }
+            -- Since when this button waits and for what (the status says, in the status's
+            -- place), for the counters: the draw says how long it was.
+            state.notReadySince = state.notReadySince or GetTime()
+            state.notReadyWhy = state.notReadyWhy or (type(mogStatus) == "string" and mogStatus) or "something it does not name"
             if not self.tooltipRetryTimer then
-                self.tooltipRetryTimer = C_Timer.NewTimer(1.0, function()
+                self.tooltipRetryTimer = C_Timer.NewTimer(NOT_READY_RETRY_SECONDS, function()
                     self.tooltipRetryTimer = nil
-                    local pending = self.pendingTooltipRetries
-                    self.pendingTooltipRetries = nil
-                    if pending then
-                        for key, info in pairs(pending) do
-                            -- Only while the button still shows this item: the same key can stand for
-                            -- another item by now (the next vendor page), and running the old request
-                            -- again would clear that item's icon.
-                            local itemID = not info.item:IsItemEmpty() and info.item:GetItemID() or nil
-                            if self:GetButtonLocationKey(info.button) == info.expectedKey and
-                                (itemID == nil or self:GetButtonItemID(info.button) == itemID) then
-                                -- Tells UpdateButton this is the same request again, not a new one.
-                                local retryState = GetButtonState(info.button)
-                                if retryState then
-                                    retryState.retryingNotReady = true
-                                end
-                                self:UpdateButton(info.button, info.item, info.feature, info.locationInfo, info.options)
-                            end
-                        end
-                    end
+                    self:RunNotReadyRetries(false)
                 end)
             end
         end
         return
+    end
+
+    do
+        local state = GetButtonState(button)
+        if state and state.notReadySince then
+            Counters:NoteLateDraw(GetTime() - state.notReadySince, state.notReadyWhy)
+            state.notReadySince, state.notReadyWhy = nil, nil
+        end
     end
 
     if caerdonType == CaerdonItemType.Equipment then
@@ -2394,6 +2470,7 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
             retryState.retryingNotReady = nil
         else
             retryState.notReadyRetries = nil
+            retryState.notReadySince, retryState.notReadyWhy = nil, nil
         end
     end
 

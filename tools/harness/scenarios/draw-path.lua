@@ -260,6 +260,106 @@ return function(H, S)
         return world.client:NewFrame("Button")
     end
 
+    -- A verdict that is not ready is asked for again: after a second where nothing says
+    -- sooner, and in a moment where the data it was put off for has come.
+    do
+        local world = QueueWorld()
+        local core, client = world.core, world.client
+        -- An item whose status is not ready until `world.ready` is set.
+        local function WaitingItem(slot)
+            local item = SlotItem(world, slot)
+            item.tries = 0
+            function item:GetCaerdonStatus()
+                self.tries = self.tries + 1
+                if not world.ready then
+                    return false, "its tooltip"
+                end
+                return true, "own", nil, {}, nil
+            end
+            return item
+        end
+        local function Drawn(button)
+            local count = Draws(world, button)
+            return count
+        end
+        local function Frames(button, limit)
+            for frame = 1, limit do
+                client:Tick(1)
+                if Drawn(button) > 0 then
+                    return frame
+                end
+            end
+            return nil
+        end
+
+        -- Nothing says sooner: the timer's second.
+        local slow = NewButton(world)
+        Ask(world, slow, WaitingItem(11))
+        client:Tick(3)
+        Equal(Drawn(slow), 0, "not ready: nothing is drawn while the verdict is not ready")
+        world.ready = true
+        local frames = Frames(slow, 40)
+        Check(frames ~= nil and frames >= 15, "not ready: with nothing to say sooner it is asked again after about a second (" ..
+            tostring(frames) .. " frames of a twentieth)")
+
+        -- The data it waits for comes: asked again in a moment.
+        world.ready = false
+        local fast = NewButton(world)
+        Ask(world, fast, WaitingItem(12))
+        client:Tick(3)
+        Equal(Drawn(fast), 0, "data awaited: nothing is drawn while the verdict is not ready")
+        core:RetryWhenLoaded(4242)
+        world.ready = true
+        client:Fire("ITEM_DATA_LOAD_RESULT", 4242, true)
+        frames = Frames(fast, 40)
+        Check(frames ~= nil and frames <= 3, "data awaited: when the data comes the button is drawn in a moment (" .. tostring(frames) .. " frames)")
+        local lines = {}
+        for _, line in ipairs(world.env.CaerdonCounters:GetReportLines()) do
+            lines[#lines + 1] = tostring(line.text)
+        end
+        Check(table.concat(lines, " / "):find("Draws that waited for a verdict to be ready: 2, waiting ", 1, true) ~= nil and
+            table.concat(lines, " / "):find("for its tooltip: 2, ", 1, true) ~= nil,
+            "data awaited: the counters say how many draws waited, for what, and how long")
+
+        -- Another item's data is not the one waited for, and nothing is listened to once
+        -- nothing is waited for.
+        world.ready = false
+        local other = NewButton(world)
+        local waiting = WaitingItem(13)
+        Ask(world, other, waiting)
+        client:Tick(3)
+        local tries = waiting.tries
+        client:Fire("ITEM_DATA_LOAD_RESULT", 99, true)
+        client:Tick(3)
+        Equal(waiting.tries, tries, "data awaited: an item nobody waits for asks nothing again")
+        -- Nor does it while another item is waited for.
+        core:RetryWhenLoaded(7000)
+        client:Fire("ITEM_DATA_LOAD_RESULT", 99, true)
+        client:Tick(3)
+        Equal(waiting.tries, tries, "data awaited: nor while another item is the one waited for")
+        client:Fire("ITEM_DATA_LOAD_RESULT", 7000, true)
+        client:Tick(3)
+        Equal(waiting.tries, tries + 1, "data awaited: the one waited for does")
+        tries = waiting.tries
+
+        -- A verdict that waits for several items in turn is tried once for each, and those
+        -- tries do not use up the limit of a tooltip that never loads.
+        for round = 1, 15 do
+            core:RetryWhenLoaded(5000 + round)
+            client:Fire("ITEM_DATA_LOAD_RESULT", 5000 + round, true)
+            client:Tick(3)
+        end
+        Check(waiting.tries >= tries + 15, "data awaited: asked again each time something it waits for comes (" ..
+            tostring(waiting.tries - tries) .. " times)")
+        world.ready = true
+        core:RetryWhenLoaded(6000)
+        client:Fire("ITEM_DATA_LOAD_RESULT", 6000, false)
+        frames = Frames(other, 40)
+        Check(frames ~= nil and frames <= 3, "data awaited: and it is still drawn when the last of it has come, refused or not (" ..
+            tostring(frames) .. " frames)")
+        NoErrors(world, "not ready")
+    end
+
     do
         local world = QueueWorld()
         local core, client = world.core, world.client

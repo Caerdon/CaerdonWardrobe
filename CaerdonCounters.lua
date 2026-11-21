@@ -305,6 +305,31 @@ function Counters:NoteWithoutData(where, link, noItemInfo)
     entry.item = type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
 end
 
+-- A button whose verdict was not ready at first has been drawn: how long it waited. A verdict
+-- is put off for a tooltip that is still loading, and for the data of the gear a piece is
+-- compared with or of the set's piece it converts to; the wait is what the player sees as
+-- icons that come late.
+-- By what the verdict first waited for (GetCaerdonStatus names it).
+local lateDraws = { count = 0, seconds = 0, longest = 0 }
+local lateDrawsBy, lateDrawsOrder = {}, {}
+
+function Counters:NoteLateDraw(seconds, why)
+    why = why or "something it does not name"
+    local by = lateDrawsBy[why]
+    if not by then
+        by = { count = 0, seconds = 0, longest = 0 }
+        lateDrawsBy[why] = by
+        lateDrawsOrder[#lateDrawsOrder + 1] = why
+    end
+    for _, entry in ipairs({ lateDraws, by }) do
+        entry.count = entry.count + 1
+        entry.seconds = entry.seconds + seconds
+        if seconds > entry.longest then
+            entry.longest = seconds
+        end
+    end
+end
+
 -- From RefreshItems' timer, as it starts on the features' Refresh(). A refresh empties the
 -- caches at once and the windows draw a tenth of a second after the last one of a run, so a
 -- run of refreshes is one redraw, and one put off by a fight is none until the fight is over.
@@ -738,6 +763,14 @@ function Counters:GetReport()
     report.itemAnswers = { total = itemAnswers.total, lastMinute = lastMinute, lastFiveMinutes = lastFive,
         mostInASecond = itemAnswers.mostInASecond, mostAt = itemAnswers.mostAt }
 
+    report.lateDraws = { count = lateDraws.count, longest = Round(lateDraws.longest, 2),
+        mean = lateDraws.count > 0 and Round(lateDraws.seconds / lateDraws.count, 2) or nil, by = {} }
+    for index, why in ipairs(lateDrawsOrder) do
+        local by = lateDrawsBy[why]
+        report.lateDraws.by[index] = { why = why, count = by.count, longest = Round(by.longest, 2),
+            mean = Round(by.seconds / by.count, 2) }
+    end
+
     report.withoutData = {}
     for index, where in ipairs(withoutDataOrder) do
         local entry = withoutData[where]
@@ -901,6 +934,14 @@ function Counters:GetReportLines()
             add(2, ("%s: %d times (%d with no item info for the link at all), first at %s s, last at %s s, last item %s"):format(
                 entry.where, entry.count, entry.noItemInfo, Figure(entry.first, 1), Figure(entry.last, 1), tostring(entry.item)))
         end
+    end
+
+    add(1, ("Draws that waited for a verdict to be ready: %d%s"):format(report.lateDraws.count,
+        report.lateDraws.count > 0 and (", waiting %s s on average, %s s at the longest"):format(
+            Figure(report.lateDraws.mean, 2), Figure(report.lateDraws.longest, 2)) or ""))
+    for _, by in ipairs(report.lateDraws.by) do
+        add(2, ("for %s: %d, %s s on average, %s s at the longest"):format(by.why, by.count, Figure(by.mean, 2),
+            Figure(by.longest, 2)))
     end
 
     local profile = report.profile
