@@ -1907,7 +1907,14 @@ local function StatusCacheKey(item, itemLink)
     -- Which equipment sets hold a piece is asked of the copy too, and it decides the binding
     -- text and whether the piece is judged a spare. So of two copies with one link, the one a
     -- set names has an entry of its own, and so has each of two sets' copies.
-    local equipmentSets = CaerdonEquipment:GetEquipmentSetsOf(item)
+    -- Only of something that can be worn: nothing else is in a set, and the asking is not
+    -- free (the sets are walked once for every frame in which anything asks). It was asked of
+    -- every item, a bank's 213 for its 60 pieces of equipment. Both clients answer
+    -- "INVTYPE_NON_EQUIP_IGNORE" for what cannot be worn, and not an empty text (seen in the
+    -- recordings of both; a first try that went by the empty text asked of everything still).
+    local equipLocation = item:GetEquipLocation()
+    local equipmentSets = equipLocation ~= nil and equipLocation ~= "INVTYPE_NON_EQUIP_IGNORE" and
+        CaerdonEquipment:GetEquipmentSetsOf(item) or nil
     if equipmentSets then
         key = key .. "|e" .. table.concat(equipmentSets, "\1")
     end

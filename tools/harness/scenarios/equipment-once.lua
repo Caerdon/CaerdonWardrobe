@@ -61,6 +61,10 @@ return function(H, S)
             [920030] = Armor("Smith's Boots", "INVTYPE_FEET", 10, { appearanceID = 5230, sourceID = 7230, collected = true },
                 { crafter = "Player-1-0000ABCD" }),
             -- A look with two more sources, whose items this client cannot load.
+            -- Nothing to wear: it can be in no gear set. The equip location is what both
+            -- clients answer for such an item, which is not an empty text.
+            [920040] = { name = "Plain Ore", quality = 1, level = 10, minLevel = 0, type = "Tradeskill", subType = "Metal & Stone",
+                stack = 20, equipLoc = "INVTYPE_NON_EQUIP_IGNORE", price = 5, classID = 7, subClassID = 7, bindType = 0, tooltip = {} },
             [920010] = Armor("Shared Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7210 }),
             [920011] = Armor("Ghost Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7211 }),
             [920012] = Armor("Lost Vest", "INVTYPE_CHEST", 20, { appearanceID = 5210, sourceID = 7212 }),
@@ -455,6 +459,52 @@ return function(H, S)
 
         local _, binding = Status(world, Load(world, 920005))
         Equal(binding, "*Alpha", "sets: the binding text is the first set's name, starred for more than one")
+
+        -- Something that cannot be worn is in no set, and no set is walked to say so.
+        client:Tick(1)
+        world.counts = {}
+        local ore = Load(world, 920040)
+        local oreStatus = Status(world, ore)
+        Check(oreStatus ~= "<not ready>", "sets: an item that cannot be worn has its verdict (" .. tostring(oreStatus) .. ")")
+        Equal(SetWalks(), 0, "sets: and the gear sets are not walked for it")
+        Check(not tostring(ore:GetStatusCacheKey()):find("|e", 1, true), "sets: nor has its cache entry a set's name")
+        -- A piece of equipment in the same frame still is asked, as before.
+        Status(world, Load(world, 920006))
+        Equal(SetWalks(), 3, "sets: a piece of equipment asked after it walks them once")
+        client:Tick(1)
+        world.counts = {}
+
+        -- A copy in a bag is asked by its place, so the walk reads no link of a set's piece
+        -- for it; an item known by its link has the walk made with them.
+        do
+            local linkReads, getLink = 0, env.C_Item.GetItemLink
+            env.C_Item.GetItemLink = function(...)
+                linkReads = linkReads + 1
+                return getLink(...)
+            end
+            -- Long enough since anything last asked by its link.
+            client:Tick(30)
+            local placed = Loaded(world, env.CaerdonItem:CreateFromBagAndSlot(0, 1))
+            client:Tick(1)
+            world.counts = {}
+            linkReads = 0
+            local placedSets = env.CaerdonEquipment:GetEquipmentSetsOf(placed)
+            Equal(placedSets and table.concat(placedSets, ","), "Alpha,Beta", "walk: a copy asked by its place is in its sets")
+            Equal(linkReads, 0, "walk: and no set piece's link was read for that")
+            Equal(SetWalks(), 3, "walk: the sets were walked once")
+            local linkSets = env.CaerdonEquipment:GetEquipmentSetsOf(helm)
+            Equal(linkSets and table.concat(linkSets, ","), "Alpha,Beta", "walk: an item known by its link is in a piece's sets, as before")
+            Check(linkReads > 0, "walk: for which the pieces' links are read")
+            -- While items ask by their link, a frame is walked once, with the links.
+            client:Tick(1)
+            world.counts = {}
+            env.CaerdonEquipment:GetEquipmentSetsOf(placed)
+            env.CaerdonEquipment:GetEquipmentSetsOf(helm)
+            Equal(SetWalks(), 3, "walk: the next frame is walked once for both kinds of asking")
+            env.C_Item.GetItemLink = getLink
+            client:Tick(1)
+            world.counts = {}
+        end
 
         -- An item that lies in a bag slot is asked as that copy: the two helms share a link,
         -- and each is in the sets that name its slot.

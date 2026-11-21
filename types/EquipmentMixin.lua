@@ -4410,8 +4410,12 @@ end
 -- (GetTime() does not move within one): the draws of a frame share it, and nothing has to tell it
 -- that a piece moved, a set changed or the bank opened. (equipmentSetIndex is declared with the
 -- other caches, above InvalidateCaches.)
-local function BuildEquipmentSetIndex()
-    local index = { byPlace = {}, byLink = {} }
+--
+-- withLinks: byLink is made too. Only an item that lies nowhere is asked by its link, and a
+-- window of bags or a bank has none, so the pieces' links are not read for it: that was a
+-- link asked of the client for every piece of every set in every frame of a draw.
+local function BuildEquipmentSetIndex(withLinks)
+    local index = { byPlace = {}, byLink = withLinks and {} or nil }
     if not C_EquipmentSet.CanUseEquipmentSets() then
         return index
     end
@@ -4434,12 +4438,16 @@ local function BuildEquipmentSetIndex()
                     local foundLink = nil
                     if locationData.isBank and not locationData.bag then -- main bank container
                         place = equipSlot
-                        foundLink = GetInventoryItemLink("player", equipSlot)
+                        if withLinks then
+                            foundLink = GetInventoryItemLink("player", equipSlot)
+                        end
                     elseif locationData.isBank or locationData.isBags then -- any other bag
                         place = SetPlace(equipBag, equipSlot)
-                        local itemLocation = ItemLocation:CreateFromBagAndSlot(equipBag, equipSlot)
-                        if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
-                            foundLink = C_Item.GetItemLink(itemLocation)
+                        if withLinks then
+                            local itemLocation = ItemLocation:CreateFromBagAndSlot(equipBag, equipSlot)
+                            if itemLocation:HasAnyLocation() and itemLocation:IsValid() then
+                                foundLink = C_Item.GetItemLink(itemLocation)
+                            end
                         end
                     end
 
@@ -4459,6 +4467,11 @@ local function BuildEquipmentSetIndex()
     return index
 end
 
+-- When an item last asked by its link, and for how long after that a frame's walk reads the
+-- links at once.
+local equipmentSetLinksAskedAt = nil
+local SET_LINKS_WANTED_SECONDS = 1
+
 -- The names of the equipment sets an item is part of, or nil. An item that lies somewhere is
 -- asked as that copy. One known only by its link (the mail, a merchant's row, the bags a bag
 -- addon remembers) has no copy to ask about and is in the sets of a piece with its link. The
@@ -4466,7 +4479,10 @@ end
 function CaerdonEquipment:GetEquipmentSetsOf(item)
     local now = GetTime()
     if not equipmentSetIndex or equipmentSetIndexTime ~= now then
-        equipmentSetIndex = BuildEquipmentSetIndex()
+        -- With the links where an item asked by its link a moment ago (a mail or a merchant's
+        -- window is open): its frames are then walked once, not twice.
+        equipmentSetIndex = BuildEquipmentSetIndex(equipmentSetLinksAskedAt ~= nil and
+            now - equipmentSetLinksAskedAt < SET_LINKS_WANTED_SECONDS)
         equipmentSetIndexTime = now
     end
 
@@ -4479,7 +4495,14 @@ function CaerdonEquipment:GetEquipmentSetsOf(item)
     end
 
     local itemLink = item:GetItemLink()
-    return itemLink and equipmentSetIndex.byLink[itemLink] or nil
+    if not itemLink then
+        return nil
+    end
+    equipmentSetLinksAskedAt = now
+    if not equipmentSetIndex.byLink then
+        equipmentSetIndex = BuildEquipmentSetIndex(true)
+    end
+    return equipmentSetIndex.byLink[itemLink]
 end
 
 function CaerdonEquipmentMixin:GetEquipmentSets()
