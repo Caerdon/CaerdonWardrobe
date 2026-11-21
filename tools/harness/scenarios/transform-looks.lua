@@ -619,6 +619,45 @@ return function(H, S)
     end
 
     --------------------------------------------------------------------------------------
+    -- 3a. The client's word on a copy comes while its verdict waits
+    --------------------------------------------------------------------------------------
+    -- The first time a copy is asked about, the client has no icon for its converted piece
+    -- and sends for it. The verdict waits a few seconds for that: when the word comes the
+    -- queue asks again and the piece is judged, with no redraw of everything.
+    do
+        local world = Start("retail", true)
+        local GUID = "Item-0-930008"
+        world.icons[930008] = nil
+        local boots = Loaded(world, InBag(world, 930008))
+        local ready, why = boots:GetCaerdonStatus()
+        Equal(ready, false, "word awaited: no verdict while the client has no icon for the copy")
+        Equal(why, "the Catalyst's answer", "word awaited: and the status says what it waits for")
+        local refreshes = world.env.CaerdonCounters:GetReport().refreshes.total
+        -- The queue is told to ask again for the buttons that wait.
+        local core, again = world.env.CaerdonWardrobe, 0
+        local retrySoon = core.RetryNotReadySoon
+        function core:RetryNotReadySoon(...)
+            again = again + 1
+            return retrySoon(self, ...)
+        end
+        world.icons[930008] = ITEMS[940008].icon
+        world.client:Fire("ITEM_CONVERSION_DATA_READY", GUID)
+        Equal(again, 1, "word awaited: the client's word has the waiting buttons asked again")
+        world.client:Tick(10)
+        core.RetryNotReadySoon = retrySoon
+        local status = boots:GetCaerdonStatus() and select(2, boots:GetCaerdonStatus())
+        Equal(status, "transform", "word awaited: with the client's word the piece is judged")
+        Equal(world.env.CaerdonCounters:GetReport().refreshes.total, refreshes, "word awaited: and nothing was drawn again for it")
+        local lines = {}
+        for _, line in ipairs(world.env.CaerdonCounters:GetReportLines()) do
+            lines[#lines + 1] = tostring(line.text)
+        end
+        Check(table.concat(lines, " / "):find("the Catalyst's word on a copy: asked for, the verdict put off: 1 times", 1, true) ~= nil,
+            "word awaited: the counters say that a verdict waited for it")
+        NoErrors(world, "word awaited")
+    end
+
+    --------------------------------------------------------------------------------------
     -- 3b. Two sets with the converted piece's icon
     --------------------------------------------------------------------------------------
     -- A season's PVP set has the class set's icons, with looks of its own that the piece's
@@ -669,7 +708,12 @@ return function(H, S)
         Check(text:find("upgrade track: none", 1, true) ~= nil, "export: a piece of no season says so")
         -- No icon for the boots: said, with no guess at the set.
         text = Explained(world, 930008)
-        Check(text:find("no icon yet, so nothing is said", 1, true) ~= nil, "export: no icon yet says so")
+        Check(text:find("no icon yet (the client has been asked; the verdict waits for it)", 1, true) ~= nil and
+            text:find("a look to gain: not known just now", 1, true) ~= nil, "export: no icon yet says so, and that the verdict waits")
+        -- After a few seconds without the client's word the copy is judged without it.
+        world.client:Tick(80)
+        text = Explained(world, 930008)
+        Check(text:find("no icon yet, so nothing is said", 1, true) ~= nil, "export: and that nothing is said once it has waited long enough")
         Check(text:find("feet piece is item", 1, true) == nil, "export: and names no set")
         -- An icon no set has a piece with: the newest sets' items for the slot are described.
         world.icons[930008] = 1

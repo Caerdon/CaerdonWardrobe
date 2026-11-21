@@ -44,6 +44,9 @@ local HIGHEST_TIER = 4
 local SIBLING_REACH = 8
 -- How often the icons are drawn again for one copy because the client's conversion data came.
 local CONVERSION_REDRAWS_PER_COPY = 2
+-- How long a copy's verdict waits for the client's word on its conversion, the first time the
+-- copy is asked about. The word comes within a second or two of the ask where it comes.
+local CONVERSION_PATIENCE = 3
 
 -- The slots the Catalyst takes, by the client's name of the equipment location. A robe is
 -- turned into the set's chest piece.
@@ -70,8 +73,9 @@ local families
 -- "refused" where the client said it has none to give.
 local awaitedItems = {}
 local refreshPending = false
--- Item GUID -> how often the icons were drawn again for it: the copies judged while the
--- client had no icon for their converted piece.
+-- Item GUID -> { askedAt, redraws, judgedWithout } for the copies the client had no icon for
+-- when they were asked about: when that first was, how often the icons were drawn again for
+-- the copy, and whether a verdict was made without the icon.
 local awaitedConversions = {}
 
 local function Note(trace, text, ...)
@@ -420,10 +424,18 @@ local function AwaitItem(itemID)
     end
     awaitedItems[itemID] = true
     CaerdonCounters:NoteWithoutData("the Catalyst's set piece: asked for, the verdict put off", "item:" .. itemID, true)
+    -- Loaded or refused, the buttons whose verdict waits are asked again at once.
+    local function Again()
+        if CaerdonWardrobe and CaerdonWardrobe.RetryNotReadySoon then
+            CaerdonWardrobe:RetryNotReadySoon()
+        end
+    end
     CaerdonItemEventListener:AddCallback(itemID, function()
         awaitedItems[itemID] = false
+        Again()
     end, function()
         awaitedItems[itemID] = "refused"
+        Again()
     end)
     return true
 end
@@ -479,12 +491,33 @@ local function CatalystLooks(item, itemLink, itemID, track, trace)
         -- The client sends for it at this first ask, and says when it is here
         -- (ITEM_CONVERSION_DATA_READY). Nothing is said until then: a guess at the set was
         -- wrong where it was tried (a set of the expansion before).
+        --
+        -- The verdict waits for it, once, for a few seconds from the first ask: the queue
+        -- asks again when the client's word comes (the event below), and that one button is
+        -- drawn. It used to be judged without at once and everything drawn again when the
+        -- word came, which for a window full of such pieces was a redraw of every window for
+        -- each of them in turn (seen: nine in twelve seconds as a bank opened). A copy the
+        -- client sends no word for in that time is judged without, as before.
         local guid = C_Item.GetItemGUID(location)
+        local waiting = false
         if guid then
-            awaitedConversions[guid] = awaitedConversions[guid] or 0
+            local awaited = awaitedConversions[guid]
+            if not awaited then
+                awaited = { askedAt = GetTime(), redraws = 0 }
+                awaitedConversions[guid] = awaited
+                CaerdonCounters:NoteWithoutData("the Catalyst's word on a copy: asked for, the verdict put off", itemLink, false)
+            end
+            waiting = not awaited.judgedWithout and GetTime() - awaited.askedAt <= CONVERSION_PATIENCE
+            if not waiting then
+                awaited.judgedWithout = true
+            end
         end
-        Note(trace, "catalyst: no icon yet, so nothing is said (the icons are drawn again when the client has it)")
-        return nil
+        if waiting then
+            Note(trace, "catalyst: no icon yet (the client has been asked; the verdict waits for it)")
+        else
+            Note(trace, "catalyst: no icon yet, so nothing is said (the icons are drawn again when the client has it)")
+        end
+        return nil, nil, waiting
     end
 
     -- The set's piece is the one with the icon that the client names a source of for this
@@ -762,9 +795,17 @@ end
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ITEM_CONVERSION_DATA_READY")
 eventFrame:SetScript("OnEvent", function(_, _, itemGUID)
-    local redraws = itemGUID and awaitedConversions[itemGUID]
-    if redraws and redraws < CONVERSION_REDRAWS_PER_COPY then
-        awaitedConversions[itemGUID] = redraws + 1
+    local awaited = itemGUID and awaitedConversions[itemGUID]
+    if not awaited then
+        return
+    end
+    if not awaited.judgedWithout then
+        -- Its verdict is still waiting: the queue asks again, and nothing else is drawn.
+        if CaerdonWardrobe and CaerdonWardrobe.RetryNotReadySoon then
+            CaerdonWardrobe:RetryNotReadySoon()
+        end
+    elseif awaited.redraws < CONVERSION_REDRAWS_PER_COPY then
+        awaited.redraws = awaited.redraws + 1
         RefreshSoon("conversion data")
     end
 end)
