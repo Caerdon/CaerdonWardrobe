@@ -98,6 +98,11 @@ local function ItemID(reference)
 end
 
 -- toon: { name, realm, class, classFile, race, faction, level }
+-- An item with bonuses = { "12782", ... } has them in its link, and its level is then what its
+-- link's bonus IDs say (game.levelBonuses: bonus ID -> the level it gives; the first of the
+-- link's that gives one counts, and baseLevel where none does), as the client has it for a
+-- season's gear. bonusLevels = { ["12831"] = 300 } is what an ID gives this one item, where
+-- that is not what it gives the others.
 -- items: id -> { name, quality, level, minLevel, type, subType, stack, equipLoc, icon, price,
 --                classID, subClassID, bindType, expansion, tooltip = { { text, type, r, g, b } },
 --                appearance = { appearanceID, sourceID, collected, valid, canCollect } }
@@ -110,9 +115,32 @@ function H.StockGame(toon, items)
     local function Link(id)
         local item = items[id]
         -- A crafted piece's link ends in its maker's GUID (item.crafter).
-        return ("|cffffffff|Hitem:%d::::::::%d::::::::%s:|h[%s]|h|r"):format(id, toon.level, item.crafter or "", item.name)
+        local bonuses = item.bonuses and #item.bonuses > 0 and (#item.bonuses .. ":" .. table.concat(item.bonuses, ":")) or ""
+        return ("|cffffffff|Hitem:%d::::::::%d::::%s::::%s:|h[%s]|h|r"):format(id, toon.level, bonuses, item.crafter or "",
+            item.name)
     end
     game.Link = Link
+    game.items = items
+    game.levelBonuses = {}
+    -- The level a link's bonus IDs give an item that has them, or nil for any other reference.
+    local function LevelByBonus(reference)
+        local item = Item(reference)
+        if not (item and item.bonuses and type(reference) == "string") then
+            return nil
+        end
+        local fields = {}
+        for field in (reference:match("|H(item:[^|]*)|h") or reference):gmatch("([^:]*):?") do
+            fields[#fields + 1] = field
+        end
+        for index = 1, tonumber(fields[14]) or 0 do
+            local level = (item.bonusLevels and item.bonusLevels[fields[14 + index]]) or game.levelBonuses[fields[14 + index]]
+            if level then
+                return level
+            end
+        end
+        return item.baseLevel or 1
+    end
+    game.LevelByBonus = LevelByBonus
 
     local function Set(name, value) game:Set(name, value) end
 
@@ -214,6 +242,10 @@ function H.StockGame(toon, items)
     Set("C_Item.GetItemMaxStackSize", function(reference) return Item(reference) and Item(reference).stack end)
     Set("C_Item.GetItemInventoryType", function() return 0 end)
     Set("C_Item.GetDetailedItemLevelInfo", function(reference)
+        local byBonus = LevelByBonus(reference)
+        if byBonus then
+            return byBonus, false, byBonus
+        end
         return Item(reference) and Item(reference).level, false, Item(reference) and Item(reference).level
     end)
     Set("C_Item.GetItemStats", function() return {} end)

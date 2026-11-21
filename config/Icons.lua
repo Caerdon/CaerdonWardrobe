@@ -67,7 +67,16 @@ function CaerdonWardrobeConfigIcons:GetTitle()
     return "Icons"
 end
 
--- A spec switch's tooltip: what it does, why it is on or off right now, and where it is kept.
+-- What the toon keeps beside what it wears, one list in the upgrade block under "Also for gear
+-- I am not wearing": a row per gear set, then (on a client with specs) one per spec of its
+-- class that no gear set speaks for. A row has a switch (its upgrades are shown, in red, while
+-- something else is worn) and, for a gear set, the Pawn scale the set is scored on. Both
+-- clients have gear sets, and neither lets a set say which weights it is for. Which gear a
+-- toon keeps and which specs it plays are facts about the toon, so all of it is kept per
+-- character and the line above the rows says so. With Pawn alone: without it there is no
+-- scale to score on, and the list takes no room.
+
+-- A spec's switch: what it does, why it is on or off right now, and where it is kept.
 -- reason: what CaerdonEquipment:GetOtherSpecChoice says (the equipment code's names).
 local FOLLOWS = " Until you click it, it follows the gear sets you assign and the scales you have Pawn show."
 local function OtherSpecTooltip(specName, wanted, reason)
@@ -88,63 +97,12 @@ local function OtherSpecTooltip(specName, wanted, reason)
         "\n\nKept for this character only."
 end
 
--- Under "Also for my other specs and gear sets": one switch per spec of the toon's class, for a player who
--- only cares about some of them. Only where the client has specs (with talent trees in their
--- place, Pawn's own list of shown scales is the choice). Which specs a toon plays is a fact
--- about the toon, so this is the one choice on the page that is kept per character, and its
--- label says so.
-function CaerdonWardrobeConfigIcons:AddOtherSpecChoices(dependsOn)
-    if C_Traits ~= nil and C_Traits.GetGroupDisplayInfoByTreeID ~= nil then
-        return
-    end
-    local countSpecs = C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID
-    if not (countSpecs and GetSpecializationInfoForClassID) then
-        return
-    end
-    local _, classFile, classID = UnitClass("player")
-    local count = classID and countSpecs(classID) or 0
-    if not classFile or count < 2 then
-        return
-    end
+-- The switch of a gear set that has a scale of its own and no spec, and of one with neither.
+local SET_TOOLTIP = "Show upgrades for this gear set, in red, while you wear another.\n\nKept for this character only."
+local NO_SCALE_TOOLTIP = "This gear set is not scored on its own. Choose a Pawn scale for it first."
 
-    local infos = {}
-    for specIndex = 1, count do
-        local _, specName = GetSpecializationInfoForClassID(classID, specIndex)
-        if specName then
-            infos[#infos + 1] = {
-                key = "otherSpec" .. specIndex,
-                text = specName,
-                -- Built as the tooltip opens: it says why the switch is as it is, which for one
-                -- never clicked is the game's or Pawn's doing and can change by itself.
-                tooltip = function()
-                    return OtherSpecTooltip(specName, CaerdonEquipment:GetOtherSpecChoice(specIndex))
-                end,
-                configSection = "Icon",
-                configSubsection = "OtherSpecs",
-                configValue = classFile .. specIndex,
-                -- Never clicked: what the equipment code takes the spec as right now.
-                default = function()
-                    return CaerdonEquipment:IsOtherSpecWantedByDefault(specIndex)
-                end,
-                perCharacter = true,
-            }
-        end
-    end
-    if #infos > 0 then
-        local name = UnitName("player")
-        local whose = name and name ~= UNKNOWNOBJECT and (name .. "'s") or "this character's"
-        self:AddLabel("Which of " .. whose .. " specs (kept per character):", { indent = 2 })
-        self:AddCheckboxGrid(infos, { indent = 2, dependsOn = dependsOn })
-    end
-end
-
--- At the end of the upgrade block: a row per gear set of the toon, with the Pawn scale the set
--- is scored on (the equipment code's "tied" set). Both clients have gear sets, and neither
--- lets a set say which weights it is for; which set is for what is a fact about the toon, so
--- it is kept per character and the line above the rows says so. With Pawn alone: without it
--- there is no scale to choose, and the list takes no room.
 local TIED_TOOLTIP = "While you wear this gear set, upgrades are scored on this scale, whether Pawn shows it or not. " ..
-    "While you wear another, an upgrade for this set gets the red arrow (with \"Also for my other specs and gear sets\" on)." ..
+    "While you wear another, an upgrade for this set gets the red arrow (with the set ticked, and \"Also for gear I am not wearing\" on)." ..
     "\n\nKept for this character only."
 
 -- What a set nobody tied goes by: the dropdown's first entry, and its tooltip.
@@ -170,10 +128,33 @@ local function TakenTooltip(scale)
         scale.takenBy .. " first."
 end
 
-function CaerdonWardrobeConfigIcons:AddGearSetScales()
+-- The mark at the end of a gear set's row: the set is one for PVP, and is scored at the levels
+-- its pieces' PVP floors raise them to, wherever the toon is. Offered for a set that is scored
+-- at all (a spec's, or one with a scale) and holds a piece with a floor.
+local PVP_TOOLTIP = "Score this gear set as it is in PvP. Its pieces, and a piece you compare with them, count at the item level " ..
+    "their PvP floor raises them to in arenas, battlegrounds and War Mode, wherever you are. " ..
+    "Without it a piece is scored at the level it has in the open world." ..
+    "\n\nKept for this character only."
+
+-- Where a row's switch is kept: a spec's (its own row, or the row of the gear set the client
+-- ties to it) by class file and spec index, as before the rows were one list; a gear set's own
+-- by the set's ID. nil for a row with no switch to click.
+local function RowSwitch(row)
+    local specIndex = row.spec and row.spec.index or (row.set and row.set.specIndex)
+    if specIndex then
+        local _, classFile = UnitClass("player")
+        return { perCharacter = true, configSection = "Icon", configSubsection = "OtherSpecs",
+            configValue = tostring(classFile) .. specIndex }, specIndex
+    elseif row.set and row.set.tied then
+        return { perCharacter = true, configSection = "Icon", configSubsection = "OtherSets", configValue = row.set.id }
+    end
+    return nil
+end
+
+function CaerdonWardrobeConfigIcons:AddLoadoutList(dependsOn)
     self:AddDropdownList({
         key = "gearSetScale",
-        width = 230,
+        width = 210,
         rows = function()
             local sets, byTree = CaerdonEquipment:GetGearSets()
             if not sets or not CaerdonEquipment:GetGearSetScaleChoices() then
@@ -193,17 +174,33 @@ function CaerdonWardrobeConfigIcons:AddGearSetScales()
                 end
                 rows[#rows + 1] = row
             end
+            for _, spec in ipairs(CaerdonEquipment:GetSpecsWithoutGearSet() or {}) do
+                rows[#rows + 1] = { icon = spec.icon, text = spec.name, spec = spec,
+                    note = "No gear set: what you wear, on " .. spec.scaleLabel }
+            end
             return rows
         end,
-        header = function(count)
+        header = function(count, rows)
             local name = UnitName("player")
             local known = name ~= nil and name ~= UNKNOWNOBJECT
             if count == 0 then
                 return (known and name or "This character") ..
                     " has no gear sets. One you save in the character window can be scored on a Pawn scale of its own here."
             end
-            return (known and (name .. "'s") or "This character's") ..
-                " gear sets, and the Pawn scale each is scored on (kept per character):"
+            local sets, specs = false, false
+            for _, row in ipairs(rows) do
+                sets = sets or row.set ~= nil
+                specs = specs or row.spec ~= nil
+            end
+            local whose = known and (name .. "'s") or "This character's"
+            local what = sets and specs and "gear sets and specs" or (sets and "gear sets" or "specs")
+            local text = whose .. " " .. what .. " (kept per character). Ticked: its upgrades show while you wear something else."
+            if sets then
+                text = text .. " The scale is what a gear set is scored on."
+            else
+                text = text .. " A gear set you save in the character window gets a row here, and can be scored on a Pawn scale of its own."
+            end
+            return text
         end,
         choices = function(row)
             local title, tooltip = UntiedChoice(row.set, row.byTree)
@@ -224,7 +221,57 @@ function CaerdonWardrobeConfigIcons:AddGearSetScales()
             self:SetOption({ perCharacter = true, configSection = "Icon", configSubsection = "GearSetScales",
                 configValue = row.set.id }, value)
         end,
-    })
+        mark = {
+            text = "PvP",
+            get = function(row)
+                local set = row.set
+                if not (set and (set.specIndex or set.tied)) then
+                    return nil
+                end
+                local marked = CaerdonEquipment:IsPvpGearSet(set.id)
+                if marked or CaerdonEquipment:GearSetHasPvpFloor(set.id) then
+                    return marked
+                end
+                return nil
+            end,
+            set = function(row, checked)
+                self:SetOption({ perCharacter = true, configSection = "Icon", configSubsection = "PvpSets",
+                    configValue = row.set.id }, checked)
+            end,
+            tooltip = function()
+                return PVP_TOOLTIP
+            end,
+        },
+        check = {
+            -- A spec's switch shows what the equipment code takes the spec as until it is
+            -- clicked; the click writes that switch alone.
+            get = function(row)
+                local info, specIndex = RowSwitch(row)
+                if not info then
+                    return nil
+                elseif specIndex then
+                    return (CaerdonEquipment:GetOtherSpecChoice(specIndex)) and true or false
+                end
+                return CaerdonEquipment:IsGearSetWanted(row.set.id)
+            end,
+            set = function(row, checked)
+                local info = RowSwitch(row)
+                if info then
+                    self:SetOption(info, checked)
+                end
+            end,
+            tooltip = function(row)
+                local info, specIndex = RowSwitch(row)
+                if not info then
+                    return NO_SCALE_TOOLTIP
+                elseif specIndex then
+                    local specName = row.spec and row.spec.name or row.set.specName
+                    return OtherSpecTooltip(specName, CaerdonEquipment:GetOtherSpecChoice(specIndex))
+                end
+                return SET_TOOLTIP
+            end,
+        },
+    }, { indent = 2, dependsOn = dependsOn })
 end
 
 function CaerdonWardrobeConfigIcons:Register()
@@ -333,6 +380,10 @@ function CaerdonWardrobeConfigIcons:Register()
     -- column is, is the tooltip's to say.
     self:AddCheckbox({ key = "auctionUpgradeColumn", text = "In the auction house", tooltip = "Adds a column for the upgrade arrow and the item level gain while you browse weapons or armor you could wear, and one for each auction's upgrade percentage on the page of such a piece. Off: the auction house shows neither. The list of auctions has the column only while your settings leave something to put in it.", configSection = "Auction", configValue = "UpgradeColumn" },
         { indent = 1, dependsOn = showUpgrade })
+    -- One more place of the arrow's: a piece that is saved in a gear set. Not about what a
+    -- piece is measured against, which is the list further down.
+    self:AddCheckbox({ key = "showUpgradeOnGearSets", text = "On pieces saved in a gear set", tooltip = "Show the arrow on items that belong to a saved gear set. With the gear set icon on, it sits on that icon as a small badge. Off: a gear set piece never shows the arrow.", configSection = "Icon", configValue = "ShowUpgradeOnGearSets" },
+        { indent = 1, dependsOn = showUpgrade })
     -- Without Pawn the item level is all the arrow goes by: both are shown as they then are, on.
     local function WithoutPawn()
         return PawnShouldItemLinkHaveUpgradeArrowUnbudgeted == nil
@@ -342,21 +393,20 @@ function CaerdonWardrobeConfigIcons:Register()
         { indent = 1, dependsOn = showUpgrade, forcedOn = WithoutPawn })
     self:AddCheckbox({ key = "itemLevelOverPawn", text = "Even when Pawn rates the equipped piece higher", tooltip = "For when item level is what counts (a gear score to reach, a game mode that goes by item level): a higher item level is then always an upgrade.", forcedTooltip = WITHOUT_PAWN, configSection = "Icon", configValue = "ItemLevelOverPawn" },
         { indent = 2, dependsOn = showItemLevel, forcedOn = WithoutPawn })
-    local showOtherSpecs = self:AddCheckbox({ key = "showOtherSpecUpgrades", text = "Also for my other specs and gear sets", tooltip = "Shows the arrow, in red, on gear that is an upgrade for another of your specializations. With Pawn it is scored on that spec's scale against the gear set assigned to the spec, or against what you are wearing when none is. The gear set of the spec you are playing counts the same way for a slot where you are not wearing its piece. So does a gear set you gave a Pawn scale of its own (at the end of this block), while you wear another.", configSection = "Icon", configValue = "ShowOtherSpecUpgrades" },
+    -- What the toon keeps beside what it wears: the switch, and under it the gear sets and
+    -- specs it is for (AddLoadoutList).
+    local showOtherSpecs = self:AddCheckbox({ key = "showOtherSpecUpgrades", text = "Also for gear I am not wearing", tooltip = "Shows the arrow, in red, on gear that is an upgrade for a gear set you are not wearing or for another of your specializations: the ones ticked below. With Pawn a piece is scored on the scale of the gear set or spec, against that set's pieces, or against what you are wearing for a spec with no gear set. The gear set of the spec you are playing counts the same way for a slot where you are not wearing its piece.", configSection = "Icon", configValue = "ShowOtherSpecUpgrades" },
         { indent = 1, dependsOn = showUpgrade })
-    self:AddOtherSpecChoices(showOtherSpecs)
-    self:AddCheckbox({ key = "showUpgradeOnGearSets", text = "On gear set pieces", tooltip = "Show the arrow on items that belong to a saved gear set. With the gear set icon on, it sits on that icon as a small badge. Off: a gear set piece never shows the arrow.", configSection = "Icon", configValue = "ShowUpgradeOnGearSets" },
-        { indent = 1, dependsOn = showUpgrade })
+    self:AddLoadoutList(showOtherSpecs)
     self:AddCheckbox({ key = "showUpgradeLevelDelta", text = "Show the item level gain", tooltip = "Displays the item level difference, such as +5, on an upgrade.", configSection = "Icon", configValue = "ShowUpgradeLevelDelta" })
     -- The tooltip lines that say what the arrow is for. A switch of their own, not one under the
     -- arrow's: they are shown whether the arrow is or not.
-    self:AddCheckbox({ key = "showLoadoutUpgrades", text = "Say what an upgrade is for, and by how much, in its tooltip", tooltip = "Adds a line to the tooltip of gear that is an upgrade: for what you are wearing, for one of your gear sets, or for another specialization. It names the gear set or spec and how much better the piece is on that spec's Pawn scale, with the arrow the piece has in your bags. Shown at the bottom with Pawn's lines, in place of Pawn's own upgrade note and its \"your best\" marks for the same spec. The lines for other gear follow \"Also for my other specs and gear sets\" above.", configSection = "Tooltip", configValue = "ShowLoadoutUpgrades" })
+    self:AddCheckbox({ key = "showLoadoutUpgrades", text = "Say what an upgrade is for, and by how much, in its tooltip", tooltip = "Adds a line to the tooltip of gear that is an upgrade: for what you are wearing, for one of your gear sets, or for another specialization. It names the gear set or spec and how much better the piece is on that spec's Pawn scale, with the arrow the piece has in your bags. Shown at the bottom with Pawn's lines, in place of Pawn's own upgrade note and its \"your best\" marks for the same spec. The lines for other gear follow \"Also for gear I am not wearing\" above.", configSection = "Tooltip", configValue = "ShowLoadoutUpgrades" })
     self:AddDropdown({ key = "sameLevelItems", text = "Same item level as equipped:", configSection = "Icon", configValue = "SameLevelBehavior" }, {
         { title = "No Icon", value = "none", tooltip = "Keep same-level pieces quiet (no neutral or sellable icons)." },
         { title = "Sellable", value = "sellable", tooltip = "Treat same-level pieces as sellable duplicates." },
         { title = "Neutral Balance", value = "neutral", tooltip = "Show the neutral balance icon so you can evaluate them manually." }
     })
-    self:AddGearSetScales()
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({

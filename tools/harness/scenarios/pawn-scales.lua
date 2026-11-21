@@ -74,6 +74,92 @@ return function(H, S)
                 subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
                 bindType = 1, tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } },
                 appearance = { appearanceID = 6401, sourceID = 8401, collected = true } },
+            -- A season's gear, whose level is its link's bonus ID's (the stock game's bonuses):
+            -- a PVP set's piece with a floor, a piece for the open world with none, a PVP piece
+            -- below the first with a higher floor, and one whose floor no bonus ID gives.
+            [940211] = { name = "Arena Jerkin", quality = 4, level = 250, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "13449", "12782" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 285" } },
+                appearance = { appearanceID = 6411, sourceID = 8411, collected = true } },
+            [940212] = { name = "Dungeon Jerkin", quality = 4, level = 276, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "6652", "12798" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 } },
+                appearance = { appearanceID = 6412, sourceID = 8412, collected = true } },
+            [940213] = { name = "Gladiator's Jerkin", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793", "13577" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6413, sourceID = 8413, collected = true } },
+            [940214] = { name = "Jerkin Of A Floor Too Far", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 400" } },
+                appearance = { appearanceID = 6414, sourceID = 8414, collected = true } },
+            -- A piece of another run of level IDs, whose floor none of them gives, and a piece
+            -- that an ID for its floor would make of another quality.
+            [940216] = { name = "Aspirant's Jerkin", quality = 3, level = 263, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "13650", "13657" }, baseLevel = 259,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 331" } },
+                appearance = { appearanceID = 6416, sourceID = 8416, collected = true } },
+            -- Fresh pieces for a table read from what was saved, for one of another build, for
+            -- a level ID the table does not have, and for a level past the table's end.
+            [940218] = { name = "Jerkin For A Saved Table", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6418, sourceID = 8418, collected = true } },
+            [940219] = { name = "Jerkin For Another Build", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6419, sourceID = 8419, collected = true } },
+            -- A piece with a level of its own beside its ID's: 298 with no level ID, 292 by its own.
+            [940222] = { name = "Jerkin With A Level Of Its Own", quality = 4, level = 292, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12833" }, baseLevel = 298,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 344" } },
+                appearance = { appearanceID = 6422, sourceID = 8422, collected = true } },
+            [940223] = { name = "Jerkin That Wants Its Own Level", quality = 4, level = 292, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12833" }, baseLevel = 298,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6423, sourceID = 8423, collected = true } },
+            [940220] = { name = "Jerkin Of A New Season", quality = 4, level = 300, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "16500" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 345" } },
+                appearance = { appearanceID = 6420, sourceID = 8420, collected = true } },
+            [940221] = { name = "Jerkin Of A Raised Floor", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 420" } },
+                appearance = { appearanceID = 6421, sourceID = 8421, collected = true } },
+            [940217] = { name = "Jerkin Of Another Colour", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6417, sourceID = 8417, collected = true } },
+            -- One that an ID gives another level than it gives the rest.
+            [940215] = { name = "Jerkin Of Its Own Mind", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44, bonusLevels = { ["12831"] = 300 },
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6415, sourceID = 8415, collected = true } },
+            -- And one that every ID for its floor gives another level.
+            [940224] = { name = "Jerkin No ID Raises", quality = 4, level = 259, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12793" }, baseLevel = 44, bonusLevels = { ["12831"] = 300, ["12835"] = 300, ["100"] = 300 },
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 298" } },
+                appearance = { appearanceID = 6424, sourceID = 8424, collected = true } },
+            -- A set's piece the client is without for a while.
+            [940225] = { name = "Arena Jerkin Not Yet There", quality = 4, level = 250, minLevel = 80, type = "Armor",
+                subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
+                bindType = 1, bonuses = { "12782" }, baseLevel = 44,
+                tooltip = { { text = "Binds when picked up", type = 20, bonding = 1 }, { text = "@floor 285" } },
+                appearance = { appearanceID = 6425, sourceID = 8425, collected = true } },
             -- In the bags, for the other spec's gear set.
             [940003] = { name = "Prowler's Jerkin", quality = 3, level = 190, minLevel = 80, type = "Armor",
                 subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 800, classID = 4, subClassID = 2,
@@ -2588,8 +2674,479 @@ return function(H, S)
             PawnChanged(world)
             info = Info(world, { GUARDIAN, OWN }, { OWN })
             Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true, "tied: with a weaker piece in the set it is that set's upgrade")
+
+            -- The set's own switch (the Icons page's row for it): switched off, the set is no
+            -- loadout while another is worn, and its scale is the set's all the same, so
+            -- Pawn's verdict for it, which is against the worn gear, gives no arrow either.
+            local function Want(sets)
+                world.env.CaerdonWardrobeCharacterConfig.Icon.OtherSets = sets
+            end
+            Want({ [41] = false })
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Equal(info.isUpgrade, nil, "switched off: a set the player switched off shows no upgrade for its weaker piece")
+            Equal(info.pawnIdentifiedUpgrade, false, "switched off: and Pawn's word for its scale is not the worn gear's")
+            Equal(equipment:GetLoadoutUpgradeList(piece), nil, "switched off: nor has the tooltip a line for it")
+            Check(tostring(equipment:GetGearSetScaleDescription()):find(
+                "\"Arena\" (41) tied to My own, its upgrades switched off while another set is worn", 1, true) ~= nil,
+                "switched off: the export says so: " .. tostring(equipment:GetGearSetScaleDescription()))
+            info = Info(world, { GUARDIAN }, {})
+            Equal(info.isUpgrade, nil, "switched off: the same where Pawn hides the scale")
+            Want({ [31] = false })
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true, "switched off: another set's switch is not this one's")
+            Want({ [41] = true })
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true, "switched off: and on again it is the set's upgrade")
+            Want(nil)
+
+            -- A copy the player made of the played spec's scale keeps its class and spec in
+            -- Pawn. Tied to a set that is not worn it is that set's, as any scale of the
+            -- player's own: Pawn's verdict for it is not the worn gear's yellow arrow.
+            world.scales[OWN].ClassID, world.scales[OWN].SpecID = CLASS_ID, 3
+            world.scaleValues[OWN][940003] = 40
+            PawnChanged(world)
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Equal(info.pawnIdentifiedUpgrade, false, "a copy: tied to a set that is not worn, a copy of the played spec's scale is the set's")
+            Equal(info.isUpgrade, nil, "a copy: and the set's better piece decides")
+            Check(tostring(equipment:GetPawnScaleFilterDescription()):find("ignored: My own", 1, true) ~= nil,
+                "a copy: the export lists it with the scales that are not the worn gear's: " ..
+                tostring(equipment:GetPawnScaleFilterDescription()))
+            world.scaleValues[OWN][940003] = 4
+            PawnChanged(world)
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true and info.pawnIdentifiedUpgrade == false,
+                "a copy: with a weaker piece in the set it is that set's upgrade, in red")
+            Want({ [41] = false })
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Equal(info.isUpgrade, nil, "a copy: and with the set switched off, no upgrade at all")
+            Want(nil)
+            Tie(nil)
+            info = Info(world, { GUARDIAN, OWN }, { OWN })
+            Equal(info.pawnIdentifiedUpgrade, true, "a copy: tied to no set, it counts for the worn gear as before")
+            -- Pawn's own scale for the spec being played stays the toon's, whatever set it
+            -- is tied to: the worn gear is judged on it.
+            Tie({ [41] = GUARDIAN })
+            info = Info(world, { GUARDIAN, OWN }, { GUARDIAN })
+            Check(tostring(equipment:GetPawnScaleFilterDescription()):find("ignored: Druid: Guardian", 1, true) == nil,
+                "a copy: Pawn's own scale for the played spec is not another's when a set that is not worn is tied to it: " ..
+                tostring(equipment:GetPawnScaleFilterDescription()))
+            Tie({ [41] = OWN })
+            world.scales[OWN].ClassID, world.scales[OWN].SpecID = nil, nil
             world.scaleValues[OWN] = nil
             world.scaleValues[FERAL][940003] = 4
+
+            -- A gear set marked as one for PVP is scored at PVP levels in every context: a
+            -- piece with a floor above its level, the set's and the one looked at, as its link
+            -- with the bonus ID that carries its level swapped for the one that gives the
+            -- floor. Arena is tied to Feral's scale and not worn; its piece is the Arena
+            -- Jerkin in the bags (level 250, floor 285). A value on that scale is the link's
+            -- level less 200, so a raised link is worth more.
+            do
+                local game = world.game
+                local floorLine = world.env.PVP_ITEM_LEVEL_TOOLTIP
+                for id = 940211, 940225 do
+                    for _, line in ipairs(game.items[id].tooltip) do
+                        local floor = line.text:match("^@floor (%d+)$")
+                        if floor then
+                            line.text = floorLine:format(tonumber(floor))
+                        end
+                    end
+                end
+                game.levelBonuses = { ["12782"] = 250, ["12793"] = 259, ["12798"] = 276, ["12805"] = 285,
+                    ["12831"] = 298, ["12835"] = 298, ["13650"] = 263, ["13651"] = 266, ["14000"] = 280, ["14050"] = 331,
+                    -- An ID for a level far from the others that give it: the nearest to a piece's own is tried first.
+                    ["100"] = 298, ["12833"] = 292, ["13848"] = 344 }
+                -- The table of level IDs is made in the background: its work is run to its end.
+                local bonuses = world.namespace.LevelBonuses
+                local function TableMade()
+                    return world.client:TickUntil(function() return not bonuses:IsScanning() end, 120)
+                end
+                -- The questions about a link that is not an item's own: those the search asks.
+                local levelAsks = 0
+                local levelInfo = world.env.C_Item.GetDetailedItemLevelInfo
+                world.env.C_Item.GetDetailedItemLevelInfo = function(reference)
+                    local id = type(reference) == "string" and tonumber(reference:match("item:(%d+)"))
+                    if id and game.items[id] and reference ~= game.Link(id) then
+                        levelAsks = levelAsks + 1
+                    end
+                    return levelInfo(reference)
+                end
+                local pawnValue = world.env.PawnGetSingleValueFromItem
+                rawset(world.env, "PawnGetSingleValueFromItem", function(itemData, scaleName)
+                    -- On the set's scale; on the played spec's such a piece is worth next to
+                    -- nothing, so that none of them is an upgrade for what is worn.
+                    local byBonus = game.LevelByBonus(itemData.Link)
+                    if byBonus then
+                        return nil, scaleName == FERAL and byBonus - 200 or 1
+                    end
+                    return pawnValue(itemData, scaleName)
+                end)
+                local function Mark(sets)
+                    world.env.CaerdonWardrobeCharacterConfig.Icon.PvpSets = sets
+                end
+                local hadBag, hadLocation = world.inBag[1], world.setLocations[41]
+                world.inBag[1] = 940211
+                world.setLocations[41] = { [5] = 9001 }
+                Tie({ [41] = FERAL })
+                world.setWorn = { [31] = { 10, 10 }, [41] = { 10, 2 } }
+                PawnChanged(world)
+
+                -- The mark is offered for a set that holds a piece with a floor.
+                Equal(equipment:GearSetHasPvpFloor(41), true, "pvp set: a set with a piece that has a floor says so")
+                Equal(equipment:GearSetHasPvpFloor(31), false, "pvp set: one with none does not")
+                Equal(equipment:IsPvpGearSet(41), false, "pvp set: and no set is marked by itself")
+
+                -- Not marked: every piece at its own level.
+                local dungeon
+                info, dungeon = Info(world, { GUARDIAN }, {}, 940212)
+                Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true,
+                    "pvp set: not marked, a piece for the open world beats the set's piece at its own level (76 against 50)")
+                local list = equipment:GetLoadoutUpgradeList(dungeon)
+                Check(list ~= nil and list[1].percent == 52 and list[1].pvp == nil, "pvp set: by 52%, with no word of PVP levels")
+                Check(tostring(equipment:GetLoadoutDescription()):find("scored at PVP levels", 1, true) == nil,
+                    "pvp set: and the export does not say the set is scored so")
+
+                -- Marked. Which IDs give which level is the client's table, made in the background
+                -- the first time it is needed: until it is there every piece counts at its own
+                -- level, and when it is the icons are asked again.
+                Equal(bonuses:IsScanning(), false, "the table: nothing is asked of the client while no set is marked")
+                Equal(world.env.CaerdonLevelBonusData, nil, "the table: and nothing is saved")
+                Mark({ [41] = true })
+                info, dungeon = Info(world, { GUARDIAN }, {}, 940212)
+                Equal(bonuses:IsScanning(), true, "the table: the first piece with a floor to reach has it made")
+                Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true,
+                    "the table: while it is being made the comparison is at the pieces' own levels (76 against 50)")
+                Check(table.concat(equipment:ExplainPvpLevel(world.env.CaerdonItem:CreateFromItemID(940211)), " / "):find(
+                    "at its floor: no link (the table of level IDs is being made)", 1, true) ~= nil,
+                    "the table: and the export says the table is being made")
+                world.refreshes = {}
+                Check(TableMade(), "the table: its making comes to an end")
+                Check(#world.refreshes == 1 and world.refreshes[1].reason == "level bonus IDs",
+                    "the table: made, the icons are asked again once, with the reason said")
+                local saved = world.env.CaerdonLevelBonusData
+                Check(type(saved) == "table" and saved.build == select(2, world.env.GetBuildInfo()) and saved.ids[12805] == 285 and
+                    saved.ids[12831] == 298 and saved.ids[14050] == 331 and saved.ids[12806] == nil,
+                    "the table: it is saved for the client's build, with the IDs that give a level and no other")
+                Check(saved ~= nil and saved.scannedTo >= 14050 + 3000, "the table: asked to well past the last ID that gave a level")
+                Check(saved ~= nil and saved.blind == 44 and type(saved.made) == "table" and saved.made.asked == saved.scannedTo and
+                    saved.made.frames == saved.scannedTo / 250,
+                    "the table: with the one level it cannot show, and what its making took")
+                Check(tostring(bonuses:Describe()):find("its last making: " .. saved.scannedTo .. " questions in", 1, true) ~= nil and
+                    tostring(bonuses:Describe()):find("cannot show level 44", 1, true) ~= nil,
+                    "the table: both are in the export's line: " .. tostring(bonuses:Describe()))
+                Check(tostring(bonuses:Describe()):find("13 IDs for 11 levels", 1, true) ~= nil and
+                    tostring(bonuses:Describe()):find("asked this session", 1, true) ~= nil,
+                    "the table: the export says how it stands: " .. tostring(bonuses:Describe()))
+
+                -- With the table: the set's piece counts at its floor (85), which the open world's does not reach.
+                info, dungeon = Info(world, { GUARDIAN }, {}, 940212)
+                Equal(info.isUpgrade, nil, "pvp set: marked, the same piece is no upgrade over the set's piece at its floor (76 against 85)")
+                Equal(equipment:GetLoadoutUpgradeList(dungeon), nil, "pvp set: nor has its tooltip a line")
+                Check(tostring(equipment:GetLoadoutDescription()):find("gear set \"Arena\", scored at PVP levels", 1, true) ~= nil,
+                    "pvp set: the export says the set is scored at PVP levels: " .. tostring(equipment:GetLoadoutDescription()))
+                Check(tostring(equipment:GetGearSetScaleDescription()):find("\"Arena\" (41) tied to Druid: Feral, marked as a PVP set", 1, true) ~= nil,
+                    "pvp set: and that it is marked: " .. tostring(equipment:GetGearSetScaleDescription()))
+                -- A PVP piece below the set's by its own level, with the higher floor: both raised.
+                local gladiator
+                info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+                Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true,
+                    "pvp set: a piece with a higher floor is an upgrade at the floors (98 against 85)")
+                list = equipment:GetLoadoutUpgradeList(gladiator)
+                Check(list ~= nil and list[1].percent == 15 and list[1].pvp == true and list[1].name == "Arena",
+                    "pvp set: by 15%, and the entry says it is at PVP levels")
+                Check(TooltipLines(world, 940213):find("(at PvP levels)", 1, true) ~= nil,
+                    "pvp set: the tooltip's line says so: " .. TooltipLines(world, 940213))
+                local explained = table.concat(equipment:ExplainPvpLevel(gladiator), " / ")
+                Check(explained:find("floor: 298; the piece's level: 259", 1, true) ~= nil and
+                    explained:find("at its floor: item level 298, by bonus 12831 in the place of 12793", 1, true) ~= nil,
+                    "pvp set: the export names the floor and the bonus ID swapped: " .. explained)
+                Check(explained:find(":2:12831:13577:", 1, true) ~= nil,
+                    "pvp set: the level's ID stands where the piece's own stood, and its other IDs stay: " .. explained)
+                -- Not marked, the same piece is the better one by less.
+                Mark(nil)
+                info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+                list = equipment:GetLoadoutUpgradeList(gladiator)
+                Check(list ~= nil and list[1].percent == 18 and list[1].pvp == nil,
+                    "pvp set: not marked, that piece is scored at its own level (59 against 50, 18%)")
+                Check(TooltipLines(world, 940213):find("(at PvP levels)", 1, true) == nil, "pvp set: with no such word in its line")
+                Mark({ [41] = true })
+
+                -- A link raised once is kept: nothing is asked about it again.
+                info = Info(world, { GUARDIAN }, {}, 940213)
+                levelAsks = 0
+                info = Info(world, { GUARDIAN }, {}, 940213)
+                Equal(levelAsks, 0, "pvp set: a link raised once is kept, and no link is made to ask about it again")
+
+                -- What one piece taught is tried first on the next, and checked: a piece the
+                -- same ID gives another level is searched for its own.
+                local ownMind
+                info, ownMind = Info(world, { GUARDIAN }, {}, 940215)
+                explained = table.concat(equipment:ExplainPvpLevel(ownMind), " / ")
+                Check(explained:find("at its floor: item level 298, by bonus 12835 in the place of 12793", 1, true) ~= nil,
+                    "pvp set: an ID that gives this piece another level than the floor is not taken for it: " .. explained)
+                Check(info.isUpgrade == true, "pvp set: and the piece is an upgrade at its floor (98 against 85)")
+                -- The set's piece is one the client cannot give the level of just now (it has
+                -- happened to every worn piece at once). Whether it has a floor is not known
+                -- then, so it is not taken for a piece without one and scored as it is beside
+                -- a piece that was raised: the comparison is at own levels until it is known.
+                world.inBag[1] = 940225
+                local knownLevel = world.env.C_Item.GetDetailedItemLevelInfo
+                world.env.C_Item.GetDetailedItemLevelInfo = function(reference)
+                    if reference == game.Link(940225) then
+                        return nil
+                    end
+                    return knownLevel(reference)
+                end
+                info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+                list = equipment:GetLoadoutUpgradeList(gladiator)
+                Check(list ~= nil and list[1] ~= nil and list[1].percent == 18 and list[1].pvp == nil,
+                    "unready: against a set's piece the client has no level for, the comparison is at own levels (59 against 50, not 98 against 50): " ..
+                    tostring(list and list[1] and list[1].percent) .. ", " .. tostring(list and list[1] and list[1].pvp))
+                -- The export's counters say that it happened, and where.
+                local counted = {}
+                for _, line in ipairs(world.env.CaerdonCounters:GetReportLines()) do
+                    counted[#counted + 1] = type(line) == "table" and tostring(line.text or line[2] or line[1]) or tostring(line)
+                end
+                counted = table.concat(counted, " / ")
+                Check(counted:find("A piece's data missing from the client's cache when a comparison needed it:", 1, true) ~= nil and
+                    counted:find("a piece's PVP floor: ", 1, true) ~= nil and counted:find("last item 940225", 1, true) ~= nil,
+                    "unready: the counters have the piece the client was without")
+                -- The client has it again, in the middle of the same refresh: the next piece
+                -- judged is compared at the floors, the set's piece raised with it (what was
+                -- made of it while it was not known is not kept as its value at the floor).
+                world.env.C_Item.GetDetailedItemLevelInfo = knownLevel
+                local sameRefresh
+                info, sameRefresh = Info(world, { GUARDIAN }, {}, 940215, true)
+                list = equipment:GetLoadoutUpgradeList(sameRefresh)
+                Check(list ~= nil and list[1] ~= nil and list[1].percent == 15 and list[1].pvp == true,
+                    "unready: once the client has the piece, the next comparison of the same refresh is at the floors (98 against 85): " ..
+                    tostring(list and list[1] and list[1].percent) .. ", " .. tostring(list and list[1] and list[1].pvp))
+                -- And so does the next refresh.
+                info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+                list = equipment:GetLoadoutUpgradeList(gladiator)
+                Check(list ~= nil and list[1] ~= nil and list[1].percent == 15 and list[1].pvp == true,
+                    "unready: and at the floors once the client has the piece (98 against 85): " ..
+                    tostring(list and list[1] and list[1].percent) .. ", " .. tostring(list and list[1] and list[1].pvp))
+                world.inBag[1] = 940211
+                info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+
+                -- The export sets the worn gear's levels and floors beside the client's averages.
+                rawset(world.env, "GetAverageItemLevel", function() return 274, 244.5625, 291.8125 end)
+                explained = table.concat(equipment:ExplainPvpLevel(ownMind), " / ")
+                -- And says of a worn piece the client has no level for by its link what it does have.
+                local wornLevels = world.env.C_Item.GetDetailedItemLevelInfo
+                local wornChest = world.env.GetInventoryItemLink("player", 5)
+                world.env.C_Item.GetDetailedItemLevelInfo = function(reference)
+                    if reference == wornChest then
+                        return nil
+                    end
+                    return wornLevels(reference)
+                end
+                local linkless = table.concat(equipment:ExplainPvpLevel(ownMind), " / ")
+                world.env.C_Item.GetDetailedItemLevelInfo = wornLevels
+                rawset(world.env, "GetAverageItemLevel", nil)
+                Check(wornChest ~= nil and linkless:find("1 pieces the client has no level for by their links just now", 1, true) ~= nil and
+                    linkless:find("no level by its link: slot 5: item:", 1, true) ~= nil and linkless:find("error:", 1, true) == nil,
+                    "pvp set: and what the client has of a worn piece it has no level for by its link: " .. linkless)
+                Check(explained:find("worn gear: average of the pieces' own levels ", 1, true) ~= nil and
+                    explained:find("the client's averages: overall 274.00, equipped 244.56, PVP 291.81 (the last counts gear in the bags too)", 1, true) ~= nil and
+                    explained:find("by slot, level>floor: ", 1, true) ~= nil and explained:find("error:", 1, true) == nil,
+                    "pvp set: the export has the worn gear's levels beside the client's averages: " .. explained)
+                local noneRaises
+                info, noneRaises = Info(world, { GUARDIAN }, {}, 940224)
+                explained = table.concat(equipment:ExplainPvpLevel(noneRaises), " / ")
+                Check(explained:find("at its floor: no link (none of the ", 1, true) ~= nil and
+                    explained:find(" bonus IDs in the table for level 298 gives it that level)", 1, true) ~= nil,
+                    "pvp set: a piece that every ID for its floor gives another level has no link: " .. explained)
+
+                -- A floor no bonus ID gives: the comparison is not made with one piece raised
+                -- and the other not. Both count at their own levels, and the export says why.
+                local tooFar
+                info, tooFar = Info(world, { GUARDIAN }, {}, 940214)
+                -- A level no ID of the table gives has the IDs after the table's end asked, once.
+                Equal(bonuses:IsScanning(), true, "the table: a level it has no ID for has it carried on past its end")
+                local endedAt = world.env.CaerdonLevelBonusData.scannedTo
+                Check(TableMade(), "the table: that comes to an end too")
+                Check(world.env.CaerdonLevelBonusData.scannedTo >= endedAt + 3000, "the table: with as many IDs more asked")
+                info, tooFar = Info(world, { GUARDIAN }, {}, 940214)
+                Equal(bonuses:IsScanning(), false, "the table: and not carried on a second time for the same level")
+                Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true,
+                    "pvp set: a piece with a floor and no link for it is compared at the pieces' own levels (59 against 50, not 85)")
+                list = equipment:GetLoadoutUpgradeList(tooFar)
+                Check(list ~= nil and list[1].percent == 18 and list[1].pvp == nil,
+                    "pvp set: by 18%, and the entry does not say PVP levels")
+                Check(TooltipLines(world, 940214):find("(at PvP levels)", 1, true) == nil, "pvp set: nor does its tooltip line")
+                explained = table.concat(equipment:ExplainPvpLevel(tooFar), " / ")
+                Check(explained:find("at its floor: no link (no bonus ID in the table gives level 400)", 1, true) ~= nil and
+                    explained:find("its bonus IDs, and its level without each: 12793 -> 44", 1, true) ~= nil and
+                    explained:find("the table of level IDs: 13 IDs for 11 levels", 1, true) ~= nil,
+                    "pvp set: and the export says why, with what was asked: " .. explained)
+                -- Asked again at the next refresh, it costs nothing: it is asked again only when
+                -- the table has changed.
+                levelAsks = 0
+                info = Info(world, { GUARDIAN }, {}, 940214)
+                Check(levelAsks < 20, "pvp set: a piece with no link is not searched for anew at every refresh (" .. levelAsks ..
+                    " questions about links made)")
+                -- The next comparison of the same set is at the floors again.
+                info, gladiator = Info(world, { GUARDIAN }, {}, 940213)
+                list = equipment:GetLoadoutUpgradeList(gladiator)
+                Check(list ~= nil and list[1].percent == 15 and list[1].pvp == true,
+                    "pvp set: a comparison made at own levels does not stay with the set")
+
+                -- The same where it is the set's own piece that has no link for its floor: the
+                -- piece looked at is not raised against it (59 against 59, not 98).
+                world.inBag[1] = 940214
+                info = Info(world, { GUARDIAN }, {}, 940213)
+                Equal(info.isUpgrade, nil, "pvp set: nor is a piece raised against a set's piece that has no link for its floor")
+                world.inBag[1] = 940211
+
+                -- A piece of another run of IDs, whose floor none beside its own gives: the
+                -- table has the ID from wherever it lies, with no piece to learn it from.
+                local aspirant
+                info, aspirant = Info(world, { GUARDIAN }, {}, 940216)
+                explained = table.concat(equipment:ExplainPvpLevel(aspirant), " / ")
+                Check(explained:find("at its floor: item level 331, by bonus 14050 in the place of 13650", 1, true) ~= nil,
+                    "another run: the ID for the floor is the table's, and is put in the piece's own place: " .. explained)
+                Check(explained:find(":2:14050:13657:", 1, true) ~= nil, "another run: its other ID stays: " .. explained)
+                list = equipment:GetLoadoutUpgradeList(aspirant)
+                Check(list ~= nil and list[1].percent == 54 and list[1].pvp == true,
+                    "another run: and the piece is an upgrade at the floors (131 against 85)")
+
+                -- A link that would make the piece another quality is not one for its floor.
+                local itemInfo = world.env.C_Item.GetItemInfo
+                -- Where every ID for the floor does that, the nearest of them is taken all the
+                -- same: quality does not move a piece's stats, and the link is only scored.
+                world.env.C_Item.GetItemInfo = function(reference)
+                    local results = { itemInfo(reference) }
+                    if type(reference) == "string" and reference:find("item:940217:", 1, true) and
+                        not reference:find(":12793", 1, true) then
+                        results[3] = 3
+                    end
+                    return unpack(results, 1, 18)
+                end
+                local allOther
+                info, allOther = Info(world, { GUARDIAN }, {}, 940217)
+                explained = table.concat(equipment:ExplainPvpLevel(allOther), " / ")
+                Check(explained:find("at its floor: item level 298, by bonus 12831 in the place of 12793, at quality 3 where its own is 4 (no ID gives the floor at its own)", 1, true) ~= nil and
+                    explained:find("bonus 12835, in the table for level 298, gives this piece level 298, quality 3 (its own: 4)", 1, true) ~= nil and
+                    explained:find("its own level by other IDs of the table: 0 at its own quality (0 with its stats), 0 at another quality", 1, true) ~= nil,
+                    "quality: with no ID for the floor at its own quality, the nearest of another is taken, and the export says so: " .. explained)
+                list = equipment:GetLoadoutUpgradeList(allOther)
+                Check(list ~= nil and list[1] ~= nil and list[1].pvp == true,
+                    "quality: and the piece is compared at the floors")
+                -- More is known the next time (a table read anew), and the piece is asked again.
+                bonuses:Forget()
+                world.env.C_Item.GetItemInfo = function(reference)
+                    local results = { itemInfo(reference) }
+                    if type(reference) == "string" and reference:find("item:940217:", 1, true) and reference:find(":12831", 1, true) then
+                        results[3] = 3
+                    end
+                    return unpack(results, 1, 18)
+                end
+                local colour
+                info, colour = Info(world, { GUARDIAN }, {}, 940217)
+                explained = table.concat(equipment:ExplainPvpLevel(colour), " / ")
+                Check(explained:find("by bonus 12835 in the place of 12793", 1, true) ~= nil and
+                    explained:find("bonus 12831, in the table for level 298, gives this piece level 298, quality 3 (its own: 4)", 1, true) ~= nil,
+                    "quality: an ID that makes the piece another quality is passed over, and the export says so: " .. explained)
+                world.env.C_Item.GetItemInfo = itemInfo
+
+                -- The table over time. A new session reads what was saved for the build and asks
+                -- the client nothing.
+                bonuses:Forget()
+                levelAsks = 0
+                local fresh
+                info, fresh = Info(world, { GUARDIAN }, {}, 940218)
+                Equal(bonuses:IsScanning(), false, "the table: a new session with the build's table saved does not make it again")
+                explained = table.concat(equipment:ExplainPvpLevel(fresh), " / ")
+                Check(explained:find("by bonus 12831 in the place of 12793", 1, true) ~= nil and explained:find("the saved table", 1, true) ~= nil,
+                    "the table: the piece is raised from what was saved: " .. explained)
+                Check(levelAsks < 20, "the table: with a handful of questions about the piece itself (" .. levelAsks .. ")")
+                -- Another build of the client: the saved table is not this one's. This time the
+                -- piece it is asked with has a level of its own, 298, with none of these IDs, so
+                -- an ID that gives 298 reads as one that gives nothing: the table cannot show it.
+                world.env.CaerdonLevelBonusData.build = "1"
+                bonuses:Forget()
+                local ownLevel
+                info, ownLevel = Info(world, { GUARDIAN }, {}, 940222)
+                Equal(bonuses:IsScanning(), true, "the table: a table saved for another build is made anew")
+                Check(TableMade() and world.env.CaerdonLevelBonusData.build == select(2, world.env.GetBuildInfo()),
+                    "the table: and saved for this one")
+                info, ownLevel = Info(world, { GUARDIAN }, {}, 940222)
+                Check(table.concat(equipment:ExplainPvpLevel(ownLevel), " / "):find("at its floor: item level 344, by bonus 13848 in the place of 12833", 1, true) ~= nil,
+                    "the table: after which the piece is raised")
+                Check(bonuses:IdsFor(298) == nil and world.env.CaerdonLevelBonusData.blind == 298 and
+                    tostring(bonuses:Describe()):find("cannot show level 298", 1, true) ~= nil,
+                    "blind: made with a piece of level 298 by itself, the table has no ID for 298 and says so")
+                -- A piece that wants 298 and is itself of level 298 without an ID could not show
+                -- it either: no asking of every ID for it, only the IDs past the table's end.
+                info = Info(world, { GUARDIAN }, {}, 940223)
+                Check(bonuses:IsScanning() and tostring(bonuses:Describe()):find("no ID for level 298", 1, true) ~= nil and
+                    tostring(bonuses:Describe()):find("could not show", 1, true) == nil,
+                    "blind: a piece as blind to the level does not have every ID asked again: " .. tostring(bonuses:Describe()))
+                Check(TableMade(), "blind: the carrying on ends")
+                -- A piece that wants 298 and is not blind to it has every ID asked once more.
+                info, fresh = Info(world, { GUARDIAN }, {}, 940219)
+                Equal(bonuses:IsScanning(), true, "blind: the level it could not show is asked for with another piece")
+                Check(TableMade(), "blind: which ends")
+                info, fresh = Info(world, { GUARDIAN }, {}, 940219)
+                Check(table.concat(equipment:ExplainPvpLevel(fresh), " / "):find("by bonus 12831 in the place of 12793", 1, true) ~= nil,
+                    "blind: and the piece is raised by an ID the first making could not see")
+                Check(world.env.CaerdonLevelBonusData.blind == nil and bonuses:IdsFor(344) ~= nil,
+                    "blind: the table is blind to nothing then, and has kept what it had")
+                -- The client's data moved on without a new build: a piece whose own level ID the
+                -- table does not have. All of it is asked again.
+                game.levelBonuses["16500"], game.levelBonuses["16510"] = 300, 345
+                info, fresh = Info(world, { GUARDIAN }, {}, 940220)
+                Equal(bonuses:IsScanning(), true, "the table: a piece whose own level ID it does not have has it made anew")
+                Check(TableMade(), "the table: which ends")
+                info, fresh = Info(world, { GUARDIAN }, {}, 940220)
+                explained = table.concat(equipment:ExplainPvpLevel(fresh), " / ")
+                Check(explained:find("at its floor: item level 345, by bonus 16510 in the place of 16500", 1, true) ~= nil,
+                    "the table: and the new season's piece is raised by the new season's ID: " .. explained)
+                -- A floor raised to a level whose ID lies past the table's end: carried on, and found.
+                game.levelBonuses[tostring(world.env.CaerdonLevelBonusData.scannedTo + 700)] = 420
+                info, fresh = Info(world, { GUARDIAN }, {}, 940221)
+                Equal(bonuses:IsScanning(), true, "the table: a level it has no ID for has it carried on")
+                Check(TableMade(), "the table: to its new end")
+                info, fresh = Info(world, { GUARDIAN }, {}, 940221)
+                Check(table.concat(equipment:ExplainPvpLevel(fresh), " / "):find("at its floor: item level 420, by bonus", 1, true) ~= nil,
+                    "the table: and the piece is raised by an ID that was past its end")
+
+                -- Another set's mark is not this one's.
+                Mark({ [31] = true })
+                info = Info(world, { GUARDIAN }, {}, 940212)
+                Check(info.isUpgrade == true, "pvp set: a mark on another set leaves this one at its own levels")
+
+                -- The marked set worn: what is worn is scored at its floors too.
+                Mark({ [41] = true })
+                local hadWorn = world.worn[5]
+                world.worn[5] = 940211
+                world.setWorn = { [31] = { 10, 4 }, [41] = { 10, 10 } }
+                world.setLocations[41] = { [5] = 9005 }
+                world.locationData[9005] = { isPlayer = true, slot = 5 }
+                info = Info(world, { GUARDIAN }, {}, 940212)
+                Equal(info.pawnIdentifiedUpgrade, false, "pvp set: worn, a piece for the open world is no upgrade over the worn piece at its floor")
+                Check(tostring(equipment:GetWornVerdictDescription(world.env.CaerdonItem:CreateFromItemID(940212))):find(
+                    "; a PVP set, scored at PVP levels", 1, true) ~= nil, "pvp set: and the export says how what is worn was scored")
+                Check(tostring(equipment:GetWornVerdictDescription(world.env.CaerdonItem:CreateFromItemID(940214))):find(
+                    "; a PVP set, scored at the pieces' own levels here", 1, true) ~= nil,
+                    "pvp set: also where a piece with no link for its floor made it the own levels")
+                Mark(nil)
+                info = Info(world, { GUARDIAN }, {}, 940212)
+                Equal(info.pawnIdentifiedUpgrade, true, "pvp set: and not marked, it is one over the worn piece at its own level")
+
+                world.worn[5] = hadWorn
+                world.inBag[1], world.setLocations[41], world.locationData[9005] = hadBag, hadLocation, nil
+                world.env.C_Item.GetDetailedItemLevelInfo = levelInfo
+                rawset(world.env, "PawnGetSingleValueFromItem", pawnValue)
+                game.levelBonuses = {}
+                bonuses:Forget()
+                rawset(world.env, "CaerdonLevelBonusData", nil)
+                Tie({ [41] = FERAL })
+                world.setWorn = { [31] = { 10, 10 }, [41] = { 10, 2 } }
+                PawnChanged(world)
+            end
 
             -- A set a spec is tied to keeps to that spec's loadout, on the tied scale: it is
             -- not a second loadout beside it.

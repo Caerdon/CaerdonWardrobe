@@ -1,3 +1,5 @@
+local ADDON_NAME, NS = ...
+
 CaerdonEquipment = {}
 CaerdonEquipmentMixin = {}
 
@@ -1301,7 +1303,8 @@ end
 -- A gear set tied to a Pawn scale by the player (TiedSetScale, below) comes before spec and
 -- tree: while that set is the one worn, its scale is the toon's own, shown in Pawn or not, and
 -- every other scale of the class is another's. A scale tied to a gear set that is not the one
--- worn is that set's, whatever kind of scale it is, unless it is the toon's own as well.
+-- worn is that set's, whatever kind of scale it is, unless it is the toon's own as well: the
+-- scale Pawn ships for the spec being played or the leading tree, not a copy of it.
 local GetTiedScales
 
 local function GetPawnOffTreeScales()
@@ -1343,6 +1346,16 @@ local function GetPawnOffTreeScales()
                 own = scaleName == tiedOwn
             else
                 own = classScale and specIDs[scale.SpecID] == true
+                -- A scale tied to a gear set that is not the one worn is that set's. Pawn's
+                -- own scale for the spec played or the leading tree stays the toon's, since
+                -- the worn gear is judged on it whatever else is tied to it. A copy of it the
+                -- player made keeps its class and spec in Pawn (Provider is what it loses),
+                -- and is the set's. Seen (retail 12.1.5.70961): a copy of a druid's Guardian
+                -- scale tied to a PVP set, and Pawn's verdict on it, against the worn gear,
+                -- gave two rings in the bank the yellow arrow of an upgrade for what is worn.
+                if own and scale.Provider == nil and tiedElsewhere ~= nil and tiedElsewhere[scaleName] == true then
+                    own = false
+                end
             end
             if PawnIsScaleVisible(scaleName) then
                 if not own and (classScale or (tiedElsewhere ~= nil and tiedElsewhere[scaleName] == true)) then
@@ -1737,8 +1750,30 @@ local function TiedSetScale(setID)
     return tied
 end
 
--- A gear set that is deleted takes its tie with it: the client gives a deleted set's ID to the
--- next set made, which would come by a scale nobody chose for it. Both clients delete through
+-- Whether the player marked the gear set as one for PVP (the Icons page's row for it;
+-- CaerdonWardrobeCharacterConfig.Icon.PvpSets: set ID -> true). Such a set is scored at PVP
+-- levels in every context (author decision): it is kept for PVP, where its pieces count at
+-- their floors, and outside PVP the client gives their own levels' stats, which made a piece
+-- for the open world look like an upgrade over a set piece that is the higher one in PVP.
+local function IsPvpSet(setID)
+    local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
+    local marked = type(icon) == "table" and icon.PvpSets
+    return type(marked) == "table" and marked[setID] == true
+end
+
+-- Whether the player wants upgrades for a gear set shown while another is worn: the set's
+-- switch on the Icons page (CaerdonWardrobeCharacterConfig.Icon.OtherSets: set ID -> false for
+-- one switched off). It is for a set tied to a scale that no spec owns; a set the client ties
+-- to a spec goes by that spec's switch (IsOtherSpecWanted). One never clicked is wanted: tying
+-- the set to a scale is the sign.
+local function IsOtherSetWanted(setID)
+    local icon = type(CaerdonWardrobeCharacterConfig) == "table" and CaerdonWardrobeCharacterConfig.Icon
+    local chosen = type(icon) == "table" and icon.OtherSets
+    return not (type(chosen) == "table" and chosen[setID] == false)
+end
+
+-- A gear set that is deleted takes its tie and its switch with it: the client gives a deleted
+-- set's ID to the next set made, which would come by a scale nobody chose for it. Both clients delete through
 -- this one function (the confirm dialog's OnAccept). A set deleted where the addon was not
 -- running keeps its tie, and the settings page shows it on the set that has the ID now.
 -- The client refuses a secure hook on some functions and does not say which, so it is tried
@@ -1751,6 +1786,14 @@ if C_EquipmentSet and type(C_EquipmentSet.DeleteEquipmentSet) == "function" then
         if type(ties) == "table" and setID ~= nil then
             ties[setID] = nil
         end
+        local wanted = type(icon) == "table" and icon.OtherSets
+        if type(wanted) == "table" and setID ~= nil then
+            wanted[setID] = nil
+        end
+        local marked = type(icon) == "table" and icon.PvpSets
+        if type(marked) == "table" and setID ~= nil then
+            marked[setID] = nil
+        end
     end)
 end
 
@@ -1760,7 +1803,10 @@ end
 --   for the set. It is then not also a loadout kept beside what is worn; the played spec's own
 --   set stays listed, since that one is only asked where its piece is not the one worn.
 --   Any other set that no spec is tied to (specSets: set ID -> true): a loadout of its own,
---   measured against the set's pieces. A set a spec is tied to is that spec's loadout already,
+--   measured against the set's pieces, unless the player switched it off (IsOtherSetWanted).
+--   Its scale is the set's all the same (tiedScales, and tiedUnwanted for one switched off):
+--   Pawn's verdict for it, which is against the worn gear, is not the worn gear's and does not
+--   stand in the set's place. A set a spec is tied to is that spec's loadout already,
 --   on the tied scale (GetLoadouts), and the spec's switch still says whether it is wanted.
 --   A spec with no set of its own, whose scale a set is tied to, is no loadout beside that set.
 -- wornScaleTied and tiedScales are for Pawn's verdict (GetPawnOffTreeScales).
@@ -1800,6 +1846,9 @@ local function AddTiedSets(loadouts, specSets)
                         end
                     end
                 end
+            elseif not (specSets and specSets[setID]) and not IsOtherSetWanted(setID) then
+                loadouts.tiedUnwanted = loadouts.tiedUnwanted or {}
+                loadouts.tiedUnwanted[scaleName] = true
             elseif not (specSets and specSets[setID]) then
                 local setName, setIcon = C_EquipmentSet.GetEquipmentSetInfo(setID)
                 loadouts[#loadouts + 1] = {
@@ -1823,6 +1872,10 @@ local function AddTiedSets(loadouts, specSets)
             tiedScales = tiedScales or {}
             tiedScales[loadout.scale] = true
         end
+    end
+    for scaleName in pairs(loadouts.tiedUnwanted or {}) do
+        tiedScales = tiedScales or {}
+        tiedScales[scaleName] = true
     end
     loadouts.tiedScales = tiedScales
     -- A set tied to a scale speaks for that scale. A spec with no set of its own, whose scale
@@ -2017,6 +2070,15 @@ local function GetLoadouts()
         loadouts.activeSet, loadouts.activeWhy = ReadActiveSet(setForSpec and setForSpec(current) or nil)
     end
     AddTiedSets(loadouts, specSets)
+    -- A set marked for PVP: its loadout, and what is worn while it is the set worn.
+    for _, loadout in ipairs(loadouts) do
+        if loadout.setID and IsPvpSet(loadout.setID) then
+            loadout.pvp = true
+        end
+    end
+    if loadouts.worn and loadouts.activeSet and IsPvpSet(loadouts.activeSet.id) then
+        loadouts.worn.pvp = true
+    end
     table.sort(loadouts, function(a, b) return a.index < b.index end)
     return loadouts
 end
@@ -2066,6 +2128,14 @@ local function GetShownSetSpecs(offTreeScales)
             found[loadout.scale] = true
         end
     end
+    -- A set the player switched off: its scale is still the set's, so Pawn's verdict for it
+    -- stands for nothing, and no loadout is asked in its place.
+    for scaleName in pairs(loadouts.tiedUnwanted or {}) do
+        if offTreeScales[scaleName] then
+            found = found or {}
+            found[scaleName] = true
+        end
+    end
     return found
 end
 
@@ -2087,11 +2157,253 @@ local function OtherSpecValue(scaleName, link)
             end
         else
             -- Pawn has nothing for the item yet: asked again the next time, not kept.
+            CaerdonCounters:NoteWithoutData("Pawn's value of a piece", link, C_Item.GetItemInfo(link) == nil)
             return nil
         end
         values[link] = value
     end
     return value or nil
+end
+
+-- A piece at the level its PVP floor raises it to, as a link Pawn can score.
+--
+-- The client gives a piece's stats for its link, and those are its own level's in every
+-- context: nothing it reports for a piece changes in War Mode. But one of a seasonal piece's
+-- bonus IDs carries its level (left out, the piece answers with its base level), the IDs near
+-- it are the season's other levels, and the piece's link with one of those in its place is the
+-- piece at that level, stats and all. The client answers the level of any link at once
+-- (C_Item.GetDetailedItemLevelInfo) and ignores a bonus it does not know, so the ID for a
+-- level is found by asking, with no table of seasons. The level an ID gives is the same on
+-- every item seen, so what one piece taught is tried first on the next, and checked.
+-- Seen (retail 12.1.5.70961): a head piece of level 276 with a floor of 298, bonus 12798
+-- (44 without it), is 298 with 12831 in its place, Agility 110 to 135; an honor belt of level
+-- 250 with a floor of 285, bonus 12782, is 285 with 12805. A crafted piece carries its level
+-- in two IDs; both go, and one of the season's takes their place.
+-- Not known: that the game's raising of a piece in a battleground or an arena is the piece at
+-- that level (expected). The character sheet in War Mode does not show it either way: the
+-- secondary ratings are those of War Mode off, and the primary stat is higher by one factor
+-- for all of the gear (notes: Upgrades).
+--
+-- A season has more than one run of such IDs, and an ID of one run can be wrong for a piece
+-- of another: a rare honor ring of level 263 with a floor of 331 has 13650, no ID within 120
+-- of that gives 331, and the one that does elsewhere (12853) makes the ring epic. So which
+-- IDs give which level is the client's whole table, asked once a build in the background and
+-- saved (CaerdonLevelBonuses.lua), and every ID it has for the floor is tried on the piece,
+-- the nearest to the piece's own first. A link is used only where the client answers the
+-- floor for it. One that leaves the piece its own quality comes first; where none does (that
+-- ring: 12853 is the client's one ID for 331), one of another quality is taken, because
+-- quality does not move a piece's stats and the link is only ever scored: the ring at its own
+-- level by an ID that makes it epic has the stats it has as a rare, to the point, and at 331
+-- by 12853 its stats lie on the line of the season's other levels.
+--
+-- PvpLinkOf(link): the link at its floor, and what was done ({ link, level, from, bonus, own,
+-- quality and ownQuality where the link is of another quality });
+-- the link itself where it has no floor above its level or no such link was found (pvpLinkWhy
+-- says which; pvpLinkStuck for a piece that has a floor to reach and no link for it, which a
+-- comparison must not then make with the other piece raised: SetPvpMode). Kept for the
+-- session: all of it follows from the link and the client's data. A piece that found no link,
+-- or one of another quality only, is asked again when the table has changed.
+--
+-- A piece the client cannot say enough about right now (no level or no item info for its
+-- link, which happens for worn pieces too: seen, every worn piece at once, some seconds after
+-- all of them had it) is neither: nothing is kept, it is asked again the next time, and until
+-- then it counts as one with no link for its floor (pvpLinkUnready), because whether it has a
+-- floor is not known. Taken for a piece without one, it would be scored as it is beside a
+-- piece that was raised.
+local pvpLinks, pvpLinkWhy, pvpLinkStuck, pvpLinkAt, pvpLinkNotes = {}, {}, {}, {}, {}
+local pvpLinkUnready = {}
+-- How many IDs of the table are tried on one piece before it is left as it is.
+local MAX_LEVEL_BONUS_TRIES = 60
+
+-- item:ID:enchant:gem:gem:gem:gem:suffix:unique:level:spec:modifiers:context:count:bonus...
+local function ReadItemString(link)
+    local itemString = type(link) == "string" and link:match("|H(item:[^|]*)|h") or nil
+    if not itemString then
+        return nil
+    end
+    local parts = { strsplit(":", itemString) }
+    local count = tonumber(parts[14]) or 0
+    local bonuses = {}
+    for index = 1, count do
+        bonuses[index] = parts[14 + index]
+    end
+    return parts, count, bonuses
+end
+
+local function LinkWithBonuses(link, parts, count, bonuses)
+    local forged = {}
+    for index = 1, 13 do
+        forged[index] = parts[index] or ""
+    end
+    forged[14] = #bonuses > 0 and tostring(#bonuses) or ""
+    for _, bonus in ipairs(bonuses) do
+        forged[#forged + 1] = bonus
+    end
+    for index = 15 + count, #parts do
+        forged[#forged + 1] = parts[index]
+    end
+    local forgedString = table.concat(forged, ":")
+    return (link:gsub("|H(item:[^|]*)|h", function() return "|H" .. forgedString .. "|h" end, 1))
+end
+
+-- A link taken apart: its level, the bonus IDs that carry it (left out one at a time, the
+-- level moves), the rest, and a function that makes the link with another ID in the carriers'
+-- place. nil where the client has no level for the link, or it has no item string.
+local function ReadLevelBonuses(link)
+    local level = C_Item.GetDetailedItemLevelInfo(link)
+    local parts, count, bonuses = ReadItemString(link)
+    if not (level and parts) then
+        return nil
+    end
+    local carriers, rest, place, said = {}, {}, nil, {}
+    for index, bonus in ipairs(bonuses) do
+        local others = {}
+        for other, otherBonus in ipairs(bonuses) do
+            if other ~= index then
+                others[#others + 1] = otherBonus
+            end
+        end
+        local without = C_Item.GetDetailedItemLevelInfo(LinkWithBonuses(link, parts, count, others))
+        said[#said + 1] = format("%s -> %s", tostring(bonus), tostring(without))
+        if without ~= level then
+            carriers[#carriers + 1] = bonus
+            place = place or (#rest + 1)
+        else
+            rest[#rest + 1] = bonus
+        end
+    end
+    local read = { link = link, level = level, carriers = carriers, said = table.concat(said, ", ") }
+    function read.With(bonus)
+        local swapped = {}
+        for index, restBonus in ipairs(rest) do
+            if index == place then
+                swapped[#swapped + 1] = tostring(bonus)
+            end
+            swapped[#swapped + 1] = restBonus
+        end
+        if not place or place > #rest then
+            swapped[#swapped + 1] = tostring(bonus)
+        end
+        return LinkWithBonuses(link, parts, count, swapped)
+    end
+    read.without = C_Item.GetDetailedItemLevelInfo(LinkWithBonuses(link, parts, count, rest))
+    return read
+end
+
+local function PvpLinkOf(link)
+    local known = NS.LevelBonuses
+    local kept = pvpLinks[link]
+    if kept and (not kept.quality or pvpLinkAt[link] == (known and known:Version())) then
+        return kept.link, kept
+    elseif kept == false and (not pvpLinkStuck[link] or pvpLinkAt[link] == (known and known:Version())) then
+        return link
+    end
+    if not (known and pvpFloorPattern and C_TooltipInfo and C_TooltipInfo.GetHyperlink and C_Item.GetDetailedItemLevelInfo) then
+        return link
+    end
+    local level = C_Item.GetDetailedItemLevelInfo(link)
+    if not (level and C_Item.GetItemInfo(link)) then
+        -- The client does not have the item yet: asked again the next time.
+        pvpLinkUnready[link] = true
+        CaerdonCounters:NoteWithoutData("a piece's PVP floor", link, true)
+        return link
+    end
+    pvpLinkUnready[link] = nil
+    local floor = ExtractPvpFloorFromTooltip(C_TooltipInfo.GetHyperlink(link))
+    local function No(why, stuck)
+        pvpLinks[link], pvpLinkWhy[link], pvpLinkStuck[link], pvpLinkAt[link] = false, why, stuck or nil, known:Version()
+        return link
+    end
+    if not floor or floor <= level then
+        return No(floor and "its floor is not above its level" or "no floor")
+    end
+    local read = ReadLevelBonuses(link)
+    if not read then
+        return No("the link has no item string", true)
+    end
+    local notes = { format("its bonus IDs, and its level without each: %s", read.said ~= "" and read.said or "none") }
+    pvpLinkNotes[link] = notes
+    if #read.carriers == 0 then
+        return No("none of its bonus IDs carries its level", true)
+    end
+    local own = tonumber(read.carriers[1])
+    -- The piece to ask the client with, should the table have to be made or carried on.
+    local probe = { carrier = own, level = level, without = read.without, ask = function(id)
+        return (C_Item.GetDetailedItemLevelInfo(read.With(id)))
+    end }
+    if known:IsScanning() then
+        known:Need(probe)
+        return No("the table of level IDs is being made", true)
+    end
+    -- A piece whose one level ID the table does not have: the client's data is not the table's.
+    if own and #read.carriers == 1 and known:LevelOf(own) ~= level and known:Need(probe, "carrier") then
+        return No("the table of level IDs is being made", true)
+    end
+
+    -- A link is one for the floor where the client answers the floor for it. The first that
+    -- leaves the piece its own quality is taken; failing that, the first of another.
+    local _, _, quality = C_Item.GetItemInfo(link)
+    local candidates = known:IdsFor(floor, own) or {}
+    local forged, found
+    local other, otherBonus, otherQuality
+    local passed = 0
+    for index, bonus in ipairs(candidates) do
+        if index > MAX_LEVEL_BONUS_TRIES then
+            break
+        end
+        local tried = read.With(bonus)
+        local triedLevel = C_Item.GetDetailedItemLevelInfo(tried)
+        local _, _, triedQuality = C_Item.GetItemInfo(tried)
+        if triedLevel == floor and (quality == nil or triedQuality == nil or triedQuality == quality) then
+            forged, found = tried, bonus
+            break
+        end
+        if triedLevel == floor and not other then
+            other, otherBonus, otherQuality = tried, bonus, triedQuality
+        end
+        passed = passed + 1
+        if passed <= 8 then
+            notes[#notes + 1] = format("bonus %d, in the table for level %d, gives this piece level %s, quality %s (its own: %s)",
+                bonus, floor, tostring(triedLevel), tostring(triedQuality), tostring(quality))
+        end
+    end
+    if passed > 8 then
+        notes[#notes + 1] = format("and %d more IDs of the table for that level, none of which did", passed - 8)
+    end
+    local asQuality
+    if not forged and other then
+        forged, found, asQuality = other, otherBonus, otherQuality
+    end
+    if not forged then
+        if #candidates == 0 and known:Need(probe, "level", floor) then
+            return No("the table of level IDs is being carried on", true)
+        end
+        return No(#candidates == 0 and format("no bonus ID in the table gives level %d", floor) or
+            format("none of the %d bonus IDs in the table for level %d gives it that level", #candidates, floor), true)
+    end
+    kept = { link = forged, level = floor, from = level, bonus = found, own = table.concat(read.carriers, ", "),
+        quality = asQuality, ownQuality = asQuality and quality or nil }
+    pvpLinks[link], pvpLinkStuck[link], pvpLinkAt[link] = kept, nil, known:Version()
+    return forged, kept
+end
+
+-- A piece that has a floor to reach and no link for it, or that the client cannot say enough
+-- about to know.
+local function IsPvpStuck(link)
+    PvpLinkOf(link)
+    return pvpLinkUnready[link] == true or (pvpLinks[link] == false and pvpLinkStuck[link] == true)
+end
+
+-- Pawn's value of a piece for the loadout: at its PVP floor where the loadout is a set marked
+-- for PVP (loadout.pvp), the piece looked at and the set's own alike. A piece with no floor,
+-- or none that a link can be made for, is valued as it is.
+-- loadout.plain: for the comparison being made, every piece at its own level after all
+-- (SetPvpMode).
+local function LoadoutValue(loadout, scaleName, link)
+    if loadout.pvp and not loadout.plain then
+        link = PvpLinkOf(link)
+    end
+    return OtherSpecValue(scaleName, link)
 end
 
 -- What the loadout has in the slot and Pawn's value of it on its scale, or nil: { link, value,
@@ -2102,13 +2414,16 @@ end
 -- offScale: the piece's value on the loadout's scale for the off hand's weapon instead
 -- (OffHandScale), kept apart.
 local function LoadoutBaseline(loadout, slotID, offScale)
-    local kept = loadout.baseline
-    if offScale then
-        kept = loadout.offBaseline
-        if not kept then
-            kept = {}
-            loadout.offBaseline = kept
-        end
+    -- A set marked for PVP has its pieces' values twice: at their floors, and as they are
+    -- (loadout.plain, for a comparison that cannot be made at the floors).
+    local name = offScale and "offBaseline" or "baseline"
+    if loadout.pvp and loadout.plain then
+        name = offScale and "plainOffBaseline" or "plainBaseline"
+    end
+    local kept = loadout[name]
+    if not kept then
+        kept = {}
+        loadout[name] = kept
     end
     local entry = kept[slotID]
     if entry == nil then
@@ -2123,14 +2438,45 @@ local function LoadoutBaseline(loadout, slotID, offScale)
             link, worn = GetInventoryItemLink("player", slotID), true
         end
         if link then
-            local value = OtherSpecValue(offScale or loadout.scale, link)
+            local value = LoadoutValue(loadout, offScale or loadout.scale, link)
             if value then
                 entry = { link = link, value = value, fromSet = fromSet or false, worn = worn or false }
+            end
+            -- A value at the floors is one only where the client could say what the piece's
+            -- floor is: otherwise it is the piece as it is, and is not kept as the other.
+            if loadout.pvp and not loadout.plain and pvpLinkUnready[link] then
+                return entry or nil
+            end
+            -- The loadout's piece for the slot is there and has no value: kept so for the
+            -- refresh, which leaves every piece for the slot without a verdict until the
+            -- next. Counted where the reason is that the client has no item info for it.
+            if not value and C_Item.GetItemInfo(link) == nil then
+                CaerdonCounters:NoteWithoutData(worn and "a loadout's worn piece, kept as none for the refresh" or
+                    "a gear set's piece, kept as none for the refresh", link, true)
             end
         end
         kept[slotID] = entry
     end
     return entry or nil
+end
+
+-- A comparison for a set marked for PVP is made at the floors only where every piece in it
+-- that has a floor to reach has a link for it: the piece looked at and the loadout's pieces
+-- for the slots. One raised and the other not is worse than neither (seen, retail
+-- 12.1.5.70961: a ring of level 263 with a floor of 331 that no link was found for, scored at
+-- 263 against a worn ring scored at its floor, came out as no upgrade). Where one of them is
+-- stuck, the comparison is the one of every other set: each piece at its own level
+-- (loadout.plain, until the next comparison sets it anew).
+local function SetPvpMode(loadout, link, slots)
+    if not loadout.pvp then
+        return
+    end
+    local stuck = IsPvpStuck(link)
+    for _, slotID in ipairs(slots or {}) do
+        local entry = LoadoutBaseline(loadout, slotID)
+        stuck = stuck or (entry ~= nil and IsPvpStuck(entry.link))
+    end
+    loadout.plain = stuck or nil
 end
 
 -- Two things Pawn's own upgrade check refuses before it compares a value (PawnIsItemAnUpgrade,
@@ -2328,7 +2674,7 @@ local function BestPartner(loadout, kind, link, takesOff)
                 fits = dual and takesOff and (kind == "either" or carried.kind == "either")
             end
             if fits then
-                local value = OtherSpecValue(loadout.scale, carried.link)
+                local value = LoadoutValue(loadout, loadout.scale, carried.link)
                 if value and value > 0 and (not bestValue or value > bestValue) then
                     best, bestValue = carried, value
                 end
@@ -2522,7 +2868,8 @@ end
 -- gear set's (fromSet) or the worn gear standing in (fromWorn), and for a weapon weighed for
 -- both hands WeaponComparison's note; the values are then the hands'.
 local function JudgeLoadout(loadout, link, inventoryTypeName, inventorySlots)
-    local value = OtherSpecValue(loadout.scale, link)
+    SetPvpMode(loadout, link, HAND_KINDS[inventoryTypeName] and BOTH_HANDS or inventorySlots)
+    local value = LoadoutValue(loadout, loadout.scale, link)
     if value == nil or IsWeaponKindRefused(loadout, inventoryTypeName) then
         return nil
     end
@@ -2605,7 +2952,8 @@ local function JudgeOffHand(loadout, link, inventoryTypeName)
     if not offScale then
         return nil
     end
-    local value = OtherSpecValue(offScale.name, link)
+    SetPvpMode(loadout, link, BOTH_HANDS)
+    local value = LoadoutValue(loadout, offScale.name, link)
     if value == nil then
         return nil, "Pawn has no value for the piece"
     end
@@ -2689,7 +3037,7 @@ local function GetWornJudge()
             loadouts.judge = worn
         else
             loadouts.judge = { isWorn = true, scale = hiddenOwn.name, label = hiddenOwn.label, own = false,
-                baseline = {} }
+                baseline = {}, pvp = loadouts.activeSet ~= nil and IsPvpSet(loadouts.activeSet.id) or nil }
         end
     elseif worn and PawnIsScaleVisible(worn.scale) then
         loadouts.judge, loadouts.judgeHidden = worn, false
@@ -2849,7 +3197,7 @@ local function GetLoadoutUpgrades(item, itemSpecs, onlySpecs, withWorn)
             end
             local entry = { scale = scaleName, label = loadout.label, colour = loadout.colour,
                 own = loadout.own, value = value, baseline = not emptySlot and lowest or nil,
-                emptySlot = emptySlot or nil, hand = hand }
+                emptySlot = emptySlot or nil, hand = hand, pvp = loadout.pvp and not loadout.plain or nil }
             if scaleName ~= loadout.scale then
                 -- The loadout's own scale, where the verdict was made on its other one.
                 entry.loadoutScale = loadout.scale
@@ -3167,9 +3515,15 @@ function CaerdonEquipment:GetWornVerdictDescription(item)
     end
     table.sort(others)
     table.sort(notCounted)
-    return format("the addon's own comparison: %s; Pawn for that scale: %s%s; an upgrade of Pawn's on its other scales: %s%s",
+    -- A set marked for PVP: how this comparison was scored (SetPvpMode, as the judge left it).
+    local pvp = ""
+    if judge.pvp then
+        pvp = judge.plain and "; a PVP set, scored at the pieces' own levels here: one of them has a floor and no link for it, or the client is without its item just now" or
+            "; a PVP set, scored at PVP levels"
+    end
+    return format("the addon's own comparison: %s; Pawn for that scale: %s%s; an upgrade of Pawn's on its other scales: %s%s%s",
         own, pawn, offHand, #others > 0 and table.concat(others, ", ") or "none",
-        #notCounted > 0 and format("; not counted, %s: %s", UNLIKE_RANGED, table.concat(notCounted, ", ")) or "")
+        #notCounted > 0 and format("; not counted, %s: %s", UNLIKE_RANGED, table.concat(notCounted, ", ")) or "", pvp)
 end
 
 -- For the item tooltip: the scale for the off hand's weapon on which the addon has a verdict
@@ -3236,10 +3590,16 @@ function CaerdonEquipment:GetGearSetScaleDescription()
         local what
         if tied then
             what = format("tied to %s", tostring(scale.LocalizedName or tied))
+            if not IsOtherSetWanted(setID) then
+                what = what .. ", its upgrades switched off while another set is worn"
+            end
         elseif lost then
             what = format("tied to \"%s\", which Pawn no longer has: not tied", tostring(lost))
         else
             what = "not tied"
+        end
+        if IsPvpSet(setID) then
+            what = what .. ", marked as a PVP set"
         end
         parts[#parts + 1] = format("\"%s\" (%s) %s", tostring(name), tostring(setID), what)
     end
@@ -3292,6 +3652,92 @@ function CaerdonEquipment:GetGearSets()
         end
     end
     return sets, byTree
+end
+
+-- For the settings page: a gear set's own switch (IsOtherSetWanted), which is for a set tied to
+-- a scale that no spec owns.
+--[[static]]
+function CaerdonEquipment:IsGearSetWanted(setID)
+    return IsOtherSetWanted(setID)
+end
+
+-- For the settings page: whether the gear set is marked as one for PVP (IsPvpSet), and whether
+-- it holds a piece with a PVP floor, which is what the mark is offered for.
+--[[static]]
+function CaerdonEquipment:IsPvpGearSet(setID)
+    return IsPvpSet(setID)
+end
+
+--[[static]]
+function CaerdonEquipment:GearSetHasPvpFloor(setID)
+    if not (pvpFloorPattern and C_TooltipInfo and C_TooltipInfo.GetHyperlink and C_EquipmentSet and
+        C_EquipmentSet.GetItemLocations) then
+        return false
+    end
+    for _, location in pairs(C_EquipmentSet.GetItemLocations(setID) or {}) do
+        local link = LinkAtSetLocation(location)
+        if link and ExtractPvpFloorFromTooltip(C_TooltipInfo.GetHyperlink(link)) then
+            return true
+        end
+    end
+    return false
+end
+
+-- For the settings page: the specs of the toon's class that no gear set speaks for, in their
+-- order, or nil on a client without specs and where Pawn is not there. Such a spec is a
+-- loadout by itself: what is worn, on the scale Pawn ships for the spec (GetLoadouts).
+--   { index, name, icon, scaleLabel }
+-- Not a spec the client ties a gear set to, nor one whose scale the player tied a set to:
+-- that set is the loadout then, and has the row (AddTiedSets drops the spec beside it).
+--[[static]]
+function CaerdonEquipment:GetSpecsWithoutGearSet()
+    if CaerdonAPI:GetTalentTrees() then
+        return nil
+    end
+    local countSpecs = C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID
+    if not (PawnCommon and PawnCommon.Scales and PawnGetItemData and PawnGetSingleValueFromItem and
+        countSpecs and GetSpecializationInfoForClassID) then
+        return nil
+    end
+    local _, _, classID = UnitClass("player")
+    local setForSpec = C_EquipmentSet and C_EquipmentSet.GetEquipmentSetForSpec
+    local tiedTo = {}
+    if C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs then
+        for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
+            local tied = TiedSetScale(setID)
+            if tied then
+                tiedTo[tied] = true
+            end
+        end
+    end
+    local specs = {}
+    for specIndex = 1, classID and countSpecs(classID) or 0 do
+        if not (setForSpec and setForSpec(specIndex)) then
+            -- The spec's scale, and whether a set has it. Several of one spec: the first by name.
+            local scaleName, taken
+            for name, scale in pairs(PawnCommon.Scales) do
+                if type(name) == "string" and type(scale) == "table" and scale.ClassID == classID and
+                    scale.Provider ~= nil and scale.SpecID == specIndex then
+                    taken = taken or tiedTo[name] == true
+                    if not scaleName or name < scaleName then
+                        scaleName = name
+                    end
+                end
+            end
+            if scaleName and not taken then
+                local _, specName, _, specIcon = GetSpecializationInfoForClassID(classID, specIndex)
+                if specName then
+                    specs[#specs + 1] = {
+                        index = specIndex,
+                        name = specName,
+                        icon = specIcon or QUESTION_MARK_ICON,
+                        scaleLabel = PawnCommon.Scales[scaleName].LocalizedName or scaleName,
+                    }
+                end
+            end
+        end
+    end
+    return specs
 end
 
 -- For the settings page: the Pawn scales a gear set of this toon can be tied to, or nil where
@@ -3379,9 +3825,171 @@ function CaerdonEquipment:GetLoadoutDescription()
             against = against .. format(" (the spec being played: where its piece is not the one worn, slots %s)",
                 #slots > 0 and table.concat(slots, ", ") or "none")
         end
+        if loadout.pvp then
+            against = against .. ", scored at PVP levels"
+        end
         parts[#parts + 1] = format("%s: %s", loadout.label, against)
     end
     return table.concat(parts, "; ")
+end
+
+-- For the Debug Frame export ("[PVP Item Level]"): the piece's PVP floor beside its level,
+-- whether the floor counts right now (GetEffectiveLevels), and the piece at its floor as a set
+-- marked for PVP scores it (PvpLinkOf): the bonus ID swapped, the link, its stats and Pawn's
+-- values on the scales shown; or why there is no such link.
+--[[static]]
+function CaerdonEquipment:ExplainPvpLevel(item)
+    local ok, lines = pcall(function()
+        local link = item and item:GetItemLink()
+        if not link then
+            return { "no link" }
+        end
+        local floor = GetCandidatePvpFloor(item)
+        local level = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link) or nil
+        local out = {}
+        out[#out + 1] = format("floor: %s; the piece's level: %s; in a PVP context now: %s",
+            floor and tostring(floor) or "none (no floor line in the tooltip)", tostring(level), tostring(IsInPvpContext()))
+        -- The worn gear's average level as it is and with every piece at its floor, beside the
+        -- client's own averages (overall, equipped, PVP). The first meets the client's equipped
+        -- figure where the counting is the client's: sixteen slots, a two-hander with nothing
+        -- in the off hand twice. The second is NOT the client's PVP figure: that one counts
+        -- gear in the bags as its overall figure does (a piece taken off leaves it as it was),
+        -- so the two only lie near each other. Each piece is read by its slot: by its link the
+        -- client is at times without a worn piece's level, which the line then says.
+        if floor and GetAverageItemLevel then
+            local own, raised, counted, linkless, said, without = 0, 0, 0, 0, {}, {}
+            for slotID = INVSLOT_FIRST_EQUIPPED, INVSLOT_OFFHAND do
+                local location = slotID ~= 4 and ItemLocation:CreateFromEquipmentSlot(slotID) or nil
+                if location and location:IsValid() and C_Item.DoesItemExist(location) then
+                    local wornLevel = C_Item.GetCurrentItemLevel(location)
+                    local wornLink = GetInventoryItemLink("player", slotID)
+                    if not (wornLink and C_Item.GetDetailedItemLevelInfo(wornLink)) then
+                        linkless = linkless + 1
+                        -- What the client does have of such a piece: by its ID, and by its link.
+                        if #without < 3 then
+                            local wornID = C_Item.GetItemID(location)
+                            without[#without + 1] = format("slot %d: %s; item info by its ID %s, by its link %s; data cached by ID %s; its tooltip by the link %s lines",
+                                slotID, wornLink and tostring(wornLink:match("|H(item:[^|]*)|h")) or "no link",
+                                tostring(wornID and C_Item.GetItemInfo(wornID) ~= nil), tostring(wornLink and C_Item.GetItemInfo(wornLink) ~= nil),
+                                tostring(wornID and C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(wornID)),
+                                tostring(wornLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink and
+                                    #((C_TooltipInfo.GetHyperlink(wornLink) or {}).lines or {})))
+                        end
+                    end
+                    if wornLevel then
+                        local wornFloor = C_TooltipInfo and C_TooltipInfo.GetInventoryItem and
+                            ExtractPvpFloorFromTooltip(C_TooltipInfo.GetInventoryItem("player", slotID)) or nil
+                        local atFloor = wornFloor and wornFloor > wornLevel and wornFloor or wornLevel
+                        local wornID = C_Item.GetItemID(location)
+                        local _, _, _, wornLoc = C_Item.GetItemInfoInstant(wornID)
+                        local twice = slotID == INVSLOT_MAINHAND and
+                            not C_Item.DoesItemExist(ItemLocation:CreateFromEquipmentSlot(INVSLOT_OFFHAND)) and
+                            (wornLoc == "INVTYPE_2HWEAPON" or wornLoc == "INVTYPE_RANGED" or wornLoc == "INVTYPE_RANGEDRIGHT")
+                        local weight = twice and 2 or 1
+                        own, raised, counted = own + wornLevel * weight, raised + atFloor * weight, counted + weight
+                        said[#said + 1] = format("%d: %d%s%s", slotID, wornLevel, atFloor ~= wornLevel and format(">%d", atFloor) or "",
+                            twice and " (twice)" or "")
+                    end
+                end
+            end
+            local overall, equipped, pvp = GetAverageItemLevel()
+            out[#out + 1] = format("worn gear: average of the pieces' own levels %.2f, with each at its floor %.2f (%d of 16 slots filled%s); the client's averages: overall %s, equipped %s, PVP %s (the last counts gear in the bags too)",
+                own / 16, raised / 16, counted, linkless > 0 and format("; %d pieces the client has no level for by their links just now", linkless) or "",
+                tostring(overall and format("%.2f", overall)), tostring(equipped and format("%.2f", equipped)),
+                tostring(pvp and format("%.2f", pvp)))
+            out[#out + 1] = "    by slot, level>floor: " .. table.concat(said, ", ")
+            for _, line in ipairs(without) do
+                out[#out + 1] = "    no level by its link: " .. line
+            end
+        end
+        if not (floor and level and floor > level) then
+            return out
+        end
+        local raised, how = PvpLinkOf(link)
+        if NS.LevelBonuses then
+            out[#out + 1] = "the table of level IDs: " .. NS.LevelBonuses:Describe()
+        end
+        for _, note in ipairs(pvpLinkNotes[link] or {}) do
+            out[#out + 1] = note
+        end
+        local function StatsOf(of)
+            local stats = C_Item.GetItemStats and C_Item.GetItemStats(of)
+            local statParts = {}
+            for key, value in pairs(type(stats) == "table" and stats or {}) do
+                statParts[#statParts + 1] = format("%s %s", tostring(key), tostring(value))
+            end
+            table.sort(statParts)
+            return #statParts > 0 and table.concat(statParts, ", ") or "none"
+        end
+        -- Pawn's values of another link of the piece on the scales shown, beside the piece's own.
+        local function PawnOf(other)
+            local pawnParts = {}
+            if PawnGetItemData and PawnGetSingleValueFromItem and PawnCommon and PawnCommon.Scales and PawnIsScaleVisible then
+                local own, forged = PawnGetItemData(link), PawnGetItemData(other)
+                if own and own.Link and forged and forged.Link then
+                    for scaleName, scale in pairs(PawnCommon.Scales) do
+                        if PawnIsScaleVisible(scaleName) then
+                            local _, ownValue = PawnGetSingleValueFromItem(own, scaleName)
+                            local _, forgedValue = PawnGetSingleValueFromItem(forged, scaleName)
+                            pawnParts[#pawnParts + 1] = format("%s %s (%s as it is)", tostring(scale.LocalizedName or scaleName),
+                                forgedValue and format("%.2f", forgedValue) or "no value",
+                                ownValue and format("%.2f", ownValue) or "no value")
+                        end
+                    end
+                    table.sort(pawnParts)
+                else
+                    pawnParts[1] = "Pawn has no data for it yet (copy again)"
+                end
+            end
+            return #pawnParts > 0 and table.concat(pawnParts, ", ") or "not there"
+        end
+        if not how then
+            out[#out + 1] = format("at its floor: no link (%s); a set marked for PVP then compares it, and the piece it is compared with, at their own levels",
+                tostring(pvpLinkWhy[link] or "the client does not have the item yet"))
+            return out
+        end
+        out[#out + 1] = format("at its floor: item level %d, by bonus %s in the place of %s%s", how.level, tostring(how.bonus),
+            tostring(how.own), how.quality and format(", at quality %s where its own is %s (no ID gives the floor at its own)",
+                tostring(how.quality), tostring(how.ownQuality)) or "")
+        out[#out + 1] = "    " .. tostring(raised:match("|H(item:[^|]*)|h"))
+        out[#out + 1] = "    stats: " .. StatsOf(raised)
+        out[#out + 1] = "    Pawn: " .. PawnOf(raised)
+        -- A link of another quality stands on quality not moving a piece's stats. What shows
+        -- that for this piece: its own level by the table's other IDs for that level, by
+        -- quality, and how many of them leave its stats as they are.
+        local read = how.quality and ReadLevelBonuses(link) or nil
+        local known = NS.LevelBonuses
+        if read and known and #read.carriers > 0 then
+            local own = tonumber(read.carriers[1])
+            local ownStats = StatsOf(link)
+            local same, sameAlike, other, otherAlike, unknown = 0, 0, 0, 0, 0
+            for index, bonus in ipairs(known:IdsFor(level, own) or {}) do
+                if index > MAX_LEVEL_BONUS_TRIES then
+                    break
+                end
+                local tried = bonus ~= own and read.With(bonus) or nil
+                if tried and C_Item.GetDetailedItemLevelInfo(tried) == level then
+                    local _, _, triedQuality = C_Item.GetItemInfo(tried)
+                    local alike = StatsOf(tried) == ownStats and 1 or 0
+                    if triedQuality == nil then
+                        unknown = unknown + 1
+                    elseif triedQuality == how.ownQuality then
+                        same, sameAlike = same + 1, sameAlike + alike
+                    else
+                        other, otherAlike = other + 1, otherAlike + alike
+                    end
+                end
+            end
+            out[#out + 1] = format("    as it is: stats: %s", ownStats)
+            out[#out + 1] = format("    its own level by other IDs of the table: %d at its own quality (%d with its stats), %d at another quality (%d with its stats), %d the client has no quality for yet",
+                same, sameAlike, other, otherAlike, unknown)
+        end
+        return out
+    end)
+    if not ok then
+        return { "error: " .. tostring(lines) }
+    end
+    return lines
 end
 
 -- For the Debug Frame export: which visible Pawn scales are being ignored for this toon, or nil.
@@ -3787,8 +4395,9 @@ function CaerdonEquipment:GetReplacementGains(item, wornItem)
         -- The off hand's piece, for a weapon whose hands are judged apart: on that hand's own
         -- scale, and against that piece alone (JudgeOffHand).
         local offScale = handKind and wornSlot == INVSLOT_OFFHAND and HandsApart(loadout, inventoryTypeName) or nil
+        SetPvpMode(loadout, link, handKind and BOTH_HANDS or { wornSlot })
         local baseline = LoadoutBaseline(loadout, wornSlot, offScale and offScale.name or nil)
-        local value = baseline and OtherSpecValue(offScale and offScale.name or loadout.scale, link)
+        local value = baseline and LoadoutValue(loadout, offScale and offScale.name or loadout.scale, link)
         if not value then
             return nil, "Pawn has no value on the scale for one of the two pieces"
         end
@@ -3817,7 +4426,7 @@ function CaerdonEquipment:GetReplacementGains(item, wornItem)
         if GetInventoryItemLink("player", wornSlot) ~= baseline.link then
             return nil, "the set that is on has another piece for the slot than the one worn"
         end
-        local entry = { colour = loadout.colour, worn = loadout.isWorn or nil,
+        local entry = { colour = loadout.colour, worn = loadout.isWorn or nil, pvp = loadout.pvp and not loadout.plain or nil,
             upgrade = total > toBeat * PAWN_UPGRADE_THRESHOLD,
             percent = toBeat > 0 and math.floor((total / toBeat - 1) * 100 + 0.5) or nil,
             atLevel = LevelToCome(item) }

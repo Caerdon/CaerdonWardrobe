@@ -768,6 +768,12 @@ local function PairNote(upgrade)
     return text and format("  |cff%s%s|r", NOTE_COLOUR, text) or ""
 end
 
+-- A gear set marked for PVP (pvp on the entry): the gain is at the levels the pieces' PVP floors
+-- raise them to, which is not what Pawn's own note or the pieces' tooltips show.
+local function PvpNote(upgrade)
+    return upgrade.pvp and format("  |cff%s%s|r", NOTE_COLOUR, L["(at PvP levels)"]) or ""
+end
+
 -- A weapon whose hands are judged apart (hand on the entry; author decision: where the
 -- class's scale has a half for the off hand's weapon, a one-hander has a verdict for each
 -- hand): the note says which hand the gain is in.
@@ -786,10 +792,10 @@ local function AddUpgradeLine(tooltip, upgrade)
     -- No percentage against a piece the scale gives no value.
     local gain = upgrade.percent and format(L["+%d%% upgrade"], upgrade.percent) or L["upgrade"]
     local worn = IsWornGain(upgrade)
-    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
+    tooltip:AddLine(format("|cff%s%s%s:|r  %s|cff%s%s|r%s%s%s%s%s", upgrade.colour or LOADOUT_NAME_COLOUR, icon,
         tostring(upgrade.name), GainMark(upgrade),
         worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR, gain, PairNote(upgrade), HandNote(upgrade),
-        OtherSpecNote(upgrade), LaterNote(upgrade)), 1, 1, 1, true)
+        PvpNote(upgrade), OtherSpecNote(upgrade), LaterNote(upgrade)), 1, 1, 1, true)
 end
 
 -- The lines by themselves, with Pawn's own lines left as they are: one is left out where
@@ -887,13 +893,13 @@ local function AddReplacementLine(tooltip, gain)
     local text
     if gain.upgrade then
         local worn = IsWornGain(gain)
-        text = format("%s|cff%s%s|r%s%s%s", GainMark(gain),
+        text = format("%s|cff%s%s|r%s%s%s%s", GainMark(gain),
             worn and WORN_GAIN_COLOUR or LOADOUT_GAIN_COLOUR,
-            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], PairNote(gain), OtherSpecNote(gain),
-            LaterNote(gain))
+            gain.percent and format(L["+%d%% upgrade"], gain.percent) or L["upgrade"], PairNote(gain), PvpNote(gain),
+            OtherSpecNote(gain), LaterNote(gain))
     else
-        text = format("|cff%s%s|r%s", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"],
-            PairNote(gain))
+        text = format("|cff%s%s|r%s%s", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"],
+            PairNote(gain), PvpNote(gain))
     end
     tooltip:AddLine(format("|cff%s%s%s:|r  %s", gain.colour or LOADOUT_NAME_COLOUR, icon, tostring(gain.name), text),
         1, 1, 1, true)

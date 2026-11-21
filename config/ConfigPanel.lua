@@ -537,15 +537,26 @@ end
 -- gear set of the toon): one small line of text, then a row per entry with its icon, its name
 -- and a dropdown. What comes after it on the page hangs below it and moves as it grows.
 --   spec = { key, width (of the dropdowns),
---            rows = function() -> { { icon, text, value, title (what the dropdown shows) } ... },
+--            rows = function() -> { { icon, text, value, title (what the dropdown shows),
+--                   note (a line of text in the dropdown's place, for a row with nothing to
+--                   choose) } ... },
 --                   or nil where there is nothing to choose from: the list then takes no room
---            header = function(count) -> the line above the rows; with no rows, what the list
---                   is for
+--            header = function(count, rows) -> the line above the rows; with no rows, what the
+--                   list is for
 --            choices = function(row) -> { { title, value, tooltip, disabled } ... }, as a
 --                   dropdown opens. disabled: greyed and not to be clicked, and its tooltip,
 --                   which says why, still shows
---            choose = function(row, value): the player's click }
--- opts = { indent = levels }
+--            choose = function(row, value): the player's click
+--            check = a switch at the head of each row (optional):
+--                   { get = function(row) -> true, false, or nil for a row whose switch is not
+--                           to be clicked (shown empty and greyed; its tooltip still shows),
+--                     set = function(row, checked): the player's click,
+--                     tooltip = function(row) -> text } }
+--            mark = a second, labelled switch at the end of a row (optional), which hangs on
+--                   nothing: { text, get = function(row) -> true, false, or nil for a row that
+--                   has none, set = function(row, checked), tooltip = function(row) -> text } }
+-- opts = { indent = levels, dependsOn = checkbox (for the rows' switches alone: a dropdown is
+--          usable whatever that checkbox says) }
 function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
     opts = opts or {}
     local parent = self.flow
@@ -575,7 +586,36 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
         row:SetSize(width, DROPDOWN_ROW_HEIGHT)
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetSize(LIST_ICON_SIZE, LIST_ICON_SIZE)
-        row.icon:SetPoint("LEFT", row, "LEFT", INDENT_STEP, 0)
+        if spec.check then
+            local check = CreateFrame("CheckButton", "CaerdonWardrobe" .. spec.key .. "Check" .. index, row,
+                "InterfaceOptionsCheckButtonTemplate")
+            check:SetPoint("LEFT", row, "LEFT", -CHECKBOX_INSET, 0)
+            -- The template's text is not used: the row has its name beside the icon.
+            local label = check.Text or (check:GetName() and _G[check:GetName() .. "Text"])
+            if label then
+                label:SetText("")
+            end
+            check:SetScript("OnClick", function(button)
+                local checked = button:GetChecked() and true or false
+                PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+                if row.entry then
+                    spec.check.set(row.entry, checked)
+                end
+            end)
+            check:SetScript("OnEnter", function(button)
+                if row.entry and spec.check.tooltip then
+                    ShowOptionTooltip(button, row.entry.text, spec.check.tooltip(row.entry))
+                end
+            end)
+            check:SetScript("OnLeave", HideOptionTooltip)
+            if check.SetMotionScriptsWhileDisabled then
+                check:SetMotionScriptsWhileDisabled(true)
+            end
+            row.check = check
+            row.icon:SetPoint("LEFT", row, "LEFT", ROW_HEIGHT + 2, 0)
+        else
+            row.icon:SetPoint("LEFT", row, "LEFT", INDENT_STEP, 0)
+        end
         -- One width for every name, so that the dropdowns stand in a column.
         row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
@@ -590,6 +630,34 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
         end
         row.dropdown = dropdown
         row.text = dropdown.Text or _G[dropdown:GetName() .. "Text"]
+        if spec.mark then
+            local mark = CreateFrame("CheckButton", "CaerdonWardrobe" .. spec.key .. "Mark" .. index, row,
+                "InterfaceOptionsCheckButtonTemplate")
+            mark:SetPoint("LEFT", dropdown, "RIGHT", -14, 2)
+            local label = mark.Text or (mark:GetName() and _G[mark:GetName() .. "Text"])
+            if label then
+                label:SetText(spec.mark.text)
+            end
+            mark:SetScript("OnClick", function(button)
+                local checked = button:GetChecked() and true or false
+                PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+                if row.entry then
+                    spec.mark.set(row.entry, checked)
+                end
+            end)
+            mark:SetScript("OnEnter", function(button)
+                if row.entry and spec.mark.tooltip then
+                    ShowOptionTooltip(button, spec.mark.text, spec.mark.tooltip(row.entry))
+                end
+            end)
+            mark:SetScript("OnLeave", HideOptionTooltip)
+            row.mark = mark
+        end
+        -- In the dropdown's place, for a row with nothing to choose.
+        row.note = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.note:SetPoint("LEFT", row.name, "RIGHT", 10, 0)
+        row.note:SetJustifyH("LEFT")
+        row.note:SetWordWrap(false)
         dropdown.initialize = function()
             local entry = row.entry
             for _, choice in ipairs(entry and spec.choices(entry) or {}) do
@@ -608,7 +676,10 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
                 else
                     menuInfo.func = function()
                         spec.choose(entry, choice.value)
+                        -- A choice can change the rows themselves (a spec is listed until a
+                        -- gear set is given its scale), and with them the page's height.
                         list.caerdonRefresh()
+                        self:UpdateHeight()
                     end
                 end
                 UIDropDownMenu_AddButton(menuInfo)
@@ -618,11 +689,21 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
         return row
     end
 
+    -- A row's switch is usable where the option above the list is on and the row has one to
+    -- click.
+    local function EnableChecks()
+        for _, row in ipairs(list.rows) do
+            if row.check then
+                row.check:SetEnabled(list.checksEnabled ~= false and row.checkUsable == true)
+            end
+        end
+    end
+
     list.caerdonRefresh = function()
         local entries = spec.rows()
         local y = 0
         if entries then
-            header:SetText(spec.header(#entries))
+            header:SetText(spec.header(#entries, entries))
             header:Show()
             y = -3 - TextHeight(header, 10) - 3
         else
@@ -638,6 +719,19 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
             row.icon:SetTexture(entry.icon)
             row.name:SetText(entry.text)
             row.text:SetText(entry.title or "")
+            row.dropdown:SetShown(entry.note == nil)
+            row.note:SetText(entry.note or "")
+            row.note:SetShown(entry.note ~= nil)
+            if row.check then
+                local checked = spec.check.get(entry)
+                row.checkUsable = checked ~= nil
+                row.check:SetChecked(checked == true)
+            end
+            if row.mark then
+                local marked = spec.mark.get(entry)
+                row.mark:SetShown(marked ~= nil)
+                row.mark:SetChecked(marked == true)
+            end
             row:Show()
             y = y - DROPDOWN_ROW_HEIGHT
         end
@@ -648,6 +742,14 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
         -- Never no height at all: a frame without one has no place, and what hangs below
         -- is placed by this one's lower edge.
         list:SetHeight(math.max(1, -y))
+        EnableChecks()
+    end
+    if spec.check then
+        list.caerdonDependsOn = opts.dependsOn
+        list.caerdonSetEnabled = function(enabled)
+            list.checksEnabled = enabled and true or false
+            EnableChecks()
+        end
     end
 
     local rest = CreateFrame("Frame", nil, parent)

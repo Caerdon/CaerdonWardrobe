@@ -350,7 +350,7 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
         end
-        -- "Also for my other specs" took the place of the loot spec option, which a player
+        -- "Also for gear I am not wearing" took the place of the loot spec option, which a player
         -- may have switched on. Where it was not, the default says what the client showed
         -- before: the red arrows of the other talent trees on a client without specs.
         if CaerdonWardrobeConfig.Icon.ShowOtherSpecUpgrades == nil then
@@ -374,9 +374,13 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
 end
 
 -- The toon's own settings (CaerdonWardrobeCharacterConfig, saved per character), for the few
--- that describe the toon and not the player's taste. Today that is one:
+-- that describe the toon and not the player's taste. Today that is the one list of the Icons
+-- page's upgrade block:
 --   Icon.OtherSpecs: class file and spec index ("DRUID2") = false for a spec whose upgrades
 --   the player does not want shown while the toon plays another. Nothing there: every spec.
+--   Icon.OtherSets: gear set ID = false, the same for a set tied to a scale that no spec owns.
+--   Icon.GearSetScales: gear set ID = the Pawn scale the set is scored on.
+--   Icon.PvpSets: gear set ID = true for a set that is scored at PVP levels.
 -- The table has no defaults, no version and no migrations: it is made by the first choice on a
 -- page, and a reader takes a missing table or key as "never chosen".
 function NS:LoadCharacterConfig()

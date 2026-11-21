@@ -2825,7 +2825,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
         do
             local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or {}
-            addKV(1, "upgradeSettings", format("arrow %s; a higher item level counts %s; and against Pawn's scores %s; also for my other specs %s; on gear set pieces %s; level gain %s",
+            addKV(1, "upgradeSettings", format("arrow %s; a higher item level counts %s; and against Pawn's scores %s; also for gear not worn %s; on gear set pieces %s; level gain %s",
                 icon.ShowUpgradeIcon ~= false and "on" or "off",
                 icon.ShowItemLevelUpgrades ~= false and "on" or "off",
                 icon.ItemLevelOverPawn == true and "on" or "off",
@@ -2866,6 +2866,16 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo and transmogInfo.canEquip)
         addKV(1, "taken to (the icon)", lookRoute or "nowhere")
         addKV(1, "and to (the small mark on it)", lookSecondRoute or "nowhere else")
+    end
+
+    -- A piece's PVP floor beside its level, whether the floor counts now, and the piece at its
+    -- floor as a set marked for PVP scores it.
+    if identifiedType == CaerdonItemType.Equipment and CaerdonEquipment.ExplainPvpLevel then
+        addLine(0, "")
+        addLine(0, "[PVP Item Level]")
+        for _, pvpLine in ipairs(CaerdonEquipment:ExplainPvpLevel(item)) do
+            addLine(1, pvpLine)
+        end
     end
 
     -- Each comparison tooltip the client puts beside an item's, as it stands, and what the

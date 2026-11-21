@@ -3,25 +3,30 @@
 --
 -- Most options are the player's and one table for every toon (CaerdonWardrobeConfig). An
 -- option marked perCharacter describes the toon, and the page keeps it with the toon. Today
--- that is two: which of the toon's specs "Also for my other specs and gear sets" is for, and
--- the Pawn scale each of its gear sets is scored on. Here:
---   1. The Icons page offers a switch per spec of the toon's class, under a label that names
---      the toon and says the choice is kept per character.
---   2. A spec nobody chose shows what the equipment code takes it as: on with a gear set
---      assigned to it or with its scale shown in Pawn by the player's choice, off otherwise.
---      No table is made for the toon by that, and the first click writes that switch alone.
---      The switch's tooltip says which it is: on or off by the player's choice, or because of
---      a gear set or of what Pawn shows.
+-- that is one list on the Icons page, under "Also for gear I am not wearing": the toon's gear
+-- sets and the specs no gear set speaks for, each with a switch, and each gear set with the
+-- Pawn scale it is scored on. Here:
+--   1. The list has a row per spec of the toon's class that has no gear set, under a line that
+--      names the toon and says the choice is kept per character. A spec with a gear set has
+--      that set's row instead, and the set's switch is the spec's.
+--   2. A switch nobody clicked shows what the equipment code takes the spec as: on with a gear
+--      set assigned to it or with its scale shown in Pawn by the player's choice, off
+--      otherwise. No table is made for the toon by that, and the first click writes that
+--      switch alone. The switch's tooltip says which it is: on or off by the player's choice,
+--      or because of a gear set or of what Pawn shows.
 --   3. A click writes to the toon's table and not to the player's settings, and refreshes the
 --      icons once; an ordinary option still writes to the player's settings alone.
 --   4. The page shows what the toon's table says each time it is displayed, so another toon's
 --      table (the client loads one per character) shows that toon's choice.
 --   5. Saved data that is no table reads as "never chosen" and is replaced by the first click.
---   6. The Icons page has a row per gear set of the toon, with the scale the set is tied to
---      and a list of the scales it can be tied to. The rows are the toon's sets as they are
---      each time the page shows, and the rest of the page moves with their number. A choice
---      is written to the toon's table and refreshes the icons once. A set that is deleted
---      takes its tie with it.
+--      The switches hang on the option above the list; the scales do not.
+--   6. A gear set's row has the scale the set is tied to and a list of the scales it can be
+--      tied to. The rows are the toon's sets as they are each time the page shows, and the
+--      rest of the page moves with their number. A choice is written to the toon's table and
+--      refreshes the icons once. A set tied to a scale that no spec owns has a switch of its
+--      own; one with neither has none to click. A set that is scored and holds a piece with
+--      a PVP floor has a second switch, "PvP", which hangs on nothing. A set that is deleted
+--      takes its tie and its switches with it.
 --   7. A page with such a list has the height of what is above it, the list as it is now and
 --      what is below.
 --
@@ -41,7 +46,8 @@ return function(H, S)
     local TOON = { name = "Zzyxa", realm = "Farrealm", class = "Druid", classFile = "DRUID", race = "Tauren",
         faction = "Horde", level = 90 }
     local SPECS = { "Balance", "Feral", "Guardian", "Restoration" }
-    local GUARDIAN = "\"MrRobot\":DRUID3"
+    local BALANCE, FERAL, GUARDIAN, RESTORATION = "\"MrRobot\":DRUID1", "\"MrRobot\":DRUID2", "\"MrRobot\":DRUID3",
+        "\"MrRobot\":DRUID4"
 
     local function Start()
         local game = H.StockGame(TOON, {})
@@ -51,7 +57,12 @@ return function(H, S)
         game:Set("C_EquipmentSet.GetEquipmentSetForSpec", function(specIndex)
             return world.setForSpec and world.setForSpec[specIndex] or nil
         end)
-        world.scales = { [GUARDIAN] = { ClassID = 3, SpecID = 3, Provider = "MrRobot" } }
+        -- Pawn's own scale for each spec of the class: a spec is a loadout through its scale.
+        world.scales = {}
+        for index, scaleName in ipairs({ BALANCE, FERAL, GUARDIAN, RESTORATION }) do
+            world.scales[scaleName] = { ClassID = 3, SpecID = index, Provider = "MrRobot",
+                LocalizedName = "Druid: " .. SPECS[index] }
+        end
         game:Set("PawnCommon.Scales", world.scales)
         -- Pawn's part that scores an item on a scale: a list of scales to choose from is only
         -- offered where it is there.
@@ -72,7 +83,9 @@ return function(H, S)
         game:Set("UIDropDownMenu_AddButton", function(info) world.menu[#world.menu + 1] = info end)
         game:Set("PawnIsScaleVisible", function(name) return world.visible[name] == true end)
         game:Set("GetSpecialization", function() return 3 end)
-        game:Set("GetSpecializationInfoForClassID", function(_, index) return 100 + index, SPECS[index] end)
+        game:Set("GetSpecializationInfoForClassID", function(_, index)
+            return 100 + index, SPECS[index], "", 9000 + index
+        end)
         game:Set("C_SpecializationInfo.GetNumSpecializationsForClassID", function() return #SPECS end)
         game:Set("Settings.RegisterCanvasLayoutSubcategory", function() return {}, {} end)
         game:Set("SettingsRegistrar.AddRegistrant", function(_, registrant)
@@ -185,96 +198,158 @@ return function(H, S)
     Equal(#world.registrants, 1, "start: the Icons page asked to be built")
     Check(world.page ~= nil, "start: and its frame is there to be refreshed")
 
-    -- 1. The switches and their label.
-    local specs = {}
-    for index = 1, #SPECS do
-        specs[index] = env["CaerdonWardrobeotherSpec" .. index]
-        Check(specs[index] ~= nil, "page: a switch for spec " .. index)
-        Equal(specs[index] and specs[index].Text:GetText(), SPECS[index], "page: named for spec " .. index)
+    -- The list, and its rows by the name they show.
+    local list = env.CaerdonWardrobegearSetScale
+    Check(list ~= nil, "page: the Icons page has the list")
+    local function RowsShown()
+        local count = 0
+        for _, row in ipairs(list.rows) do
+            count = count + (row:IsShown() and 1 or 0)
+        end
+        return count
     end
-    Equal(env.CaerdonWardrobeotherSpec5, nil, "page: and none beyond the class's specs")
-    local texts = Texts(world)
-    Check(texts["Which of Zzyxa's specs (kept per character):"], "page: the label names the toon and says the choice is its own")
-    for index = 1, #SPECS do
-        local info = specs[index] and specs[index].caerdonInfo or {}
-        Equal(info.perCharacter, true, "page: spec " .. index .. " is marked as the toon's own")
-        Equal(info.configValue, "DRUID" .. index, "page: and keyed by class file and index")
+    local function Row(name)
+        for _, row in ipairs(list.rows) do
+            if row:IsShown() and row.name:GetText() == name then
+                return row
+            end
+        end
+        return nil
     end
+    local function Tick(name)
+        local row = Row(name)
+        return row and row.check or nil
+    end
+    local function Ticked(name)
+        local tick = Tick(name)
+        if tick == nil then
+            return "no row"
+        end
+        return tick:GetChecked()
+    end
+
+    -- 1. A row per spec with no gear set, and the line above them.
+    Equal(RowsShown(), #SPECS, "page: a toon with no gear sets has a row per spec of its class")
+    for index = 1, #SPECS do
+        local row = list.rows[index]
+        Equal(row.name:GetText(), SPECS[index], "page: row " .. index .. " is named for its spec")
+        Equal(env.CaerdonEquipment:GetSpecsWithoutGearSet()[index].icon, 9000 + index, "page: with the spec's icon")
+        Equal(row.note:GetText(), "No gear set: what you wear, on Druid: " .. SPECS[index],
+            "page: and says what such a spec is measured by")
+        Check(row.note:IsShown() and not row.dropdown:IsShown(), "page: in the place of a scale to choose, row " .. index)
+        Check(row.check ~= nil and row.check == env["CaerdonWardrobegearSetScaleCheck" .. index],
+            "page: a switch at the head of row " .. index)
+    end
+    Check(Says(list.header:GetText(), "Zzyxa's specs (kept per character). Ticked: its upgrades show while you wear something else."),
+        "page: the line names the toon and says the choice is its own: " .. tostring(list.header:GetText()))
+    Check(Says(list.header:GetText(), "A gear set you save in the character window gets a row here"),
+        "page: and that a gear set would be listed too")
+    Equal(env.CaerdonWardrobeotherSpec1, nil, "page: there is no second list of specs")
     local shared = env.CaerdonWardrobeshowOtherSpecUpgrades
-    Check(shared ~= nil and shared.caerdonInfo.perCharacter == nil, "page: the option above them is the player's, for every toon")
+    Check(shared ~= nil and shared.caerdonInfo.perCharacter == nil, "page: the option above the list is the player's, for every toon")
+    Equal(shared and shared.Text:GetText(), "Also for gear I am not wearing", "page: and is named for what the rows are")
+    Equal(list.caerdonDependsOn, shared, "page: the rows' switches hang on it")
+    -- That option is off as the settings start on a client with specs: the switches are there
+    -- to be read and not to be clicked until it is on.
+    Equal(shared:GetChecked(), false, "page: it is off as the settings start")
+    Equal(list.rows[1].check:IsEnabled(), false, "page: so no row's switch can be clicked yet")
+    Click(world, shared, true)
+    Equal(list.rows[1].check:IsEnabled(), true, "page: and with it on they can")
 
     -- 2. Nobody chose: what the game and Pawn say, and nothing made.
     for index = 1, #SPECS do
-        Equal(specs[index]:GetChecked(), false,
+        Equal(Ticked(SPECS[index]), false,
             "never chosen: with no gear set and no scale shown, spec " .. index .. " shows as off")
     end
-    local hint = Hover(world, specs[1])
+    local hint = Hover(world, Tick("Balance"))
     Check(Says(hint, "Show upgrades for Balance while you play another specialization."), "tooltip: what the switch does: " .. hint)
     Check(Says(hint, "Off because no gear set is assigned to Balance and Pawn is not set to show its scale. " .. FOLLOWS),
         "tooltip: off, and why, for a spec with neither sign")
     Check(Says(hint, "Kept for this character only."), "tooltip: and that the choice is the character's")
     Equal(world.tooltip.title, "Balance", "tooltip: under the spec's name")
+    -- A gear set the client ties to a spec has the row in the spec's place, and its switch.
     world.setForSpec = { [2] = 21 }
+    world.setIDs, world.setNames = { 21 }, { [21] = "Cat" }
     world.page.OnRefresh()
-    Equal(specs[2]:GetChecked(), true, "never chosen: a gear set assigned to a spec shows it as on")
-    Equal(specs[1]:GetChecked(), false, "never chosen: and no other spec")
-    Check(Says(Hover(world, specs[2]), "On because a gear set is assigned to Feral. " .. FOLLOWS),
-        "tooltip: on because of the gear set: " .. Hover(world, specs[2]))
+    Equal(RowsShown(), #SPECS, "never chosen: a spec's gear set has a row and the spec none beside it")
+    Equal(list.rows[1].name:GetText(), "Cat", "never chosen: the gear sets come first")
+    Equal(Row("Feral"), nil, "never chosen: the spec is not listed a second time")
+    Check(Row("Cat").dropdown:IsShown() and not Row("Cat").note:IsShown(), "never chosen: a gear set's row has a scale to choose")
+    Equal(Row("Cat").text:GetText(), "By its specialization (Feral)", "never chosen: which is its spec's until it is tied")
+    Equal(Ticked("Cat"), true, "never chosen: a gear set assigned to a spec shows it as on")
+    Equal(Ticked("Balance"), false, "never chosen: and no other spec")
+    Check(Says(list.header:GetText(), "Zzyxa's gear sets and specs (kept per character).") and
+        Says(list.header:GetText(), "The scale is what a gear set is scored on."),
+        "never chosen: the line is for both kinds of row: " .. tostring(list.header:GetText()))
+    Check(Says(Hover(world, Tick("Cat")), "On because a gear set is assigned to Feral. " .. FOLLOWS),
+        "tooltip: on because of the gear set: " .. Hover(world, Tick("Cat")))
+    Equal(world.tooltip.title, "Cat", "tooltip: under the gear set's name")
     world.visible = { [GUARDIAN] = true }
     world.page.OnRefresh()
-    Equal(specs[3]:GetChecked(), true, "never chosen: a scale the player has Pawn show does too")
-    Check(Says(Hover(world, specs[3]), "On because Pawn is set to show the Guardian scale. " .. FOLLOWS),
-        "tooltip: on because of Pawn's shown scale: " .. Hover(world, specs[3]))
+    Equal(Ticked("Guardian"), true, "never chosen: a scale the player has Pawn show does too")
+    Check(Says(Hover(world, Tick("Guardian")), "On because Pawn is set to show the Guardian scale. " .. FOLLOWS),
+        "tooltip: on because of Pawn's shown scale: " .. Hover(world, Tick("Guardian")))
     rawset(env, "PawnOptions", { AutoSelectScales = true })
     world.page.OnRefresh()
-    Equal(specs[3]:GetChecked(), false, "never chosen: not a scale Pawn shows by itself")
-    hint = Hover(world, specs[3])
+    Equal(Ticked("Guardian"), false, "never chosen: not a scale Pawn shows by itself")
+    hint = Hover(world, Tick("Guardian"))
     Check(Says(hint, "Off because no gear set is assigned to Guardian. " .. FOLLOWS) and not Says(hint, "Pawn is not set"),
         "tooltip: with Pawn picking its scales, off for want of a gear set alone: " .. hint)
     Equal(env.CaerdonWardrobeCharacterConfig, nil, "tooltip: a look at it writes nothing for the toon")
-    Equal(specs[2]:GetChecked(), true, "never chosen: the spec with the gear set stays on")
+    Equal(Ticked("Cat"), true, "never chosen: the spec with the gear set stays on")
     Equal(env.CaerdonWardrobeCharacterConfig, nil, "never chosen: and the toon has no table")
     -- The first click writes its own switch and leaves the others to follow the game.
-    Click(world, specs[1], true)
+    Click(world, Tick("Balance"), true)
     local own = env.CaerdonWardrobeCharacterConfig
     Equal(type(own) == "table" and own.Icon.OtherSpecs.DRUID1, true, "first click: the clicked spec is written")
     Equal(type(own) == "table" and own.Icon.OtherSpecs.DRUID2, nil, "first click: a spec that only showed as on is not")
-    hint = Hover(world, specs[1])
+    hint = Hover(world, Tick("Balance"))
     Check(Says(hint, "On by your choice.") and not Says(hint, "Until you click it"),
         "tooltip: a clicked switch is the player's choice and follows nothing: " .. hint)
-    Check(Says(Hover(world, specs[2]), "On because a gear set is assigned to Feral."),
+    Check(Says(Hover(world, Tick("Cat")), "On because a gear set is assigned to Feral."),
         "tooltip: the unclicked one beside it still gives the game's reason")
-    Click(world, specs[1], false)
-    Check(Says(Hover(world, specs[1]), "Off by your choice."), "tooltip: switched off, it says that")
-    Click(world, specs[1], true)
+    Click(world, Tick("Balance"), false)
+    Check(Says(Hover(world, Tick("Balance")), "Off by your choice."), "tooltip: switched off, it says that")
+    Click(world, Tick("Balance"), true)
+    -- The set is no spec's any more: the spec has its own row again, and follows the game.
     world.setForSpec = nil
     world.page.OnRefresh()
-    Equal(specs[1]:GetChecked(), true, "first click: the choice stands when the game says otherwise")
-    Equal(specs[2]:GetChecked(), false, "first click: and the unclicked spec follows the game")
+    Equal(Ticked("Balance"), true, "first click: the choice stands when the game says otherwise")
+    Equal(Ticked("Feral"), false, "first click: and the unclicked spec follows the game")
+    Equal(RowsShown(), #SPECS + 1, "first click: with the gear set, now no spec's, in a row of its own")
+    -- A gear set with no spec and no scale is not scored on its own: no switch to click.
+    Equal(Row("Cat").text:GetText(), "Not tied", "no scale: a gear set no spec owns starts untied")
+    Check(Tick("Cat"):GetChecked() == false and Tick("Cat"):IsEnabled() == false, "no scale: its switch is empty and cannot be clicked")
+    Check(Says(Hover(world, Tick("Cat")), "Choose a Pawn scale for it first."), "no scale: and says what to do: " .. Hover(world, Tick("Cat")))
+    Equal(Tick("Balance"):IsEnabled(), true, "no scale: a row beside it is as usable as before")
     rawset(env, "CaerdonWardrobeCharacterConfig", nil)
     rawset(env, "PawnOptions", nil)
     world.visible = {}
 
-    -- From here every spec has a gear set assigned, so a spec nobody chose shows as on.
+    -- From here every spec has a gear set assigned, so a switch nobody clicked shows as on.
     world.setForSpec = { 11, 12, 13, 14 }
+    world.setIDs, world.setNames = { 11, 12, 13, 14 }, { [11] = "One", [12] = "Two", [13] = "Three", [14] = "Four" }
     world.page.OnRefresh()
+    Equal(RowsShown(), 4, "sets for all: a row per gear set, and no spec beside them")
 
     -- 3. A click.
-    Click(world, specs[2], false)
+    Click(world, Tick("Two"), false)
     own = env.CaerdonWardrobeCharacterConfig
     Equal(type(own), "table", "click: the toon's table is made")
-    Equal(own and own.Icon and own.Icon.OtherSpecs and own.Icon.OtherSpecs.DRUID2, false, "click: with the spec off in it")
+    Equal(own and own.Icon and own.Icon.OtherSpecs and own.Icon.OtherSpecs.DRUID2, false, "click: with the set's spec off in it")
+    Equal(own and own.Icon and own.Icon.OtherSets, nil, "click: a spec's gear set is switched by its spec, not by the set")
     Equal(env.CaerdonWardrobeConfig.Icon.OtherSpecs, nil, "click: and nothing about specs in the player's settings")
     Equal(#world.refreshes, 1, "click: one refresh")
     Equal(world.refreshes[1], "settings", "click: named for the settings")
-    Click(world, specs[2], true)
+    Click(world, Tick("Two"), true)
     Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSpecs.DRUID2, true, "click: switched on again, it is on in the toon's table")
-    Click(world, specs[4], false)
+    Click(world, Tick("Four"), false)
 
     -- An ordinary option is the player's.
     local before = H.DeepCopy(env.CaerdonWardrobeCharacterConfig)
     local gearSets = env.CaerdonWardrobeshowUpgradeOnGearSets
     Equal(gearSets:GetChecked(), true, "shared: an ordinary option shows the player's setting")
+    Equal(gearSets.Text:GetText(), "On pieces saved in a gear set", "shared: named for the piece it is about")
     Check(Says(Hover(world, gearSets), "Show the arrow on items that belong to a saved gear set."),
         "shared: and its tooltip is its text, as before")
     Click(world, gearSets, false)
@@ -320,48 +395,47 @@ return function(H, S)
     -- 4. Another toon's table, as the client loads one per character.
     rawset(env, "CaerdonWardrobeCharacterConfig", { Icon = { OtherSpecs = { DRUID1 = false } } })
     world.page.OnRefresh()
-    Equal(specs[1]:GetChecked(), false, "another toon: its spec that is off shows as off")
-    Equal(specs[2]:GetChecked(), true, "another toon: and the rest as on")
-    Equal(specs[4]:GetChecked(), true, "another toon: the first toon's choice is not shown")
+    Equal(Ticked("One"), false, "another toon: its spec that is off shows as off")
+    Equal(Ticked("Two"), true, "another toon: and the rest as on")
+    Equal(Ticked("Four"), true, "another toon: the first toon's choice is not shown")
     Equal(gearSets:GetChecked(), false, "another toon: the player's setting is the same for it")
     rawset(env, "CaerdonWardrobeCharacterConfig", nil)
     world.page.OnRefresh()
-    Equal(specs[1]:GetChecked(), true, "another toon: one with no table shows every spec as on")
+    Equal(Ticked("One"), true, "another toon: one with no table shows every spec as on")
 
     -- 5. Saved data that is no table.
     rawset(env, "CaerdonWardrobeCharacterConfig", 7)
     world.page.OnRefresh()
-    Equal(specs[3]:GetChecked(), true, "broken: saved data that is no table reads as never chosen")
-    Click(world, specs[3], false)
+    Equal(Ticked("Three"), true, "broken: saved data that is no table reads as never chosen")
+    Click(world, Tick("Three"), false)
     own = env.CaerdonWardrobeCharacterConfig
     Equal(type(own) == "table" and own.Icon.OtherSpecs.DRUID3, false, "broken: and the first click makes the table anew")
     rawset(env, "CaerdonWardrobeCharacterConfig", { Icon = { OtherSpecs = { DRUID3 = false } } })
 
-    -- The switches follow the option above them.
+    -- The switches follow the option above the list.
     Click(world, shared, false)
-    Equal(specs[1]:IsEnabled(), false, "depends: with the option off the switches cannot be changed")
+    Equal(Tick("One"):IsEnabled(), false, "depends: with the option off the switches cannot be changed")
     Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSpecs.DRUID3, false, "depends: and the toon's choice stays")
+    world.page.OnRefresh()
+    Equal(Tick("One"):IsEnabled(), false, "depends: nor after the page is shown again")
     Click(world, shared, true)
-    Equal(specs[1]:IsEnabled(), true, "depends: with it on again they can")
+    Equal(Tick("One"):IsEnabled(), true, "depends: with it on again they can")
 
     -- 6. The toon's gear sets, each with the Pawn scale it is scored on.
-    Equal(shared.Text:GetText(), "Also for my other specs and gear sets", "gear sets: the option for the red arrow names them")
-    local FERAL, OWN, MAGE = "\"MrRobot\":DRUID2", "My tanking", "\"MrRobot\":MAGE1"
-    world.scales[GUARDIAN].LocalizedName = "Druid: Guardian"
-    world.scales[FERAL] = { ClassID = 3, SpecID = 2, Provider = "MrRobot", LocalizedName = "Druid: Feral" }
+    -- Pawn has a scale for two of the class's specs here, one of the player's own and one of
+    -- another class.
+    local OWN, MAGE = "My tanking", "\"MrRobot\":MAGE1"
+    world.scales[BALANCE], world.scales[RESTORATION] = nil, nil
     world.scales[OWN] = {}
     world.scales[MAGE] = { ClassID = 8, SpecID = 1, Provider = "MrRobot", LocalizedName = "Mage: Arcane" }
     local equipment = env.CaerdonEquipment
-    local list = env.CaerdonWardrobegearSetScale
-    Check(list ~= nil, "gear sets: the page has the list")
     local scrollChild = list:GetParent()
-    local function RowsShown()
-        local count = 0
-        for _, row in ipairs(list.rows) do
-            count = count + (row:IsShown() and 1 or 0)
-        end
-        return count
+    -- Which gear sets hold a piece with a PVP floor is the equipment code's to find
+    -- (scenarios/pawn-scales.lua); here it is said for it.
+    function equipment:GearSetHasPvpFloor(setID)
+        return world.pvpFloor ~= nil and world.pvpFloor[setID] == true
     end
+    world.pvpFloor = { [41] = true }
     local function Open(row)
         world.menu = {}
         row.dropdown.initialize()
@@ -386,28 +460,41 @@ return function(H, S)
     Check(below ~= nil and below ~= scrollChild and below:GetParent() == scrollChild,
         "gear sets: what is below it is laid out on a frame of its own, which hangs below the list")
 
-    -- No gear sets: one line that says what the list is for.
+    -- No gear sets, on a client with talent trees, which has no specs to list either: one line
+    -- that says what the list is for.
+    local api = env.CaerdonAPI
+    local hadTrees = api.GetTalentTrees
     rawset(env, "CaerdonWardrobeCharacterConfig", nil)
     world.setForSpec = { [3] = 31 }
+    world.setIDs, world.setNames = nil, nil
+    api.GetTalentTrees = function() return { { index = 1 }, { index = 2 }, { index = 3 } } end
     world.page.OnRefresh()
     Equal(RowsShown(), 0, "gear sets: a toon with none has no row")
     Equal(list.header:IsShown(), true, "gear sets: and one line")
     Check(Says(list.header:GetText(), "Zzyxa has no gear sets."), "gear sets: which says so: " .. tostring(list.header:GetText()))
     Equal(list:GetHeight(), LINE, "gear sets: the list is that line high")
     local emptyHeight = scrollChild:GetHeight()
+    api.GetTalentTrees = hadTrees
 
-    -- Two sets: one no spec is tied to, and Guardian's.
+    -- Two sets: one no spec is tied to, and Guardian's. Feral has neither a set nor a set's
+    -- scale, so it has a row as a spec.
     world.setIDs, world.setNames = { 41, 31 }, { [31] = "Bear", [41] = "Arena" }
     world.page.OnRefresh()
-    Equal(RowsShown(), 2, "gear sets: a row for each set")
-    Equal(list.header:GetText(), "Zzyxa's gear sets, and the Pawn scale each is scored on (kept per character):",
+    Equal(RowsShown(), 3, "gear sets: a row for each set, and one for the spec with none")
+    Equal(list.rows[3].name:GetText(), "Feral", "gear sets: the spec comes after the sets")
+    Check(Says(list.header:GetText(), "Zzyxa's gear sets and specs (kept per character)."),
         "gear sets: under a line that names the toon and says the choice is its own")
     Equal(list.rows[1].name:GetText(), "Arena", "gear sets: in the client's order")
     Equal(list.rows[1].text:GetText(), "Not tied", "gear sets: a set nobody tied, and no spec's, is not tied")
     Equal(list.rows[2].name:GetText(), "Bear", "gear sets: the second set")
     Equal(list.rows[2].text:GetText(), "By its specialization (Guardian)", "gear sets: a spec's set goes by the spec until it is tied")
-    Equal(scrollChild:GetHeight(), emptyHeight + 2 * ROW, "gear sets: the page grows by a row for each set")
+    Equal(scrollChild:GetHeight(), emptyHeight + 3 * ROW, "gear sets: the page grows by a row for each")
     Equal(env.CaerdonWardrobeCharacterConfig, nil, "gear sets: showing them writes nothing")
+    Check(Tick("Arena"):IsEnabled() == false and Ticked("Arena") == false, "gear sets: a set with no scale has no switch to click")
+    Check(Row("Arena").mark ~= nil and Row("Arena").mark:IsShown() == false,
+        "pvp mark: a set that is not scored has none, whatever it holds")
+    Equal(Row("Bear").mark:IsShown(), false, "pvp mark: nor has a set with no piece that has a PVP floor")
+    Check(Tick("Bear"):IsEnabled() == true and Ticked("Bear") == true, "gear sets: its spec's set has the spec's, on for the set")
 
     -- The scales to choose from.
     local menu, titles, checked = Open(list.rows[1])
@@ -434,6 +521,57 @@ return function(H, S)
     Equal(world.refreshes[1], "settings", "choice: named for the settings")
     Equal(list.rows[1].text:GetText(), "Druid: Feral", "choice: the row shows it at once")
     Equal(list.rows[2].text:GetText(), "By its specialization (Guardian)", "choice: the other row is as it was")
+    -- The set speaks for the scale now: the spec whose scale it is has no row beside it, and
+    -- the set has a switch of its own, on until it is clicked.
+    Equal(RowsShown(), 2, "choice: the spec whose scale the set was given is no longer listed by itself")
+    Equal(scrollChild:GetHeight(), emptyHeight + 2 * ROW, "choice: and the page is a row shorter")
+    Check(Tick("Arena"):IsEnabled() == true and Ticked("Arena") == true, "its own switch: a set with a scale of its own has one, on")
+    Check(Says(Hover(world, Tick("Arena")), "Show upgrades for this gear set, in red, while you wear another.") and
+        Says(Hover(world, Tick("Arena")), "Kept for this character only."), "its own switch: which says what it does")
+    Equal(equipment:IsGearSetWanted(41), true, "its own switch: and the equipment code takes the set as wanted")
+    Click(world, Tick("Arena"), false)
+    Equal(own.Icon.OtherSets[41], false, "its own switch: a click is written to the toon's table, by the set's ID")
+    Equal(env.CaerdonWardrobeConfig.Icon.OtherSets, nil, "its own switch: and not to the player's settings")
+    Equal(own.Icon.OtherSpecs, nil, "its own switch: nor as a spec's")
+    Equal(#world.refreshes, 1, "its own switch: with one refresh")
+    Equal(equipment:IsGearSetWanted(41), false, "its own switch: the equipment code reads it")
+    Check(Says(equipment:GetGearSetScaleDescription(), "\"Arena\" (41) tied to Druid: Feral, its upgrades switched off while another set is worn"),
+        "its own switch: and the export says so: " .. tostring(equipment:GetGearSetScaleDescription()))
+    world.page.OnRefresh()
+    Equal(Ticked("Arena"), false, "its own switch: shown as off when the page shows again")
+    Click(world, Tick("Arena"), true)
+    Equal(own.Icon.OtherSets[41], true, "its own switch: and on again")
+
+    -- The second switch of a row: the set is one for PVP.
+    world.page.OnRefresh()
+    local mark = Row("Arena").mark
+    Check(mark:IsShown() == true and mark:GetChecked() == false, "pvp mark: a scored set with a piece that has a floor is offered it, off")
+    Equal(mark.Text:GetText(), "PvP", "pvp mark: under its name")
+    Equal(mark, env.CaerdonWardrobegearSetScaleMark1, "pvp mark: at the row's end, a control of its own")
+    Check(Says(Hover(world, mark), "Score this gear set as it is in PvP.") and Says(Hover(world, mark), "Kept for this character only."),
+        "pvp mark: its tooltip says what it does: " .. Hover(world, mark))
+    Equal(Row("Bear").mark:IsShown(), false, "pvp mark: the set beside it has none")
+    Click(world, mark, true)
+    Equal(own.Icon.PvpSets[41], true, "pvp mark: a click is written to the toon's table, by the set's ID")
+    Equal(env.CaerdonWardrobeConfig.Icon.PvpSets, nil, "pvp mark: and not to the player's settings")
+    Equal(#world.refreshes, 1, "pvp mark: with one refresh")
+    Equal(equipment:IsPvpGearSet(41), true, "pvp mark: the equipment code reads it")
+    Check(Says(equipment:GetGearSetScaleDescription(), "\"Arena\" (41) tied to Druid: Feral, marked as a PVP set"),
+        "pvp mark: and the export says so: " .. tostring(equipment:GetGearSetScaleDescription()))
+    -- It hangs on nothing: with the option above the list off, it can still be clicked.
+    Click(world, shared, false)
+    Check(Tick("Arena"):IsEnabled() == false and mark:IsEnabled() == true, "pvp mark: usable with the red arrows switched off")
+    Click(world, shared, true)
+    -- A marked set keeps its mark to be unticked, also with the piece gone from it.
+    world.pvpFloor = nil
+    world.page.OnRefresh()
+    Check(Row("Arena").mark:IsShown() == true and Row("Arena").mark:GetChecked() == true, "pvp mark: a marked set shows it as long as it is marked")
+    Click(world, Row("Arena").mark, false)
+    Equal(own.Icon.PvpSets[41], false, "pvp mark: unticked")
+    world.page.OnRefresh()
+    Equal(Row("Arena").mark:IsShown(), false, "pvp mark: and then it is gone with the piece")
+    world.pvpFloor = { [41] = true }
+    world.page.OnRefresh()
     Check(Says(equipment:GetGearSetScaleDescription(), "\"Arena\" (41) tied to Druid: Feral"),
         "choice: and the equipment code reads it: " .. tostring(equipment:GetGearSetScaleDescription()))
     menu, titles, checked = Open(list.rows[1])
@@ -483,11 +621,13 @@ return function(H, S)
         "gone: a set whose scale is gone has its spec's scale again")
     own.Icon.GearSetScales[31] = nil
 
-    -- A client with talent trees has no spec for a set to go by.
-    local api = env.CaerdonAPI
-    local hadTrees = api.GetTalentTrees
+    -- A client with talent trees has no spec for a set to go by, and none to list.
     api.GetTalentTrees = function() return { { index = 1 }, { index = 2 }, { index = 3 } } end
     world.page.OnRefresh()
+    Equal(RowsShown(), 2, "trees: the rows are the gear sets alone")
+    Check(Says(list.header:GetText(), "Zzyxa's gear sets (kept per character)."), "trees: and the line names them alone")
+    Check(Tick("Bear"):IsEnabled() == false, "trees: a set with no scale has no switch to click there either")
+    Check(Tick("Arena"):IsEnabled() == true, "trees: one with a scale has")
     Equal(list.rows[2].text:GetText(), "Not tied", "trees: no set goes by a specialization there")
     menu = Open(list.rows[2])
     Check(Says(menu[1].tooltipText, "your gear is scored for the talent tree you have the most points in."),
@@ -511,10 +651,17 @@ return function(H, S)
     Equal(list.rows[1].text:GetText(), "Druid: Feral", "another toon: with its scale")
     Equal(scrollChild:GetHeight(), emptyHeight + ROW, "another toon: and the page is a row shorter")
 
-    -- A set that is deleted takes its tie with it: the client gives its ID to the next set made.
+    -- A set that is deleted takes its tie and its switch with it: the client gives its ID to
+    -- the next set made.
+    env.CaerdonWardrobeCharacterConfig.Icon.OtherSets = { [31] = false, [41] = false }
+    env.CaerdonWardrobeCharacterConfig.Icon.PvpSets = { [31] = true, [41] = true }
     env.C_EquipmentSet.DeleteEquipmentSet(31)
     Equal(world.deleted, 31, "deleted: the client's own function ran")
     Equal(env.CaerdonWardrobeCharacterConfig.Icon.GearSetScales[31], nil, "deleted: and the set's tie is gone")
+    Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSets[31], nil, "deleted: with its switch")
+    Equal(env.CaerdonWardrobeCharacterConfig.Icon.OtherSets[41], false, "deleted: another set's stays")
+    Equal(env.CaerdonWardrobeCharacterConfig.Icon.PvpSets[31], nil, "deleted: and its PVP mark is gone")
+    Equal(env.CaerdonWardrobeCharacterConfig.Icon.PvpSets[41], true, "deleted: another set's stays as well")
     Check(Says(equipment:GetGearSetScaleDescription(), "(a deleted set's tie goes with it: yes)"),
         "deleted: the export says the client's function is watched: " .. tostring(equipment:GetGearSetScaleDescription()))
     world.page.OnRefresh()
@@ -531,7 +678,8 @@ return function(H, S)
     rawset(env, "CaerdonWardrobeCharacterConfig", nil)
     world.setIDs, world.setNames = nil, nil
     world.page.OnRefresh()
-    Equal(scrollChild:GetHeight(), emptyHeight, "no Pawn: with Pawn again, as before")
+    Equal(RowsShown(), 1, "no Pawn: with Pawn again, the spec that has no gear set is listed")
+    Equal(scrollChild:GetHeight(), emptyHeight + ROW, "no Pawn: and the page is as high as that")
 
     -- 7. A page's height with such a list: a page of this scenario's own, with one row above
     -- the list and one below. 16 above the first row, 26 a row, 24 below the last.

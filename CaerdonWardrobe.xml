@@ -8,6 +8,7 @@
 	<Script file="FeatureMixin.lua" />
 	<Script file="ItemDataMixin.lua" />
 	<Script file="CaerdonRefresh.lua" />
+	<Script file="CaerdonLevelBonuses.lua" />
 	<Script file="CaerdonWardrobe.lua" />
 
 	<Frame name="CaerdonWardrobe" secureMixin="CaerdonWardrobeMixin">

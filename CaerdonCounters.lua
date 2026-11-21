@@ -173,6 +173,31 @@ function Counters:NoteLoadAsked(event, id, first)
     openLoads[kind .. ":" .. tostring(id)] = { kind = kind, id = id, by = by, where = where, at = SinceLoad() }
 end
 
+-- From the listener, for every answer about an item, whoever asked: the addon, another addon
+-- or Blizzard's own code. The client's item cache holds only so many items and drops the
+-- rest (notes: Upgrades), so how many answers it gives, and how many at once, is what decides
+-- whether a piece's data is still there when a comparison needs it. Kept by the second for
+-- the last five minutes.
+local ANSWER_SECONDS = 300
+local itemAnswers = { total = 0, mostInASecond = 0 }
+local answerAt, answerCount = {}, {}
+
+function Counters:NoteAnswer(event)
+    if LOAD_KINDS[event] ~= "item" then
+        return
+    end
+    local second = math.floor(SinceLoad())
+    local slot = second % ANSWER_SECONDS + 1
+    if answerAt[slot] ~= second then
+        answerAt[slot], answerCount[slot] = second, 0
+    end
+    answerCount[slot] = answerCount[slot] + 1
+    itemAnswers.total = itemAnswers.total + 1
+    if answerCount[slot] > itemAnswers.mostInASecond then
+        itemAnswers.mostInASecond, itemAnswers.mostAt = answerCount[slot], second
+    end
+end
+
 -- From the listener, when the client's answer arrives and before the callbacks run. Returns
 -- who had asked, which the listener sets as the requester for the callbacks.
 function Counters:NoteLoadAnswered(event, id, success)
@@ -255,6 +280,29 @@ function Counters:NoteRefresh(reason, detail, changed)
         table.remove(recentRefreshes, 1)
     end
     lastRefreshTrigger = trigger
+end
+
+-- A piece's data was not in the client's cache when a comparison needed it. The client drops
+-- item data from its cache again (Blizzard's ItemMixin:IsDataEvictable), for worn pieces as
+-- for any other, so a question by link can go unanswered for a piece that was answered for a
+-- moment ago. Counted by the place that asked, so that an export says how often it happens in
+-- play and where: where, how often, how often the client had no item info for the link at all
+-- (against Pawn alone having none), when first and last, and the last item.
+local withoutData, withoutDataOrder = {}, {}
+
+function Counters:NoteWithoutData(where, link, noItemInfo)
+    local entry = withoutData[where]
+    if not entry then
+        entry = { count = 0, noItemInfo = 0, first = Round(SinceLoad(), 1) }
+        withoutData[where] = entry
+        withoutDataOrder[#withoutDataOrder + 1] = where
+    end
+    entry.count = entry.count + 1
+    if noItemInfo then
+        entry.noItemInfo = entry.noItemInfo + 1
+    end
+    entry.last = Round(SinceLoad(), 1)
+    entry.item = type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
 end
 
 -- From RefreshItems' timer, as it starts on the features' Refresh(). A refresh empties the
@@ -677,6 +725,26 @@ function Counters:GetReport()
     table.sort(itemLoads.unanswered, function(a, b) return a.at < b.at end)
     report.itemLoads = itemLoads
 
+    local thisSecond, lastMinute, lastFive = math.floor(SinceLoad()), 0, 0
+    for slot = 1, ANSWER_SECONDS do
+        local age = answerAt[slot] and thisSecond - answerAt[slot] or nil
+        if age and age < ANSWER_SECONDS then
+            lastFive = lastFive + answerCount[slot]
+            if age < 60 then
+                lastMinute = lastMinute + answerCount[slot]
+            end
+        end
+    end
+    report.itemAnswers = { total = itemAnswers.total, lastMinute = lastMinute, lastFiveMinutes = lastFive,
+        mostInASecond = itemAnswers.mostInASecond, mostAt = itemAnswers.mostAt }
+
+    report.withoutData = {}
+    for index, where in ipairs(withoutDataOrder) do
+        local entry = withoutData[where]
+        report.withoutData[index] = { where = where, count = entry.count, noItemInfo = entry.noItemInfo, first = entry.first,
+            last = entry.last, item = entry.item }
+    end
+
     report.refreshes = { total = refreshes.total, by = {}, about = {}, recent = {} }
     for trigger, count in pairs(refreshesBy) do
         report.refreshes.by[trigger] = count
@@ -820,6 +888,19 @@ function Counters:GetReportLines()
         end
         add(2, ("not answered: %s %s, asked at %s s (%s) by %s, %s s ago"):format(request.kind, tostring(request.id),
             Figure(request.at, 2), request.phase, tostring(request.where or request.by), Figure(request.waiting)))
+    end
+
+    add(1, ("Item answers from the client, whoever asked: %d this session; %d in the last minute, %d in the last five; the most in one second %d%s")
+        :format(report.itemAnswers.total, report.itemAnswers.lastMinute, report.itemAnswers.lastFiveMinutes,
+            report.itemAnswers.mostInASecond, report.itemAnswers.mostAt and (" (at %d s)"):format(report.itemAnswers.mostAt) or ""))
+    if #report.withoutData == 0 then
+        add(1, "A piece's data missing from the client's cache when a comparison needed it: never this session")
+    else
+        add(1, "A piece's data missing from the client's cache when a comparison needed it:")
+        for _, entry in ipairs(report.withoutData) do
+            add(2, ("%s: %d times (%d with no item info for the link at all), first at %s s, last at %s s, last item %s"):format(
+                entry.where, entry.count, entry.noItemInfo, Figure(entry.first, 1), Figure(entry.last, 1), tostring(entry.item)))
+        end
     end
 
     local profile = report.profile

@@ -34,6 +34,8 @@ function CaerdonAsyncCallbackSystemMixin:Init(apiType)
 		function(self, event, ...)
 			if event == self.api.event then
 				local id, success = ...;
+				-- Every answer, also to a question that was not the addon's.
+				CaerdonCounters:NoteAnswer(event);
 				if success then
 					self:FireSuccessCallbacks(id);
 				else
