@@ -3086,6 +3086,16 @@ return function(H, S)
                     Check(put.isNotReady == true and put.comparedGearMissing == true,
                         "set piece without data: the verdict against it is put off")
                     Equal(askedSet, 1, "set piece without data: the piece is asked for")
+                    -- The status and the queue name what is waited for alike, so that the
+                    -- piece's coming asks the buttons again that wait for it.
+                    do
+                        local ready, why, waitsFor = piece:GetCaerdonStatus()
+                        Check(ready == false and why == "the data of gear it is compared with" and waitsFor == "gear",
+                            "set piece without data: the status says what it waits for, by the queue's name for it: " ..
+                            tostring(why) .. " / " .. tostring(waitsFor))
+                        local awaited = world.env.CaerdonWardrobe.awaitedItemData
+                        Equal(awaited and awaited[940211], "gear", "set piece without data: and the queue listens for the piece under that name")
+                    end
                     world.client:Tick(3)
                     local made = piece:GetItemData():GetTransmogInfo()
                     list = equipment:GetLoadoutUpgradeList(piece)

@@ -198,7 +198,41 @@ local function PlainRun(run, started)
         events = events or {}
         events[event] = { count = entry.count, firstMs = Round(entry.first - started, 1), items = entry.items }
     end
-    return byFeature, events
+    -- The refreshes that came during the run (Journal.lua), the run's own first.
+    local refreshes
+    for index, entry in ipairs(run.refreshes or {}) do
+        refreshes = refreshes or {}
+        refreshes[index] = { ms = Round(entry.at - started, 1), who = entry.who, detail = entry.detail, about = entry.about }
+    end
+    -- The draws that had waited for data, by what they waited for (Journal.lua).
+    local waits
+    for why, entry in pairs(run.waits or {}) do
+        waits = waits or {}
+        waits[why] = { count = entry.count, longestMs = Round(entry.longest * 1000, 1) }
+    end
+    return byFeature, events, refreshes, waits
+end
+
+-- The draws of a run that had waited for data, in words: "2 for the Catalyst's answer".
+local function Waits(run)
+    local parts = {}
+    for why, entry in pairs(run.waits or {}) do
+        parts[#parts + 1] = ("%s for %s"):format(tostring(entry.count), tostring(why))
+    end
+    table.sort(parts)
+    return #parts > 0 and table.concat(parts, ", ") or nil
+end
+
+-- The refreshes of a run that were not its own, in words: "quest log (objective ...) after 165.3 ms".
+local function OtherRefreshes(run)
+    local parts = {}
+    for index, entry in ipairs(run.refreshes or {}) do
+        if index > 1 then
+            parts[#parts + 1] = ("%s%s after %s ms"):format(tostring(entry.who),
+                entry.detail and (" (" .. tostring(entry.detail) .. ")") or "", tostring(entry.ms))
+        end
+    end
+    return #parts > 0 and table.concat(parts, "; ") or nil
 end
 
 -- Inside a job: one forced refresh, measured until the queue has drained. changed: what the
@@ -222,11 +256,13 @@ local function MeasureRefresh(changed)
 
     local cpu, frames, worstFrame = FollowRun(run, startedAt, MIN_RUN_SECONDS, 0)
     T.timingRun = nil
-    local byFeature, events = PlainRun(run, started)
+    local byFeature, events, refreshes, waits = PlainRun(run, started)
 
     return {
         byFeature = byFeature,
         events = events,
+        refreshes = refreshes,
+        waits = waits,
         tooltip = tooltip,
         cpuMs = Round(cpu),
         frames = frames,
@@ -301,8 +337,32 @@ function T.RunRefreshTiming(label, count, changed)
         if (record.medianDraws or 0) == 0 then
             T.Print("nothing was drawn: no window the addon decorates was open.")
         elseif record.fewestDraws ~= record.mostDraws then
-            T.Print("|cffffcc00the refreshes drew between %d and %d items, so something else was drawing too|r (a window opened, a page changed, an item moved). Run it again with nothing changing.",
-                record.fewestDraws, record.mostDraws)
+            -- A refresh that drew another number of items than most says why where the addon
+            -- knows: it was asked to refresh again (by whom), or items waited for data and
+            -- were asked for again when it came. Both are the addon's own doing and the
+            -- medians stand; only a refresh with neither had something else drawing.
+            local explained, unexplained = {}, 0
+            for index, run in ipairs(record.runs) do
+                if run.draws ~= record.medianDraws then
+                    local others, waited = OtherRefreshes(run), Waits(run)
+                    if others or waited then
+                        explained[#explained + 1] = ("refresh %d drew %s: %s%s%s"):format(index, tostring(run.draws),
+                            others and ("asked to refresh again by " .. others) or "",
+                            others and waited and "; " or "",
+                            waited and ("items that waited for data and were drawn when it came: " .. waited) or "")
+                    else
+                        unexplained = unexplained + 1
+                    end
+                end
+            end
+            if #explained > 0 then
+                T.Print("the refreshes drew between %d and %d items, by the addon's own doing: %s. The medians stand; the worst figures are that refresh's.",
+                    record.fewestDraws, record.mostDraws, table.concat(explained, "; "))
+            end
+            if unexplained > 0 then
+                T.Print("|cffffcc00%d of the refreshes drew another number of items with no cause the addon knows, so something else was drawing too|r (a window opened, a page changed, an item moved). Run it again with nothing changing.",
+                    unexplained)
+            end
         end
         if T.OnTestsFinished then
             T.OnTestsFinished()

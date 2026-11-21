@@ -1946,7 +1946,18 @@ function CaerdonItemMixin:GetStatusCacheKey()
     return StatusCacheKey(self, itemLink)
 end
 
--- Where it is not ready, the second value says what it waits for (for the counters).
+-- The link's tooltip, asked of the client. A method of its own so that the counters can say
+-- what the asking costs apart from the rest of a verdict (CaerdonCounters:Attach): it was
+-- counted with GetTooltipData before the status took it over, and with nothing after.
+function CaerdonItemMixin:GetLinkTooltip(itemLink)
+    return C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink) or nil
+end
+
+-- Where it is not ready, the second value says what it waits for in words (for the counters),
+-- and the third names it for the queue, which asks this button again when that has come and
+-- not when anything has (CaerdonWardrobe:RetryWaitingFor): a tooltip's instance as a number,
+-- "item:<ID>" for a set piece's data, "conversion:<GUID>" for the client's word on a copy,
+-- "gear" for the pieces it is compared with. nil where nothing says when (the timer asks).
 -- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo. transmogInfo is what
 -- GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it is shared
 -- by every copy the cache entry stands for, so read it and do not ask the item data again.
@@ -1981,7 +1992,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     -- also serves the equipment code, which reads the PVP floor from it (GetTransmogInfo).
     local linkTooltip = nil
     if not data then
-        linkTooltip = C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink) or nil
+        linkTooltip = self:GetLinkTooltip(itemLink)
         data = linkTooltip
     end
 
@@ -1989,7 +2000,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
         if CaerdonCounters.on then CaerdonCounters:Mark("tooltip not ready") end
-        return false, "its tooltip" -- Don't cache: result will change once tooltip data loads
+        -- Don't cache: result will change once tooltip data loads. Third: the tooltip's
+        -- instance, by which the client says that what it was looking up is there
+        -- (TOOLTIP_DATA_UPDATE; CaerdonWardrobe:RetryWhenTooltipComes).
+        return false, "its tooltip", type(data) == "table" and data.dataInstanceID or nil
     end
 
     local itemID = self:GetItemID()
@@ -2162,8 +2176,11 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         if transmogInfo then
             if transmogInfo.isNotReady then
                 isReady = false
-                return isReady, transmogInfo.comparedGearMissing and "the data of gear it is compared with" or
-                    "the collection's answer"
+                if transmogInfo.comparedGearMissing then
+                    -- "gear": what the equipment code asks the queue to listen for (ComparedPieceThere).
+                    return isReady, "the data of gear it is compared with", "gear"
+                end
+                return isReady, "the collection's answer"
             end
             statusTransmogInfo = transmogInfo
             if transmogInfo.canEquipForPlayer == nil then
@@ -2240,7 +2257,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 transmogInfo.transformLook = transformLook
                 transmogInfo.transformLookWhy, transmogInfo.transformLookAt = why, GetTime()
                 if transformLook and transformLook.pending then
-                    lookPending = true
+                    -- What it waits for, where the look's code names it (a key), else true.
+                    lookPending = transformLook.pending
                     return nil
                 end
                 -- The Catalyst's answer is for this toon. A look gained by raising the piece
@@ -2588,7 +2606,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     if lookPending then
         -- Not ready, and nothing kept: the queue asks again, and the data is here by then.
         if CaerdonCounters.on then CaerdonCounters:Mark("look data not ready") end
-        return false, "the Catalyst's answer"
+        return false, "the Catalyst's answer", type(lookPending) == "string" and lookPending or nil
     end
 
     -- Everything up to here follows from the link and the toon, and is kept per link. What

@@ -331,6 +331,68 @@ return function(H, S)
     Equal(By("level"), 1, "level: a level gained refreshes under its own name")
     Equal(By("quests"), quests, "level: and not under the quest module's")
 
+    -- An objective's text names its item only while the client has the item's data. A quest
+    -- with two item objectives, the second of which has no text yet.
+    do
+        local function Names()
+            local state = env.CaerdonQuestItems:GetDebugState().questLog
+            return state.incomplete, state.keptNames, state.rechecks
+        end
+        -- Whether a quest in the log takes an item of that name (asking reads the log).
+        local function Wants(name)
+            local info = env.CaerdonQuestItems:GetItemQuestInfo(ORB, name)
+            return info ~= nil and info.isActive == true
+        end
+        local objectives = { { type = "item", text = "0/5 Ember" }, { type = "item", text = "" } }
+        Accept(8020, objectives)
+        After("QUEST_ACCEPTED", 8020)
+        Check(Wants("Ember") and not Wants("Sand"), "names: the named objective counts, the other is not known")
+        Equal((Names()), true, "names: an objective with no text leaves the log incomplete")
+        local logRefreshes = By("quest log")
+        -- The event's own check, with nothing new; then the text comes, and the event that
+        -- brings it comes within the interval of that check, which lets it pass. The clock
+        -- asks again.
+        client:Fire("QUEST_LOG_UPDATE")
+        client:Tick(2)
+        objectives[2].text = "0/5 Sand"
+        client:Fire("QUEST_LOG_UPDATE")
+        client:Tick(14)
+        Equal(By("quest log"), logRefreshes, "names: an event within the interval of the last check is let pass")
+        client:Tick(60)
+        Equal(By("quest log"), logRefreshes + 1, "names: the clock asks again, finds the name, and the icons are refreshed once")
+        Equal(select(2, Last()), "objective Sand: new, 8020", "names: under the objective that has its name")
+        Check(Wants("Sand"), "names: and its item is a quest's")
+        Check(select(3, Names()) >= 1, "names: the export counts the recheck")
+        -- The client drops the items' data and both texts are empty again: a full refresh
+        -- reads the log, and the names stay.
+        objectives[1].text, objectives[2].text = "", ""
+        logRefreshes = By("quest log")
+        local total = Total()
+        env.CaerdonWardrobe:RefreshItems("test")
+        client:Tick(10)
+        Check(Wants("Ember") and Wants("Sand"), "names: objectives whose text is gone keep the names they had")
+        local stillIncomplete, kept = Names()
+        Check(stillIncomplete == false and kept == 2, "names: the log is not incomplete for them, and the export says two were kept")
+        -- The texts come back: nothing has changed, and nothing is refreshed for it.
+        objectives[1].text, objectives[2].text = "1/5 Ember", "0/5 Sand"
+        client:Fire("QUEST_LOG_UPDATE")
+        client:Tick(80)
+        Equal(By("quest log"), logRefreshes, "names: their return is no change")
+        Equal(Total(), total + 1, "names: so the one refresh asked for is the only one")
+        -- The quest leaves the log and takes its names with it: taken again, an objective
+        -- with no text is not known by the old name.
+        Leave(8020)
+        After("QUEST_REMOVED", 8020)
+        Check(not Wants("Ember"), "names: a quest that left the log no longer takes the item")
+        objectives[1].text, objectives[2].text = "", "0/5 Sand"
+        Accept(8020, objectives)
+        After("QUEST_ACCEPTED", 8020)
+        Check(not Wants("Ember") and Wants("Sand"), "names: and it took its names with it")
+        Leave(8020)
+        After("QUEST_REMOVED", 8020)
+        client:Tick(60)
+    end
+
     Equal(#client.errors, 0, "end: no error reached the error handler")
     for _, message in ipairs(client.errors) do
         Check(false, "error: " .. message)

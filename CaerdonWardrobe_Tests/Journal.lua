@@ -219,9 +219,50 @@ function T.GetSessionCounts()
 end
 
 T.OnInit(function()
-    hooksecurefunc(CaerdonWardrobe, "RefreshItems", function()
+    hooksecurefunc(CaerdonWardrobe, "RefreshItems", function(core, reason, detail, changed)
         T.counters.refreshItems = T.counters.refreshItems + 1
+        -- A timing run notes every refresh that comes while it measures, its own among them.
+        -- One more than its own makes the run draw everything twice, and "something else was
+        -- drawing" is no finding: the record is to say who asked. By the reason the caller
+        -- gave, else the event the core was handling, else the line that called.
+        local run = T.timingRun
+        if run then
+            local who = reason or (type(core) == "table" and core.event) or nil
+            if who == nil then
+                for file, line in (debugstack(2, 8, 0) or ""):gmatch("([%w_]+%.lua)[^:\n]*:(%d+)") do
+                    if file ~= "Journal.lua" then
+                        who = file .. ":" .. line
+                        break
+                    end
+                end
+            end
+            run.refreshes = run.refreshes or {}
+            run.refreshes[#run.refreshes + 1] = { at = T.Milliseconds(), who = tostring(who or "?"),
+                detail = detail ~= nil and tostring(detail) or nil, about = changed ~= nil and tostring(changed) or nil }
+        end
     end)
+    -- A draw that had waited for data (the core counts it as it is made, with what it waited
+    -- for): an item that was not ready is asked for again when its data comes, so a run with
+    -- such items draws more than the windows hold. That is the addon's own doing and not
+    -- something else drawing, and the record is to say so.
+    if type(CaerdonCounters) == "table" and type(CaerdonCounters.NoteLateDraw) == "function" then
+        hooksecurefunc(CaerdonCounters, "NoteLateDraw", function(_, seconds, why)
+            local run = T.timingRun
+            if run then
+                run.waits = run.waits or {}
+                local key = tostring(why or "data")
+                local entry = run.waits[key]
+                if not entry then
+                    entry = { count = 0, longest = 0 }
+                    run.waits[key] = entry
+                end
+                entry.count = entry.count + 1
+                if type(seconds) == "number" and seconds > entry.longest then
+                    entry.longest = seconds
+                end
+            end
+        end)
+    end
     -- Requests per feature: a feature that asks for draws and gets none has another problem
     -- than one whose hooks never call (the bag button check, Rotation.lua).
     hooksecurefunc(CaerdonWardrobe, "UpdateButton", function(_, _, item, feature)

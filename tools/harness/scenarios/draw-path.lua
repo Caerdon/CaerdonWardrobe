@@ -271,8 +271,9 @@ return function(H, S)
             item.tries = 0
             function item:GetCaerdonStatus()
                 self.tries = self.tries + 1
-                if not world.ready then
-                    return false, "its tooltip"
+                if not (world.ready or self.ready) then
+                    -- Third: what it waits for (a tooltip's instance, or a key).
+                    return false, self.why or "its tooltip", self.instance or self.waitsFor
                 end
                 return true, "own", nil, {}, nil
             end
@@ -341,6 +342,89 @@ return function(H, S)
         client:Tick(3)
         Equal(waiting.tries, tries + 1, "data awaited: the one waited for does")
         tries = waiting.tries
+
+        -- A tooltip the client is still looking something up for: the client says when that
+        -- is through, by the tooltip's instance, and the button is asked again in a moment.
+        do
+            world.ready = false
+            local tipButton = NewButton(world)
+            local tipItem = WaitingItem(14)
+            tipItem.instance = 9001
+            Ask(world, tipButton, tipItem)
+            client:Tick(3)
+            Check(core.awaitedTooltips ~= nil and core.awaitedTooltips[9001] == true, "tooltip awaited: the queue waits for the tooltip's instance")
+            local asked = tipItem.tries
+            client:Fire("TOOLTIP_DATA_UPDATE", 77)
+            client:Tick(3)
+            Equal(tipItem.tries, asked, "tooltip awaited: another tooltip's lookup asks nothing again")
+            client:Fire("TOOLTIP_DATA_UPDATE", 9001)
+            client:Tick(3)
+            Equal(tipItem.tries, asked + 1, "tooltip awaited: its own does, in a moment")
+            Check(core.awaitedTooltips ~= nil and core.awaitedTooltips[9001] == true, "tooltip awaited: still not there, it is waited for again")
+            client:Fire("TOOLTIP_DATA_UPDATE")
+            client:Tick(3)
+            Equal(tipItem.tries, asked + 2, "tooltip awaited: an update that names no tooltip is taken for any")
+            tipItem.ready = true
+            client:Fire("TOOLTIP_DATA_UPDATE", 9001)
+            local frames = Frames(tipButton, 40)
+            Check(frames ~= nil and frames <= 3, "tooltip awaited: when it has come the button is drawn in a moment (" .. tostring(frames) .. " frames)")
+            Equal(core.awaitedTooltips, nil, "tooltip awaited: and nothing is waited for or listened to after")
+            local updates = world.env.CaerdonCounters:GetReport().tooltipUpdates
+            Check(updates.waitedFor == 2 and updates.unnamed == 1 and updates.other == 1,
+                "tooltip awaited: the counters say which updates were for a tooltip waited for (" .. tostring(updates.waitedFor) .. ", " ..
+                tostring(updates.unnamed) .. ", " .. tostring(updates.other) .. ")")
+            -- A tooltip with no instance to go by waits for the timer as before.
+            local plain = NewButton(world)
+            local plainItem = WaitingItem(15)
+            Ask(world, plain, plainItem)
+            client:Tick(3)
+            Equal(core.awaitedTooltips, nil, "tooltip awaited: one with no instance is not waited for by the event")
+            plainItem.ready = true
+            local slowFrames = Frames(plain, 40)
+            Check(slowFrames ~= nil and slowFrames >= 10, "tooltip awaited: it is asked again by the timer (" .. tostring(slowFrames) .. " frames)")
+            tries = waiting.tries
+        end
+
+        -- What comes is matched to what waits for it: of two buttons that wait for two
+        -- things, the arrival of one asks its button again and leaves the other waiting.
+        do
+            local first, second = WaitingItem(16), WaitingItem(17)
+            first.why, first.waitsFor = "the Catalyst's answer", "item:801"
+            second.why, second.waitsFor = "the Catalyst's answer", "item:802"
+            Ask(world, NewButton(world), first)
+            Ask(world, NewButton(world), second)
+            client:Tick(3)
+            local firstTries, secondTries, otherTries = first.tries, second.tries, waiting.tries
+            core:RetryWhenLoaded(801, "item:801")
+            core:RetryWhenLoaded(802, "item:802")
+            client:Fire("ITEM_DATA_LOAD_RESULT", 801, true)
+            client:Tick(3)
+            Equal(first.tries, firstTries + 1, "matched: the item that came asks the button again that waits for it")
+            Equal(second.tries, secondTries, "matched: and not the button that waits for another item")
+            Equal(waiting.tries, otherTries, "matched: nor one that waits for something else altogether")
+            core:RetryWaitingFor("item:802")
+            client:Tick(3)
+            Equal(second.tries, secondTries + 1, "matched: whoever has what a button waits for names it, and that button is asked")
+            Equal(first.tries, firstTries + 1, "matched: the first is left alone by it")
+            -- Two tooltips: the client names one.
+            local tipA, tipB = WaitingItem(18), WaitingItem(19)
+            tipA.instance, tipB.instance = 9101, 9102
+            Ask(world, NewButton(world), tipA)
+            Ask(world, NewButton(world), tipB)
+            client:Tick(3)
+            local triesA, triesB = tipA.tries, tipB.tries
+            firstTries = first.tries
+            client:Fire("TOOLTIP_DATA_UPDATE", 9102)
+            client:Tick(3)
+            Equal(tipB.tries, triesB + 1, "matched: the tooltip the client names asks its button again")
+            Equal(tipA.tries, triesA, "matched: and not the button of another tooltip")
+            Equal(first.tries, firstTries, "matched: nor one that waits for an item")
+            -- The timer still asks all of them, what they wait for or not.
+            first.ready, second.ready, tipA.ready, tipB.ready = true, true, true, true
+            client:Tick(40)
+            Check(first.tries > firstTries and tipA.tries > triesA, "matched: the timer asks every button that still waits, as before")
+            tries = waiting.tries
+        end
 
         -- A verdict that waits for several items in turn is tried once for each, and those
         -- tries do not use up the limit of a tooltip that never loads.

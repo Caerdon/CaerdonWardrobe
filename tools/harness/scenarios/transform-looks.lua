@@ -562,27 +562,57 @@ return function(H, S)
         -- the piece judged when the data is here. It is not offered for sale in between.
         local mantle = Loaded(world, InBag(world, 930011))
         Equal((mantle:GetCaerdonStatus()), false, "mantle: no verdict while the set piece has no data")
+        Equal(select(3, mantle:GetCaerdonStatus()), "item:940011", "mantle: the status names the set piece it waits for, for the queue")
         Equal(world.asked["load 940011"], 1, "mantle: the set piece's data is asked for")
         Equal((mantle:GetCaerdonStatus()), false, "mantle: still none while it is on its way")
         Equal(world.asked["load 940011"], 1, "mantle: and it is asked for once while it is")
+        local queue = world.env.CaerdonWardrobe
+        local came, retryFor = {}, queue.RetryWaitingFor
+        function queue:RetryWaitingFor(key, ...)
+            came[#came + 1] = tostring(key)
+            return retryFor(self, key, ...)
+        end
         status, _, info = Judge(world, InBag(world, 930011))
+        queue.RetryWaitingFor = retryFor
+        Equal(came[1], "item:940011", "mantle: the set piece's coming asks the buttons again that wait for it, by the name the status gave")
         Equal(status, "transform", "mantle: with the data here it is one to keep")
         Equal(Look(info, "catalyst") and Look(info, "catalyst").sourceID, 6042, "mantle: the set shoulders' Normal source")
         local refreshes = world.env.CaerdonCounters:GetReport().refreshes.total
         world.client:Tick(40, 1)
         Equal(world.env.CaerdonCounters:GetReport().refreshes.total, refreshes, "mantle: the data's coming draws nothing again by itself")
 
-        -- The client drops the data again (it keeps about two thousand items): the next time
-        -- the piece is judged the set piece is asked for again, and the piece is not for sale.
+        -- The client drops the data again (it keeps about two thousand items). What the
+        -- piece converts to was worked out and is kept for the session: the piece is judged
+        -- at once, with no wait and no asking, and whether its look is collected is still
+        -- asked of the client.
+        local looks = world.env.CaerdonTransformLooks
+        local keptLinks, keptUsed = looks:GetKeptAnswers()
+        Check(keptLinks >= 1, "mantle: what the piece converts to is kept once it is worked out")
         world.unloaded[940011] = true
         Again()
         mantle = Loaded(world, InBag(world, 930011))
-        Equal((mantle:GetCaerdonStatus()), false, "mantle, the data gone again: no verdict")
-        Equal(world.asked["load 940011"], 2, "mantle, the data gone again: asked for again")
-        Equal((Judge(world, InBag(world, 930011))), "transform", "mantle, the data gone again: one to keep once it is back")
+        local keptStatus
+        _, keptStatus = mantle:GetCaerdonStatus()
+        Equal(keptStatus, "transform", "mantle, the data gone again: judged at once from what was worked out")
+        Equal(world.asked["load 940011"], 1, "mantle, the data gone again: and the set piece is not asked for again")
+        Check(select(2, looks:GetKeptAnswers()) > keptUsed, "mantle, the data gone again: the kept answer was the one used")
+        Equal((looks:GetKeptAnswers()), keptLinks, "mantle, the data gone again: and nothing was worked out anew")
+        Check(Explained(world, 930011):find("the set's piece is item 940011 and the converted piece has source 6042, as worked out earlier this session", 1, true) ~= nil,
+            "mantle, the data gone again: the export says the answer was kept: " .. Explained(world, 930011))
+        -- The look learned meanwhile: the kept answer names the source, and its state is the client's now.
+        SOURCES[6042].collected = true
+        Again()
+        Equal((Judge(world, InBag(world, 930011))), "sellable", "mantle, the data gone again: a look learned since is seen, the state being asked each time")
+        SOURCES[6042].collected = false
+        Again()
+        Equal((Judge(world, InBag(world, 930011))), "transform", "mantle, the data gone again: and not learned, it is one to keep")
+        world.unloaded[940011] = nil
 
+        -- What follows is the first time a link is asked about, so what was kept is forgotten
+        -- before each (as a replay does).
         -- A set piece the client has no data to give for: judged without, as before, and
         -- not asked about again.
+        looks:ForgetEverything()
         world.unloaded[940011], world.never = true, { [940011] = true }
         Again()
         mantle = Loaded(world, InBag(world, 930011))
@@ -598,6 +628,7 @@ return function(H, S)
         -- The data is here and the client names no source of the set piece for the converted
         -- link: this set's piece is not the one the Catalyst gives. With no other set that
         -- has the icon, nothing is said, whatever the set piece's looks are.
+        looks:ForgetEverything()
         world.unloaded[940011], world.noSource = nil, { [940011] = true }
         Again()
         status, _, info = Judge(world, InBag(world, 930011))
@@ -609,6 +640,7 @@ return function(H, S)
             "mantle, no source named: the export says why: " .. text)
         world.noSource = nil
         -- Nor is a source of another item taken for the set piece's.
+        looks:ForgetEverything()
         world.otherSource = { [940011] = 6142 }
         Again()
         status, _, info = Judge(world, InBag(world, 930011))
@@ -629,22 +661,29 @@ return function(H, S)
         local GUID = "Item-0-930008"
         world.icons[930008] = nil
         local boots = Loaded(world, InBag(world, 930008))
-        local ready, why = boots:GetCaerdonStatus()
+        local ready, why, waitsFor = boots:GetCaerdonStatus()
         Equal(ready, false, "word awaited: no verdict while the client has no icon for the copy")
         Equal(why, "the Catalyst's answer", "word awaited: and the status says what it waits for")
+        Equal(waitsFor, "conversion:" .. GUID, "word awaited: by the name the client's word will come under, for the queue")
         local refreshes = world.env.CaerdonCounters:GetReport().refreshes.total
-        -- The queue is told to ask again for the buttons that wait.
-        local core, again = world.env.CaerdonWardrobe, 0
-        local retrySoon = core.RetryNotReadySoon
+        -- The queue is told to ask again for the buttons that wait for this copy's word,
+        -- and not for every button that waits.
+        local core, again, all = world.env.CaerdonWardrobe, {}, 0
+        local retryFor, retrySoon = core.RetryWaitingFor, core.RetryNotReadySoon
+        function core:RetryWaitingFor(key, ...)
+            again[#again + 1] = tostring(key)
+            return retryFor(self, key, ...)
+        end
         function core:RetryNotReadySoon(...)
-            again = again + 1
+            all = all + 1
             return retrySoon(self, ...)
         end
         world.icons[930008] = ITEMS[940008].icon
         world.client:Fire("ITEM_CONVERSION_DATA_READY", GUID)
-        Equal(again, 1, "word awaited: the client's word has the waiting buttons asked again")
+        Equal(table.concat(again, " "), "conversion:" .. GUID, "word awaited: the client's word has the buttons asked again that wait for it")
+        Equal(all, 0, "word awaited: and not every button that waits")
         world.client:Tick(10)
-        core.RetryNotReadySoon = retrySoon
+        core.RetryWaitingFor, core.RetryNotReadySoon = retryFor, retrySoon
         local status = boots:GetCaerdonStatus() and select(2, boots:GetCaerdonStatus())
         Equal(status, "transform", "word awaited: with the client's word the piece is judged")
         Equal(world.env.CaerdonCounters:GetReport().refreshes.total, refreshes, "word awaited: and nothing was drawn again for it")
@@ -678,7 +717,9 @@ return function(H, S)
             text:find("converted, it has source 6142", 1, true) ~= nil,
             "two sets with the icon: the export names the set passed over and the one taken: " .. text)
         -- Where the first set's piece is the one the client names a source of, it is taken
-        -- and the second is not asked.
+        -- and the second is not asked. (Another client's answers for the same link: what
+        -- was worked out is forgotten first, as it is kept for the session.)
+        world.env.CaerdonTransformLooks:ForgetEverything()
         world.noSource = nil
         world.env.CaerdonWardrobe:RefreshItems()
         world.client:Tick(20)

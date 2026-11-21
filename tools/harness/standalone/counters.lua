@@ -271,8 +271,19 @@ local function StartSession(options)
     CaerdonItemType = { Equipment = "Equipment", Empty = "Empty" }
     CaerdonItem = { InvalidateStatusCache = function() statusCache = {} end }
     local invalidate = { InvalidateCaches = function() end, NoteCollectionChanged = function() end }
-    CaerdonEquipment, CaerdonFoodDrink, CaerdonProfessionTools, CaerdonBagSlots, CaerdonIngredients =
-        invalidate, invalidate, invalidate, invalidate, invalidate
+    CaerdonFoodDrink, CaerdonProfessionTools, CaerdonBagSlots, CaerdonIngredients =
+        invalidate, invalidate, invalidate, invalidate
+    -- The equipment code, with the one function of its own that the counters wrap.
+    CaerdonEquipment = { InvalidateCaches = function() end, NoteCollectionChanged = function() end,
+        GetEquipmentSetsOf = function() end }
+    CaerdonTransformLooks = { MayBeConverted = function() end, GetRoute = function() end }
+    -- The data of each kind of item that is not equipment: there to be found, and not asked here.
+    CaerdonConsumableMixin, CaerdonRecipeMixin, CaerdonProfessionMixin = { GetConsumableInfo = function() end },
+        { GetRecipeInfo = function() end }, { GetProfessionInfo = function() end }
+    CaerdonToyMixin, CaerdonMountMixin, CaerdonCompanionPetMixin, CaerdonBattlePetMixin = { GetToyInfo = function() end },
+        { GetMountInfo = function() end }, { GetCompanionPetInfo = function() end }, { GetBattlePetInfo = function() end }
+    CaerdonHousingMixin, CaerdonCurrencyMixin, CaerdonConduitMixin = { GetHousingInfo = function() end },
+        { GetCurrencyInfo = function() end }, { GetConduitInfo = function() end }
     -- The quest module's check after a run of quest events is one of the profile's functions.
     CaerdonQuestItems = { InvalidateCaches = function() end, CompareWithAnswers = function() end }
     CaerdonWardrobeConfig = nil -- saved variables arrive after the files
@@ -282,7 +293,8 @@ local function StartSession(options)
     CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end,
         GetPlayerSpecializationIndex = function() return nil end }
     NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end }
-    CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end, InvalidateCaches = function() end }
+    CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end, InvalidateCaches = function() end,
+        GetOwnedQuantity = function() end }
     Session.outside = { api = CaerdonAPI, tooltip = NS.Tooltip }
 
     -- The item side, in the shape of the real one: a cache per link, the tooltip, the binding,
@@ -329,6 +341,13 @@ local function StartSession(options)
             error("the copy's state raised an error")
         end
         return status
+    end
+    -- What else a verdict asks, which the counters wrap by name (the link's tooltip, the item's
+    -- data, each signal's entry point): there to be found, and not called by this stand-in.
+    for _, name in ipairs({ "GetLinkTooltip", "GetItemData", "GetTransformLookInfo", "GetQuestItemInfo", "GetAuctionValueInfo",
+        "GetIngredientStatus", "GetFoodDrinkInfo", "GetProfessionToolInfo", "GetBagSlotInfo", "GetUnneededRecipeStatus",
+        "IsSellable", "IsEquippableJunk", "IsCollectible", "GetHasUse", "IsOtherClassConsumable" }) do
+        CaerdonItemMixin[name] = function() end
     end
     CaerdonEquipmentMixin = {}
     function CaerdonEquipmentMixin:GetTransmogInfo()

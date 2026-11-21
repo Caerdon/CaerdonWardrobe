@@ -73,6 +73,19 @@ local families
 -- "refused" where the client said it has none to give.
 local awaitedItems = {}
 local refreshPending = false
+-- Link and converted piece's icon -> { piece, sourceID, notes }: the set's piece a link
+-- converts to and the source it then has, once worked out, with what was noted on the way
+-- (for the export, which would otherwise no longer say how the set was found). Kept for the session: neither changes, and
+-- working it out needs the set piece's item data, which the client drops again (notes:
+-- Upgrades, the item cache). Without this every refresh of everything found the data gone for
+-- some piece and put its verdict off until the client had sent it again (seen, retail
+-- 12.1.5.70961: nine draws of a bank waiting 0.8 s on average, after every such refresh).
+-- Whether the look is collected is asked each time; that needs no item data (seen in an
+-- export: the set piece's sources named with their state while the client had no data for
+-- the item).
+local convertedByLink = {}
+-- For the export: how often the answer kept was used.
+local keptAnswers = 0
 -- Item GUID -> { askedAt, redraws, judgedWithout } for the copies the client had no icon for
 -- when they were asked about: when that first was, how often the icons were drawn again for
 -- the copy, and whether a verdict was made without the icon.
@@ -424,10 +437,10 @@ local function AwaitItem(itemID)
     end
     awaitedItems[itemID] = true
     CaerdonCounters:NoteWithoutData("the Catalyst's set piece: asked for, the verdict put off", "item:" .. itemID, true)
-    -- Loaded or refused, the buttons whose verdict waits are asked again at once.
+    -- Loaded or refused, the buttons whose verdict waits for this piece are asked again at once.
     local function Again()
-        if CaerdonWardrobe and CaerdonWardrobe.RetryNotReadySoon then
-            CaerdonWardrobe:RetryNotReadySoon()
+        if CaerdonWardrobe and CaerdonWardrobe.RetryWaitingFor then
+            CaerdonWardrobe:RetryWaitingFor("item:" .. itemID)
         end
     end
     CaerdonItemEventListener:AddCallback(itemID, function()
@@ -517,7 +530,8 @@ local function CatalystLooks(item, itemLink, itemID, track, trace)
         else
             Note(trace, "catalyst: no icon yet, so nothing is said (the icons are drawn again when the client has it)")
         end
-        return nil, nil, waiting
+        -- Third: what the verdict waits for, by the name the event's handler gives the queue.
+        return nil, nil, waiting and (guid and ("conversion:" .. guid) or true)
     end
 
     -- The set's piece is the one with the icon that the client names a source of for this
@@ -527,7 +541,21 @@ local function CatalystLooks(item, itemLink, itemID, track, trace)
     -- next set with the icon is asked.
     local piece, family, how, sourceID
     local startAt = 1
-    while true do
+    local keptKey = itemLink .. "|" .. tostring(icon)
+    local kept = convertedByLink[keptKey]
+    if kept then
+        piece, sourceID = kept.piece, kept.sourceID
+        keptAnswers = keptAnswers + 1
+        Note(trace, "catalyst: the set's piece is item %d and the converted piece has source %d, as worked out earlier this session%s",
+            piece.itemID, sourceID, kept.notes and ":" or "")
+        if trace then
+            for _, line in ipairs(kept.notes or {}) do
+                trace[#trace + 1] = "  then: " .. line
+            end
+        end
+    end
+    local notedFrom = trace and #trace or nil
+    while not kept do
         local familyIndex
         piece, family, how, familyIndex = FindSetPiece(slot, icon, trace, startAt)
         if not piece then
@@ -561,7 +589,7 @@ local function CatalystLooks(item, itemLink, itemID, track, trace)
             local pending = AwaitItem(piece.itemID)
             Note(trace, "catalyst: the client has no data for item %d %s", piece.itemID,
                 pending and "just now (asked for; the verdict waits for it)" or "and has said it has none to give")
-            return nil, nil, pending
+            return nil, nil, pending and ("item:" .. piece.itemID)
         end
         if sourceID and C_TransmogCollection.GetSourceItemID(sourceID) == piece.itemID then
             break
@@ -593,6 +621,16 @@ local function CatalystLooks(item, itemLink, itemID, track, trace)
                 sourceID = byIcon
             end
         end
+    end
+    if not kept then
+        local notes
+        if notedFrom then
+            notes = {}
+            for index = notedFrom + 1, #trace do
+                notes[#notes + 1] = trace[index]
+            end
+        end
+        convertedByLink[keptKey] = { piece = piece, sourceID = sourceID, notes = notes }
     end
     local state, info = LookState(sourceID)
     if not state then
@@ -632,7 +670,8 @@ end
 --                 tier = 1 to 4 for Raid Finder to Mythic, where known,
 --                 itemID = the set piece, for the Catalyst's },
 --               ... },
---     pending = true where the client is without the data of the set's piece just now: it is
+--     pending = what is waited for ("item:<ID>", "conversion:<GUID>"; true where it has no
+--               name) where the client is without the data of the set's piece just now: it is
 --               asked for, and the caller makes no verdict from this answer,
 --     needsLook = how the first look that is missing is gained,
 --     needsSource = how the first source is gained whose look is known from another item }
@@ -672,7 +711,7 @@ function CaerdonTransformLooks:GetItemInfo(item, sourceID, upgradeDisabled, trac
     looks[#looks + 1] = convertedAndRaised
     if pending then
         -- The Catalyst's look cannot be told yet: nothing is said about the piece until it can.
-        return { looks = looks, pending = true }
+        return { looks = looks, pending = pending }
     end
     if #looks == 0 then
         return nil
@@ -786,6 +825,18 @@ function CaerdonTransformLooks:ForgetEverything()
     families = nil
     awaitedItems = {}
     awaitedConversions = {}
+    convertedByLink = {}
+    keptAnswers = 0
+end
+
+-- For the export and the tests: how many links have their converted piece worked out, and how
+-- often such an answer was used in the place of asking again.
+function CaerdonTransformLooks:GetKeptAnswers()
+    local links = 0
+    for _ in pairs(convertedByLink) do
+        links = links + 1
+    end
+    return links, keptAnswers
 end
 
 -- The client's data for a conversion comes after the copy was first asked about: the icon
@@ -800,9 +851,10 @@ eventFrame:SetScript("OnEvent", function(_, _, itemGUID)
         return
     end
     if not awaited.judgedWithout then
-        -- Its verdict is still waiting: the queue asks again, and nothing else is drawn.
-        if CaerdonWardrobe and CaerdonWardrobe.RetryNotReadySoon then
-            CaerdonWardrobe:RetryNotReadySoon()
+        -- Its verdict is still waiting: the queue asks that copy's button again, and nothing
+        -- else is drawn.
+        if CaerdonWardrobe and CaerdonWardrobe.RetryWaitingFor then
+            CaerdonWardrobe:RetryWaitingFor("conversion:" .. itemGUID)
         end
     elseif awaited.redraws < CONVERSION_REDRAWS_PER_COPY then
         awaited.redraws = awaited.redraws + 1

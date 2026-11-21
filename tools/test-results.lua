@@ -640,8 +640,21 @@ local function printTiming(db)
                     .. (#events > 0 and ("; events in the first: " .. table.concat(events, ", ")) or ""))
             end
             if fewest ~= most then
-                print(("        NOT A CLEAN RUN: the refreshes drew between %d and %d items, so something else was drawing too")
-                    :format(fewest, most))
+                -- A refresh the addon was asked for again, or items that waited for data, are
+                -- its own doing (named per refresh below); with neither, something else drew.
+                local unexplained = 0
+                for _, run in ipairs(record.runs) do
+                    if run.draws ~= record.medianDraws and not (run.refreshes and #run.refreshes > 1) and not (run.waits and next(run.waits)) then
+                        unexplained = unexplained + 1
+                    end
+                end
+                if unexplained > 0 then
+                    print(("        NOT A CLEAN RUN: the refreshes drew between %d and %d items, %d of them with no cause the addon knows, so something else was drawing too")
+                        :format(fewest, most, unexplained))
+                else
+                    print(("        the refreshes drew between %d and %d items, by the addon's own doing (the medians stand):")
+                        :format(fewest, most))
+                end
                 -- Per refresh: which window drew how much and from when, and which events came.
                 for index, run in ipairs(record.runs) do
                     local parts = {}
@@ -649,10 +662,27 @@ local function printTiming(db)
                         parts[#parts + 1] = describeFeature(name, run.byFeature[name], true)
                     end
                     local events = describeEvents(run)
-                    print(("          %2d: %d draws%s%s%s"):format(index, run.draws,
+                    -- The refreshes that came during the run beside its own, by who asked.
+                    local asked = {}
+                    for which, entry in ipairs(run.refreshes or {}) do
+                        if which > 1 then
+                            asked[#asked + 1] = ("%s%s after %s ms"):format(tostring(entry.who),
+                                entry.detail and (" (" .. tostring(entry.detail) .. ")") or "", tostring(entry.ms))
+                        end
+                    end
+                    -- The draws that had waited for data, by what they waited for.
+                    local waited = {}
+                    for _, why in ipairs(sortedKeys(run.waits or {})) do
+                        local entry = run.waits[why]
+                        waited[#waited + 1] = ("%s for %s (%s ms at the longest)"):format(tostring(entry.count), tostring(why),
+                            tostring(entry.longestMs))
+                    end
+                    print(("          %2d: %d draws%s%s%s%s%s"):format(index, run.draws,
                         #parts > 0 and (": " .. table.concat(parts, ", ")) or "",
                         #events > 0 and ("; events: " .. table.concat(events, ", ")) or "",
-                        run.tooltip and ("; tooltip on " .. tostring(run.tooltip)) or ""))
+                        run.tooltip and ("; tooltip on " .. tostring(run.tooltip)) or "",
+                        #asked > 0 and ("; REFRESHED AGAIN BY: " .. table.concat(asked, "; ")) or "",
+                        #waited > 0 and ("; WAITED FOR DATA: " .. table.concat(waited, ", ")) or ""))
                 end
             end
             local frameRates = describeFrameRates(record.runs)

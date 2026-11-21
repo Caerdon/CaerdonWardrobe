@@ -96,7 +96,20 @@ local questLog = {
     objectiveCount = 0,
     itemNames = {},       -- objective item name -> { questID, ... }
     error = nil,
+    keptNames = 0,        -- objectives of the last scan that had no text and kept their name
 }
+
+-- The names the log's item objectives have had this session: questID -> { [objective] = name }.
+-- An objective's text names its item only while the client has that item's data, and the
+-- client drops item data again (notes: Upgrades, the item cache). A scan that finds an
+-- objective without its text takes the name it had: forgetting it took the item's quest icon
+-- away, and the name's return was then a change, with a refresh of everything for it. Seen
+-- (retail 12.1.5.70961): two objectives of one quest named again 0.2 s into the first full
+-- refresh of a session, and every window drawn a second time. A quest that leaves the log
+-- takes its names with it.
+local objectiveNames = {}
+-- For the export: how often a scan kept a name, when last, and the rechecks made by timer.
+local namesHistory = { scansThatKept = 0, lastKept = nil, rechecks = 0 }
 
 local provider = {
     state = "unchecked",  -- unchecked | missing | unsupported | building | ready | failed
@@ -190,18 +203,32 @@ local function ScanQuestLog()
     local incomplete = false
     local questCount = 0
     local objectiveCount = 0
+    local kept = 0
+    local inLog = {}
 
     local numEntries = C_QuestLog.GetNumQuestLogEntries() or 0
     for index = 1, numEntries do
         local info = C_QuestLog.GetInfo(index)
         if info and not info.isHeader and info.questID and info.questID > 0 then
             questCount = questCount + 1
+            inLog[info.questID] = true
 
             local objectives = C_QuestLog.GetQuestObjectives(info.questID)
             if objectives then
-                for _, objective in ipairs(objectives) do
+                for objectiveIndex, objective in ipairs(objectives) do
                     if objective.type == "item" then
                         local name = ObjectiveItemName(objective.text)
+                        local known = objectiveNames[info.questID]
+                        if name then
+                            if not known then
+                                known = {}
+                                objectiveNames[info.questID] = known
+                            end
+                            known[objectiveIndex] = name
+                        elseif known and known[objectiveIndex] then
+                            name = known[objectiveIndex]
+                            kept = kept + 1
+                        end
                         if name then
                             objectiveCount = objectiveCount + 1
                             local quests = itemNames[name]
@@ -223,8 +250,33 @@ local function ScanQuestLog()
     for _, quests in pairs(itemNames) do
         table.sort(quests)
     end
+    for questID in pairs(objectiveNames) do
+        if not inLog[questID] then
+            objectiveNames[questID] = nil
+        end
+    end
 
-    return itemNames, incomplete, questCount, objectiveCount
+    return itemNames, incomplete, questCount, objectiveCount, kept
+end
+
+-- An objective without a name is asked about again by the clock, and not only when the next
+-- QUEST_LOG_UPDATE comes: the one that brings the name can come within RESCAN_INTERVAL of the
+-- scan that found it missing, where the event's own check lets it pass, and standing still
+-- sends no other. As many times as the event's check allows (MAX_INCOMPLETE_RESCANS).
+local RescanForNames
+local recheckTimer
+local function ScheduleRecheck()
+    if recheckTimer or questLog.awaitingData or questLog.rescanAttempts >= MAX_INCOMPLETE_RESCANS then
+        return
+    end
+    recheckTimer = C_Timer.NewTimer(RESCAN_INTERVAL, function()
+        recheckTimer = nil
+        if questLog.incomplete and not questLog.awaitingData then
+            questLog.rescanAttempts = questLog.rescanAttempts + 1
+            namesHistory.rechecks = namesHistory.rechecks + 1
+            RescanForNames()
+        end
+    end)
 end
 
 local function EnsureQuestLog()
@@ -233,12 +285,13 @@ local function EnsureQuestLog()
     end
     questLog.dirty = false
 
-    local ok, itemNames, incomplete, questCount, objectiveCount = pcall(ScanQuestLog)
+    local ok, itemNames, incomplete, questCount, objectiveCount, kept = pcall(ScanQuestLog)
     if ok then
         questLog.itemNames = itemNames
         questLog.incomplete = incomplete
         questLog.questCount = questCount
         questLog.objectiveCount = objectiveCount
+        questLog.keptNames = kept
         questLog.error = nil
     else
         questLog.error = tostring(itemNames)
@@ -246,8 +299,16 @@ local function EnsureQuestLog()
         questLog.incomplete = false
         questLog.questCount = 0
         questLog.objectiveCount = 0
+        questLog.keptNames = 0
     end
     questLog.lastScan = GetTime()
+    if questLog.keptNames > 0 then
+        namesHistory.scansThatKept = namesHistory.scansThatKept + 1
+        namesHistory.lastKept = questLog.lastScan
+    end
+    if questLog.incomplete then
+        ScheduleRecheck()
+    end
 end
 
 -- The log's item objectives as a flat reading (NS.Refresh:Difference): which quests name
@@ -257,6 +318,23 @@ local function AddNamesReading(itemNames, reading)
         reading["objective " .. name] = table.concat(quests, ",")
     end
     return reading
+end
+
+-- Reads the log again and asks for a refresh where the objectives' names are not what they
+-- were: for the event that may have brought a name (byEvent: the interval between two such
+-- checks counts from this one), and for the recheck by the clock, which leaves the next
+-- event free to be checked at once.
+RescanForNames = function(byEvent)
+    if byEvent then
+        questLog.lastRescanRequest = GetTime()
+    end
+    local previous = AddNamesReading(questLog.itemNames, {})
+    questLog.dirty = true
+    EnsureQuestLog()
+    local what = NS.Refresh:Difference(previous, AddNamesReading(questLog.itemNames, {}))
+    if what then
+        RequestRefresh("quest log", what)
+    end
 end
 
 ----------------------------------------------------------------------------------------------
@@ -887,6 +965,13 @@ function CaerdonQuestItems:GetDebugState()
             awaitingData = questLog.awaitingData,
             lastScan = questLog.lastScan,
             error = questLog.error,
+            -- Objectives the client had no text for: those of the last scan that kept the name
+            -- they had, how many scans did, when last, and the rechecks made by the clock.
+            keptNames = questLog.keptNames,
+            scansThatKept = namesHistory.scansThatKept,
+            lastKept = namesHistory.lastKept,
+            rechecks = namesHistory.rechecks,
+            rescanAttempts = questLog.rescanAttempts,
         },
         provider = {
             state = provider.state,
@@ -918,6 +1003,7 @@ eventFrame:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_ENTERING_WORLD" then
         questLog.awaitingData = true
         questLog.dirty = true
+        questLog.rescanAttempts = 0
         -- Build the index before the bags are first opened rather than on that first lookup.
         C_Timer.After(3, EnsureProvider)
     elseif event == "QUEST_LOG_UPDATE" then
@@ -936,15 +1022,7 @@ eventFrame:SetScript("OnEvent", function(_, event)
             questLog.rescanAttempts = questLog.rescanAttempts + 1
         end
         questLog.awaitingData = false
-        questLog.lastRescanRequest = now
-
-        local previous = AddNamesReading(questLog.itemNames, {})
-        questLog.dirty = true
-        EnsureQuestLog()
-        local what = NS.Refresh:Difference(previous, AddNamesReading(questLog.itemNames, {}))
-        if what then
-            RequestRefresh("quest log", what)
-        end
+        RescanForNames(true)
     end
 end)
 

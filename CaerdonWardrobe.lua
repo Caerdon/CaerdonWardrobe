@@ -2037,15 +2037,47 @@ local NOT_READY_RETRY_SECONDS = 1.0
 -- enough for the items asked for together to arrive together, short enough not to be seen.
 local NOT_READY_SOON_SECONDS = 0.05
 
--- Asks again for every button whose verdict was not ready.
--- early: the data a verdict was put off for has come (RetryNotReadySoon). Such a try is not
--- counted against the limit: the limit is for a tooltip that never loads, and a verdict that
--- waits for several items in turn (the worn gear, then a set's piece) is tried once for each.
-function CaerdonWardrobeMixin:RunNotReadyRetries(early)
+-- Asks again for the buttons whose verdict was not ready.
+-- early: the data a verdict was put off for has come. Such a try is not counted against the
+-- limit: the limit is for a tooltip that never loads, and a verdict that waits for several
+-- items in turn (the worn gear, then a set's piece) is tried once for each.
+-- keys: what has come (wait key -> true): the buttons that wait for one of these alone, and
+-- the others go on waiting. Without it every button that waits.
+--
+-- What comes is matched to what waits for it (author decision): each verdict that is put off
+-- says what for (the status's third value: a tooltip's instance, a set piece's item, the
+-- client's word on a copy, the compared gear), and the client's event names the same thing.
+-- Asking every waiting button at each arrival was work for nothing, a window's sixty for one
+-- item's data, and it made one kind of wait short by another kind's arrivals, which hid for
+-- weeks that tooltips were waited for by the clock alone.
+function CaerdonWardrobeMixin:RunNotReadyRetries(early, keys)
     local pending = self.pendingTooltipRetries
-    self.pendingTooltipRetries = nil
     if not pending then
         return
+    end
+    if keys then
+        local matched
+        for key, info in pairs(pending) do
+            if info.waitsFor and keys[info.waitsFor] then
+                matched = matched or {}
+                matched[key] = info
+            end
+        end
+        if not matched then
+            return
+        end
+        for key in pairs(matched) do
+            pending[key] = nil
+        end
+        pending = matched
+    else
+        self.pendingTooltipRetries = nil
+        -- Every button that waits is asked anew, and one whose tooltip is still not there says
+        -- so again with the instance it then has: the ones awaited are done with.
+        if self.awaitedTooltips then
+            self.awaitedTooltips = nil
+            self:UnregisterEvent("TOOLTIP_DATA_UPDATE")
+        end
     end
     for key, info in pairs(pending) do
         -- Only while the button still shows this item: the same key can stand for
@@ -2067,9 +2099,32 @@ function CaerdonWardrobeMixin:RunNotReadyRetries(early)
     end
 end
 
--- The data a verdict was put off for is here, or on its way: the buttons that wait are asked
--- again in a moment, and not after the second the timer would take. Called by whoever asked
--- the client for the data, when it came.
+-- What a verdict was put off for has come: the buttons that wait for it are asked again in a
+-- moment, and not after the second the timer would take. key: what it is, as the status named
+-- it ("item:255423", "tooltip:163957", "conversion:<guid>", "gear"). Called by whoever asked
+-- the client for it, when it came. With no key, every waiting button (RetryNotReadySoon).
+function CaerdonWardrobeMixin:RetryWaitingFor(key)
+    if not key then
+        return self:RetryNotReadySoon()
+    end
+    self.keysCome = self.keysCome or {}
+    self.keysCome[key] = true
+    if self.keyedRetrySoon then
+        return
+    end
+    self.keyedRetrySoon = true
+    C_Timer.After(NOT_READY_SOON_SECONDS, function()
+        self.keyedRetrySoon = nil
+        local keys = self.keysCome
+        self.keysCome = nil
+        if keys then
+            self:RunNotReadyRetries(true, keys)
+        end
+    end)
+end
+
+-- Every button that waits is asked again in a moment: for an arrival that names nothing to
+-- match (a tooltip update with no instance), and for a caller that has no key to give.
 function CaerdonWardrobeMixin:RetryNotReadySoon()
     if self.notReadySoon then
         return
@@ -2086,9 +2141,10 @@ function CaerdonWardrobeMixin:RetryNotReadySoon()
 end
 
 -- A verdict was put off for this item's data, which has been asked for: when the client has
--- it, the buttons that wait are asked again (RetryNotReadySoon). The event is listened to only
--- while something is waited for: it comes for every item anybody loads.
-function CaerdonWardrobeMixin:RetryWhenLoaded(itemID)
+-- it, the buttons that wait for it are asked again. key: what those buttons' verdicts said
+-- they wait for (RetryWaitingFor); without one, every waiting button. The event is listened
+-- to only while something is waited for: it comes for every item anybody loads.
+function CaerdonWardrobeMixin:RetryWhenLoaded(itemID, key)
     if not itemID then
         return
     end
@@ -2098,12 +2154,13 @@ function CaerdonWardrobeMixin:RetryWhenLoaded(itemID)
     if next(self.awaitedItemData) == nil then
         self:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end
-    self.awaitedItemData[itemID] = true
+    self.awaitedItemData[itemID] = key or true
 end
 
 function CaerdonWardrobeMixin:ITEM_DATA_LOAD_RESULT(itemID)
     local awaited = self.awaitedItemData
-    if not (awaited and awaited[itemID]) then
+    local key = awaited and awaited[itemID]
+    if not key then
         return
     end
     awaited[itemID] = nil
@@ -2111,7 +2168,53 @@ function CaerdonWardrobeMixin:ITEM_DATA_LOAD_RESULT(itemID)
         self:UnregisterEvent("ITEM_DATA_LOAD_RESULT")
     end
     -- Loaded or refused, the verdict that waited can be made now.
-    self:RetryNotReadySoon()
+    self:RetryWaitingFor(key ~= true and key or nil)
+end
+
+-- A verdict was put off for a tooltip the client is still looking something up for
+-- ("Retrieving item information"). The client says when such a lookup is through, by the
+-- tooltip's instance (TOOLTIP_DATA_UPDATE: "a sparse or cache lookup has resolved"; with no
+-- instance, any): the buttons that wait are then asked again in a moment, and not after the
+-- timer's second. The same in both clients (Blizzard's own tooltips fill themselves again by
+-- it, GameTooltipDataMixin:OnEvent). Listened to only while a tooltip is waited for.
+-- Before, such a button was asked again early only where something else had data coming (a
+-- worn piece, the Catalyst's set piece), and once the Catalyst's answers were kept nothing
+-- had: a bank's sixty buttons then waited 1.2 s on average where it had been 0.4 to 0.6
+-- (retail 12.1.5.70961).
+function CaerdonWardrobeMixin:RetryWhenTooltipComes(dataInstanceID)
+    if not dataInstanceID then
+        return
+    end
+    if not self.awaitedTooltips then
+        self.awaitedTooltips = {}
+        self:RegisterEvent("TOOLTIP_DATA_UPDATE")
+    end
+    self.awaitedTooltips[dataInstanceID] = true
+end
+
+function CaerdonWardrobeMixin:TOOLTIP_DATA_UPDATE(dataInstanceID)
+    local awaited = self.awaitedTooltips
+    if not awaited then
+        return
+    end
+    if dataInstanceID == nil then
+        -- It names no tooltip: any may be the one, so every waiting button is asked.
+        Counters:NoteTooltipUpdate("unnamed")
+        self:RetryNotReadySoon()
+        return
+    end
+    if not awaited[dataInstanceID] then
+        Counters:NoteTooltipUpdate("other")
+        return
+    end
+    Counters:NoteTooltipUpdate("waitedFor")
+    awaited[dataInstanceID] = nil
+    if next(awaited) == nil then
+        self.awaitedTooltips = nil
+        self:UnregisterEvent("TOOLTIP_DATA_UPDATE")
+    end
+    -- The button whose tooltip this is, and no other.
+    self:RetryWaitingFor("tooltip:" .. dataInstanceID)
 end
 
 -- The key a button is filed under while a request for it is being worked on: the feature's name
@@ -2161,6 +2264,10 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         if state and locationKey and retries <= NOT_READY_MAX_RETRIES then
             self.pendingTooltipRetries = self.pendingTooltipRetries or {}
             -- Per button, like the queue (see UpdateButton).
+            -- What the verdict waits for, where the status says (in the binding's place): a
+            -- tooltip's instance as a number, anything else by its key.
+            local waitsFor = (type(bindingStatus) == "number" and ("tooltip:" .. bindingStatus)) or
+                (type(bindingStatus) == "string" and bindingStatus) or nil
             self.pendingTooltipRetries[button or locationKey] = {
                 button = button,
                 item = item,
@@ -2168,11 +2275,16 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                 locationInfo = locationInfo,
                 options = options,
                 expectedKey = locationKey,
+                waitsFor = waitsFor,
             }
             -- Since when this button waits and for what (the status says, in the status's
             -- place), for the counters: the draw says how long it was.
             state.notReadySince = state.notReadySince or GetTime()
             state.notReadyWhy = state.notReadyWhy or (type(mogStatus) == "string" and mogStatus) or "something it does not name"
+            -- A tooltip that is not there yet comes with its instance in the binding's place.
+            if mogStatus == "its tooltip" and type(bindingStatus) == "number" then
+                self:RetryWhenTooltipComes(bindingStatus)
+            end
             if not self.tooltipRetryTimer then
                 self.tooltipRetryTimer = C_Timer.NewTimer(NOT_READY_RETRY_SECONDS, function()
                     self.tooltipRetryTimer = nil

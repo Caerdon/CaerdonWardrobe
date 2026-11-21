@@ -330,6 +330,16 @@ function Counters:NoteLateDraw(seconds, why)
     end
 end
 
+-- The client's word that a tooltip's lookup is through (TOOLTIP_DATA_UPDATE), while a draw
+-- waited for a tooltip: whether it named one that was waited for (asked: the waiting buttons
+-- are asked again), named none (taken for any), or named another. What says whether the
+-- early asking works by this event, and not by other data that happens to come.
+local tooltipUpdates = { waitedFor = 0, unnamed = 0, other = 0 }
+
+function Counters:NoteTooltipUpdate(kind)
+    tooltipUpdates[kind] = (tooltipUpdates[kind] or 0) + 1
+end
+
 -- From RefreshItems' timer, as it starts on the features' Refresh(). A refresh empties the
 -- caches at once and the windows draw a tenth of a second after the last one of a run, so a
 -- run of refreshes is one redraw, and one put off by a fight is none until the fight is over.
@@ -546,9 +556,42 @@ function Counters:Attach()
     Probe("CaerdonWardrobe", core, "ClearButton", WrapClearButton)
     Probe("CaerdonWardrobe", core, "ProcessItem", WrapProcessItem)
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetCaerdonStatus", nil, { "cache hit", "tooltip not ready", "no link" })
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetLinkTooltip")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetTooltipData")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetBindingStatus")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetCopyStatus")
+    -- What a verdict asks beside the item's type: each signal by its entry point, so that the
+    -- status's own part is what is left of it and not everything nobody named.
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetItemData")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetTransformLookInfo")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetQuestItemInfo")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetAuctionValueInfo")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetIngredientStatus")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetFoodDrinkInfo")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetProfessionToolInfo")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetBagSlotInfo")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetUnneededRecipeStatus")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "IsSellable")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "IsEquippableJunk")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "IsCollectible")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "GetHasUse")
+    Probe("CaerdonItemMixin", CaerdonItemMixin, "IsOtherClassConsumable")
+    -- What the cache's key asks of a copy before anything is looked up, and the look route.
+    Probe("CaerdonTransformLooks", CaerdonTransformLooks, "MayBeConverted")
+    Probe("CaerdonTransformLooks", CaerdonTransformLooks, "GetRoute")
+    Probe("CaerdonEquipment", CaerdonEquipment, "GetEquipmentSetsOf")
+    Probe("CaerdonAuctionValue", CaerdonAuctionValue, "GetOwnedQuantity")
+    -- The branch for the item's type, where it is not equipment.
+    Probe("CaerdonConsumableMixin", CaerdonConsumableMixin, "GetConsumableInfo")
+    Probe("CaerdonRecipeMixin", CaerdonRecipeMixin, "GetRecipeInfo")
+    Probe("CaerdonProfessionMixin", CaerdonProfessionMixin, "GetProfessionInfo")
+    Probe("CaerdonToyMixin", CaerdonToyMixin, "GetToyInfo")
+    Probe("CaerdonMountMixin", CaerdonMountMixin, "GetMountInfo")
+    Probe("CaerdonCompanionPetMixin", CaerdonCompanionPetMixin, "GetCompanionPetInfo")
+    Probe("CaerdonBattlePetMixin", CaerdonBattlePetMixin, "GetBattlePetInfo")
+    Probe("CaerdonHousingMixin", CaerdonHousingMixin, "GetHousingInfo")
+    Probe("CaerdonCurrencyMixin", CaerdonCurrencyMixin, "GetCurrencyInfo")
+    Probe("CaerdonConduitMixin", CaerdonConduitMixin, "GetConduitInfo")
     Probe("CaerdonEquipmentMixin", CaerdonEquipmentMixin, "GetTransmogInfo")
     Probe("CaerdonEquipmentMixin", CaerdonEquipmentMixin, "GetEquipmentSets")
     Probe("CaerdonWardrobe", core, "SetItemButtonStatus")
@@ -763,6 +806,7 @@ function Counters:GetReport()
     report.itemAnswers = { total = itemAnswers.total, lastMinute = lastMinute, lastFiveMinutes = lastFive,
         mostInASecond = itemAnswers.mostInASecond, mostAt = itemAnswers.mostAt }
 
+    report.tooltipUpdates = { waitedFor = tooltipUpdates.waitedFor, unnamed = tooltipUpdates.unnamed, other = tooltipUpdates.other }
     report.lateDraws = { count = lateDraws.count, longest = Round(lateDraws.longest, 2),
         mean = lateDraws.count > 0 and Round(lateDraws.seconds / lateDraws.count, 2) or nil, by = {} }
     for index, why in ipairs(lateDrawsOrder) do
@@ -893,11 +937,25 @@ function Counters:GetReportLines()
         add(2, ("watched %s: %d events, read %d times, %d changes%s"):format(watch.name, watch.events, watch.checks,
             watch.changes, watch.notRegistered and ("; this client has no " .. watch.notRegistered) or ""))
     end
-    -- The newest few, with what the caller said had changed.
-    local RECENT_SHOWN = 8
-    for index = math.max(1, #refreshReport.recent - RECENT_SHOWN + 1), #refreshReport.recent do
-        local entry = refreshReport.recent[index]
-        add(2, ("at %s s: %s%s%s"):format(Figure(entry.at), entry.trigger, entry.detail and (" (" .. entry.detail .. ")") or "",
+    -- The newest few, with what the caller said had changed. Refreshes one after the other
+    -- by one caller, saying the same, are one line: a timing's run of them does not push out
+    -- what came before it.
+    local RECENT_SHOWN = 12
+    local runs = {}
+    for _, entry in ipairs(refreshReport.recent) do
+        local last = runs[#runs]
+        if last and last.trigger == entry.trigger and last.detail == entry.detail and last.about == entry.about then
+            last.count = last.count + 1
+            last.to = entry.at
+        else
+            runs[#runs + 1] = { at = entry.at, to = entry.at, count = 1, trigger = entry.trigger, detail = entry.detail, about = entry.about }
+        end
+    end
+    for index = math.max(1, #runs - RECENT_SHOWN + 1), #runs do
+        local entry = runs[index]
+        local when = entry.count > 1 and ("%s to %s s, %d times"):format(Figure(entry.at), Figure(entry.to), entry.count) or
+            (Figure(entry.at) .. " s")
+        add(2, ("at %s: %s%s%s"):format(when, entry.trigger, entry.detail and (" (" .. entry.detail .. ")") or "",
             entry.about and (", about " .. entry.about) or ""))
     end
 
@@ -943,6 +1001,9 @@ function Counters:GetReportLines()
         add(2, ("for %s: %d, %s s on average, %s s at the longest"):format(by.why, by.count, Figure(by.mean, 2),
             Figure(by.longest, 2)))
     end
+    local updates = report.tooltipUpdates
+    add(2, ("the client's word that a tooltip's lookup was through, while a draw waited for one: %d for a tooltip waited for and %d naming none (the waiting draws asked again), %d for another"):format(
+        updates.waitedFor, updates.unnamed, updates.other))
 
     local profile = report.profile
     if not profile.attached then

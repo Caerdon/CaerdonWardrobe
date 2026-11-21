@@ -2873,6 +2873,12 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         -- A gear set's piece is not marked, whatever the lines below find for it.
         local lookSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
         addKV(1, "in a gear set (not marked while it is)", lookSets and table.concat(lookSets, ", ") or false)
+        -- What a link converts to is worked out once and kept for the session.
+        if CaerdonTransformLooks.GetKeptAnswers then
+            local keptLinks, keptUsed = CaerdonTransformLooks:GetKeptAnswers()
+            addKV(1, "the Catalyst's piece kept this session", string.format("for %d links, used %d times in the place of asking again",
+                keptLinks or 0, keptUsed or 0))
+        end
         -- What the client answered when the verdict above was made, which may be a while ago
         -- and other than what it answers now.
         local verdictWhy = statusTransmogInfo and statusTransmogInfo.transformLookWhy
@@ -3168,6 +3174,11 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         if logState.error then
             addKV(1, "Quest Log Error", logState.error)
         end
+        -- An objective's text names its item only while the client has the item's data.
+        addKV(1, "Quest Log Names", string.format("%d of the last scan's objectives had no text and kept the name they had; %d scans kept one%s; %d rechecks by the clock, %d rescans for a missing name counted",
+            logState.keptNames or 0, logState.scansThatKept or 0,
+            logState.lastKept and string.format(", the last %.1fs ago", now - logState.lastKept) or "",
+            logState.rechecks or 0, logState.rescanAttempts or 0))
 
         local providerState = questState.provider
         local providerText = "QuestieDB " .. tostring(providerState.state)
