@@ -218,6 +218,7 @@ local function NewDB()
         counters = {},  -- the core's own counters, as stored by /cwtest counters
         switches = {},  -- what the tests changed for a while and have to put back
         recordings = { list = {}, environments = {} }, -- the client's answers behind a verdict, for the offline harness
+        itemCache = {}, -- how long item data stayed in the client's cache, as measured by /cwtest cache
     }
 end
 

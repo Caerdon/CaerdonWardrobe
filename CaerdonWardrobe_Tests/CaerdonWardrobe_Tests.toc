@@ -27,6 +27,7 @@ RotationPanel.lua
 Sources.lua
 Search.lua
 Timing.lua
+ItemCache.lua
 Plan.lua
 Plan.local.lua
 Commands.lua

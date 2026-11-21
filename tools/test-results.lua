@@ -900,6 +900,104 @@ end
 local SIGHTING_CASES = { "openable", "locked", "readable", "refundable", "soulbound", "bindOnEquip", "accountBindType",
     "lootOnCooldown", "longCooldown" }
 
+-- What made item data leave the client's cache (/cwtest cache). A mark is where an item was
+-- first found gone: seconds while idle, items loaded since in the stream; "-" is one still
+-- there.
+local function printItemCache(db)
+    local runs = db.itemCache or {}
+    if #runs == 0 then
+        print("  Item cache: never measured (/cwtest cache)")
+        return
+    end
+    print("  Item cache (what makes item data leave it; newest last):")
+    local function marks(result)
+        local parts = {}
+        for _, gone in ipairs(result.gone or {}) do
+            if gone == false then
+                parts[#parts + 1] = "-"
+            elseif type(gone) == "table" then
+                parts[#parts + 1] = ("%s s after %s"):format(tostring(gone.at), tostring(gone.asked))
+            else
+                parts[#parts + 1] = tostring(gone)
+            end
+        end
+        return ("%d of %d still there%s; gone at: %s"):format(result.left or 0, result.items or 0,
+            (result.back or 0) > 0 and (", %d came back"):format(result.back) or "", table.concat(parts, ", "))
+    end
+    local function answers(found)
+        return ("%s pieces: cached by ID %s, by slot %s; by slot: level %s, link %s, tooltip %s; inventory link %s; instant info by ID %s\n" ..
+            "          by link (asked after those, and asking brings the data back): Pawn %s, level %s, stats %s, tooltip %s, item info %s; item info by ID %s"):format(
+            tostring(found.pieces), tostring(found.cachedByID or found.byID), tostring(found.cachedBySlot or found.byLocation),
+            tostring(found.levelBySlot), tostring(found.linkBySlot), tostring(found.tooltipBySlot), tostring(found.inventoryLink),
+            tostring(found.instantByID), tostring(found.pawnByLink), tostring(found.levelByLink), tostring(found.statsByLink),
+            tostring(found.tooltipByLink), tostring(found.infoByLink or found.byLink), tostring(found.infoByID))
+    end
+    for _, run in ipairs(runs) do
+        print(("    %s  [%s, %s, %s fps]"):format(when(run.at), tostring(run.toon), tostring(run.build), tostring(run.framerate)))
+        if run.wornAtStart then
+            print("      worn pieces as found: " .. answers(run.wornAtStart))
+        end
+        local idle = run.idle
+        if idle then
+            print(("      idle, %s s, read every %s s (item events meanwhile: info %s, load %s):"):format(tostring(idle.seconds),
+                tostring(run.sample), tostring(idle.events and idle.events.info), tostring(idle.events and idle.events.load)))
+            print("        left alone:        " .. marks(idle.untouched))
+            if idle.touched then
+                print(("        touched every 2 s: %s; found gone on a touch %s times"):format(marks(idle.touched), tostring(idle.touchedMisses)))
+            end
+            if idle.late then
+                local late = {}
+                for _, entry in ipairs(idle.late) do
+                    late[#late + 1] = ("at %s s %s of %s"):format(tostring(entry.at), tostring(entry.there), tostring(entry.of))
+                end
+                print("        not read until:    " .. table.concat(late, "; "))
+            end
+            print("        worn:              " .. marks(idle.worn))
+        end
+        local collect = run.collect
+        if collect then
+            print(("      the Lua collector run once (%s KB to %s KB): %s of %s there at once, %s after 2 s; worn %s and %s of %s"):format(
+                tostring(collect.kbBefore), tostring(collect.kbAfter), tostring(collect.leftAtOnce), tostring(collect.items),
+                tostring(collect.leftAfter2), tostring(collect.wornLeftAtOnce), tostring(collect.wornLeftAfter2), tostring(collect.worn)))
+        end
+        local pressure = run.pressure
+        if pressure then
+            print(("      under %s other items asked for in %s s, not waited for (item events: info %s, load %s):"):format(tostring(pressure.asked),
+                tostring(pressure.seconds), tostring(pressure.events and pressure.events.info), tostring(pressure.events and pressure.events.load)))
+            print("        loaded before:     " .. marks(pressure.probes))
+            print("        worn:              " .. marks(pressure.worn))
+        end
+        local stream = run.stream
+        if stream then
+            print(("      stream: %s other items loaded a hundred at a time, each hundred waited for (%s did not load), in %s s (item events: info %s, load %s);"):format(
+                tostring(stream.loaded), tostring(stream.failed), tostring(stream.seconds), tostring(stream.events and stream.events.info),
+                tostring(stream.events and stream.events.load)))
+            print("        a mark is how many of them had loaded when the item was first found gone")
+            print("        loaded before, left alone:   " .. marks(stream.untouched))
+            print(("        loaded before, touched after every hundred: %s; found gone on a touch %s times"):format(marks(stream.touched),
+                tostring(stream.touchedMisses)))
+            print("        worn:                        " .. marks(stream.worn))
+            for _, group in ipairs(stream.order or {}) do
+                print(("        loaded after %5s:          %s"):format(tostring(group.loadedAt), marks(group)))
+            end
+        end
+        local size = run.size
+        if size then
+            print(("      size: of the stream's %s items %s are still there, the newest %s in a row; in the order loaded (+ there, - gone): %s"):format(
+                tostring(size.of), tostring(size.there), tostring(size.newestInARow), table.concat(size.runs or {}, " ")))
+        end
+        if run.evicted then
+            print(("      worn pieces whose data was gone (first after %s loaded): %s"):format(tostring(run.evicted.firstGoneAfter), answers(run.evicted)))
+        end
+        local back = run.back
+        if back then
+            print(("      asked for again: %s of %s were gone; there in the same frame %s; all there %s after %s frames, %s s"):format(
+                tostring(back.wereGone), tostring(back.pieces), tostring(back.thereInTheSameFrame), tostring(back.all),
+                tostring(back.frames), tostring(back.seconds)))
+        end
+    end
+end
+
 local function printSightings(db)
     local sightings = db.sightings or {}
     print("  Bag states (checked when an item showed one):")
@@ -1127,6 +1225,7 @@ for _, file in ipairs(files) do
             if wants("search") then printSearch(db) end
             if wants("traces") then printTraces(db) end
             if wants("sightings") then printSightings(db) end
+            if wants("cache") then printItemCache(db) end
             if wants("integrations") then printIntegrations(db) end
             if wants("rotation") then printRotation(db) end
             if wants("errors") then printErrors(db) end
