@@ -694,10 +694,12 @@ return function(H, S)
             dornRecording.maxRank = 150
             Equal(Lists(), "missing 0, too low 1, unknown 0, not in list 0",
                 "caps: a toon below the cap lacks it, and below the rank the book asks for cannot learn it yet")
-            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = true }), nil, "caps: no mail icon, and not one to sell either")
+            Equal(book:GetUnneededRecipeStatus({ alreadyKnown = true }), "send",
+                "caps: one to send all the same: the ledger keeps a second copy from being sent while the toon waits")
             Equal(world.TooltipLinesFor(BOOK, true), "Needs Cooking 125 first: Dorn (Cooking 100)",
                 "caps: the tooltip of a book this toon knows says what the other toon needs")
-            Equal(world.TooltipLinesFor(BOOK, false), "", "caps: and nothing on one it does not know")
+            Equal(world.TooltipLinesFor(BOOK, false), "Needs Cooking 125 first: Dorn (Cooking 100)",
+                "caps: and so does the tooltip of one it does not know, since it is why the icon is there")
             recipeSection = world.Section(BOOK, "[Recipe]")
             Check(Has(recipeSection, "    Dorn (rank 100): lacks it (its recorded cap 150 is below the cap the item gives, 225): " ..
                 "rank too low (Cooking 100, the item asks for 125)"), "caps: the export says both (" .. tostring(recipeSection) .. ")")
@@ -728,10 +730,31 @@ return function(H, S)
             Check(Has(world.Section(PATTERN, "[Recipe]"), "    Dorn (rank 100): lacks it (in its recorded list, not learned): " ..
                 "can learn it (the item asks for no rank)"), "rank: a recipe that asks for no rank is one the toon can learn")
             ITEMS[PATTERN].tooltip = { { text = "Requires Cooking (120)", type = lineTypes.UsageRequirement, requirementType = SKILL } }
-            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), nil,
-                "rank: a recipe the other toon's rank is too low for is neither one to send nor one to sell")
-            Equal(world.TooltipLinesFor(PATTERN, true), "Needs Cooking 120 first: Dorn (Cooking 100)", "rank: and its tooltip says so")
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send",
+                "rank: a recipe the other toon's rank is too low for is one to send as well")
+            Equal(world.TooltipLinesFor(PATTERN, true), "Needs Cooking 120 first: Dorn (Cooking 100)", "rank: and its tooltip says what it waits for")
+            -- The ledger: the other toon has a copy in its bags as they were last seen, so a
+            -- second one is not sent. This toon knows the recipe, so the spare is one to sell.
+            local realmKey = world.env.CaerdonAPI:GetRealmKey()
+            rawset(world.env, "CaerdonLedgerData", { [realmKey] = { Dorn = { bags = { [PATTERN] = 1 }, mail = {}, sent = {} } } })
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "sellable",
+                "ledger: a recipe the other toon already carries is not one to send, and a known one is a spare to sell")
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = false }), nil, "ledger: one this toon does not know is left as it is")
+            Equal(world.TooltipLinesFor(PATTERN, true), "Already has one to learn: Dorn (Cooking 100)", "ledger: and the tooltip says the toon has one")
+            Check(Has(world.Section(PATTERN, "[Recipe]"), "    Ledger, Dorn: 1 in its bags, 0 in its bank, 0 in its mailbox, 0 sent to it: it has a copy"),
+                "ledger: the export says what the ledger has of it with that toon")
+            local ledgerSection = world.Section(PATTERN, "[Ledger]")
+            Check(Has(ledgerSection, "  Counts This Item: yes") and tostring(ledgerSection):find("Client's Count Of It: ", 1, true) ~= nil,
+                "ledger: and the export of any item has the ledger's section, with what the client counts of the item")
             dornRank.skillLevel = 120
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "sellable", "ledger: the same for a toon at the rank")
+            Equal(world.TooltipLinesFor(PATTERN, true), "Already has one to learn: Dorn (Cooking 120)", "ledger: with the same line")
+            -- One on its way counts as one it has; a note older than a mail lives does not.
+            world.env.CaerdonLedgerData[realmKey].Dorn = { bags = {}, mail = {}, sent = { [PATTERN] = { { count = 1, at = world.env.time(), from = "Zzyxa" } } } }
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "sellable", "ledger: a copy sent to it counts")
+            world.env.CaerdonLedgerData[realmKey].Dorn.sent[PATTERN][1].at = world.env.time() - 31 * 24 * 60 * 60
+            Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send", "ledger: one sent longer ago than a mail lives does not")
+            rawset(world.env, "CaerdonLedgerData", nil)
             Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send", "rank: at the rank it asks for it is one to send")
             -- A skill the toon has no saved rank for is not held against it.
             ITEMS[PATTERN].tooltip = { { text = "Requires Outland Cooking (50)", type = lineTypes.UsageRequirement, requirementType = SKILL } }

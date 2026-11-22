@@ -187,6 +187,8 @@ Keys.SEAMS = {
     -- What the saved recordings of every toon's recipes say about one item: saved variables,
     -- which no recording of a client's answers holds.
     "CaerdonIngredients.GetRecordedUses",
+    -- What each other toon of the realm said of an item that teaches: saved variables too.
+    "CaerdonLearners.GetSavedAnswers",
 }
 
 -- Functions that hand their answer to a function they are given, at once. The recorder asks

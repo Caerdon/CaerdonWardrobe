@@ -69,7 +69,8 @@ function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreate
             -- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
             local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
             if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                -- A copy in the toon's own mailbox is one it holds (CaerdonItemMixin:IsOwnCopy).
+                local item = CaerdonItem:CreateFromItemLink(itemLink, { ownCopy = true })
                 CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
                     locationKey = format("open-%d", i),
                     type = "open",
@@ -91,7 +92,7 @@ function MailMixin:OnSendMailFrameUpdate()
         if HasSendMailItem(i) then
             local itemLink = GetSendMailItemLink(i)
             if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                local item = CaerdonItem:CreateFromItemLink(itemLink, { ownCopy = true })
                 CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
                     locationKey = format("send-%d", i),
                     type = "send",
@@ -118,7 +119,7 @@ function MailMixin:OnInboxFrameUpdate()
             local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink =
                 GetInboxHeaderInfo(index);
             if firstItemLink then
-                local item = CaerdonItem:CreateFromItemLink(firstItemLink)
+                local item = CaerdonItem:CreateFromItemLink(firstItemLink, { ownCopy = true })
                 CaerdonWardrobe:UpdateButton(button, item, self, {
                     locationKey = format("inbox-%d", index),
                     type = "inbox",

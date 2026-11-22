@@ -1470,27 +1470,41 @@ end
 -- own rules. The client is asked about the spell as well (C_SpellBook.IsSpellKnown), which
 -- agreed with "Already known" on every recipe item of a WoW Forever client; a learned book
 -- or rune has not been seen there, so either word is taken.
+--
+-- Second, for every item the rule judges (nil for one it does not): this toon's answer as its
+-- other toons are told it (CaerdonLearners): "own", "lowSkill", "known", or "never" where a
+-- class line of the item's own is unmet.
 local function LearnableByTeachingLine(tooltipData)
     local spellID = tooltipData and tooltipData.teachesSpell
     if not spellID or tooltipData.ownSkillLine then
-        return nil
+        return nil, nil
     end
     local known = tooltipData.isKnownSpell
     if type(spellID) == "number" then
         taughtSpellsJudged[spellID] = true
         known = known or C_SpellBook.IsSpellKnown(spellID) == true
     end
-    if known or tooltipData.ownClassUnmet then
-        return nil
+    if known then
+        return nil, "known"
+    elseif tooltipData.ownClassUnmet then
+        return nil, "never"
+    elseif tooltipData.ownLevelUnmet then
+        return "lowSkill", "lowSkill"
     end
-    return tooltipData.ownLevelUnmet and "lowSkill" or "own"
+    return "own", "own"
 end
 
 -- What the item's own teaching line and the lines below it say, and what the rule above
--- makes of them, for the export: nil for an item whose tooltip teaches nothing.
---   { spellID, classUnmet, levelUnmet, asksForSkill, saysKnown, spellKnown, status }
+-- makes of them, for the export and for the toon's answer to its other toons
+-- (CaerdonLearners): nil for an item whose tooltip teaches nothing, and nil with true where
+-- the client has no tooltip for the item yet.
+--   { spellID, classUnmet, levelUnmet, asksForSkill, saysKnown, spellKnown, status,
+--     answer = the rule's second value }
 function CaerdonItemMixin:GetTeachingInfo()
     local tooltipData = self:GetItemLink() and self:GetTooltipData() or nil
+    if tooltipData and tooltipData.isRetrieving then
+        return nil, true
+    end
     local spellID = tooltipData and tooltipData.teachesSpell
     if not spellID then
         return nil
@@ -1505,7 +1519,7 @@ function CaerdonItemMixin:GetTeachingInfo()
     if info.spellID then
         info.spellKnown = C_SpellBook.IsSpellKnown(info.spellID) == true
     end
-    info.status = LearnableByTeachingLine(tooltipData)
+    info.status, info.answer = LearnableByTeachingLine(tooltipData)
     return info
 end
 
@@ -1687,6 +1701,11 @@ end
 -- they know the recipe (see CaerdonRecipe:GetOtherToonRecipeInfo for the fields). nil for
 -- anything that is not a recipe, for a recipe that cannot be handed over (soulbound or bind on
 -- pickup), and when no other toon has the profession. The icon and the tooltip both use this.
+--
+-- Each toon that lacks the recipe (missing, tooLow) also has what the ledger last saw of the
+-- item with it: held (CaerdonLedger:GetHeld, nil for a toon the ledger has no record of) and
+-- covered (it has a copy in its bags or its mailbox, or one was sent to it). Asked on every
+-- call, since a mail sent changes it.
 function CaerdonItemMixin:GetRecipeOtherToonInfo()
     if self:GetCaerdonItemType() ~= CaerdonItemType.Recipe then
         return nil
@@ -1698,17 +1717,79 @@ function CaerdonItemMixin:GetRecipeOtherToonInfo()
     if not (itemData and itemData.GetOtherToonRecipeInfo) then
         return nil
     end
-    return itemData:GetOtherToonRecipeInfo()
+    local info = itemData:GetOtherToonRecipeInfo()
+    if info then
+        local itemID = self:GetItemID()
+        for _, toons in ipairs({ info.missing, info.tooLow }) do
+            for _, toon in ipairs(toons) do
+                -- Asked of that toon's client when it is next played: a copy in its bank.
+                CaerdonLedger:NoteWanted(toon.name, itemID)
+                toon.held = CaerdonLedger:GetHeld(toon.name, itemID)
+                toon.covered = toon.held ~= nil and toon.held.covered == true
+            end
+        end
+    end
+    return info
+end
+
+-- Whether one of the toons lacks a copy as far as the ledger knows.
+local function AnyWithoutCopy(toons)
+    for _, toon in ipairs(toons) do
+        if not toon.covered then
+            return true
+        end
+    end
+    return false
+end
+
+-- The player's other toons on this realm and what each said of an item that teaches and asks
+-- for no skill (a class's spell book, a rune; see CaerdonLearners:GetItemInfo for the fields).
+-- nil for an item the teaching rule does not judge, for one that cannot be handed over
+-- (soulbound or bind on pickup), and when no other toon has a record. The icon, the tooltip
+-- and the export use this.
+-- answer: this toon's own, where the caller has it (GetCaerdonStatus); else the tooltip is read.
+function CaerdonItemMixin:GetLearnerInfo(answer)
+    if answer == nil then
+        local teaching = self:GetItemLink() and self:GetTeachingInfo() or nil
+        answer = teaching and teaching.answer or nil
+    end
+    if not answer then
+        return nil
+    end
+    if self:IsSoulbound() or self:GetBinding() == CaerdonItemBind.BindOnPickup then
+        return nil
+    end
+    return CaerdonLearners:GetItemInfo(self:GetItemID(), answer)
+end
+
+-- An item that teaches, asks for no skill and that this toon has no use for (another class's,
+-- or learned): "send" where it can be handed over and another toon of the realm said it can
+-- learn it, now or once it has the level, and has no copy that the ledger knows of
+-- (CaerdonLedger: in its bags, in its mailbox, or sent to it). nil to leave the status.
+-- Second: the learner info where it was read.
+-- The switch is the one of the recipes for other toons (Icon.ShowRecipesForOtherToons): one
+-- switch for all that another toon could learn (author decision, 2026-11-22).
+function CaerdonItemMixin:GetLearnerStatus(answer)
+    if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == false then
+        return nil, nil
+    end
+    local info = self:GetLearnerInfo(answer)
+    if info and (#info.now > 0 or #info.later > 0) then
+        return "send", info
+    end
+    return nil, info
 end
 
 -- A recipe item this toon has no use for: it already knows the recipe (Pattern: Woolen Reagent
 -- Bag 253668 on a tailor who knows it) or cannot learn it. Returns the status that replaces
 -- "collected", or nil to leave it:
---   "send":      it can still be handed over and another toon on the realm has the profession
---                at the rank the item asks for, and the recipe in its recorded list as one
---                not learned (CaerdonRecipe:GetOtherToonRecipeInfo): mail it. The same
---                status an ingredient another toon can use gets.
---   "sellable":  this toon knows it and nobody else wants it; needs a vendor price.
+--   "send":      it can still be handed over and another toon on the realm has the
+--                profession and the recipe in its recorded list as one not learned
+--                (CaerdonRecipe:GetOtherToonRecipeInfo), at the rank the item asks for or
+--                below it, and has no copy that the ledger knows of (CaerdonLedger): mail
+--                it. The same status an ingredient another toon can use gets.
+--   "sellable":  this toon knows it and nobody else wants it, or every toon that does has
+--                a copy; needs a vendor price.
 -- For "sellable" only the client's own tooltip verdict counts as known; the name-based recipe
 -- lookup cannot tell recipe ranks that share a name apart, which is fine for hiding a star or
 -- picking the icon colour but not for saying "sell this". Account-bound recipes are never
@@ -1722,15 +1803,16 @@ function CaerdonItemMixin:GetUnneededRecipeStatus(bindingResult)
     if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons ~= false then
         local otherToons = self:GetRecipeOtherToonInfo()
         if otherToons then
-            if #otherToons.missing > 0 then
+            -- A toon below the rank counts as well: the ledger keeps a second copy from
+            -- being sent while it waits for the first.
+            if AnyWithoutCopy(otherToons.missing) or AnyWithoutCopy(otherToons.tooLow) then
                 return "send"
             end
-            if alreadyKnown and (#otherToons.unknown > 0 or #otherToons.notInList > 0 or #otherToons.tooLow > 0) then
-                -- A toon with the profession whose recipes were never recorded, whose
+            if alreadyKnown and (#otherToons.unknown > 0 or #otherToons.notInList > 0) then
+                -- A toon with the profession whose recipes were never recorded, or whose
                 -- recorded list has no such recipe and nothing else says whether it has what
-                -- the item teaches, or whose rank is below what the item asks for: it may
-                -- need this one, so do not call it sellable, but there is nothing to claim
-                -- either.
+                -- the item teaches: it may need this one, so do not call it sellable, but
+                -- there is nothing to claim either.
                 return nil
             end
         end
@@ -2107,6 +2189,18 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     return mogStatus
 end
 
+-- Whether this is a copy the toon holds: one that lies in a slot of its own (bags, bank,
+-- worn), or one a window says is the toon's (extraData.ownCopy: its mailbox).
+function CaerdonItemMixin:IsOwnCopy()
+    return self:IsItemInPlayersControl() == true or (self.extraData ~= nil and self.extraData.ownCopy == true)
+end
+
+-- The classes of what is learned by using it up: a recipe, a class's spell book (class
+-- Recipe), a rune (class Consumable).
+local function IsLearnedByUse(classID)
+    return classID == Enum.ItemClass.Recipe or classID == Enum.ItemClass.Consumable
+end
+
 -- The key of an item's entry in the status cache: its link, and whatever else about this copy
 -- changes the verdict or the transmog info kept with it. Copies with one key are served one
 -- entry, whichever of them was judged first.
@@ -2137,6 +2231,12 @@ local function StatusCacheKey(item, itemLink)
         CaerdonEquipment:GetEquipmentSetsOf(item) or nil
     if equipmentSets then
         key = key .. "|e" .. table.concat(equipmentSets, "\1")
+    end
+    -- A copy the toon does not hold of something it learns by using it has no star while it
+    -- has a copy already (GetCaerdonStatus), and the copy it holds keeps its own. So the two
+    -- do not share an entry.
+    if IsLearnedByUse(select(6, C_Item.GetItemInfoInstant(itemLink))) and not item:IsOwnCopy() then
+        key = key .. "|f"
     end
     -- A stackable item's auction verdict depends on how many are owned.
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
@@ -2260,6 +2360,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     local lookPending = false
     -- The equipment branch's transmog info, kept with the verdict and returned.
     local statusTransmogInfo = nil
+    -- This toon's answer for an item the teaching rule judged (LearnableByTeachingLine), and
+    -- the spell the item teaches.
+    local teachingAnswer, teachingSpell = nil, nil
 
     if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit and caerdonType ~= CaerdonItemType.Equipment then
         local expansionID = expacID
@@ -2361,7 +2464,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
             -- 	end
         else
             -- Something that teaches this toon a spell it does not know (a rune).
-            mogStatus = LearnableByTeachingLine(tooltipData) or "collected"
+            local learnable
+            learnable, teachingAnswer = LearnableByTeachingLine(tooltipData)
+            teachingSpell = tooltipData.teachesSpell
+            mogStatus = learnable or "collected"
         end
     elseif caerdonType == CaerdonItemType.Currency then
         local currencyInfo = itemData:GetCurrencyInfo()
@@ -2734,7 +2840,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
         else
             -- No profession's recipe for this toon. An item of this class may still teach it
             -- something: a class's spell book asks for no skill.
-            mogStatus = LearnableByTeachingLine(tooltipData) or "collected"
+            local learnable
+            learnable, teachingAnswer = LearnableByTeachingLine(tooltipData)
+            teachingSpell = tooltipData.teachesSpell
+            mogStatus = learnable or "collected"
         end
     elseif caerdonType == CaerdonItemType.Toy then
         local toyInfo = itemData:GetToyInfo()
@@ -2775,6 +2884,34 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
                 itemSellPrice and itemSellPrice > 0 and self:IsSellable() then
                 mogStatus = "sellable"
             end
+        end
+    end
+
+    -- Something this toon learns by using it (a recipe, a spell book, a rune) and already has
+    -- a copy of: in its bags or its bank by the client's count, in its mailbox as last seen,
+    -- or bought at the auction house and not yet fetched (CaerdonLedger:GetOwnCopies). A copy
+    -- it does not hold (an auction, a vendor's, loot) has no star and no gear then: one is
+    -- enough, and it is not bought twice (author decision, 2026-11-22). The copy it holds
+    -- keeps its icon. What follows may still make it one to send to another toon.
+    -- Asked for the copy it holds as well: what the client counts is written down for the
+    -- toon's other toons as it is asked (GetOwnCopies).
+    if (mogStatus == "own" or mogStatus == "lowSkill") and IsLearnedByUse(itemClassID) and
+        (caerdonType == CaerdonItemType.Recipe or teachingAnswer ~= nil) then
+        local copies = CaerdonLedger:GetOwnCopies(itemID)
+        if copies.total > 0 and not self:IsOwnCopy() then
+            bindingResult.ownCopies = copies
+            mogStatus = "collected"
+        end
+    end
+
+    -- What teaches a spell and asks for no skill (a class's spell book, a rune): this toon's
+    -- answer is kept for its other toons, and one it has no use for that another of them
+    -- could learn is one to send. Before the next step, which would call another class's
+    -- rune sellable.
+    if teachingAnswer then
+        CaerdonLearners:NoteOwnAnswer(itemID, teachingAnswer, teachingSpell)
+        if mogStatus == "collected" then
+            mogStatus = self:GetLearnerStatus(teachingAnswer) or mogStatus
         end
     end
 

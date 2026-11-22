@@ -345,7 +345,7 @@ local function StartSession(options)
     -- What else a verdict asks, which the counters wrap by name (the link's tooltip, the item's
     -- data, each signal's entry point): there to be found, and not called by this stand-in.
     for _, name in ipairs({ "GetLinkTooltip", "GetItemData", "GetTransformLookInfo", "GetQuestItemInfo", "GetAuctionValueInfo",
-        "GetIngredientStatus", "GetFoodDrinkInfo", "GetProfessionToolInfo", "GetBagSlotInfo", "GetUnneededRecipeStatus",
+        "GetIngredientStatus", "GetFoodDrinkInfo", "GetProfessionToolInfo", "GetBagSlotInfo", "GetUnneededRecipeStatus", "GetLearnerStatus",
         "IsSellable", "IsEquippableJunk", "IsCollectible", "GetHasUse", "IsOtherClassConsumable" }) do
         CaerdonItemMixin[name] = function() end
     end

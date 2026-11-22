@@ -27,6 +27,8 @@
 	<Script file="CaerdonProfessionTools.lua" />
 	<Script file="CaerdonBagSlots.lua" />
 	<Script file="CaerdonIngredients.lua" />
+	<Script file="CaerdonLedger.lua" />
+	<Script file="CaerdonLearners.lua" />
 	<Script file="CaerdonVendorGoods.lua" />
 	<Script file="CaerdonTransformLooks.lua" />
 	<Script file="CaerdonButtonGeometry.lua" />

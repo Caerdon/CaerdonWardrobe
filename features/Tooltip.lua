@@ -512,6 +512,8 @@ local function ShowItemTooltip(tooltip)
         -- Reported rather than raised, so the item's own lines below are still added.
         xpcall(function() Tooltip:AddRecipeLearners(tooltip, shownItem) end, geterrorhandler())
         xpcall(function() Tooltip:AddIngredientUsers(tooltip, shownItem) end, geterrorhandler())
+        xpcall(function() Tooltip:AddTaughtLearners(tooltip, shownItem) end, geterrorhandler())
+        xpcall(function() Tooltip:AddOwnCopies(tooltip, shownItem) end, geterrorhandler())
         Tooltip:OweUpgradeLines(tooltip, shownItem)
 
         Tooltip:ProcessTooltip(tooltip, shownItem, false)
@@ -616,15 +618,18 @@ local function TooltipSaysAlreadyKnown(tooltip)
 end
 
 -- Recipe items that can still be handed over: which of the player's other toons on this realm
--- could learn the recipe, from the saved per-toon profession data. Two possible lines:
---   green: toons that have the profession at the rank the item asks for and lack this recipe
---   gray:  toons that lack it and whose rank is below what the item asks for, and toons that
---          have the profession but whose recipes were never recorded. Only on a recipe this
---          toon already knows, where it explains why there is no sellable icon; anywhere else
---          it would nag on every recipe of that profession.
+-- could learn the recipe, from the saved per-toon profession data. The possible lines:
+--   green: toons that have the profession at the rank the item asks for, lack this recipe and
+--          have no copy of the item
+--   gray:  toons that lack it and whose rank is below what the item asks for (they are a
+--          reason for the mail icon too); toons that lack it and have a copy already, by the
+--          ledger; and toons that have the profession but whose recipes were never recorded.
+--          That last one only on a recipe this toon already knows, where it explains why
+--          there is no sellable icon; anywhere else it would nag on every recipe of that
+--          profession.
 -- The number is the toon's rank in the profession, to hold against the "Requires" line.
--- With AddIngredientUsers the only tooltip text the addon adds outside debug mode;
--- Tooltip.ShowRecipeLearners turns both off.
+-- With AddIngredientUsers and AddTaughtLearners the tooltip text that names the toons the
+-- mail icon is for; Tooltip.ShowRecipeLearners turns all three off.
 function TooltipMixin:AddRecipeLearners(tooltip, item)
     local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
     if tooltipConfig and tooltipConfig.ShowRecipeLearners == false then
@@ -639,23 +644,39 @@ function TooltipMixin:AddRecipeLearners(tooltip, item)
         return
     end
 
-    local function ListToons(toons)
+    -- covered: the toons of the list that have a copy (true), or those that have none (false);
+    -- nil for all of them.
+    local function ListToons(toons, covered)
         local parts = {}
         for _, toon in ipairs(toons) do
-            table.insert(parts, format("%s (%s %d)", toon.name, otherToons.professionName, toon.rank))
+            if covered == nil or (toon.covered == true) == covered then
+                table.insert(parts, format("%s (%s %d)", toon.name, otherToons.professionName, toon.rank))
+            end
         end
         return table.concat(parts, ", ")
     end
 
     local wrap = true
-    if #otherToons.missing > 0 then
-        tooltip:AddLine(format(L["Could be learned by: %s"], ListToons(otherToons.missing)), 0.4, 1, 0, wrap)
+    local missing = ListToons(otherToons.missing, false)
+    if missing ~= "" then
+        tooltip:AddLine(format(L["Could be learned by: %s"], missing), 0.4, 1, 0, wrap)
     end
-    local saysKnown = (#otherToons.unknown > 0 or #otherToons.tooLow > 0) and TooltipSaysAlreadyKnown(tooltip)
-    if #otherToons.tooLow > 0 and saysKnown and otherToons.requirement then
+    local tooLow = ListToons(otherToons.tooLow, false)
+    if tooLow ~= "" and otherToons.requirement then
         tooltip:AddLine(format(L["Needs %s %d first: %s"], otherToons.requirement.skillName, otherToons.requirement.rank,
-            ListToons(otherToons.tooLow)), 0.6, 0.6, 0.6, wrap)
+            tooLow), 0.6, 0.6, 0.6, wrap)
     end
+    local covered = ListToons(otherToons.missing, true)
+    local coveredLow = ListToons(otherToons.tooLow, true)
+    if covered ~= "" and coveredLow ~= "" then
+        covered = covered .. ", " .. coveredLow
+    elseif covered == "" then
+        covered = coveredLow
+    end
+    if covered ~= "" then
+        tooltip:AddLine(format(L["Already has one to learn: %s"], covered), 0.6, 0.6, 0.6, wrap)
+    end
+    local saysKnown = #otherToons.unknown > 0 and TooltipSaysAlreadyKnown(tooltip)
     if #otherToons.unknown > 0 and saysKnown then
         tooltip:AddLine(format(L["Recipes not recorded yet (open the profession on that toon): %s"],
             ListToons(otherToons.unknown)), 0.6, 0.6, 0.6, wrap)
@@ -711,6 +732,84 @@ function TooltipMixin:AddIngredientUsers(tooltip, item)
             tooltip:AddLine(format(L["Used in recipes of: %s"], others), 0.6, 0.6, 0.6, wrap)
         end
     end
+end
+
+-- A class's spell book or a rune that can be handed over: which of the player's other toons
+-- on this realm could learn it, each by its own saved answer (CaerdonLearners), a line a
+-- toon, in the order the learner info has them:
+--   green: can learn it now and has no copy
+--   gray:  can learn it at a later level (with the level it had when last played), and one
+--          that could learn it and has a copy already, with where the ledger last saw it
+-- A toon of another class, one that has learned it and one that has not answered get no
+-- line. No more than LEARNER_LINES toons, then how many more (author decision: five).
+-- Tooltip.ShowRecipeLearners turns it off with the recipe and the ingredient lines.
+local LEARNER_LINES = 5
+function TooltipMixin:AddTaughtLearners(tooltip, item)
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    if tooltipConfig and tooltipConfig.ShowRecipeLearners == false then
+        return
+    end
+    -- An item no toon has answered for has nothing to say, and its tooltip is not read for it.
+    if not item or item:IsItemEmpty() or not item.GetLearnerInfo or not CaerdonLearners:IsListed(item:GetItemID()) then
+        return
+    end
+    local info = item:GetLearnerInfo()
+    if not info then
+        return
+    end
+
+    local lines = {}
+    for _, entry in ipairs(info.toons) do
+        if entry.answer == "own" or entry.answer == "lowSkill" then
+            if entry.covered then
+                local where = ((entry.bags or 0) > 0 and L["in its bags"]) or
+                    ((entry.bank or 0) > 0 and L["in its bank"]) or
+                    ((entry.mail or 0) > 0 and L["in its mailbox"]) or L["on its way to it"]
+                lines[#lines + 1] = { format(L["%s already has one (%s)"], entry.toon, where), 0.6, 0.6, 0.6 }
+            elseif entry.answer == "own" then
+                lines[#lines + 1] = { format(L["Could be learned by: %s"], entry.toon), 0.4, 1, 0 }
+            elseif entry.level then
+                lines[#lines + 1] = { format(L["Could be learned at a later level by: %s (level %d)"], entry.toon, entry.level), 0.6, 0.6, 0.6 }
+            else
+                lines[#lines + 1] = { format(L["Could be learned at a later level by: %s"], entry.toon), 0.6, 0.6, 0.6 }
+            end
+        end
+    end
+    local wrap = true
+    for index = 1, math.min(#lines, LEARNER_LINES) do
+        local line = lines[index]
+        tooltip:AddLine(line[1], line[2], line[3], line[4], wrap)
+    end
+    if #lines > LEARNER_LINES then
+        tooltip:AddLine(format(L["and %d more of your toons"], #lines - LEARNER_LINES), 0.6, 0.6, 0.6, wrap)
+    end
+end
+
+-- A copy the toon does not hold of something it could learn and already has a copy of: why
+-- it has no star (CaerdonItem.lua, GetCaerdonStatus: bindingResult.ownCopies), and where the
+-- copy is. Not on the copy it holds: a tooltip filled from a copy of the toon's own names it
+-- (the data's guid), and then nothing is asked.
+-- Tooltip.ShowRecipeLearners turns it off with the lines that name other toons.
+function TooltipMixin:AddOwnCopies(tooltip, item)
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    if tooltipConfig and tooltipConfig.ShowRecipeLearners == false then
+        return
+    end
+    if not item or item:IsItemEmpty() or not item.GetItemID or not CaerdonLedger:IsTracked(item:GetItemID()) then
+        return
+    end
+    local data = tooltip.GetPrimaryTooltipData and tooltip:GetPrimaryTooltipData()
+    if type(data) == "table" and data.guid ~= nil then
+        return
+    end
+    local isReady, _, _, bindingResult = item:GetCaerdonStatus()
+    local copies = isReady and bindingResult and bindingResult.ownCopies or nil
+    if not copies then
+        return
+    end
+    local where = (copies.bags > 0 and L["in your bags"]) or (copies.bank > 0 and L["in your bank"]) or
+        (copies.mail > 0 and L["in your mailbox"]) or L["on its way to your mailbox"]
+    tooltip:AddLine(format(L["You already have one to learn (%s)"], where), 0.6, 0.6, 0.6, true)
 end
 
 -- A piece of equipment that would be an upgrade: for what is worn (the yellow arrow), and for

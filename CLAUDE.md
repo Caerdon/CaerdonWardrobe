@@ -21,7 +21,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 |---|---|
 | `own` / `ownPlus` | Learnable by this toon (star). Plus (green): the look is already known from another item, or an ensemble with only a few pieces for this toon. Also a bag that belongs in a bag slot. |
 | `other` / `otherPlus` | This toon cannot use it, but it can be learned for the collection or by another toon. |
-| `send` | This toon has no use for it and another of the player's toons does: a recipe it can learn, an ingredient its recipes take (mail icon). |
+| `send` | This toon has no use for it and another of the player's toons does: a recipe, a spell book or a rune it can learn, an ingredient its recipes take (mail icon). |
 | `otherNoLoot` | Something to learn, but every remaining source needs another class, race or faction. |
 | `lowSkill` / `lowSkillPlus` | Learnable once a level or skill requirement is met. |
 | `transform` | A piece to keep: its own look is known, and raised on its upgrade track or converted at the Catalyst it would have one that is not (small, still icon that says which: the Catalyst's mark or the upgrade vendor's; retail). |
@@ -37,7 +37,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `CaerdonItem.lua`: `CaerdonItemMixin` with `GetCaerdonStatus`, the tooltip scan (`GetTooltipData`) and `GetBindingStatus`.
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
-- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take), `CaerdonVendorGoods` (`GetVendorInfo`: how many vendors sell it, from QuestieDB where that is loaded), `CaerdonTransformLooks` (`GetTransformLookInfo`: the look a season's piece gains by being raised on its upgrade track or converted at the Catalyst; retail).
+- Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take), `CaerdonVendorGoods` (`GetVendorInfo`: how many vendors sell it, from QuestieDB where that is loaded), `CaerdonLearners` (`GetLearnerInfo`: what each of the realm's other toons said of a spell book or rune, each by its own tooltip, saved per toon), `CaerdonLedger` (`CaerdonLedger:GetHeld`: where a copy of a recipe, book or rune was last seen with a toon: its bags, its bank, its mailbox, on its way there; `GetOwnCopies` for the toon that is played), `CaerdonTransformLooks` (`GetTransformLookInfo`: the look a season's piece gains by being raised on its upgrade track or converted at the Catalyst; retail).
 - `CaerdonFormatPattern.lua`: a client format string as a pattern (`NS.FormatPattern`), for the facts that are only a line of tooltip text (notes: Text Read Off a Tooltip Line).
 - `CaerdonLevelBonuses.lua`: which bonus IDs give an item which level (`NS.LevelBonuses`), asked of the client once a build in the background and saved; what a gear set marked for PVP is scored by (notes: Upgrades).
 - `CaerdonRefresh.lua`: the refresh watcher (`NS.Refresh:Watch`). An event that also comes when nothing changed (skill lines, the player's flags, reputation, quest events, housing) is compared before it refreshes: with the last reading, with what was saved for the toon (reputation, `CaerdonRefreshData`), or by the module that owns it with what it answered (the quest module).
@@ -57,15 +57,17 @@ Each later step only replaces the statuses listed, so an upgrade keeps its icon,
    A book or a rune that teaches this toon a spell it does not know (no profession's recipe: it asks for no skill) is `own`, `lowSkill` below its level, by the tooltip's own lines (notes: What an Item Teaches).
 3. Equippable junk becomes `sellable` (replaces empty).
 4. Bags against the bag slots: `own` / `lowSkill` or `sellable` (replaces empty, `oldexpansion`).
-5. Consumables for another class become `sellable` (replaces empty, `collected`).
-6. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).
-7. Outgrown food and drink become `sellable` (replaces empty, `collected`).
-8. Ingredients this toon has no use for: `send` when another toon's recipes take it and vendors everywhere do not sell it, `sellable` when its own have outgrown it (replaces empty).
-9. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion`, `transform` and every learnable status: `own`, `other`, their Plus forms, `otherNoLoot`, `lowSkill`; not an upgrade).
-10. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
-11. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
+   A recipe, book or rune it could learn and already has a copy of (bags, bank, mailbox, bought and not fetched) is `collected` on a copy it does not hold, and keeps its icon on the one it holds (notes: What an Item Teaches).
+5. A book or a rune this toon has no use for (another class's, or learned) that can be handed over: `send` when another toon of the realm said it can learn it, now or at a later level, and has no copy the ledger knows of (replaces `collected`; notes: What an Item Teaches).
+6. Consumables for another class become `sellable` (replaces empty, `collected`).
+7. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).
+8. Outgrown food and drink become `sellable` (replaces empty, `collected`).
+9. Ingredients this toon has no use for: `send` when another toon's recipes take it and vendors everywhere do not sell it, `sellable` when its own have outgrown it (replaces empty).
+10. Quest value becomes `quest` (replaces empty, `collected`, `sellable`, `send`, `oldexpansion`, `transform` and every learnable status: `own`, `other`, their Plus forms, `otherNoLoot`, `lowSkill`; not an upgrade).
+11. Auction value: `sellable` becomes `auction`; plain trade goods become `auctionGoods`, unless kept as an ingredient.
+12. Bag-location overrides: `openable`, `locked`, `readable`, `refundable`, combine spells.
 
-The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|x` for a season's armor that lies in a slot and may go to the Catalyst, `|e<sets>` for a piece equipment sets hold, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` / `|k<suffix>` for a row whose window passed a source, an item level or a key's suffix) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 11 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
+The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted piece that lies in a slot, `|x` for a season's armor that lies in a slot and may go to the Catalyst, `|f` for a recipe or consumable that is not a copy the toon holds, `|e<sets>` for a piece equipment sets hold, `|n<owned>` for stackable items, and `|s<source>` / `|l<level>` / `|k<suffix>` for a row whose window passed a source, an item level or a key's suffix) until `RefreshItems`. A piece of equipment's transmog info is cached with it and returned fifth. Step 12 is not part of what is cached: it belongs to one copy in its bag slot and is added after the lookup, on every call (`GetCopyStatus`; notes: Refresh).
 
 ## Rules
 
@@ -131,7 +133,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |
 | What is and is not `sellable` | Sellable Rules |
-| A class's spell book, a rune, anything with a teaching line | What an Item Teaches |
+| A class's spell book, a rune, anything with a teaching line; who else could learn it, the ledger | What an Item Teaches |
 | Tools, bags, recipes, food and drink | Profession Tools; Bags for the Bag Slots; Recipes This Toon Has No Use For; Outgrown Food and Drink |
 | Trade goods a recipe takes, recipes recorded with their difficulty | Ingredients |
 | Quest icon on non-quest items | Quest Value |

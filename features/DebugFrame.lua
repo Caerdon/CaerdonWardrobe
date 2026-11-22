@@ -3041,7 +3041,76 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Learnable By This Rule", "not judged: it asks for a skill, so it is a profession's")
         else
             addKV(1, "Learnable By This Rule", teaching.status or "no")
+            -- What this toon's other toons are told, what each of them said, and the mail
+            -- icon that comes of it (CaerdonLearners, CaerdonItemMixin:GetLearnerStatus).
+            addKV(1, "This Toon's Answer", teaching.answer)
+            local cannotHandOver = (item:IsSoulbound() and "it is soulbound") or
+                (item:GetBinding() == CaerdonItemBind.BindOnPickup and "it binds on pickup") or nil
+            addKV(1, "Can Be Handed Over", cannotHandOver and ("no: " .. cannotHandOver) or "yes")
+            local learners = item.GetLearnerInfo and item:GetLearnerInfo(teaching.answer) or nil
+            if learners then
+                -- Each toon's answer, and where the ledger last saw a copy with it.
+                for _, entry in ipairs(learners.toons) do
+                    local where = entry.bags == nil and "the ledger has no record of it" or
+                        string.format("%d in its bags, %d in its bank, %d in its mailbox, %d sent to it", entry.bags, entry.bank or 0, entry.mail or 0, entry.sent or 0)
+                    addKV(2, entry.toon, string.format("%s (%s)", entry.answer, where))
+                end
+                if #learners.unanswered > 0 then
+                    addKV(1, "Not Answered Yet (not played since the item was first seen)", table.concat(learners.unanswered, ", "))
+                end
+            elseif not cannotHandOver then
+                addKV(1, "Other Toons", "none of this realm has a record")
+            end
+            local sendStatus = item.GetLearnerStatus and item:GetLearnerStatus(teaching.answer) or nil
+            addKV(1, "Mail Icon By This Rule", sendStatus and "yes" or
+                (teaching.status and "no: this toon can learn it itself") or
+                (CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == false and "no: switched off") or
+                (cannotHandOver and "no: it cannot be handed over") or
+                (learners and #learners.covered > 0 and "no: every toon that could learn it has a copy or one on its way") or
+                "no: no other toon said it can learn it")
+            local learnerState = CaerdonLearners and CaerdonLearners.GetDebugState and CaerdonLearners:GetDebugState() or nil
+            if learnerState then
+                addKV(1, "Asked This Session", string.format("%d items asked for, %d answered, %d not there, %d teach nothing, %d waiting",
+                    learnerState.asked, learnerState.answered, learnerState.notThere, learnerState.noAnswer, learnerState.waiting))
+                for _, line in ipairs(learnerState.toons) do
+                    addLine(2, line)
+                end
+            end
         end
+    end
+
+    -- The ledger (CaerdonLedger): whether it counts this item, what it holds of it for this
+    -- toon, what it did this session, and what the client counts of the item where. For every
+    -- item: whether a count with the bank in it can be had with the bank closed is what the
+    -- last line says, of whatever lies in the bank.
+    local ledgerState = CaerdonLedger and CaerdonLedger.GetDebugState and CaerdonLedger:GetDebugState() or nil
+    if ledgerState and item:GetItemID() then
+        local countedID = item:GetItemID()
+        addLine(0, "")
+        addLine(0, "[Ledger]")
+        addKV(1, "Counts This Item", CaerdonLedger:IsTracked(countedID) and "yes" or
+            "no (no recipe, and no toon of the realm has answered for it)")
+        local own = CaerdonLedger:GetHeld(UnitName("player"), countedID)
+        addKV(1, "Of It With This Toon", own and string.format("%d in its bags, %d in its bank, %d in its mailbox, %d on its way (sent to it or bought)",
+            own.bags, own.bank, own.mail, own.sent) or "no record")
+        -- What a second copy's star goes by: asked of the client now, and of the record.
+        local copies = CaerdonLedger:GetOwnCopies(countedID)
+        addKV(1, "Copies This Toon Has Now", string.format("%d (%d in its bags, %d in its bank, %d in its mailbox, %d on its way)",
+            copies.total, copies.bags, copies.bank, copies.mail, copies.coming))
+        addKV(1, "This Is A Copy It Holds", item.IsOwnCopy and item:IsOwnCopy() or false)
+        addKV(1, "Star Held Back For A Copy It Has", (bindingResult and bindingResult.ownCopies) and "yes" or "no")
+        addKV(1, "This Toon's Ledger", string.format(
+            "%d kinds asked about, %d in the bags, %d in the bank, %d in the mailbox (%s%s), %d on their way; this session: bags read %d times, mailbox %d, %d mails noted with %d kinds, %d bought, %d refreshes",
+            ledgerState.askedItems, ledgerState.bagItems, ledgerState.bankItems, ledgerState.mailItems,
+            ledgerState.mailSeen and ("read " .. date("%Y-%m-%d %H:%M", ledgerState.mailSeen)) or "never read",
+            ledgerState.mailPartial and ", a part of it shown" or "", ledgerState.sentItems,
+            ledgerState.bagReads, ledgerState.mailReads, ledgerState.sends, ledgerState.noted,
+            ledgerState.bought, ledgerState.refreshes))
+        addKV(1, "Bank Window", BankFrame and BankFrame:IsShown() and "open" or "closed")
+        addKV(1, "Client's Count Of It", string.format("%s in the bags, %s with the bank, %s with the reagent bank too, %s with the account's bank too",
+            tostring(C_Item.GetItemCount(countedID)), tostring(C_Item.GetItemCount(countedID, true)),
+            tostring(C_Item.GetItemCount(countedID, true, false, true)),
+            tostring(C_Item.GetItemCount(countedID, true, false, true, true))))
     end
 
     if identifiedType == CaerdonItemType.Recipe then
@@ -3156,6 +3225,16 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 addKV(1, "Toons Whose Rank Is Too Low", #otherToons.tooLow)
                 addKV(1, "Toons Not Recorded", #otherToons.unknown)
                 addKV(1, "Toons Whose List Has No Such Recipe", #otherToons.notInList)
+                -- What the ledger last saw of the item with each toon that lacks the recipe: one
+                -- that has a copy is no reason for the mail icon (CaerdonLedger).
+                for _, lacking in ipairs({ otherToons.missing, otherToons.tooLow }) do
+                    for _, toon in ipairs(lacking) do
+                        local held = CaerdonLedger and CaerdonLedger:GetHeld(toon.name, item:GetItemID()) or nil
+                        addKV(2, "Ledger, " .. tostring(toon.name), held and string.format("%d in its bags, %d in its bank, %d in its mailbox, %d sent to it%s",
+                            held.bags, held.bank, held.mail, held.sent, held.covered and ": it has a copy" or "") or
+                            "no record of this toon (not played since the ledger was there)")
+                    end
+                end
                 if otherToons.requirement then
                     addKV(1, "Item Asks For", string.format("%s %d", tostring(otherToons.requirement.skillName),
                         otherToons.requirement.rank))
