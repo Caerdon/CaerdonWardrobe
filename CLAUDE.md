@@ -102,7 +102,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 - **Not loaded:** Blizzard_EncounterJournal, Blizzard_GarrisonUI, Blizzard_Housing*, Blizzard_ExpansionTrial. Blizzard TOCs gate with `AllowLoadGameType` (`mainline` includes camelot, `standard` is retail only); Forever overrides live in `Camelot/` folders.
 - **No specializations.** One trait tree per class in three groups; `CaerdonAPI:GetTalentTrees()` / `GetPrimaryTalentTree()`. Where a feature goes by the spec being played, the tree with the most points stands in for it, and a gear set the player tied to a Pawn scale comes before either in both clients (notes: Upgrades). The feature is not finished until Forever has it.
 - **Selling an item to a vendor teaches its appearance,** whatever the class. The transmog collect APIs do not reflect that.
-- **Classic armor proficiency** (mail and plate at 40) is invisible to the transmog APIs. Red tooltip text is the authority for "can equip now".
+- **Classic armor proficiency** (mail and plate at 40) is invisible to the transmog APIs. The tooltip's slot line is the authority for "can equip now": its `isValidItemType` field, which is false where the armor type is red (notes: Tooltip Lines in the Export).
 - **Classic stats are "Equip:" lines:** spell power, attack power, crit and the like come as green "Equip:" lines of type `None`, built from the client's `TOOLTIP_ITEM_STAT_*` strings. A real effect is typed `ItemSpellTriggerOnEquip` (notes: Sellable Rules).
 - **Classic ranged slot** (`INVSLOT_RANGED`, `C_PaperDollInfo.IsRangedSlotShown()` true) and no profession gear slots: tools are carried in the bags.
 - **Bag slots:** four normal slots plus a reagent slot that also takes profession bags.

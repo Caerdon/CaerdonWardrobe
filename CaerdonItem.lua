@@ -60,6 +60,26 @@ local bindTextTable = {
     [ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
 }
 
+-- What a tooltip line says the toon does not meet right now. A requirement line says it as
+-- a field (`usable`), the slot line as two (`isValidInvSlot` for the slot on the left,
+-- `isValidItemType` for the armor or weapon type on the right); those are read first. Every
+-- other line has its colour alone, as has a line of those two types that lacks its field:
+-- red is the client's RED_FONT_COLOR.
+local RED_HEX = (RED_FONT_COLOR and RED_FONT_COLOR.GenerateHexColor and RED_FONT_COLOR:GenerateHexColor()) or "ffff2020"
+local function IsUnmet(field, hex)
+    if field ~= nil then
+        return field == false
+    end
+    return hex == RED_HEX
+end
+-- The client's word that it is met: the field, or a colour that is not red.
+local function IsMet(field, hex)
+    if field ~= nil then
+        return field == true
+    end
+    return hex ~= nil and hex ~= RED_HEX
+end
+
 -- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state, and what
 -- else GetCaerdonStatus adds to the key). An entry is { isReady, mogStatus, bindingStatus,
 -- bindingResult, transmogInfo }: the transmog info of a piece of equipment is kept with the
@@ -962,15 +982,24 @@ function CaerdonItemMixin:GetTooltipData(data)
             break
         end
 
-        -- Red text (RED_FONT_COLOR, "ffff2020") on any line marks a requirement this toon does not
-        -- meet right now: level (UsageRequirement), armor/weapon proficiency (the RIGHT column of the
-        -- EquipSlot line, e.g. "Wrist | Mail" on a hunter below 40 on WoW Forever), class, skill,
-        -- reputation, "Already known". Those lines are not type None, so scan every line and both
-        -- columns here rather than inside the type-filtered branch below.
+        -- A line that says the toon does not meet something right now: level, class, skill,
+        -- reputation, "Already known" (UsageRequirement, by its field), the slot or the armor /
+        -- weapon proficiency (the EquipSlot line, by its fields: "Wrist | Mail" on a hunter below
+        -- 40 on WoW Forever is the right column), and red text on any other line, which has no
+        -- field ("Locked", a tool's line). Asked of every line and both columns here, not inside
+        -- the type-filtered branch below, which most of those lines never reach.
         -- TODO: Provide option to show stars on BoE recipes that aren't for current toon
         local leftHex = line.leftColor and line.leftColor.GenerateHexColor and line.leftColor:GenerateHexColor()
         local rightHex = line.rightColor and line.rightColor.GenerateHexColor and line.rightColor:GenerateHexColor()
-        if leftHex == "ffff2020" or rightHex == "ffff2020" then
+        local leftUnmet, rightUnmet
+        if line.type == Enum.TooltipDataLineType.UsageRequirement then
+            leftUnmet, rightUnmet = IsUnmet(line.usable, leftHex), rightHex == RED_HEX
+        elseif line.type == Enum.TooltipDataLineType.EquipSlot then
+            leftUnmet, rightUnmet = IsUnmet(line.isValidInvSlot, leftHex), IsUnmet(line.isValidItemType, rightHex)
+        else
+            leftUnmet, rightUnmet = leftHex == RED_HEX, rightHex == RED_HEX
+        end
+        if leftUnmet or rightUnmet then
             tooltipData.foundRedRequirements = true
         end
         -- Since 12.0 the "Use:" / "Equip:" / "Use: Teaches you" lines carry their own
@@ -1113,22 +1142,23 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.UsageRequirement then
             -- UsageRequirement (type 43) consolidates the old Restricted* line types.
             -- line.requirementType maps to Enum.TooltipDataUsageRequirementType.
-            -- line.usable is false when the requirement text is red (not met).
+            -- line.usable is false when the requirement is not met (the text is red then).
             local reqType = line.requirementType
             if reqType == Enum.TooltipDataUsageRequirementType.NotAlreadyKnown then
                 tooltipData.canLearn = false
                 tooltipData.isKnownSpell = true
             elseif reqType == Enum.TooltipDataUsageRequirementType.RaceClass then
-                -- "Classes: Mage" / "Races: ..." in red: unlike a level or skill shortfall this
+                -- "Classes: Mage" / "Races: ..." not met: unlike a level or skill shortfall this
                 -- never changes for the toon, so the item is permanently unusable here.
-                if leftHex == "ffff2020" then
+                if leftUnmet then
                     tooltipData.raceClassRestricted = true
                 end
             elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
                 tooltipData.hasSkillRequirement = true
-                -- "Requires Engineering (50)" not in red: the client's own verdict that this
-                -- toon has the skill at that rank.
-                if leftHex and leftHex ~= "ffff2020" then
+                -- "Requires Engineering (50)" met: the client's own verdict that this toon has
+                -- the skill at that rank.
+                local skillMet = IsMet(line.usable, leftHex)
+                if skillMet then
                     tooltipData.skillRequirementMet = true
                 end
                 local requiredSkill, requiredRank
@@ -1146,12 +1176,12 @@ function CaerdonItemMixin:GetTooltipData(data)
                             requiredSkill, requiredRank)
                         -- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
 
-                        -- The client only colors this line red while the requirement is unmet, so a
-                        -- non-red line is its own verdict that the toon has the skill at the required
-                        -- rank. Trust it over the cached profession data, which is only refreshed
-                        -- while trade skill data is ready and can lag behind skill-ups. A red line
-                        -- still goes through the cache to tell "rank too low" from "no profession".
-                        if leftHex and leftHex ~= "ffff2020" then
+                        -- A line the client calls met is its own verdict that the toon has the skill
+                        -- at the required rank. Trust it over the cached profession data, which is
+                        -- only refreshed while trade skill data is ready and can lag behind
+                        -- skill-ups. An unmet line still goes through the cache to tell "rank too
+                        -- low" from "no profession".
+                        if skillMet then
                             hasSkillLine = true
                             meetsMinRank = true
                         end

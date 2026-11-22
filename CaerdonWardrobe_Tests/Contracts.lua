@@ -947,6 +947,150 @@ T.Contract({
     end,
 })
 
+-- What a toon does not meet is read from a line's fields where it has them (CaerdonItem.lua,
+-- IsUnmet): `usable` on a requirement line, `isValidInvSlot` and `isValidItemType` on the slot
+-- line, and from red text everywhere else. It used to be red text alone. So the fields have to
+-- say what the colour says: a field is false exactly where its column is red, on both
+-- tooltips of every item in the bags. And red has to be the client's RED_FONT_COLOR, which the
+-- addon takes its red from. Red on any other line type is collected with an example each:
+-- those are the lines colour is all there is for. Added to over the runs; a toon that meets
+-- everything it carries answers for the met lines only, and its result says so.
+
+local UNMET_EXAMPLES = 4
+
+local function HasExample(list, example)
+    for _, known in ipairs(list) do
+        if known == example then
+            return true
+        end
+    end
+    return false
+end
+
+local function MergeUnmetLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "requirementLines", "slotLines", "unmetByField" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.red = new.red or old.red
+    for _, key in ipairs({ "redElsewhere", "fieldsElsewhere" }) do
+        merged[key] = merged[key] or {}
+        for lineType, entry in pairs(new[key] or {}) do
+            local target = merged[key][lineType]
+            if not target then
+                merged[key][lineType] = entry
+            else
+                target.lines = (target.lines or 0) + (entry.lines or 0)
+                target.examples = target.examples or {}
+                for _, example in ipairs(entry.examples or {}) do
+                    if #target.examples < UNMET_EXAMPLES and not HasExample(target.examples, example) then
+                        target.examples[#target.examples + 1] = example
+                    end
+                end
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.unmetLines",
+    version = 1,
+    title = "A line's fields say unmet exactly where its text is red",
+    accumulate = true,
+    merge = MergeUnmetLines,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local red = type(RED_FONT_COLOR) == "table" and RED_FONT_COLOR.GenerateHexColor and RED_FONT_COLOR:GenerateHexColor()
+        c:Note("red", red or "none")
+        if not c:Check(type(red) == "string", "RED_FONT_COLOR is a %s with no hex colour", TypeOf(RED_FONT_COLOR)) then
+            return
+        end
+        -- The value the addon falls back on where a client has no such colour.
+        c:Check(red == "ffff2020", "RED_FONT_COLOR is %s, not ffff2020", red)
+
+        local REQUIREMENT, SLOT = Enum.TooltipDataLineType.UsageRequirement, Enum.TooltipDataLineType.EquipSlot
+        local requirementLines, slotLines, unmetByField = 0, 0, 0
+        local redElsewhere, fieldsElsewhere = {}, {}
+        local function Collect(into, lineType, example)
+            local key = tostring(lineType)
+            local entry = into[key]
+            if not entry then
+                entry = { lines = 0, examples = {} }
+                into[key] = entry
+            end
+            entry.lines = entry.lines + 1
+            if #entry.examples < UNMET_EXAMPLES and not HasExample(entry.examples, example) then
+                entry.examples[#entry.examples + 1] = example
+            end
+        end
+        local function IsRed(color)
+            return type(color) == "table" and color.GenerateHexColor ~= nil and color:GenerateHexColor() == red
+        end
+        -- One column of a line: its field against its colour.
+        local function Column(itemID, side, line, field, color, column)
+            local value = line[field]
+            if not c:Check(type(value) == "boolean", "item %d, the %s's tooltip: %s on a line of type %s is a %s", itemID,
+                    side, field, tostring(line.type), TypeOf(value)) then
+                return
+            end
+            if value == false then
+                unmetByField = unmetByField + 1
+            end
+            c:Check((value == false) == IsRed(color),
+                "item %d, the %s's tooltip: %s is %s and the %s column is %s (\"%s\")", itemID, side, field,
+                tostring(value), column, IsRed(color) and "red" or "not red",
+                tostring(column == "left" and line.leftText or line.rightText))
+        end
+        local function Read(side, data, itemID)
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                if issecretvalue(line.leftText) or issecretvalue(line.usable) or issecretvalue(line.isValidInvSlot)
+                    or issecretvalue(line.isValidItemType) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's text or field is a secret value", itemID, side)
+                elseif line.type == REQUIREMENT then
+                    requirementLines = requirementLines + 1
+                    Column(itemID, side, line, "usable", line.leftColor, "left")
+                elseif line.type == SLOT then
+                    slotLines = slotLines + 1
+                    Column(itemID, side, line, "isValidInvSlot", line.leftColor, "left")
+                    Column(itemID, side, line, "isValidItemType", line.rightColor, "right")
+                else
+                    if IsRed(line.leftColor) or IsRed(line.rightColor) then
+                        Collect(redElsewhere, line.type, tostring(line.leftText))
+                    end
+                    if line.usable ~= nil or line.isValidInvSlot ~= nil or line.isValidItemType ~= nil then
+                        Collect(fieldsElsewhere, line.type, tostring(line.leftText))
+                    end
+                end
+            end
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                Read("link", C_TooltipInfo.GetHyperlink(link), itemID)
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("requirementLines", requirementLines)
+        c:Note("slotLines", slotLines)
+        c:Note("unmetByField", unmetByField)
+        c:Note("redElsewhere", redElsewhere)
+        c:Note("fieldsElsewhere", fieldsElsewhere)
+        if unmetByField == 0 then
+            return "info", "nothing unmet in these bags: only the met lines were asked"
+        end
+    end,
+})
+
 -- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
 -- of the client's answer has its row, and every field of the line is on it. An item in a bag
 -- has two tooltips, the slot's and the bare link's, which is the one the addon computes the

@@ -271,7 +271,14 @@ function H.StockGame(toon, items)
     Set("C_PetJournal.GetPetInfoByItemID", function() return nil end)
     Set("C_Soulbinds.IsItemConduitByItemInfo", function() return false end)
 
-    -- Tooltips: plain lines, a red one where the item says so.
+    -- Tooltips: plain lines, a red one where the item says so. A line may have a right column
+    -- (right, and rightRed for its colour). A requirement line (type 43) and a slot line (21)
+    -- carry what the clients' recordings show on every one of them: `usable`, and
+    -- `isValidInvSlot` / `isValidItemType`, false exactly where the column is red. A scenario
+    -- gives a field itself to say otherwise, or bare = true for a line without them.
+    local function IsRed(r, g, b)
+        return r == 1 and g == 0.125 and b == 0.125
+    end
     Set("C_TooltipInfo.GetHyperlink", function(link)
         local item = Item(link)
         if not item then
@@ -280,13 +287,31 @@ function H.StockGame(toon, items)
         local env = Client().env
         local lines = { { type = 0, leftText = item.name, leftColor = env.CreateColor(1, 1, 1, 1) } }
         for _, line in ipairs(item.tooltip or {}) do
-            lines[#lines + 1] = {
+            local made = {
                 type = line.type or 0,
                 leftText = line.text,
                 leftColor = env.CreateColor(line.r or 1, line.g or 1, line.b or 1, 1),
                 bonding = line.bonding,
                 requirementType = line.requirementType,
             }
+            if line.right ~= nil then
+                made.rightText = line.right
+                made.rightColor = line.rightRed and env.CreateColor(1, 0.125, 0.125, 1) or env.CreateColor(1, 1, 1, 1)
+            end
+            if not line.bare then
+                local leftRed = IsRed(line.r, line.g, line.b)
+                if made.type == 43 then
+                    made.usable = not leftRed
+                elseif made.type == 21 then
+                    made.isValidInvSlot, made.isValidItemType = not leftRed, not line.rightRed
+                end
+            end
+            for _, field in ipairs({ "usable", "isValidInvSlot", "isValidItemType" }) do
+                if line[field] ~= nil then
+                    made[field] = line[field]
+                end
+            end
+            lines[#lines + 1] = made
         end
         return { type = 0, id = ItemID(link), hyperlink = link, lines = lines }
     end)
