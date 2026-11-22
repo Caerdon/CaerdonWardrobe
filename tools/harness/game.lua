@@ -25,6 +25,14 @@ end
 
 function Game:Set(name, value)
     self.names[name] = value
+    -- A namespace keeps what it has handed out (Game:Table), so a member that was asked for
+    -- before is replaced there too: a scenario that sets its bags after the addon has read
+    -- the stock ones would otherwise go unheard.
+    local parent, key = name:match("^(.*)%.([^.]+)$")
+    local proxy = parent and self.tables[parent]
+    if proxy and rawget(proxy, key) ~= nil then
+        rawset(proxy, key, value)
+    end
     local at = 0
     while true do
         at = name:find(".", at + 1, true)
@@ -193,6 +201,7 @@ function H.StockGame(toon, items)
     Set("C_QuestLog.RequestLoadQuestByID", function() end)
     Set("C_Spell.RequestLoadSpellData", function() end)
     Set("C_Container.GetContainerNumSlots", function() return 0 end)
+    Set("C_Container.GetContainerItemID", function() return nil end)
     Set("C_Container.GetContainerNumFreeSlots", function() return 0, 0 end)
     Set("C_Container.ContainerIDToInventoryID", function(bag) return 30 + bag end)
     Set("C_EquipmentSet.CanUseEquipmentSets", function() return false end)
