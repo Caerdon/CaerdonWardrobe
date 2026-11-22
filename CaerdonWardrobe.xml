@@ -5,6 +5,7 @@
 ..\FrameXML\UI.xsd"
 >
 	<Script file="CaerdonAsyncCallbackSystem.lua" />
+	<Script file="CaerdonFormatPattern.lua" />
 	<Script file="FeatureMixin.lua" />
 	<Script file="ItemDataMixin.lua" />
 	<Script file="CaerdonRefresh.lua" />

@@ -38,6 +38,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
 - Signal modules, each with a `CaerdonItemMixin` entry point: `CaerdonQuestItems` (`GetQuestItemInfo`), `CaerdonAuctionValue` (`GetAuctionValueInfo`), `CaerdonFoodDrink` (`GetFoodDrinkInfo`), `CaerdonProfessionTools` (`GetProfessionToolInfo`), `CaerdonBagSlots` (`GetBagSlotInfo`), `CaerdonIngredients` (`GetIngredientInfo`: what the recorded recipes of this toon and its other toons take), `CaerdonVendorGoods` (`GetVendorInfo`: how many vendors sell it, from QuestieDB where that is loaded), `CaerdonTransformLooks` (`GetTransformLookInfo`: the look a season's piece gains by being raised on its upgrade track or converted at the Catalyst; retail).
+- `CaerdonFormatPattern.lua`: a client format string as a pattern (`NS.FormatPattern`), for the facts that are only a line of tooltip text (notes: Text Read Off a Tooltip Line).
 - `CaerdonLevelBonuses.lua`: which bonus IDs give an item which level (`NS.LevelBonuses`), asked of the client once a build in the background and saved; what a gear set marked for PVP is scored by (notes: Upgrades).
 - `CaerdonRefresh.lua`: the refresh watcher (`NS.Refresh:Watch`). An event that also comes when nothing changed (skill lines, the player's flags, reputation, quest events, housing) is compared before it refreshes: with the last reading, with what was saved for the toon (reputation, `CaerdonRefreshData`), or by the module that owns it with what it answered (the quest module).
 - `CaerdonIntegrations.lua`: whether each third-party integration found the functions it hooks (the export's `[Integrations]` section).
@@ -74,6 +75,7 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 - **A look the toon can collect is `own`, whatever the piece asks for** (a level, a standing): selling the piece teaches it, in both clients. `lowSkill` is not for looks (notes: Transmog on Forever).
 - **Investigating an item:** extend the Copy Details export instead of adding prints. Keep additions structured and readable.
 - **No text is read off a tooltip frame.** A status comes from `C_TooltipInfo`; a line that should not be on a tooltip is kept off before the client adds it (`TooltipDataProcessor.AddLinePreCall`, as for an ensemble's "Already known"; notes: Ensembles), never found by its text and blanked.
+- **A line the client writes from a format string is read back with `NS.FormatPattern`,** never with a pattern made by hand from that string or from its English text: the strings hold positional arguments, full-width punctuation and grammar escapes in other languages. A change to text that is read runs `scenarios/locale-text.lua`, which has every locale of both clients (notes: Text Read Off a Tooltip Line).
 - **New item signals** go through the item's data mixin or a signal module with a `CaerdonItemMixin` entry point, never ad-hoc API calls in feature files.
 - **An integration declares its hook points and notes each one** (`Mixin.integration`, `self:NoteHookPoint(label, owner, key)` on the line before it attaches). That is how a user's export says the other addon changed (notes: Integration Report).
 - **Never write into `options`.** It belongs to the caller and is usually shared between buttons. Per-button state goes in `buttonState` or on the overlay's regions.
@@ -121,6 +123,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Running the item code offline, recording an item, fixtures | Offline Harness |
 | What a draw or a refresh costs, who asked the client for an item | Counters |
 | What a tooltip line carries, the export's tooltip sections | Tooltip Lines in the Export |
+| Text read off a tooltip line, other languages | Text Read Off a Tooltip Line |
 | Appearances, `own` vs. `other`, selling teaches | Transmog on Forever |
 | A look known from another item, the Plus statuses | Known Looks |
 | A look a piece gains by an upgrade or at the Catalyst | Looks After a Change |

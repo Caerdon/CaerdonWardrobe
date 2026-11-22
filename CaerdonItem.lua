@@ -121,25 +121,19 @@ local function IsBagSlotLocked(bag, slot)
     return false
 end
 
--- Reusable table for GetTooltipData output to avoid per-call allocation.
--- Safe because GetTooltipData is only called synchronously within GetCaerdonStatus.
--- ITEM_MIN_SKILL ("Requires %s (%d)") as a pattern that captures the skill's name and the rank.
--- Made at the first skill requirement line, since the locale's strings are there by then.
-local skillRequirementPattern
-local function SkillRequirementPattern()
-    if not skillRequirementPattern then
-        -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-        local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-        skillCheck = string.gsub(skillCheck, "2%$", "")
-        skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-        if GetLocale() == "zhCN" then
-            skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-        else
-            skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-        end
-        skillRequirementPattern = skillCheck
+-- The skill's name and the rank of a requirement line, "Requires Cooking (125)": the line
+-- read back through the client's own ITEM_MIN_SKILL (NS.FormatPattern). Made at the first
+-- skill requirement line, since the locale's strings are there by then. nil for a line that
+-- is not of that format.
+local skillRequirementMatcher
+local function ReadSkillRequirement(lineText)
+    if skillRequirementMatcher == nil then
+        skillRequirementMatcher = NS.FormatPattern.Compile(ITEM_MIN_SKILL, { anywhere = true }) or false
     end
-    return skillRequirementPattern
+    if not skillRequirementMatcher then
+        return nil
+    end
+    return skillRequirementMatcher:Match(lineText)
 end
 
 -- An "Equip:" line that is a plain stat, not an effect. WoW Forever writes what classic gear
@@ -196,13 +190,9 @@ function CaerdonItem:GetEquipStatStringNames()
     return equipStatStringNames
 end
 
--- "Equip: Improves your chance to hit by %1$.1f%%." as a pattern for the whole line. A number
+-- "Equip: Improves your chance to hit by %1$.1f%%." is matched as the whole line. A number
 -- is matched loosely (digits and separators), since how a locale writes one is not known.
-local function EquipStatPattern(format)
-    local pattern = format:gsub("%%%%", "\2"):gsub("%%[%d%$%.]*%a", "\1")
-    pattern = pattern:gsub("%p", "%%%0"):gsub("\1", "[%%d%%.,]+"):gsub("\2", "%%%%")
-    return "^" .. pattern .. "$"
-end
+local EQUIP_STAT_OPTIONS = { capture = false, every = "[%d%.,]+" }
 
 local equipStatPatterns
 local equipStatLines = {} -- line text -> whether it is a stat line; a tooltip's lines repeat
@@ -212,9 +202,9 @@ local function IsEquipStatLine(lineText)
         if not equipStatPatterns then
             equipStatPatterns = {}
             for _, name in ipairs(CaerdonItem:GetEquipStatStringNames()) do
-                local format = _G[name]
-                if type(format) == "string" then
-                    equipStatPatterns[#equipStatPatterns + 1] = EquipStatPattern(format)
+                local matcher = NS.FormatPattern.Compile(_G[name], EQUIP_STAT_OPTIONS)
+                if matcher then
+                    equipStatPatterns[#equipStatPatterns + 1] = matcher.pattern
                 end
             end
         end
@@ -230,6 +220,51 @@ local function IsEquipStatLine(lineText)
     return isStat
 end
 
+-- Whether an untyped line is an "Equip:" line: it starts with the client's word for one
+-- (ITEM_SPELL_TRIGGER_ONEQUIP), or with what one of its stat strings starts with. The two are
+-- not the same in every language: the French Forever client has "Equipé :" for the word and
+-- writes its stats "Équiper : ..." and "Équipé : ...", the Brazilian one has "Equipado:" and
+-- "Equipar: ...". A plain compare, no pattern.
+local FULL_WIDTH_COLON = "\239\188\154"
+local equipWords
+local function IsEquipLine(lineText)
+    if not equipWords then
+        equipWords = {}
+        local seen = {}
+        local function Add(word)
+            if type(word) == "string" and word ~= "" and not seen[word] then
+                seen[word] = true
+                equipWords[#equipWords + 1] = word
+            end
+        end
+        Add(ITEM_SPELL_TRIGGER_ONEQUIP)
+        for _, name in ipairs(CaerdonItem:GetEquipStatStringNames()) do
+            local format = _G[name]
+            if type(format) == "string" then
+                local _, colonEnd = format:find(":", 1, true)
+                local _, wideEnd = format:find(FULL_WIDTH_COLON, 1, true)
+                if wideEnd and (not colonEnd or wideEnd < colonEnd) then
+                    colonEnd = wideEnd
+                end
+                local word = colonEnd and format:sub(1, colonEnd)
+                -- What stands before the colon is a word only where no argument is in it.
+                if word and not word:find("%", 1, true) then
+                    Add(word)
+                end
+            end
+        end
+    end
+    for index = 1, #equipWords do
+        local word = equipWords[index]
+        if lineText:sub(1, #word) == word then
+            return true
+        end
+    end
+    return false
+end
+
+-- Reusable table for GetTooltipData output to avoid per-call allocation.
+-- Safe because GetTooltipData is only called synchronously within GetCaerdonStatus.
 local recycledTooltipData = {}
 local function ResetTooltipData(embeddedLink)
     local t = recycledTooltipData
@@ -1020,9 +1055,9 @@ function CaerdonItemMixin:GetTooltipData(data)
             if lineText then
                 -- An "Equip:" line the client does not type: a plain stat on WoW Forever (see
                 -- IsEquipStatLine), a skill bonus, retail's PVP floor. Only an untyped line is
-                -- read by its text, and only where it starts with the client's word for it.
-                if line.type == Enum.TooltipDataLineType.None and
-                    lineText:sub(1, #ITEM_SPELL_TRIGGER_ONEQUIP) == ITEM_SPELL_TRIGGER_ONEQUIP then
+                -- read by its text, and only where it starts with the client's word for it
+                -- (IsEquipLine).
+                if line.type == Enum.TooltipDataLineType.None and IsEquipLine(lineText) then
                     tooltipData.hasEquipEffect = true
                     if not IsEquipStatLine(lineText) then
                         tooltipData.hasEquipEffectBeyondStats = true
@@ -1165,7 +1200,7 @@ function CaerdonItemMixin:GetTooltipData(data)
                 end
                 local requiredSkill, requiredRank
                 if lineText then
-                    requiredSkill, requiredRank = strmatch(lineText, SkillRequirementPattern())
+                    requiredSkill, requiredRank = ReadSkillRequirement(lineText)
                 end
                 if requiredSkill then
                     -- An item asks for a rank of this skill, so its rank is one to watch
@@ -1361,7 +1396,7 @@ function CaerdonItemMixin:GetSkillRequirement()
             -- Nothing to read.
         elseif line.type == lineTypes.UsageRequirement then
             if not rank and requirementTypes and line.requirementType == requirementTypes.Skill then
-                local name, number = strmatch(lineText, SkillRequirementPattern())
+                local name, number = ReadSkillRequirement(lineText)
                 if name and tonumber(number) then
                     skillName, rank = name, tonumber(number)
                 end

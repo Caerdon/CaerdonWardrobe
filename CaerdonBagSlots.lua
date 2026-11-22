@@ -134,21 +134,13 @@ local function ClassifyItem(itemInfo)
     return "profession", subClassID, subTypeName
 end
 
--- The tooltip format ("%d Slot %s", or a localized one with positional arguments) as a Lua
--- pattern that captures the number.
+-- The tooltip format ("%d Slot %s", or a localized one: "%2$s de %1$d |4casilla:casillas;")
+-- as a matcher that hands back the number (NS.FormatPattern).
 local function GetSlotsPattern()
     if not slotsPattern then
         slotsFormat = (type(CONTAINER_SLOTS) == "string" and CONTAINER_SLOTS ~= "") and CONTAINER_SLOTS or
             "%d Slot %s"
-        local pattern = slotsFormat
-        pattern = pattern:gsub("%%%d+%$d", "\1")
-        pattern = pattern:gsub("%%d", "\1")
-        pattern = pattern:gsub("%%%d+%$s", "\2")
-        pattern = pattern:gsub("%%s", "\2")
-        pattern = pattern:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
-        pattern = pattern:gsub("\1", "(%%d+)")
-        pattern = pattern:gsub("\2", ".+")
-        slotsPattern = "^%s*" .. pattern .. "%s*$"
+        slotsPattern = NS.FormatPattern.Compile(slotsFormat, { capture = "numbers" })
     end
     return slotsPattern, slotsFormat
 end
@@ -167,13 +159,13 @@ local function ReadSize(itemID, itemLink)
         return nil
     end
 
-    local pattern = GetSlotsPattern()
+    local slots = GetSlotsPattern()
     local _, _, subTypeName = C_Item.GetItemInfoInstant(itemID)
     local fallback
     for index, line in ipairs(data.lines) do
         local text = line.leftText and tostring(line.leftText) or nil
         if text and text ~= "" then
-            local size = tonumber((text:match(pattern)))
+            local size = tonumber((slots:Match(text)))
             if size and size > 0 then
                 known = { size = size, text = text, matchedBy = "format" }
                 break
@@ -602,11 +594,11 @@ end
 -- For the Debug Frame export: every slot with what is in it, and how tooltips are read.
 function CaerdonBagSlots:GetDebugState()
     local ctx = GetContext()
-    local pattern, format = GetSlotsPattern()
+    local slots, format = GetSlotsPattern()
     local state = {
         format = format,
         formatIsDefault = not (type(CONTAINER_SLOTS) == "string" and CONTAINER_SLOTS ~= ""),
-        pattern = pattern,
+        pattern = slots.pattern,
         reagentTakesProfession = ctx.reagentTakesProfession,
         reagentTakesProfessionWhy = ctx.reagentTakesProfessionWhy,
         ammoWeapons = string.format("arrows %s, bullets %s (%s)", tostring(ctx.ammoWeapons.arrows),

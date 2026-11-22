@@ -24,6 +24,34 @@ function Guards.Protected(f, ...)
     return unpack(results, 1, table.maxn(results))
 end
 
+-- The client's format takes an argument by its position ("%2$s de %1$d casillas"), which
+-- every locale but enUS uses somewhere; Lua's own does not. The same format with its
+-- arguments in the order of the text, for Lua's.
+function Guards.Positional(fmt, ...)
+    local arguments = { ... }
+    local out, ordered, count = {}, {}, 0
+    local from = 1
+    while true do
+        local at = fmt:find("%", from, true)
+        if not at then
+            out[#out + 1] = fmt:sub(from)
+            break
+        end
+        out[#out + 1] = fmt:sub(from, at - 1)
+        if fmt:sub(at + 1, at + 1) == "%" then
+            out[#out + 1] = "%%"
+            from = at + 2
+        else
+            count = count + 1
+            local _, positionEnd, position = fmt:find("^(%d+)%$", at + 1)
+            ordered[count] = arguments[position and tonumber(position) or count]
+            out[#out + 1] = "%"
+            from = (positionEnd or at) + 1
+        end
+    end
+    return table.concat(out), unpack(ordered, 1, count)
+end
+
 function Guards.Install()
     if installed then
         return
@@ -46,6 +74,9 @@ function Guards.Install()
         return Guards.yield(...)
     end
     string.format = function(fmt, ...)
+        if type(fmt) == "string" and fmt:find("%%%d+%$") then
+            return string.format(Guards.Positional(fmt, ...))
+        end
         local index = 0
         for spec in fmt:gmatch("%%[%-+ #0]*%d*%.?%d*([%a%%])") do
             if spec ~= "%" then

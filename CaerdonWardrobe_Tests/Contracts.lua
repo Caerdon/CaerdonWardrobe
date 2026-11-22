@@ -1428,6 +1428,170 @@ T.Contract({
     end,
 })
 
+-- Some facts are on a tooltip as a line of text and nowhere else, and the addon reads the
+-- line back through the client's own format string (CaerdonFormatPattern.lua): the skill and
+-- rank an item asks for, a bag's size, the durability. That rests on the client writing the
+-- line from that string, in whatever language it runs in. Asked here of what the toon carries:
+--   * a skill requirement line of a link's tooltip is read, and the skill and rank written
+--     back with ITEM_MIN_SKILL are the line;
+--   * a bag's or quiver's size (carried, or in a bag slot) is read by CONTAINER_SLOTS and not
+--     by the fallback;
+--   * the slot's tooltip of a piece with durability has the line DURABILITY_TEMPLATE writes
+--     with the client's two numbers.
+-- A food's restore line has no format string behind it; what the food code made of each food
+-- carried is kept beside its line (kind, amount), and a food it could not read is listed.
+-- Added to over the runs. A toon that carries none of these answers nothing, and says so.
+
+local READ_BACK_EXAMPLES = 6
+
+local function MergeReadBack(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "skillLines", "bags", "durabilityLines", "foods", "foodsNotRead" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.locale = new.locale or old.locale
+    merged.formats = new.formats or old.formats
+    for _, key in ipairs({ "skillExamples", "bagExamples", "durabilityExamples", "foodExamples", "notReadExamples" }) do
+        merged[key] = merged[key] or {}
+        for _, example in ipairs(new[key] or {}) do
+            if #merged[key] < READ_BACK_EXAMPLES and not HasExample(merged[key], example) then
+                merged[key][#merged[key] + 1] = example
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "text.readBack",
+    version = 1,
+    title = "Tooltip lines the addon reads through the client's format strings are written from them",
+    accumulate = true,
+    merge = MergeReadBack,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local counts = { skillLines = 0, bags = 0, durabilityLines = 0, foods = 0, foodsNotRead = 0 }
+        local examples = { skill = {}, bag = {}, durability = {}, food = {}, notRead = {} }
+        local function Example(kind, text)
+            local list = examples[kind]
+            if #list < READ_BACK_EXAMPLES and not HasExample(list, text) then
+                list[#list + 1] = text
+            end
+        end
+        local SKILL = Enum.TooltipDataUsageRequirementType and Enum.TooltipDataUsageRequirementType.Skill
+        local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
+        local FOOD_DRINK = Enum.ItemConsumableSubclass and Enum.ItemConsumableSubclass.Fooddrink or 5
+
+        local function ReadBag(itemID, link, where)
+            local info = CaerdonBagSlots:GetItemInfo(itemID, link)
+            if not info then
+                return
+            end
+            counts.bags = counts.bags + 1
+            Example("bag", ("%s: \"%s\" is %s, read by %s"):format(where, tostring(info.sizeText), tostring(info.size),
+                tostring(info.sizeMatchedBy)))
+            c:Check(info.sizeMatchedBy == "format", "item %d (%s): its size was read by %s, not by CONTAINER_SLOTS (\"%s\"), from \"%s\"",
+                itemID, where, tostring(info.sizeMatchedBy), tostring(CONTAINER_SLOTS), tostring(info.sizeText))
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
+
+            -- The skill requirement of the link's tooltip, which is the one the addon reads.
+            local data = link and C_TooltipInfo.GetHyperlink(link)
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                local text = line.leftText
+                if not issecretvalue(text) and not issecretvalue(line.type) and line.type == REQUIREMENT
+                    and SKILL ~= nil and line.requirementType == SKILL and type(text) == "string" then
+                    counts.skillLines = counts.skillLines + 1
+                    local requirement = CaerdonItem:CreateFromItemLink(link):GetSkillRequirement()
+                    local skillName, rank = requirement and requirement.skillName, requirement and requirement.rank
+                    Example("skill", ("\"%s\" is %s at %s"):format(text, tostring(skillName), tostring(rank)))
+                    if c:Check(type(skillName) == "string" and type(rank) == "number",
+                            "item %d: the skill line \"%s\" was not read (ITEM_MIN_SKILL is \"%s\")", itemID, text,
+                            tostring(ITEM_MIN_SKILL)) then
+                        local written = ITEM_MIN_SKILL:format(skillName, rank)
+                        c:Check(written == text, "item %d: the skill line \"%s\" read and written back is \"%s\"", itemID, text, written)
+                    end
+                    break
+                end
+            end
+
+            if classID == Enum.ItemClass.Container or classID == Enum.ItemClass.Quiver then
+                ReadBag(itemID, link, "carried")
+            end
+
+            if classID == Enum.ItemClass.Consumable and subClassID == FOOD_DRINK and link then
+                counts.foods = counts.foods + 1
+                local food = CaerdonFoodDrink:Classify(itemID, link)
+                if food then
+                    Example("food", ("\"%s\" is %s, %s%s"):format(tostring(food.text), tostring(food.kind), tostring(food.amount),
+                        food.isBuff and ", with an effect" or ""))
+                else
+                    counts.foodsNotRead = counts.foodsNotRead + 1
+                    Example("notRead", ("item %d, %s"):format(itemID, tostring(C_Item.GetItemNameByID(itemID))))
+                end
+            end
+
+            -- The durability line of the slot's tooltip.
+            local current, maximum = C_Container.GetContainerItemDurability(where.bag, where.slot)
+            if type(current) == "number" and type(maximum) == "number" and maximum > 0 then
+                local wanted = DURABILITY_TEMPLATE:format(current, maximum)
+                local slotData = C_TooltipInfo.GetBagItem(where.bag, where.slot)
+                local found, loaded = false, false
+                for _, line in ipairs(type(slotData) == "table" and slotData.lines or {}) do
+                    local text = line.leftText
+                    if not issecretvalue(text) and type(text) == "string" then
+                        loaded = loaded or text ~= RETRIEVING_ITEM_INFO
+                        if text:match("^%s*(.-)%s*$") == wanted then
+                            found = true
+                        end
+                    end
+                end
+                if loaded then
+                    counts.durabilityLines = counts.durabilityLines + 1
+                    Example("durability", ("\"%s\""):format(wanted))
+                    c:Check(found, "item %d: its slot's tooltip has no line \"%s\" (DURABILITY_TEMPLATE is \"%s\")", itemID, wanted,
+                        tostring(DURABILITY_TEMPLATE))
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+
+        -- The bags in the bag slots.
+        for bag = Enum.BagIndex.Backpack + 1, Enum.BagIndex.ReagentBag do
+            local inventorySlot = C_Container.ContainerIDToInventoryID(bag)
+            local itemID = inventorySlot and GetInventoryItemID("player", inventorySlot)
+            if itemID then
+                ReadBag(itemID, GetInventoryItemLink("player", inventorySlot), "bag slot " .. bag)
+            end
+        end
+
+        c:Note("locale", GetLocale())
+        c:Note("formats", { ITEM_MIN_SKILL = ITEM_MIN_SKILL, CONTAINER_SLOTS = CONTAINER_SLOTS,
+            DURABILITY_TEMPLATE = DURABILITY_TEMPLATE, HEALTH = HEALTH, MANA = MANA })
+        c:Note("items", #slots)
+        for key, count in pairs(counts) do
+            c:Note(key, count)
+        end
+        c:Note("skillExamples", examples.skill)
+        c:Note("bagExamples", examples.bag)
+        c:Note("durabilityExamples", examples.durability)
+        c:Note("foodExamples", examples.food)
+        c:Note("notReadExamples", examples.notRead)
+        if counts.skillLines + counts.bags + counts.durabilityLines == 0 then
+            return "info", "nothing here is written from a format string the addon reads back"
+        end
+    end,
+})
+
 -- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
 -- of the client's answer has its row, and every field of the line is on it. An item in a bag
 -- has two tooltips, the slot's and the bare link's, which is the one the addon computes the

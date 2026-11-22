@@ -79,16 +79,10 @@ local twoHandedInventoryTypeNames = {
 
 local GetEquippedGearSnapshot -- forward declaration; defined after NormalizeItemLevel/DetermineUniqueness
 
--- PVP item level floor extraction via tooltip text parsing.
--- PVP_ITEM_LEVEL_TOOLTIP is a Blizzard global format string for the
--- "Increases item level to a minimum of %d ..." tooltip line.
--- We build a locale-safe Lua pattern once at load time.
-local pvpFloorPattern
-if PVP_ITEM_LEVEL_TOOLTIP then
-    local sample = PVP_ITEM_LEVEL_TOOLTIP:format(12345)
-    sample = sample:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
-    pvpFloorPattern = sample:gsub("12345", "(%%d+)")
-end
+-- The PVP item level floor, which is on a tooltip as a line of text and nowhere else:
+-- PVP_ITEM_LEVEL_TOOLTIP, "Equip: Increases item level to a minimum of %d ...", read back
+-- through the client's own string (NS.FormatPattern). Made once, when the file loads.
+local pvpFloorPattern = NS.FormatPattern.Compile(PVP_ITEM_LEVEL_TOOLTIP, { anywhere = true })
 
 local function ExtractPvpFloorFromTooltip(tooltipData)
     if not pvpFloorPattern or not tooltipData or not tooltipData.lines then
@@ -96,7 +90,7 @@ local function ExtractPvpFloorFromTooltip(tooltipData)
     end
     for _, line in ipairs(tooltipData.lines) do
         if line.leftText then
-            local floor = line.leftText:match(pvpFloorPattern)
+            local floor = pvpFloorPattern:Match(line.leftText)
             if floor then
                 return tonumber(floor)
             end
@@ -893,14 +887,7 @@ local comparisonEnchantLineType = Enum.TooltipDataLineType and Enum.TooltipDataL
 
 -- "Durability 20 / 20" has no line type of its own and differs between armor types and
 -- qualities without changing what the piece does.
-local durabilityPattern
-if DURABILITY_TEMPLATE then
-    local sample = DURABILITY_TEMPLATE:format(12345, 67890)
-    sample = sample:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
-    sample = sample:gsub("12345", "%%d+")
-    sample = sample:gsub("67890", "%%d+")
-    durabilityPattern = "^%s*" .. sample .. "%s*$"
-end
+local durabilityPattern = NS.FormatPattern.Compile(DURABILITY_TEMPLATE, { capture = false })
 
 -- The compared lines of an item link's tooltip, or nil when the tooltip has none (data not
 -- loaded): two empty lists must never count as identical.
@@ -919,7 +906,7 @@ local function BuildComparisonLines(itemLink)
         if not comparisonIgnoredLineTypes[line.type] then
             local left = line.leftText and tostring(line.leftText) or ""
             local right = line.rightText and tostring(line.rightText) or ""
-            if (left ~= "" or right ~= "") and not (durabilityPattern and left:match(durabilityPattern)) then
+            if (left ~= "" or right ~= "") and not (durabilityPattern and durabilityPattern:Match(left)) then
                 local isEnchant = comparisonEnchantLineType ~= nil and line.type == comparisonEnchantLineType
                 if isEnchant then
                     lines.hasEnchant = true

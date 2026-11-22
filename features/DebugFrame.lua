@@ -1986,15 +1986,9 @@ function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation, itemKey)
     return rows
 end
 
--- A client format string ("%s (%d/%d)") as a pattern that finds its values in a tooltip line.
+-- A client format string ("%s (%d/%d)") as a matcher that finds its values in a tooltip line.
 local function TextPattern(formatString)
-    if type(formatString) ~= "string" then
-        return nil
-    end
-    local pattern = formatString:gsub("%%%d+%$", "%%")
-    pattern = pattern:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
-    pattern = pattern:gsub("%%s", "(.+)"):gsub("%%d", "(%%d+)")
-    return "^%s*" .. pattern .. "%s*$"
+    return NS.FormatPattern.Compile(formatString)
 end
 
 local function ItemSetOf(link)
@@ -2054,13 +2048,13 @@ local function ExplainSetBonuses(item)
         local color = line.leftColor and line.leftColor.GenerateHexColor and line.leftColor:GenerateHexColor() or "?"
         local name, worn, total
         if namePattern then
-            name, worn, total = text:match(namePattern)
+            name, worn, total = namePattern:Match(text)
         end
         local needs, needsText
         if needsPattern then
-            needs, needsText = text:match(needsPattern)
+            needs, needsText = needsPattern:Match(text)
         end
-        local hasText = not needs and hasPattern and text:match(hasPattern) or nil
+        local hasText = not needs and hasPattern and hasPattern:Match(text) or nil
         if name and tonumber(worn) and tonumber(total) then
             found, inPieces = true, true
             add(1, "set line: \"%s\", %s of %s worn", name, worn, total)
@@ -3252,10 +3246,23 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     -- Food and drink: how the item was read and whether a better one is carried.
     if CaerdonFoodDrink and item.GetFoodDrinkInfo then
         local foodDrinkInfo = item:GetFoodDrinkInfo()
+        local foodState = CaerdonFoodDrink.GetDebugState and CaerdonFoodDrink:GetDebugState(item:GetItemID())
+        if not foodDrinkInfo and foodState and foodState.isFoodDrink then
+            -- Food or drink by its class, and no restore line was found on its tooltip.
+            addLine(0, "")
+            addLine(0, "[Food and Drink]")
+            addKV(1, "Kind", "not read (no tooltip line has a number and one of the words below)")
+            addKV(1, "Health Words", foodState.healthWords)
+            addKV(1, "Mana Words", foodState.manaWords)
+        end
         if foodDrinkInfo then
             addLine(0, "")
             addLine(0, "[Food and Drink]")
             addKV(1, "Show Outdated Food", CaerdonWardrobeConfig.Icon.ShowOutdatedFood)
+            if foodState then
+                addKV(1, "Health Words", foodState.healthWords)
+                addKV(1, "Mana Words", foodState.manaWords)
+            end
             addKV(1, "Kind", foodDrinkInfo.kind)
             addKV(1, "Buff Food", foodDrinkInfo.isBuff)
             addKV(1, "Restore Amount", foodDrinkInfo.amount)

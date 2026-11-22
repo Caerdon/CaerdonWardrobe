@@ -7,7 +7,8 @@
 --
 --   kind:   "food" (restores health), "drink" (restores mana). Items that restore both are left
 --           alone. Nothing in the item API separates the two, so the tooltip's restore line is
---           read (localized HEALTH / MANA words).
+--           read: the line that has a number and the client's word for health or mana
+--           (RestoreWords). The amount is the number before that word.
 --   buff:   food with an extra effect ("well fed") is only ever compared with other buff food.
 --   better: a higher required level, or the same required level and a larger restore amount.
 --
@@ -53,6 +54,71 @@ local function LowerWord(globalName, fallback)
     return word:lower()
 end
 
+-- What two of the client's texts differ in, word by word: "%s Health per sec" and "%s Mana
+-- per sec" give "health" and "mana". nil where they differ in nothing that is a plain word.
+local function DifferingWords(first, second)
+    if type(first) ~= "string" or type(second) ~= "string" then
+        return nil
+    end
+    local a, b = {}, {}
+    for word in first:gmatch("%S+") do a[#a + 1] = word end
+    for word in second:gmatch("%S+") do b[#b + 1] = word end
+    local head = 0
+    while head < #a and head < #b and a[head + 1] == b[head + 1] do
+        head = head + 1
+    end
+    local tail = 0
+    while tail < #a - head and tail < #b - head and a[#a - tail] == b[#b - tail] do
+        tail = tail + 1
+    end
+    local function Rest(words)
+        local rest = table.concat(words, " ", head + 1, #words - tail)
+        if rest == "" or rest:find("[%%|%d]") then
+            return nil
+        end
+        return rest:lower()
+    end
+    local restA, restB = Rest(a), Rest(b)
+    if restA and restB then
+        return restA, restB
+    end
+    return nil
+end
+
+-- The words a restore line names health and mana by. The client's HEALTH and MANA are the
+-- words standing alone, which is not how every language writes them after an amount: Russian
+-- has "Здоровье" and writes "61 ед. здоровья". So the form after an amount is taken too, from
+-- what the client's two "... per sec" cost texts differ in ("%s ед. здоровья в секунду."
+-- against "%s ед. маны в секунду."). Lower-cased the way Lua can, which is ASCII: a word in
+-- another script is compared as the client writes it.
+local restoreWords
+local function RestoreWords()
+    if not restoreWords then
+        local health, mana = { LowerWord("HEALTH", "health") }, { LowerWord("MANA", "mana") }
+        local healthForm, manaForm = DifferingWords(_G.HEALTH_COST_PER_TIME_NO_BASE, _G.MANA_COST_PER_TIME_NO_BASE)
+        if healthForm and healthForm ~= health[1] then
+            health[#health + 1] = healthForm
+        end
+        if manaForm and manaForm ~= mana[1] then
+            mana[#mana + 1] = manaForm
+        end
+        restoreWords = { health = health, mana = mana }
+    end
+    return restoreWords
+end
+
+-- Where the first of the words stands in the text, nil when none does.
+local function FindWord(lower, words)
+    local first
+    for index = 1, #words do
+        local at = lower:find(words[index], 1, true)
+        if at and (not first or at < first) then
+            first = at
+        end
+    end
+    return first
+end
+
 local function IsFoodDrinkItem(itemID)
     local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
     return classID == Enum.ItemClass.Consumable and subClassID == FOOD_DRINK_SUBCLASS
@@ -66,30 +132,38 @@ local function ReadRestoreLine(itemLink)
         return nil
     end
 
-    local healthWord = LowerWord("HEALTH", "health")
-    local manaWord = LowerWord("MANA", "mana")
+    local words = RestoreWords()
 
     for _, line in ipairs(data.lines) do
         local text = line.leftText and tostring(line.leftText) or nil
         if text and text:find("%d") then
             local lower = text:lower()
-            local hasHealth = lower:find(healthWord, 1, true) ~= nil
-            local hasMana = lower:find(manaWord, 1, true) ~= nil
+            local hasHealth = FindWord(lower, words.health) ~= nil
+            local hasMana = FindWord(lower, words.mana) ~= nil
             if hasHealth or hasMana then
                 -- The line ends in a cooldown note, "(1 |4Sec:Sec; Cooldown)" on WoW Forever:
                 -- drop it and any plural escape so their digits are not counted as effects.
                 local counted = text:gsub("%s*%([^%)]*%)%s*$", ""):gsub("|4[^;]*;", "")
-                local numbers = {}
-                for number in counted:gmatch("%d[%d,%.]*") do
-                    numbers[#numbers + 1] = tonumber((number:gsub("[,%.]", ""))) or 0
-                end
                 local kind = hasHealth and hasMana and "both" or hasHealth and "food" or "drink"
-                -- "Restores 61 health over 18 sec": an amount and a duration (one more amount
-                -- when both are restored). Anything beyond that is an extra effect.
+                -- The amount is the number before the word: "Restores 61 health over 18 sec",
+                -- and "Stellt im Verlauf von 18 Sek. 61 Punkt(e) Gesundheit wieder her", where
+                -- the first number of the line is the duration. The line's first number where
+                -- none stands before the word.
+                local wordAt = FindWord(counted:lower(), hasHealth and words.health or words.mana)
+                local numbers, amount = {}, nil
+                for at, number in counted:gmatch("()(%d[%d,%.]*)") do
+                    local value = tonumber((number:gsub("[,%.]", ""))) or 0
+                    numbers[#numbers + 1] = value
+                    if wordAt and at < wordAt then
+                        amount = value
+                    end
+                end
+                -- An amount and a duration (one more amount when both are restored). Anything
+                -- beyond that is an extra effect.
                 local expected = kind == "both" and 3 or 2
                 return {
                     kind = kind,
-                    amount = numbers[1] or 0,
+                    amount = amount or numbers[1] or 0,
                     isBuff = #numbers > expected,
                     text = text
                 }
@@ -291,6 +365,18 @@ local function IsBetter(candidate, item)
         return candidate.requiredLevel > item.requiredLevel
     end
     return candidate.amount > item.amount
+end
+
+-- For the export: whether the item is of the food and drink class at all, and the words a
+-- restore line is known by in this client. A food that was not read is one whose tooltip has
+-- no line with a number and one of these words.
+function CaerdonFoodDrink:GetDebugState(itemID)
+    local words = RestoreWords()
+    return {
+        isFoodDrink = itemID ~= nil and IsFoodDrinkItem(itemID) or false,
+        healthWords = table.concat(words.health, " / "),
+        manaWords = table.concat(words.mana, " / "),
+    }
 end
 
 -- The verdict for one item, or nil when it is not food or drink (or not readable yet).

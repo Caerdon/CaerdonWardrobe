@@ -499,16 +499,34 @@ end)
 
 -- The recipe name a recipe item teaches: the item name without its "Pattern: " style prefix.
 -- This is the key of globalRecipeNameToID and of every toon's knownRecipes.
-local function GetRecipeNameFromItem(item)
-    local checkName = item:GetItemName()
-    local recipeName = string.gsub(checkName or "", "Recipe: ", "")
-    recipeName = string.gsub(recipeName, "Schematic: ", "")
-    recipeName = string.gsub(recipeName, "Design: ", "")
-    recipeName = string.gsub(recipeName, "Plans: ", "")
-    recipeName = string.gsub(recipeName, "Pattern: ", "")
-    recipeName = string.gsub(recipeName, "Technique: ", "")
-    recipeName = string.gsub(recipeName, "Formula: ", "")
+--
+-- The prefix is whatever stands before the name's first colon, in any language: "Recipe: ",
+-- "Rezept: ", "Recette : " (a space before the colon), "配方：" (a full-width colon and no
+-- space). A list of the English words found nothing in another language's client, and left
+-- out English ones as well ("Manual: "). A name without a colon is the recipe's as it is
+-- ("Expert Cookbook").
+local FULL_WIDTH_COLON = "\239\188\154"
+function CaerdonRecipe:GetRecipeNameFromItemName(itemName)
+    if type(itemName) ~= "string" then
+        return ""
+    end
+    local colon, colonEnd = itemName:find(":", 1, true)
+    local wide, wideEnd = itemName:find(FULL_WIDTH_COLON, 1, true)
+    if wide and (not colon or wide < colon) then
+        colonEnd = wideEnd
+    end
+    if not colonEnd then
+        return itemName
+    end
+    local recipeName = itemName:sub(colonEnd + 1):gsub("^%s+", "")
+    if recipeName == "" then
+        return itemName
+    end
     return recipeName
+end
+
+local function GetRecipeNameFromItem(item)
+    return CaerdonRecipe:GetRecipeNameFromItemName(item:GetItemName())
 end
 
 -- The saved skill line a toon has for a profession name. A parent profession and its child skill
