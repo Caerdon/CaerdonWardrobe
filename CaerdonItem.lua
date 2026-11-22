@@ -1264,6 +1264,17 @@ function CaerdonItemMixin:GetQuestItemInfo()
     return CaerdonQuestItems:GetItemQuestInfo(itemID, self:GetItemName())
 end
 
+-- What the client says about this copy in its bag slot: whether it is a quest's item, the
+-- quest it starts and whether that quest is in the log. nil for an item that lies in no bag
+-- slot. See CaerdonQuestItems:GetSlotQuestInfo.
+function CaerdonItemMixin:GetSlotQuestInfo()
+    local itemLocation = self:GetItemLocation()
+    if not (itemLocation and itemLocation:IsBagAndSlot()) then
+        return nil
+    end
+    return CaerdonQuestItems:GetSlotQuestInfo(itemLocation:GetBagAndSlot())
+end
+
 -- Food and drink: what kind it is and whether a better one is carried. nil for anything else.
 -- See CaerdonFoodDrink:GetItemInfo for the fields.
 function CaerdonItemMixin:GetFoodDrinkInfo()

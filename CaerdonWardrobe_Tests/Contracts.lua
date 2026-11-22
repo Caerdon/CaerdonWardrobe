@@ -1091,6 +1091,108 @@ T.Contract({
     end,
 })
 
+-- The client says of an item in a bag slot whether it is a quest's item and which quest it
+-- starts (C_Container.GetContainerItemQuestInfo; Blizzard's bags draw their quest border and
+-- bang from it). The addon makes no status from it: its quest icon comes from the quest log's
+-- objectives and from QuestieDB. This collects what the client answers for the bags, beside
+-- what the addon makes of the same item, so the two can be compared before a rule is written:
+-- which items the client calls a quest's, which start a quest, and for which of those the
+-- addon shows no quest icon or knows no such quest. Added to over the runs, by item.
+
+local function MergeSlotQuestInfo(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "questItems", "starters", "startersWithoutQuestIcon", "startersTheAddonDoesNotName" }) do
+        merged[key] = new[key]
+    end
+    merged.runs = (old.runs or 1) + 1
+    merged.seen = merged.seen or {}
+    for itemID, entry in pairs(new.seen or {}) do
+        merged.seen[itemID] = entry
+    end
+    return merged
+end
+
+T.Contract({
+    id = "quest.slotInfo",
+    version = 1,
+    title = "What the client says about quest items in the bags, beside the addon's quest icon",
+    accumulate = true,
+    merge = MergeSlotQuestInfo,
+    run = function(c)
+        if not (C_Container and C_Container.GetContainerItemQuestInfo) then
+            return "skip", "this client has no C_Container.GetContainerItemQuestInfo"
+        end
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local questItems, starters, withoutIcon, notNamed, seen = 0, 0, 0, 0, {}
+        for index, where in ipairs(slots) do
+            local info = C_Container.GetContainerItemQuestInfo(where.bag, where.slot)
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            if c:Check(type(info) == "table", "item %d: the answer is a %s, not a table", itemID, TypeOf(info)) then
+                c:Check(type(info.isQuestItem) == "boolean" and type(info.isActive) == "boolean"
+                        and (info.questID == nil or type(info.questID) == "number"),
+                    "item %d: isQuestItem is a %s, isActive a %s, questID a %s", itemID, TypeOf(info.isQuestItem),
+                    TypeOf(info.isActive), TypeOf(info.questID))
+                if info.isQuestItem == true or info.questID ~= nil then
+                    local entry = {
+                        isQuestItem = info.isQuestItem,
+                        questID = info.questID,
+                        isActive = info.isActive,
+                    }
+                    local item = CaerdonItem:CreateFromBagAndSlot(where.bag, where.slot)
+                    local loaded = false
+                    item:ContinueOnItemLoad(function() loaded = true end)
+                    if T.WaitUntil(function() return loaded end, 10) then
+                        entry.name = item:GetItemName()
+                        entry.classID = select(6, C_Item.GetItemInfoInstant(itemID))
+                        local isReady, status = T.GetVerdict(item, nil, { bag = where.bag, slot = where.slot }, 8)
+                        entry.status = isReady and (status or "") or "not ready"
+                        -- The quests the addon knows for the item, and whether the client's is one.
+                        local questInfo = item:GetQuestItemInfo()
+                        local roles = {}
+                        for _, quest in ipairs(questInfo and questInfo.quests or {}) do
+                            roles[#roles + 1] = ("%s: %s"):format(tostring(quest.questID), tostring(quest.role))
+                            if quest.questID == info.questID then
+                                entry.addonNamesQuest = true
+                            end
+                        end
+                        entry.addonQuests = table.concat(roles, "; ")
+                        entry.addonHasQuestValue = questInfo ~= nil and questInfo.hasQuestValue == true
+                    else
+                        entry.status = "not loaded"
+                    end
+                    if info.isQuestItem == true then
+                        questItems = questItems + 1
+                    end
+                    if info.questID ~= nil then
+                        starters = starters + 1
+                        if entry.status ~= "quest" then
+                            withoutIcon = withoutIcon + 1
+                        end
+                        if not entry.addonNamesQuest then
+                            notNamed = notNamed + 1
+                        end
+                    end
+                    seen[tostring(itemID)] = entry
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("questItems", questItems)
+        c:Note("starters", starters)
+        c:Note("startersWithoutQuestIcon", withoutIcon)
+        c:Note("startersTheAddonDoesNotName", notNamed)
+        c:Note("seen", seen)
+        return "info", ("%d of %d bag items are a quest's for the client, %d start a quest (%d of those without the addon's quest icon)")
+            :format(questItems, #slots, starters, withoutIcon)
+    end,
+})
+
 -- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
 -- of the client's answer has its row, and every field of the line is on it. An item in a bag
 -- has two tooltips, the slot's and the bare link's, which is the one the addon computes the

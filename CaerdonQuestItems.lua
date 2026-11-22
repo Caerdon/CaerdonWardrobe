@@ -861,6 +861,19 @@ function CaerdonQuestItems:GetIndexedQuests(itemID)
     return provider.index and provider.index[itemID] or nil, provider.starters and provider.starters[itemID] or nil
 end
 
+-- What the client itself says about the item in a bag slot, as Blizzard's bags read it for
+-- their quest border and bang: { isQuestItem, questID, isActive }, where questID is the quest
+-- the item starts and isActive whether that quest is in the log. nil where the client has no
+-- answer. It is read for the export and the test addon; no status is made from it.
+function CaerdonQuestItems:GetSlotQuestInfo(bag, slot)
+    local ask = C_Container and C_Container.GetContainerItemQuestInfo
+    if not ask or bag == nil or slot == nil then
+        return nil
+    end
+    local info = ask(bag, slot)
+    return type(info) == "table" and info or nil
+end
+
 -- Returns nil when no known quest takes the item. Otherwise:
 --   hasQuestValue  an unfinished quest that applies to this toon takes the item (honours the
 --                  "upcoming quests" setting)

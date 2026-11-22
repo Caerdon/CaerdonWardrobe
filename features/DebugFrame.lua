@@ -3174,6 +3174,20 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Has Quest Value", questItemInfo ~= nil and questItemInfo.hasQuestValue or false)
         addKV(1, "Active Quest", questItemInfo ~= nil and questItemInfo.isActive or false)
         addKV(1, "Upcoming Quest", questItemInfo ~= nil and questItemInfo.isUpcoming or false)
+        -- The client's own word for the copy in its bag slot, which no status is made from.
+        local slotQuestInfo = item.GetSlotQuestInfo and item:GetSlotQuestInfo()
+        if slotQuestInfo then
+            local startsText = "starts no quest"
+            if slotQuestInfo.questID then
+                local title = C_QuestLog.GetTitleForQuestID(slotQuestInfo.questID)
+                startsText = string.format("starts quest %s%s, which is %s", tostring(slotQuestInfo.questID),
+                    title and (" (" .. tostring(title) .. ")") or "", slotQuestInfo.isActive and "in the log" or "not in the log")
+            end
+            addKV(1, "The Client, For Its Bag Slot", string.format("%s, %s",
+                slotQuestInfo.isQuestItem and "a quest item" or "no quest item", startsText))
+        else
+            addKV(1, "The Client, For Its Bag Slot", "not asked (the item lies in no bag slot)")
+        end
         addKV(1, "Show Quest Items", CaerdonWardrobeConfig.Icon.ShowQuestItems)
         addKV(1, "Show Upcoming Quest Items", CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems)
         addKV(1, "Upcoming Level Window", questState.upcomingLevelWindow)
