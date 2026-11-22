@@ -306,7 +306,7 @@ function H.StockGame(toon, items)
                     made.isValidInvSlot, made.isValidItemType = not leftRed, not line.rightRed
                 end
             end
-            for _, field in ipairs({ "usable", "isValidInvSlot", "isValidItemType" }) do
+            for _, field in ipairs({ "usable", "isValidInvSlot", "isValidItemType", "spellID" }) do
                 if line[field] ~= nil then
                     made[field] = line[field]
                 end

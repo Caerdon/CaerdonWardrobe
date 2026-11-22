@@ -1428,6 +1428,37 @@ function CaerdonItemMixin:GetSkillRequirement()
     return { skillName = skillName, rank = rank, useNumber = useNumber }
 end
 
+-- The spell a recipe item teaches: the spellID of its tooltip's "Use: Teaches you how to ..."
+-- line (ItemSpellTriggerLearn), which is the recipe's ID in the profession's list. nil where
+-- the tooltip has no such line (a book that raises a profession's cap has a plain use line)
+-- or is not there yet. It follows from the item, so a spell that was found is kept by item ID.
+local taughtSpellByItem = {}
+function CaerdonItemMixin:GetTaughtSpellID()
+    local itemID = self:GetItemID()
+    local kept = itemID and taughtSpellByItem[itemID]
+    if kept then
+        return kept
+    end
+    local learnLine = Enum.TooltipDataLineType.ItemSpellTriggerLearn
+    local itemLink = self:GetItemLink()
+    local data = learnLine and itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
+    if type(data) ~= "table" or type(data.lines) ~= "table" then
+        return nil
+    end
+    for _, line in ipairs(data.lines) do
+        if line.type == learnLine then
+            local spellID = line.spellID
+            if not issecretvalue(spellID) and type(spellID) == "number" then
+                if itemID then
+                    taughtSpellByItem[itemID] = spellID
+                end
+                return spellID
+            end
+        end
+    end
+    return nil
+end
+
 -- What to do with an ingredient this toon has no use for. Returns the status that replaces an
 -- empty one, or nil, and the ingredient info where it was read:
 --   "send":     another toon of the realm has a recipe that takes it (which recipes count is

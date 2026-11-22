@@ -274,6 +274,17 @@ local function RecordRecipes(recipeIDs, infos, complete)
     end
 end
 
+-- Every recipe ID a profession window has given a name (the values of globalRecipeNameToID),
+-- built when first asked and added to as windows are read. Where two recipes have one name,
+-- the saved table has kept only one of their IDs.
+local namedRecipeIDs
+
+local function NoteNamedRecipe(recipeID)
+    if namedRecipeIDs then
+        namedRecipeIDs[recipeID] = true
+    end
+end
+
 -- Function to gather known recipes when the player opens the profession window
 local function GatherRecipes()
     if not C_TradeSkillUI.IsTradeSkillReady() then
@@ -294,6 +305,7 @@ local function GatherRecipes()
         if recipeInfo then
             infos[recipeID] = recipeInfo
             CaerdonRecipeData.globalRecipeNameToID[recipeInfo.name] = recipeID
+            NoteNamedRecipe(recipeID)
 
             if recipeInfo.learned and isOwn then
                 PlayerRecipeData.knownRecipes[recipeInfo.name] = recipeID
@@ -480,6 +492,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if recipeInfo and recipeInfo.name then
             CaerdonRecipeData.globalRecipeNameToID[recipeInfo.name] = recipeID
             PlayerRecipeData.knownRecipes[recipeInfo.name] = recipeID
+            NoteNamedRecipe(recipeID)
         end
         -- A recipe recorded as not learned is learned now. Its difficulty stays as it was said.
         for _, entry in pairs(PlayerRecipeData.recipes) do
@@ -625,19 +638,95 @@ function CaerdonRecipe:GetToonRank(toonName, skillName)
     return skillLine and skillLine.skillLevel or nil
 end
 
--- Function to check if a recipe is known based on previously gathered data
-local function GetRecipe(item)
-    -- print(item:GetItemLink())
-    local recipeName = GetRecipeNameFromItem(item)
+-- Whether an ID is a recipe some list has shown: one a window gave a name, or one in a list
+-- recorded for a toon of this realm.
+local function IsListedRecipe(recipeID)
+    local names = CaerdonRecipeData and CaerdonRecipeData.globalRecipeNameToID
+    if type(names) ~= "table" then
+        return false
+    end
+    if not namedRecipeIDs then
+        namedRecipeIDs = {}
+        for _, id in pairs(names) do
+            namedRecipeIDs[id] = true
+        end
+    end
+    if namedRecipeIDs[recipeID] then
+        return true
+    end
+    for _, recordings in pairs(CaerdonRecipe:GetRealmRecordedRecipes()) do
+        for _, entry in pairs(recordings) do
+            if type(entry) == "table" and type(entry.recipes) == "table" and entry.recipes[recipeID] then
+                namedRecipeIDs[recipeID] = true
+                return true
+            end
+        end
+    end
+    return false
+end
 
-    local recipeID = CaerdonRecipe:FindByName(CaerdonRecipeData.globalRecipeNameToID, recipeName)
+-- The ID of the recipe a recipe item teaches and how it was found, nil where no list has it.
+--   "spell": the spell its tooltip's teaching line names (CaerdonItemMixin:GetTaughtSpellID),
+--            where that is a recipe some list has shown. It is the list's own key.
+--   "name":  the item's name without its prefix, for an item with no such line and for a
+--            spell no list has shown.
+-- The name alone is not a key. An item and the list may word it differently ("Recipe: Elixir
+-- of Ogre's Strength" teaches "Elixir of Ogre Strength"), which finds nothing, and on WoW
+-- Forever two recipes of one list may have the same name (an old one and one that client
+-- added), of which the name finds whichever was read last.
+function CaerdonRecipe:FindRecipeID(item)
+    local taught = item.GetTaughtSpellID and item:GetTaughtSpellID() or nil
+    if taught and IsListedRecipe(taught) then
+        return taught, "spell"
+    end
+    local recipeID = CaerdonRecipe:FindByName(CaerdonRecipeData and CaerdonRecipeData.globalRecipeNameToID,
+        GetRecipeNameFromItem(item))
     if recipeID then
-        -- DevTools_Dump(C_TradeSkillUI.GetRecipeInfo(recipeID))
-        return C_TradeSkillUI.GetRecipeInfo(recipeID)
-    else
-        -- print("Unknown recipe " .. recipeName)
+        return recipeID, "name"
+    end
+    return nil
+end
+
+-- The client's recipe info for the recipe an item teaches, and how the recipe was found.
+local function GetRecipe(item)
+    local recipeID, foundBy = CaerdonRecipe:FindRecipeID(item)
+    if not recipeID then
         return nil
     end
+    local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
+    if not info and foundBy == "spell" then
+        recipeID = CaerdonRecipe:FindByName(CaerdonRecipeData.globalRecipeNameToID, GetRecipeNameFromItem(item))
+        info, foundBy = recipeID and C_TradeSkillUI.GetRecipeInfo(recipeID) or nil, "name"
+    end
+    if not info then
+        return nil
+    end
+    return info, foundBy
+end
+
+-- Looks the item's recipe up again while it is not found by its spell: neither the item's
+-- name nor its tooltip need have been there when the item's data was made (a vendor's row).
+local function EnsureRecipe(itemType)
+    local foundBy = itemType.recipeFoundBy
+    if foundBy == "spell" or foundBy == "given" or not itemType.item then
+        return
+    end
+    local recipe, by = GetRecipe(itemType.item)
+    if recipe then
+        itemType.recipe, itemType.recipeFoundBy = recipe, by
+    end
+end
+
+-- A toon's record of a recipe by its ID in its recording of a profession, and whether that
+-- recording is of the whole list. nil where it has no recording with that ID.
+local function RecordedByID(toonRecipes, professionName, recipeID)
+    local recordings = recipeID and type(toonRecipes) == "table" and toonRecipes.recipes
+    local entry = type(recordings) == "table" and recordings[professionName]
+    local recorded = type(entry) == "table" and type(entry.recipes) == "table" and entry.recipes[recipeID]
+    if type(recorded) ~= "table" then
+        return nil
+    end
+    return recorded, entry.complete == true
 end
 
 function CaerdonRecipe:GetPlayerSkillInfo(item, requiredSkill, requiredRank)
@@ -715,6 +804,25 @@ local function IsInRecordedList(toonRecipes, professionName, recipeName)
     return CaerdonRecipe:FindByName(names, recipeName) == true
 end
 
+-- Whether a toon's saved data says it knows the recipe an item teaches. By the ID where its
+-- recording of the profession has the taught spell: learned there, or filed under that ID
+-- among the recipes it knows (which a recipe learned since the recording is). By the item's
+-- name otherwise. Second: whether its whole recorded list has the recipe (IsInRecordedList).
+local function ToonKnowsRecipe(toonRecipes, professionName, taught, recipeName)
+    local knownRecipes = type(toonRecipes) == "table" and toonRecipes.knownRecipes
+    local recorded, whole = RecordedByID(toonRecipes, professionName, taught)
+    if recorded then
+        local knows = recorded.learned == true
+            or (type(knownRecipes) == "table" and recorded.name ~= nil and knownRecipes[recorded.name] == taught)
+        if whole then
+            return knows, true
+        end
+        return knows, IsInRecordedList(toonRecipes, professionName, recipeName)
+    end
+    return CaerdonRecipe:FindByName(knownRecipes, recipeName) ~= nil,
+        IsInRecordedList(toonRecipes, professionName, recipeName)
+end
+
 -- The cap a toon's recording of the profession was made at, where the profession is one skill
 -- line (WoW Forever: the recorded line has the profession's name). With a line per expansion
 -- (retail) the recorded cap is one line's and says nothing about the profession. nil otherwise.
@@ -731,6 +839,7 @@ end
 -- per-toon data, and whether each one's saved recipe list holds this recipe. Returns nil when no
 -- other toon has the profession, otherwise
 --   { professionName, recipeName,
+--     taughtSpell = the spell the item's tooltip says it teaches, where it says one,
 --     knownByPlayer = this toon's own saved list has the recipe,
 --     requirement = what the item asks for (CaerdonItemMixin:GetSkillRequirement), read only
 --                   when a toon lacks the recipe,
@@ -744,6 +853,8 @@ end
 --     notInList = { toons whose recorded whole list has no recipe of this name, where nothing
 --                   else says whether they have what the item teaches } }
 -- (missing / tooLow / unknown / notInList hold the same entries as toons, sorted by name.)
+-- A toon's recording is asked by the taught spell first, which is its key, and by the item's
+-- name where it has no recipe of that ID (ToonKnowsRecipe).
 -- A toon's list is only as fresh as its last session: it is filled when that toon opens the
 -- profession window or learns a recipe, and recipesRecorded is set once the window has shown
 -- the full list (see GatherRecipes). Nobody can say whether an "unknown" toon needs the recipe.
@@ -771,6 +882,7 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
     if not professionName or professionName == "" or recipeName == "" then
         return nil
     end
+    local taught = item.GetTaughtSpellID and item:GetTaughtSpellID() or nil
 
     -- By the realm's key, as everything saved by realm and toon is filed (the realm's name
     -- is an empty text on WoW Forever).
@@ -789,14 +901,14 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
             local rank = skillLine and skillLine.skillLevel
             if rank and rank > 0 then
                 local toonRecipes = type(realmRecipes) == "table" and realmRecipes[toonName]
-                local knownRecipes = type(toonRecipes) == "table" and toonRecipes.knownRecipes
                 local scanned = type(toonRecipes) == "table" and toonRecipes.scannedProfessions
+                local knowsRecipe, inRecordedList = ToonKnowsRecipe(toonRecipes, professionName, taught, recipeName)
                 table.insert(toons, {
                     name = toonName,
                     rank = rank,
-                    knowsRecipe = CaerdonRecipe:FindByName(knownRecipes, recipeName) ~= nil,
+                    knowsRecipe = knowsRecipe,
                     recipesRecorded = (type(scanned) == "table" and scanned[professionName] == true) or false,
-                    inRecordedList = IsInRecordedList(toonRecipes, professionName, recipeName),
+                    inRecordedList = inRecordedList,
                     cap = RecordedCap(toonRecipes, professionName),
                     professions = toonProfessions,
                 })
@@ -858,10 +970,17 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
     end
     local playerRecipes = type(realmRecipes) == "table" and realmRecipes[playerName]
     local playerKnown = type(playerRecipes) == "table" and playerRecipes.knownRecipes
+    local knownByPlayer
+    if RecordedByID(playerRecipes, professionName, taught) then
+        knownByPlayer = ToonKnowsRecipe(playerRecipes, professionName, taught, recipeName)
+    else
+        knownByPlayer = (type(playerKnown) == "table" and playerKnown[recipeName] ~= nil) or false
+    end
     return {
         professionName = professionName,
         recipeName = recipeName,
-        knownByPlayer = (type(playerKnown) == "table" and playerKnown[recipeName] ~= nil) or false,
+        taughtSpell = taught,
+        knownByPlayer = knownByPlayer,
         toons = toons,
         requirement = requirement,
         capTaught = capTaught,
@@ -881,6 +1000,7 @@ end
 
     if caerdonItem.extraData and caerdonItem.extraData.recipeInfo then
         itemType.recipe = caerdonItem.extraData.recipeInfo
+        itemType.recipeFoundBy = "given"
     end
 
     -- local itemID = caerdonItem:GetItemID()
@@ -898,7 +1018,7 @@ end
     -- end
 
     if not itemType.recipe then
-        itemType.recipe, itemType.hasProfession = GetRecipe(itemType.item)
+        itemType.recipe, itemType.recipeFoundBy = GetRecipe(itemType.item)
     end
 
     return itemType
@@ -908,9 +1028,7 @@ function CaerdonRecipeMixin:LoadCreatedItems(callbackFunction)
     local item = self.item
 
     -- Lazy re-evaluation (same as GetRecipeInfo)
-    if not self.recipe and item then
-        self.recipe = GetRecipe(item)
-    end
+    EnsureRecipe(self)
 
     local continuableContainer = ContinuableContainer:Create();
     local cancelFunc = function() end;
@@ -966,20 +1084,19 @@ function CaerdonRecipeMixin:GetOtherToonRecipeInfo()
 end
 
 function CaerdonRecipeMixin:GetRecipeInfo()
-    local item = self.item
-
     -- Lazy re-evaluation: if recipe was nil at creation time (e.g. merchant items
     -- where GetItemName() wasn't available yet), retry now that data may be loaded.
-    if not self.recipe and item then
-        self.recipe = GetRecipe(item)
-    end
+    EnsureRecipe(self)
 
     local result = {
         schematic = nil,
         firstCraft = false,
         learned = false,
         createdItem = nil,
-        canLearn = false
+        canLearn = false,
+        -- How the recipe was found: "spell", "name", or "given" by the window that asked.
+        foundBy = self.recipeFoundBy,
+        recipeID = self.recipe and self.recipe.recipeID or nil,
     }
 
     if self.recipe then
@@ -991,9 +1108,23 @@ function CaerdonRecipeMixin:GetRecipeInfo()
         -- C_TradeSkillUI.GetRecipeInfo().learned can return false when the profession
         -- window isn't open (e.g. browsing the AH). Fall back to the saved known
         -- recipes data which was populated when the profession window was last open.
+        -- A recipe found by its spell is asked of that data by its ID where a recording has
+        -- it: the name may be another recipe's too.
         if not result.learned and PlayerRecipeData and PlayerRecipeData.knownRecipes then
-            local recipeName = self.recipe.name
-            if recipeName and PlayerRecipeData.knownRecipes[recipeName] then
+            local recipeName, recipeID = self.recipe.name, self.recipe.recipeID
+            local knownID = recipeName and PlayerRecipeData.knownRecipes[recipeName]
+            local recorded
+            if self.recipeFoundBy == "spell" and knownID ~= recipeID then
+                for _, entry in pairs(PlayerRecipeData.recipes or {}) do
+                    recorded = type(entry) == "table" and type(entry.recipes) == "table" and entry.recipes[recipeID]
+                    if recorded then
+                        break
+                    end
+                end
+            end
+            if recorded then
+                result.learned = recorded.learned == true
+            elseif knownID then
                 result.learned = true
             end
         end

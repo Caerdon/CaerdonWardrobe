@@ -3027,9 +3027,22 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     if identifiedType == CaerdonItemType.Recipe then
         addLine(0, "")
         addLine(0, "[Recipe]")
+        -- The item's use spell is the client's "Learning"; what it teaches is on its tooltip's
+        -- teaching line, and that spell is the recipe's ID in the profession's list.
         local recipeSpellName, recipeSpellID = C_Item.GetItemSpell(item:GetItemLink())
-        addKV(1, "Recipe Spell ID", recipeSpellID)
-        addKV(1, "Recipe Spell Name", recipeSpellName)
+        addKV(1, "Use Spell ID", recipeSpellID)
+        addKV(1, "Use Spell Name", recipeSpellName)
+        local taughtSpellID = item.GetTaughtSpellID and item:GetTaughtSpellID() or nil
+        addKV(1, "Taught Spell ID", taughtSpellID or "none (no teaching line on its tooltip)")
+        if CaerdonRecipe and CaerdonRecipe.FindRecipeID then
+            local foundID, foundBy = CaerdonRecipe:FindRecipeID(item)
+            addKV(1, "Recipe ID", foundID or "none (no list has shown its spell or its name)")
+            if foundBy == "spell" then
+                addKV(1, "Recipe Found By", "the spell its tooltip says it teaches")
+            elseif foundBy == "name" then
+                addKV(1, "Recipe Found By", taughtSpellID and "its name (no list has shown the taught spell)" or "its name")
+            end
+        end
 
         -- What Caerdon believes about the toon's rank in the recipe's profession (cached skill lines,
         -- then the live profession slots). Compare against the "Requires <skill> (<rank>)" tooltip line.
@@ -3041,8 +3054,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Cached Skill Rank", knownRank)
         end
 
-        if recipeSpellID then
-            local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeSpellID)
+        if taughtSpellID then
+            local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(taughtSpellID)
             if tradeSkillRecipeInfo then
                 addKV(1, "TradeSkill Learned", tradeSkillRecipeInfo.learned)
                 addKV(1, "TradeSkill Recipe ID", tradeSkillRecipeInfo.recipeID)
