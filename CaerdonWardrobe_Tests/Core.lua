@@ -208,6 +208,7 @@ local function NewDB()
         probes = {},    -- toon -> item ID -> what the client and the addon say about it
         sources = {},   -- toon -> appearance sources whose item the client does not have
         search = {},    -- toon -> items found for the verdict tests' pools
+        teaches = {},   -- what the items of two classes teach, by shape (/cwtest teaches)
         traces = {},    -- the last session that traced who asks for the plan's items
         sightings = {}, -- case -> item -> a bag state checked when an item showed it
         integrations = {}, -- feature -> the other addon's version -> hook points found

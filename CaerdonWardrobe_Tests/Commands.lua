@@ -177,6 +177,7 @@ local HELP = {
     "/cwtest record <item ID or link> ... | slot <bag> <slot> | bags | list | clear - record the client's answers behind a verdict, for the offline harness",
     "/cwtest sources - appearance sources of what was drawn this session whose item the client does not have",
     "/cwtest search [count] - find items that fit the verdict tests on this toon, for their pools",
+    "/cwtest teaches [restart] - what every Consumable and Recipe teaches by its tooltip (four minutes a run, standing still, bags closed; again to go on)",
     "/cwtest sightings - bag states (openable, locked, refundable, bound) checked when an item showed one",
     "/cwtest integrations - whether each integration found the places it hooks in the other addon",
     "/cwtest counters [on | off | reset | login] - the core's own counters: print and store them; its profile on or off; profile the next login",
@@ -284,6 +285,10 @@ end
 
 COMMANDS.search = function(rest)
     T.SearchPoolItems(tonumber(rest))
+end
+
+COMMANDS.teaches = function(rest)
+    T.TeachesCommand(rest)
 end
 
 COMMANDS.sightings = function()

@@ -26,6 +26,7 @@ Rotation.lua
 RotationPanel.lua
 Sources.lua
 Search.lua
+Teaches.lua
 Timing.lua
 ItemCache.lua
 Plan.lua

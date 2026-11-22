@@ -7,7 +7,7 @@
 -- install folders. --file reads one saved variables file instead.
 --
 -- Sections (all of them when none is named): sessions, contracts, verdicts, snapshot,
--- timing, counters, journal, probes, sources, search, traces, sightings, integrations, rotation, errors. "detail" adds
+-- timing, counters, journal, probes, sources, search, teaches, traces, sightings, cache, integrations, rotation, errors. "detail" adds
 -- every contract's stored detail, and
 -- "contract:<id>" prints one contract in full.
 --
@@ -886,6 +886,61 @@ local function printSearch(db)
     end
 end
 
+-- What the items of the classes Consumable and Recipe teach, by shape (/cwtest teaches).
+-- The shapes that were asked about come first, with every item kept for them.
+local function printTeaches(db)
+    local record = db.teaches
+    if type(record) ~= "table" or not record.build then
+        print("  What teaches what: never asked (/cwtest teaches)")
+        return
+    end
+    local function counts(map)
+        local parts = {}
+        for _, name in ipairs(sortedKeys(map or {})) do
+            parts[#parts + 1] = ("%s %s"):format(name, figure(map[name]))
+        end
+        return #parts > 0 and table.concat(parts, ", ") or "none"
+    end
+    print(("  What teaches what (%s, build %s, %s; %s run(s), %s s):"):format(when(record.at), tostring(record.build),
+        tostring(record.toon), tostring(record.runs), figure(record.seconds)))
+    print(("    %s; %s item IDs looked at, the last with a record %s%s"):format(tostring(record.stoppedBy or "still running when saved"),
+        figure(record.looked), tostring(record.lastRecord),
+        record.done and "" or (" (NOT OVER: /cwtest teaches goes on from item %s)"):format(tostring(record.cursor))))
+    print(("    the client has a record of: %s; loaded: %s; not loaded %s; without a tooltip %s"):format(counts(record.records),
+        counts(record.loaded), figure(record.notLoaded), figure(record.noTooltip)))
+    print(("    the toon's professions: %s; a profession window ready: %s; lists the addon has recorded for it: %s"):format(
+        #(record.professions or {}) > 0 and table.concat(record.professions, ", ") or "none", tostring(record.tradeSkillReady),
+        #(record.recordedLists or {}) > 0 and table.concat(record.recordedLists, ", ") or "none"))
+    local shapes = sortedKeys(record.shapes or {})
+    for _, askedPass in ipairs({ true, false }) do
+        print(askedPass and "    shapes that were asked about:" or "    the other shapes:")
+        local any = false
+        for _, shape in ipairs(shapes) do
+            local tally = record.shapes[shape]
+            if (tally.asked == true) == askedPass then
+                any = true
+                print(("      %5s  %s"):format(figure(tally.count), shape))
+                for _, example in ipairs(tally.examples or {}) do
+                    local parts = { ("item %s [%s]"):format(tostring(example.id), tostring(example.name)) }
+                    if example.spell then
+                        parts[#parts + 1] = ("teaches %s [%s]"):format(tostring(example.spell), tostring(example.spellName))
+                    end
+                    if example.tradeSkill then parts[#parts + 1] = "of " .. tostring(example.tradeSkill) end
+                    if example.infoName then parts[#parts + 1] = ("recipe info [%s]"):format(tostring(example.infoName)) end
+                    if example.skillLine then parts[#parts + 1] = ("\"%s\""):format(tostring(example.skillLine)) end
+                    if example.classLine then parts[#parts + 1] = ("\"%s\""):format(tostring(example.classLine)) end
+                    if example.levelLine then parts[#parts + 1] = ("\"%s\""):format(tostring(example.levelLine)) end
+                    if example.spells then parts[#parts + 1] = "all its teaching lines: " .. tostring(example.spells) end
+                    print("             " .. table.concat(parts, ", "))
+                end
+            end
+        end
+        if not any then
+            print("      none")
+        end
+    end
+end
+
 local function printTraces(db)
     local traces = db.traces
     if not traces or not traces.ids then
@@ -1253,6 +1308,7 @@ for _, file in ipairs(files) do
             if wants("probes") then printProbes(db) end
             if wants("sources") then printSources(db) end
             if wants("search") then printSearch(db) end
+            if wants("teaches") then printTeaches(db) end
             if wants("traces") then printTraces(db) end
             if wants("sightings") then printSightings(db) end
             if wants("cache") then printItemCache(db) end

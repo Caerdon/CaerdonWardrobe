@@ -62,7 +62,7 @@ end
 
 -- Jobs of the tests that ask for items themselves. A refusal that arrives while one of them
 -- runs may be the answer to its own question, so it is counted apart.
-local ASKING_JOBS = { probe = true, tests = true, sources = true, search = true }
+local ASKING_JOBS = { probe = true, tests = true, sources = true, search = true, teaches = true }
 
 local refused = {} -- item ID -> { info, load, duringTests, first }
 local watching     -- the probe's current step: { itemID, events, started, lastEvent }
