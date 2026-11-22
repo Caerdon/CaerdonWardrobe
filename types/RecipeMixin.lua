@@ -403,9 +403,19 @@ local function ResetMissingProfessionLevel()
         currentProfessions[name] = true
     end
 
+    -- The profession's own rank goes with its lines'. It is saved only ever upwards
+    -- (CacheSkillLine) and FindSkillLine takes the highest of the two, so a profession that
+    -- was dropped kept the rank it had: a hunter that had left Herbalism at 44 was still an
+    -- herbalist to every "Requires Herbalism" item, which then read as one to learn later.
+    -- Only while the client names a profession at all: with none named, nothing says whether
+    -- the toon has none or the client has not got them yet.
+    local clientNamesSome = next(currentProfessions) ~= nil
     for professionIndex, professionData in pairs(PlayerProfessionData) do
-        if professionData.childSkillLines then
-            if not currentProfessions[professionIndex] then
+        if type(professionData) == "table" and not currentProfessions[professionIndex] then
+            if clientNamesSome and type(professionData.skillLevel) == "number" then
+                professionData.skillLevel = 0
+            end
+            if professionData.childSkillLines then
                 for professionChildIndex, professionChildData in pairs(professionData.childSkillLines) do
                     if professionChildData then
                         professionChildData.skillLevel = 0
