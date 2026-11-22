@@ -1432,6 +1432,10 @@ end
 -- line (ItemSpellTriggerLearn), which is the recipe's ID in the profession's list. nil where
 -- the tooltip has no such line (a book that raises a profession's cap has a plain use line)
 -- or is not there yet. It follows from the item, so a spell that was found is kept by item ID.
+--
+-- The last such line, not the first: a recipe's tooltip holds the lines of the item it makes
+-- before its own use line, and the made item may teach something itself (Schematic: Lil'
+-- Smoky 11827 has the pet's "teaches you to summon" 15049 and then the recipe 15633).
 local taughtSpellByItem = {}
 function CaerdonItemMixin:GetTaughtSpellID()
     local itemID = self:GetItemID()
@@ -1445,18 +1449,19 @@ function CaerdonItemMixin:GetTaughtSpellID()
     if type(data) ~= "table" or type(data.lines) ~= "table" then
         return nil
     end
+    local taught
     for _, line in ipairs(data.lines) do
         if line.type == learnLine then
             local spellID = line.spellID
             if not issecretvalue(spellID) and type(spellID) == "number" then
-                if itemID then
-                    taughtSpellByItem[itemID] = spellID
-                end
-                return spellID
+                taught = spellID
             end
         end
     end
-    return nil
+    if taught and itemID then
+        taughtSpellByItem[itemID] = taught
+    end
+    return taught
 end
 
 -- What to do with an ingredient this toon has no use for. Returns the status that replaces an

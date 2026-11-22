@@ -1221,12 +1221,15 @@ T.Contract({
 -- the old world are asked by their ID as well (the link's tooltip alone): of Alchemy and
 -- Tailoring first, then one each of four other professions. The IDs are from memory and
 -- from the recordings; one that is no recipe in the client at hand is left out and counted.
+-- A tooltip may have more than one teaching line: the lines of the item a recipe makes come
+-- before the recipe's own, and that item may teach something itself. The recipe's is the last.
 
 T.TaughtSpellPool = {
     2553, 2555, 3393, 3394, 3396, 5640, 6211,   -- Alchemy
     2598, 2601, 4292, 5771, 5772, 6270, 6271, 6272, 6274, -- Tailoring
     7084, 7086,                                 -- Tailoring, a name two recipes of the list have
     10424, 6342, 6325, 2406,                    -- Blacksmithing, Enchanting, Cooking, Leatherworking
+    4408, 11827,                                -- Engineering, for a pet: the made item's teaching line, then the recipe's
 }
 
 local function MergeTaughtSpells(old, new)
@@ -1249,7 +1252,7 @@ end
 
 T.Contract({
     id = "recipe.taughtSpell",
-    version = 2,
+    version = 3,
     title = "A recipe item's tooltip names the spell it teaches, that spell is the recipe's ID in the profession's list, and the addon finds the recipe by it",
     accumulate = true,
     merge = MergeTaughtSpells,
@@ -1314,10 +1317,10 @@ T.Contract({
             recipeItems = recipeItems + 1
             local name = C_Item.GetItemNameByID(itemID)
             local profession = select(7, C_Item.GetItemInfo(itemID))
-            local spell = linkSpells[1] or slotSpells[1]
+            local spell = linkSpells[#linkSpells] or slotSpells[#slotSpells]
             if #slotSpells > 0 and #linkSpells > 0 then
-                c:Check(slotSpells[1] == linkSpells[1], "item %d: the slot's tooltip teaches spell %s and the link's %s", itemID,
-                    tostring(slotSpells[1]), tostring(linkSpells[1]))
+                c:Check(slotSpells[#slotSpells] == linkSpells[#linkSpells], "item %d: the slot's tooltip teaches spell %s and the link's %s", itemID,
+                    tostring(slotSpells[#slotSpells]), tostring(linkSpells[#linkSpells]))
             end
             local recipeName = CaerdonRecipe and CaerdonRecipe:GetRecipeNameFromItemName(name) or nil
             local byName = CaerdonRecipe and names and CaerdonRecipe:FindByName(names, recipeName) or nil

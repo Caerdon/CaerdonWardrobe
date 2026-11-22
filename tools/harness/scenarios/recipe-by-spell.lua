@@ -24,6 +24,11 @@ return function(H, S)
     local REWORDED_ID, OLD_ID, ADDED_ID, UNLISTED_ID, BARE_ID, BOOK_ID, LATE_ID = 992001, 992002, 992003, 992004, 992005, 992006, 992007
     local REWORDED_SPELL, OLD_SPELL, ADDED_SPELL, UNLISTED_SPELL, BARE_SPELL, PLAIN_SPELL =
         71001, 71002, 71003, 71004, 71005, 71006
+    -- A recipe for an item that teaches something itself: its tooltip has the made item's
+    -- teaching line first and the recipe's own last (a WoW Forever client: Schematic: Lil'
+    -- Smoky 11827 has 15049 "Summon Robot" and then 15633, the recipe). The list words the
+    -- recipe another way than the item, so only the spell finds it.
+    local PET_ID, PET_SUMMON_SPELL, PET_RECIPE_SPELL = 992008, 71008, 71009
 
     local function Recipe(name, spell, lineType)
         local tooltip = { { text = "Binds when picked up", type = 20, bonding = 6 } }
@@ -42,6 +47,8 @@ return function(H, S)
         [UNLISTED_SPELL] = "Unlisted Potion",
         [BARE_SPELL] = "Bare Potion",
         [PLAIN_SPELL] = "Plain Potion",
+        [PET_SUMMON_SPELL] = "Summon Test Pet",
+        [PET_RECIPE_SPELL] = "Test Pet Crate",
     }
 
     local function Start(flavor)
@@ -53,7 +60,10 @@ return function(H, S)
             [BARE_ID] = Recipe("Recipe: Bare Potion", nil),
             [BOOK_ID] = Recipe("Expert Alchemy", PLAIN_SPELL, USE_LINE),
             [LATE_ID] = Recipe("Recipe: Test Banner", nil),
+            [PET_ID] = Recipe("Recipe: Test Pet Box", PET_RECIPE_SPELL),
         }
+        table.insert(items[PET_ID].tooltip, 2,
+            { text = "Use: Teaches you how to summon this companion.", type = LEARN_LINE, spellID = PET_SUMMON_SPELL })
         local saved = {
             CaerdonProfessionData = { Farrealm = {
                 Zzyxa = { Alchemy = { skillLevel = 120 } },
@@ -71,6 +81,7 @@ return function(H, S)
                             [REWORDED_SPELL] = { name = "Elixir of Test Strength", learned = false },
                             [OLD_SPELL] = { name = "Test Banner", learned = true },
                             [ADDED_SPELL] = { name = "Test Banner", learned = false },
+                            [PET_RECIPE_SPELL] = { name = "Test Pet Crate", learned = true },
                         } } },
                     },
                     -- Another toon knows the added one and not the old one, and has learned the
@@ -159,6 +170,8 @@ return function(H, S)
         Equal(Item(REWORDED_ID):GetTaughtSpellID(), REWORDED_SPELL, flavor .. ": the teaching line's spell is what the item teaches")
         Equal(Item(BARE_ID):GetTaughtSpellID(), nil, flavor .. ": an item without the line teaches none")
         Equal(Item(BOOK_ID):GetTaughtSpellID(), nil, flavor .. ": a plain use line is no teaching line")
+        Equal(Item(PET_ID):GetTaughtSpellID(), PET_RECIPE_SPELL,
+            flavor .. ": of two teaching lines the last is the recipe's, the first the made item's own")
 
         -- Which recipe that is.
         local id, by = env.CaerdonRecipe:FindRecipeID(Item(REWORDED_ID))
@@ -171,6 +184,10 @@ return function(H, S)
         Check(id == PLAIN_SPELL and by == "name", flavor .. ": a spell no list has shown is left for the name")
         id, by = env.CaerdonRecipe:FindRecipeID(Item(BARE_ID))
         Check(id == BARE_SPELL and by == "name", flavor .. ": an item without the line is found by its name")
+        id, by = env.CaerdonRecipe:FindRecipeID(Item(PET_ID))
+        Check(id == PET_RECIPE_SPELL and by == "spell", flavor .. ": a recipe for an item that teaches something itself is found by its own spell")
+        local pet = Info(PET_ID) or {}
+        Check(pet.recipeID == PET_RECIPE_SPELL and pet.learned == true, flavor .. ": and is learned where the list says so")
         id, by = env.CaerdonRecipe:FindRecipeID(Item(BOOK_ID))
         Check(id == nil and by == nil, flavor .. ": a book whose name no list has finds none")
 
