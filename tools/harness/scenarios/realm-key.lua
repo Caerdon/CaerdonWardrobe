@@ -77,7 +77,10 @@ return function(H, S)
                     Stranger = { knownRecipes = { Fish = 9 } },
                 },
             },
-            CaerdonProfessionData = { ["Old Realm Name"] = { Zzyxa = { Tailoring = { skillLevel = 80 } } }, [""] = { Zzyxa = {} } },
+            CaerdonProfessionData = {
+                ["Old Realm Name"] = { Zzyxa = { Tailoring = { skillLevel = 80 } }, Other = { Mining = { skillLevel = 150 } } },
+                [""] = { Zzyxa = {} },
+            },
             CaerdonRefreshData = {
                 ["Old Realm Name"] = { Zzyxa = { standings = { [72] = 4 }, chosenGearSet = 3 }, Other = { standings = { [47] = 5 } } },
                 [""] = { Zzyxa = { standings = { [72] = 5, [47] = 4 } } },
@@ -111,6 +114,16 @@ return function(H, S)
         Check(refresh["server 6928"].Other ~= nil and refresh["Old Realm Name"] == nil and refresh[""] == nil,
             "hidden: the same for the standings' table, and an empty key that holds nothing more is gone")
         Check(env.CaerdonProfessionData["server 6928"].Zzyxa.Tailoring ~= nil, "hidden: and for the professions' ranks")
+        -- What is filed under the key is read under it: another toon's rank, and whether it
+        -- knows what a recipe item teaches (both were read under the realm's name, which is
+        -- the empty key here and holds neither).
+        Equal(env.CaerdonRecipe:GetToonRank("Other", "Mining"), 150, "hidden: another toon's rank is read under the key")
+        local others = env.CaerdonRecipe:GetOtherToonRecipeInfo({
+            GetItemSubType = function() return "Mining" end,
+            GetItemName = function() return "Plans: Ore" end,
+        })
+        Check(others ~= nil and #others.toons == 1 and others.toons[1].name == "Other" and others.toons[1].knowsRecipe == true,
+            "hidden: and so is what the realm's other toons know of a recipe")
         local taken = api:GetRealmTakeOver()
         Check(taken ~= nil and taken.from == "Old Realm Name" and taken.toons == 2 and taken.fromEmpty == true and taken.candidates == 1,
             "hidden: the export has what was taken over")

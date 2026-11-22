@@ -620,7 +620,7 @@ end
 -- The same for another toon of this realm, as its last session left it. A profession it
 -- dropped reads 0.
 function CaerdonRecipe:GetToonRank(toonName, skillName)
-    local realmProfessions = CaerdonProfessionData and CaerdonProfessionData[GetRealmName()]
+    local realmProfessions = CaerdonProfessionData and CaerdonProfessionData[CaerdonAPI:GetRealmKey() or ""]
     local skillLine = type(realmProfessions) == "table" and FindSkillLine(realmProfessions[toonName], skillName)
     return skillLine and skillLine.skillLevel or nil
 end
@@ -772,7 +772,9 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
         return nil
     end
 
-    local realmName = GetRealmName()
+    -- By the realm's key, as everything saved by realm and toon is filed (the realm's name
+    -- is an empty text on WoW Forever).
+    local realmName = CaerdonAPI:GetRealmKey() or ""
     local playerName = UnitName("player")
     local realmProfessions = CaerdonProfessionData and CaerdonProfessionData[realmName]
     if type(realmProfessions) ~= "table" then
