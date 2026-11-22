@@ -14,10 +14,6 @@ function BlackMarketMixin:ADDON_LOADED(name)
 	end
 end
 
-function BlackMarketMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function BlackMarketMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

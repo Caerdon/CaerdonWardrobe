@@ -36,10 +36,6 @@ function WorldMapMixin:Init()
 	end)
 end
 
-function WorldMapMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function WorldMapMixin:Refresh()
 	CaerdonWardrobeFeatureMixin:Refresh(self)
 	if not WorldMapFrame or not WorldMapFrame:IsShown() then

@@ -279,14 +279,6 @@ function BaganatorMixin:Init()
     Register("Caerdon Level Gain", "gain", "upgradeDeltaText", { corner = "bottom_right", priority = 1 })
 end
 
-function BaganatorMixin:GetTooltipData(item, locationInfo)
-    -- if locationInfo.bag == BANK_CONTAINER then
-    -- 	return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-    -- else
-    -- 	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-    -- end
-end
-
 function BaganatorMixin:Refresh()
     if IsWidgetActive("icon") or IsWidgetActive("text") or IsWidgetActive("gain") then
         Baganator.API.RequestItemButtonsRefresh()

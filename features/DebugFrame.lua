@@ -6924,11 +6924,6 @@ function DebugFrameMixin:RefreshCurrentItem()
     end
 end
 
-function DebugFrameMixin:GetTooltipData(item, locationInfo)
-    -- Not needed for debug frame
-    return {}
-end
-
 function DebugFrameMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     -- For ensemble items, show all relevant icons (learnable, completionist, restrictions, etc.)
     -- but hide binding and sellable icons

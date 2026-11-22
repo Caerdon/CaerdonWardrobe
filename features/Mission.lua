@@ -17,10 +17,6 @@ function MissionMixin:ADDON_LOADED(name)
     end
 end
 
-function MissionMixin:GetTooltipData(item, locationInfo)
-    return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         bindingStatus = {

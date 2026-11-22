@@ -677,13 +677,6 @@ function NarcissusMixin:Refresh()
     self:RefreshNarcissusOutfitButtons()
 end
 
-function NarcissusMixin:GetTooltipData(item, locationInfo)
-    local itemLink = item and item:GetItemLink()
-    if itemLink then
-        return C_TooltipInfo.GetHyperlink(itemLink)
-    end
-end
-
 function NarcissusMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     return {
         bindingStatus = {

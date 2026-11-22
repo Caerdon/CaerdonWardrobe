@@ -74,8 +74,13 @@ function CaerdonWardrobeFeatureMixin:NoteHookCalled(label)
     CountHookPoint(self, label, true)
 end
 
+-- The tooltip of the copy at a place in this feature's window (a bag slot, a mail attachment,
+-- a guild bank slot), where the client has one that says more than the item's link does. The
+-- status asks only for a Pet Cage, whose link says nothing about the pet inside
+-- (CaerdonItemMixin:GetCaerdonStatus); every other item is judged from its link's tooltip. A
+-- feature with no such place leaves this as it is: nil is "ask the link".
 function CaerdonWardrobeFeatureMixin:GetTooltipData(item, locationInfo)
-    error(format("Caerdon Wardrobe: Must provide GetTooltipData implementation for %s", self:GetName()))
+    return nil
 end
 
 -- Called after every full refresh (CaerdonWardrobe:RefreshItems), when every verdict has been

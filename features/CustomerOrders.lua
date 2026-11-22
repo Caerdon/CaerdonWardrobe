@@ -37,18 +37,6 @@ function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
     })
 end
 
-function CustomerOrdersMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-
-	-- local option = locationInfo.option
-	-- if option then
-        -- local reagents = {};
-        -- TODO: Do I need to get this somehow?  New link method seems fine...
-        -- C_TradeSkillUI.SetTooltipRecipeResultItem(option.spellID, reagents);
-        -- DevTools_Dump(tooltip)
-	-- end
-end
-
 function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

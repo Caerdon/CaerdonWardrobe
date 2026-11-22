@@ -975,6 +975,19 @@ function CaerdonItemMixin:GetCaerdonItemType()
     return self.caerdonItemType
 end
 
+-- The item a caged battle pet is while it is not a battle pet link (in the mail, in a guild
+-- bank): one item for every pet, so its link says nothing about the pet and its tooltip has to
+-- come from the place it lies in. Known by its ID, which is the same in every language (it
+-- was known by its English name); the name is asked only of an item that has no ID.
+local PET_CAGE_ITEM_ID = 82800
+local function IsPetCage(item)
+    local itemID = item:GetItemID()
+    if itemID then
+        return itemID == PET_CAGE_ITEM_ID
+    end
+    return item:GetItemName() == L["Pet Cage"]
+end
+
 function CaerdonItemMixin:GetTooltipData(data)
     if not data then
         data = C_TooltipInfo and C_TooltipInfo.GetHyperlink(self:GetItemLink()) or nil
@@ -1003,9 +1016,7 @@ function CaerdonItemMixin:GetTooltipData(data)
         ["Studying"] -- A bunch of these so working off name for now: itemSpellID == 450824 or itemSpellID == 462909 --Spell: "Studying"
     local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
     local isMiscellaneousStudy = self:GetCaerdonItemType() == CaerdonItemType.Miscellaneous and isStudyItem
-    local lines = data.lines or {}
-
-    for lineIndex, line in ipairs(data.lines) do
+    for lineIndex, line in ipairs(data.lines or {}) do
         local lineText = line.leftText and tostring(line.leftText) or nil
 
         -- The client has no tooltip for the item yet. Asked of every line, before anything is read
@@ -2039,7 +2050,7 @@ end
 -- test addon, whose contract compares the copies that share an entry.
 function CaerdonItemMixin:GetStatusCacheKey()
     local itemLink = self:GetItemLink()
-    if not itemLink or self:GetItemName() == L["Pet Cage"] then
+    if not itemLink or IsPetCage(self) then
         return nil
     end
     return StatusCacheKey(self, itemLink)
@@ -2060,7 +2071,11 @@ end
 -- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo. transmogInfo is what
 -- GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it is shared
 -- by every copy the cache entry stands for, so read it and do not ask the item data again.
-function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need to remove feature/locationInfo but keeping it for now in case refactor to GetHyperlink causes any issues - also need to remove the GetTooltipData calls
+--
+-- feature and locationInfo are for a Pet Cage alone: its link is the same for every pet, so
+-- the tooltip of the place it lies in is asked of the feature (FeatureMixin:GetTooltipData).
+-- Every other item is judged from its link's tooltip.
+function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     local itemLink = self:GetItemLink()
     if not itemLink then
         -- Requiring an itemLink for now unless I find a reason not to
@@ -2069,7 +2084,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     end
 
     -- Pet Cage results depend on feature/location so they can't be cached by itemLink alone
-    local isPetCage = self:GetItemName() == L["Pet Cage"]
+    local isPetCage = IsPetCage(self)
     local statusCacheKey
     if not isPetCage then
         statusCacheKey = StatusCacheKey(self, itemLink)
@@ -2082,8 +2097,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
 
     local data = nil
     if isPetCage then
-        -- Was hoping to just use the item link but battlepets in particular cause issues showing up as Pet Cage.
-        -- Could check CaerdonItemType for BattlePet, but just going to do this for now.
+        -- Where the feature has nothing for the place, the link's tooltip below is all there is.
         data = C_TooltipInfo and feature and feature:GetTooltipData(self, locationInfo) or nil
     end
 

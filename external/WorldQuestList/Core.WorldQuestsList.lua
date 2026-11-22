@@ -43,10 +43,6 @@ end
 --     end)
 -- end
 
-function WorldQuestsListMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function WorldQuestsListMixin:Refresh()
     self:RefreshButtons()
 end

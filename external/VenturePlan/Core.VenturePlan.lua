@@ -41,10 +41,6 @@ function VenturePlanMixin:Init()
 	end)
 end
 
-function VenturePlanMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function VenturePlanMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {

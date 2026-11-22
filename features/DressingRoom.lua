@@ -363,13 +363,6 @@ function DressingRoomMixin:ClearOutfitSlot(slotFrame)
     end
 end
 
-function DressingRoomMixin:GetTooltipData(item, locationInfo)
-    local itemLink = item and item:GetItemLink()
-    if itemLink then
-        return C_TooltipInfo.GetHyperlink(itemLink)
-    end
-end
-
 function DressingRoomMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
 

@@ -79,10 +79,6 @@ function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
     end)
 end
 
-function TradeSkillMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
 	return {
 		bindingStatus = {
