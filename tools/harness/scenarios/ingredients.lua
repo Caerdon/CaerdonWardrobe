@@ -151,6 +151,7 @@ return function(H, S)
         game:Set("PLAYER_FACTION_GROUP", { [0] = "Horde", [1] = "Alliance" })
         -- features/Tooltip.lua registers with it as it loads.
         game:Set("TooltipDataProcessor.AddTooltipPostCall", function() end)
+        game:Set("TooltipDataProcessor.AddLinePreCall", function() end)
         -- QuestieDB, as far as the vendor goods module reads it: how many vendors sell an
         -- item (world.vendors). It has no quests, so the quest module leaves it alone.
         world.vendors = {}

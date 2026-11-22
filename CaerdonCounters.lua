@@ -597,10 +597,12 @@ function Counters:Attach()
     Probe("CaerdonWardrobe", core, "SetItemButtonStatus")
     Probe("CaerdonWardrobe", core, "SetItemButtonBindType")
 
-    -- What runs with no window open: the two handlers of every item tooltip anyone fills, and
-    -- the auction module's look at its tracked stacks on every change in the bags.
+    -- What runs with no window open: the two handlers of every item tooltip anyone fills, the
+    -- one asked for every requirement line of every tooltip, and the auction module's look at
+    -- its tracked stacks on every change in the bags.
     Probe("CaerdonAPI", CaerdonAPI, "OnTooltipItem")
     Probe("Tooltip", NS and NS.Tooltip, "OnTooltipSetItem")
+    Probe("Tooltip", NS and NS.Tooltip, "OnRequirementLine")
     Probe("CaerdonAuctionValue", CaerdonAuctionValue, "OnBagsChanged")
     -- What a run of quest events costs where it refreshes nothing: the answered quests judged again.
     Probe("CaerdonQuestItems", CaerdonQuestItems, "CompareWithAnswers")

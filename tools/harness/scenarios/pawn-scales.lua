@@ -410,6 +410,7 @@ return function(H, S)
         game:Set("PawnInvalidateBestItems", function() end)
         -- features/Tooltip.lua registers with it as it loads.
         game:Set("TooltipDataProcessor.AddTooltipPostCall", function() end)
+        game:Set("TooltipDataProcessor.AddLinePreCall", function() end)
         -- What the client says a tooltip shows (a tooltip here says it in shownLink).
         -- As the client's, it asks the tooltip its type first: a frame that is no tooltip
         -- has no such function, and fails.

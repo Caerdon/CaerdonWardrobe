@@ -396,7 +396,16 @@ function FrameMethods:SetHeight(height) State(self).height = height end
 function FrameMethods:GetWidth() return State(self).width or 0 end
 function FrameMethods:GetHeight() return State(self).height or 0 end
 function FrameMethods:GetSize() return State(self).width or 0, State(self).height or 0 end
-function FrameMethods:SetAttribute(name, value) State(self).attributes[name] = value end
+-- As in the client, the frame's OnAttributeChanged runs at once, inside the call. Blizzard's
+-- tooltip code passes its callbacks through one (TooltipDataHandler.lua, AttributeDelegate).
+function FrameMethods:SetAttribute(name, value)
+    local state = State(self)
+    state.attributes[name] = value
+    local script = state.scripts.OnAttributeChanged
+    if script then
+        script(self, name, value)
+    end
+end
 function FrameMethods:GetAttribute(name) return State(self).attributes[name] end
 function FrameMethods:GetChildren() return unpack(State(self).children) end
 function FrameMethods:GetNumChildren() return #State(self).children end

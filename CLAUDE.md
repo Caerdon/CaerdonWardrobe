@@ -73,6 +73,7 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 - **Legacy globals:** many undocumented ones still exist on Forever, but confirm each by finding a call in Blizzard's camelot-loaded Lua. Never call `GetSpecialization`, `GetSpecializationInfo` or `GetSpecializationInfoByID` directly; use the `CaerdonAPI` wrappers.
 - **A look the toon can collect is `own`, whatever the piece asks for** (a level, a standing): selling the piece teaches it, in both clients. `lowSkill` is not for looks (notes: Transmog on Forever).
 - **Investigating an item:** extend the Copy Details export instead of adding prints. Keep additions structured and readable.
+- **No text is read off a tooltip frame.** A status comes from `C_TooltipInfo`; a line that should not be on a tooltip is kept off before the client adds it (`TooltipDataProcessor.AddLinePreCall`, as for an ensemble's "Already known"; notes: Ensembles), never found by its text and blanked.
 - **New item signals** go through the item's data mixin or a signal module with a `CaerdonItemMixin` entry point, never ad-hoc API calls in feature files.
 - **An integration declares its hook points and notes each one** (`Mixin.integration`, `self:NoteHookPoint(label, owner, key)` on the line before it attaches). That is how a user's export says the other addon changed (notes: Integration Report).
 - **Never write into `options`.** It belongs to the caller and is usually shared between buttons. Per-button state goes in `buttonState` or on the overlay's regions.

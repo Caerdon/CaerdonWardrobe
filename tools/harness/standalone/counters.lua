@@ -292,7 +292,7 @@ local function StartSession(options)
     -- The core notes the spec as the world comes: a client without specializations here.
     CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end,
         GetPlayerSpecializationIndex = function() return nil end }
-    NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end }
+    NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end, OnRequirementLine = function() end }
     CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end, InvalidateCaches = function() end,
         GetOwnedQuantity = function() end }
     Session.outside = { api = CaerdonAPI, tooltip = NS.Tooltip }

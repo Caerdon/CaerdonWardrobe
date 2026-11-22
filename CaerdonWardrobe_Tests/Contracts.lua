@@ -1091,6 +1091,241 @@ T.Contract({
     end,
 })
 
+-- The addon keeps the client's "Already known" line off the tooltip of an ensemble that still
+-- teaches something (features/Tooltip.lua, OnRequirementLine), and knows that line by its
+-- requirement type, where it used to compare the text on the tooltip's font string. So the
+-- two have to name the same line in a client: a line is a requirement line of the kind
+-- NotAlreadyKnown exactly where its text is ITEM_SPELL_KNOWN. Asked of both tooltips, the
+-- slot's and the link's, of every item in the bags. What was seen is kept and added to over
+-- the runs, and beside it every bag item that teaches a transmog set: is the set collected,
+-- how many of its sources are not, does its tooltip say known. A toon that carries nothing it
+-- already knows answers for no line, and its result says so.
+
+local function MergeKnownLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "knownLines" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.seen = merged.seen or {}
+    for shape, count in pairs(new.seen or {}) do
+        merged.seen[shape] = (merged.seen[shape] or 0) + count
+    end
+    merged.ensembles = merged.ensembles or {}
+    for itemID, entry in pairs(new.ensembles or {}) do
+        merged.ensembles[itemID] = entry
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.alreadyKnown",
+    version = 1,
+    title = "The \"Already known\" line is a requirement line of its own kind, and nothing else is",
+    accumulate = true,
+    merge = MergeKnownLines,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local kinds = Enum.TooltipDataUsageRequirementType
+        local KNOWN = type(kinds) == "table" and kinds.NotAlreadyKnown or nil
+        if not c:Check(type(KNOWN) == "number", "Enum.TooltipDataUsageRequirementType.NotAlreadyKnown is a %s", TypeOf(KNOWN)) then
+            return
+        end
+        local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
+        c:Check(type(ITEM_SPELL_KNOWN) == "string", "ITEM_SPELL_KNOWN is a %s", TypeOf(ITEM_SPELL_KNOWN))
+
+        local knownLines, seen, ensembles = 0, {}, {}
+        -- Whether the tooltip has the line, by its kind or by its text.
+        local function Read(side, data, itemID)
+            local says = false
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                local text, kind = line.leftText, line.requirementType
+                if issecretvalue(text) or issecretvalue(kind) or issecretvalue(line.type) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's type, text or requirement type is a secret value",
+                        itemID, side)
+                elseif kind == KNOWN or text == ITEM_SPELL_KNOWN then
+                    says = true
+                    knownLines = knownLines + 1
+                    local shape = ("%s: type %s, requirementType %s, usable %s, \"%s\""):format(side, tostring(line.type),
+                        tostring(kind), tostring(line.usable), tostring(text))
+                    seen[shape] = (seen[shape] or 0) + 1
+                    c:Check(line.type == REQUIREMENT and kind == KNOWN,
+                        "item %d, the %s's tooltip: the text \"%s\" is on a line of type %s with requirement type %s", itemID,
+                        side, tostring(text), tostring(line.type), tostring(kind))
+                    c:Check(text == ITEM_SPELL_KNOWN,
+                        "item %d, the %s's tooltip: a line of the kind NotAlreadyKnown says \"%s\"", itemID, side, tostring(text))
+                end
+            end
+            return says
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            local slotSays = Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local linkSays = link ~= nil and Read("link", C_TooltipInfo.GetHyperlink(link), itemID)
+            local setID = C_Item.GetItemLearnTransmogSet(itemID)
+            if setID then
+                local info = C_TransmogSets.GetSetInfo(setID)
+                local sources, uncollected = C_TransmogSets.GetAllSourceIDs(setID) or {}, 0
+                for _, sourceID in ipairs(sources) do
+                    local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                    if sourceInfo and not sourceInfo.isCollected then
+                        uncollected = uncollected + 1
+                    end
+                end
+                ensembles[tostring(itemID)] = {
+                    name = C_Item.GetItemNameByID(itemID),
+                    classID = select(6, C_Item.GetItemInfoInstant(itemID)),
+                    setID = setID,
+                    setCollected = info and info.collected,
+                    sources = #sources,
+                    uncollected = uncollected,
+                    slotSaysKnown = slotSays,
+                    linkSaysKnown = linkSays,
+                }
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("knownLines", knownLines)
+        c:Note("seen", seen)
+        c:Note("ensembles", ensembles)
+        if knownLines == 0 then
+            return "info", "nothing in these bags is already known: no such line was asked"
+        end
+    end,
+})
+
+-- The addon keeps that line off a tooltip by answering true when the client asks before it
+-- adds a requirement line (TooltipDataProcessor.AddLinePreCall). Blizzard's code says an
+-- addon may: this asks a client. A tooltip of the tests' own is filled twice with a bag item
+-- that has a requirement line, with a callback of the tests' own asked for the same line
+-- type: once answering nothing, once answering true for the first such line. The callback
+-- has to be asked once per requirement line, before the line is on the tooltip, with the
+-- tooltip and the line; the tooltip has to be one line shorter the second time; and what the
+-- addon's handler reads has to be there while it is asked: the data the tooltip is being
+-- filled from, with the item's ID. The callback stays for the session and answers nothing
+-- outside these two fills.
+
+local PRECALL_TOOLTIP = "CaerdonWardrobeTestsLinePreCallTooltip"
+local preCallTooltip, preCall
+
+T.Contract({
+    id = "tooltip.linePreCall",
+    version = 1,
+    title = "A line pre-call of an addon's is asked for each requirement line and can keep it off the tooltip",
+    run = function(c)
+        if InCombatLockdown() then
+            return "skip", "out of combat only"
+        end
+        local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
+        -- The first bag item whose slot's tooltip has a requirement line. One that teaches a
+        -- transmog set is passed over: the addon's own callback may answer for its line, and
+        -- the client asks nobody after an answer.
+        local bag, slot, itemID, wanted
+        for _, where in ipairs(FilledBagSlots()) do
+            local data = C_TooltipInfo.GetBagItem(where.bag, where.slot)
+            local count = 0
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                if not issecretvalue(line.type) and line.type == REQUIREMENT then
+                    count = count + 1
+                end
+            end
+            local candidate = C_Container.GetContainerItemID(where.bag, where.slot)
+            if count > 0 and candidate and not C_Item.GetItemLearnTransmogSet(candidate) then
+                bag, slot, wanted, itemID = where.bag, where.slot, count, candidate
+                break
+            end
+        end
+        if not bag then
+            return "skip", "needs a bag item whose tooltip has a requirement line (a level, a class, a skill)"
+        end
+        c:Note("itemID", itemID)
+        c:Note("requirementLines", wanted)
+
+        if not preCallTooltip then
+            preCallTooltip = CreateFrame("GameTooltip", PRECALL_TOOLTIP, UIParent, "GameTooltipTemplate")
+            preCall = { armed = false }
+            TooltipDataProcessor.AddLinePreCall(REQUIREMENT, function(tooltip, lineData)
+                if not preCall.armed or tooltip ~= preCallTooltip then
+                    return nil
+                end
+                preCall.calls = preCall.calls + 1
+                if preCall.calls > 1 then
+                    return nil
+                end
+                local info = tooltip.GetProcessingTooltipInfo and tooltip:GetProcessingTooltipInfo()
+                local data = type(info) == "table" and info.tooltipData or nil
+                preCall.line = lineData
+                preCall.linesBefore = tooltip:NumLines() or 0
+                preCall.dataType = type(data) == "table" and data.type or nil
+                preCall.dataID = type(data) == "table" and data.id or nil
+                preCall.lineInData = false
+                for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                    preCall.lineInData = preCall.lineInData or line == lineData
+                end
+                return preCall.consume or nil
+            end)
+        end
+
+        local function LeftTexts()
+            local texts = {}
+            for index = 1, preCallTooltip:NumLines() or 0 do
+                local fontString = _G[PRECALL_TOOLTIP .. "TextLeft" .. index]
+                local text = fontString and fontString:GetText()
+                texts[index] = not issecretvalue(text) and text or nil
+            end
+            return texts
+        end
+        local function Fill(consume)
+            preCall.armed, preCall.consume, preCall.calls, preCall.line = true, consume, 0, nil
+            preCallTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+            preCallTooltip:SetBagItem(bag, slot)
+            preCall.armed = false
+            return preCallTooltip:NumLines() or 0, LeftTexts()
+        end
+
+        -- Answering nothing: every line is on the tooltip.
+        local fullLines, fullTexts = Fill(false)
+        c:Note("lines", fullLines)
+        if not c:Check(preCall.calls > 0, "the callback was not asked while a tooltip with %d requirement lines was filled", wanted) then
+            preCallTooltip:Hide()
+            return
+        end
+        c:Check(preCall.calls == wanted, "the callback was asked %d times for %d requirement lines", preCall.calls, wanted)
+        local line, at = preCall.line, (preCall.linesBefore or 0) + 1
+        c:Check(type(line) == "table" and not issecretvalue(line.type) and line.type == REQUIREMENT,
+            "the callback was handed a %s, not a requirement line", TypeOf(line))
+        local text = type(line) == "table" and line.leftText or nil
+        c:Note("lineText", issecretvalue(text) and "secret" or tostring(text))
+        c:Check(text ~= nil and not issecretvalue(text) and fullTexts[at] == text,
+            "the line the callback was asked about is not where the next line went: line %d of the tooltip says \"%s\"", at,
+            tostring(fullTexts[at]))
+        -- What the addon's handler reads while it is asked.
+        c:Check(preCall.dataType == Enum.TooltipDataType.Item and preCall.dataID == itemID,
+            "while the callback is asked, the tooltip's processing info has data of type %s for %s, not an item's for %s",
+            tostring(preCall.dataType), tostring(preCall.dataID), tostring(itemID))
+        -- Not relied on: whether the line handed over is the data's own table.
+        c:Note("lineIsTheDatas", preCall.lineInData == true)
+
+        -- Answering true for the first requirement line: that line is not on the tooltip.
+        local shortLines, shortTexts = Fill(true)
+        preCallTooltip:Hide()
+        c:Note("linesWithOneKeptOff", shortLines)
+        c:Check(shortLines == fullLines - 1, "the tooltip has %d lines with one line kept off and %d with none", shortLines, fullLines)
+        local same = shortLines == fullLines - 1
+        for index = 1, shortLines do
+            same = same and shortTexts[index] == fullTexts[index < at and index or index + 1]
+        end
+        c:Check(same, "with the line kept off, the tooltip's other lines are not the ones it had")
+    end,
+})
+
 -- The client says of an item in a bag slot whether it is a quest's item and which quest it
 -- starts (C_Container.GetContainerItemQuestInfo; Blizzard's bags draw their quest border and
 -- bang from it). The addon makes no status from it: its quest icon comes from the quest log's

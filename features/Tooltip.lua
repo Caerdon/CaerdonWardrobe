@@ -69,6 +69,10 @@ function TooltipMixin:OnLoad()
     -- TODO: Add Debug enable option setting
     -- TODO: Figure out how to get Pet/Toy/Mount links working
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(...) Tooltip:OnTooltipSetItem(...) end)
+    -- For the "Already known" line of an ensemble that still teaches something
+    -- (OnRequirementLine): asked before the client adds a requirement line to any tooltip.
+    TooltipDataProcessor.AddLinePreCall(Enum.TooltipDataLineType.UsageRequirement,
+        function(...) return Tooltip:OnRequirementLine(...) end)
     -- For the upgrade lines (OweUpgradeLines): the tooltips of the item looked at, and the
     -- comparison tooltips the client puts beside each of them.
     self:PlaceUpgradeLines(GameTooltip, ItemRefTooltip)
@@ -496,49 +500,6 @@ local function ShowItemTooltip(tooltip)
 
         tooltipItem = ItemForTooltip(tooltip, itemLink, tooltipItem)
 
-        -- For ensembles with uncollected variants, hide the "Already known" text
-        -- Check if this is an ensemble (consumable with transmog set)
-        if tooltipItem:GetCaerdonItemType() == CaerdonItemType.Consumable then
-            local transmogSetID = C_Item.GetItemLearnTransmogSet(itemLink)
-            if transmogSetID then
-                -- Check directly if ensemble has uncollected sources
-                -- Don't rely on GetConsumableInfo as item data may not be fully loaded yet
-                local transmogSetInfo = C_TransmogSets.GetSetInfo(transmogSetID)
-                local hasUncollected = false
-
-                if transmogSetInfo then
-                    -- Check if set is not fully collected
-                    if not transmogSetInfo.collected then
-                        hasUncollected = true
-                    else
-                        -- Even if set shows as "collected", check sources for uncollected variants
-                        local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
-                        if sourceIDs then
-                            for _, sourceID in ipairs(sourceIDs) do
-                                local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
-                                if sourceInfo and not sourceInfo.isCollected then
-                                    hasUncollected = true
-                                    break
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if hasUncollected then
-                    -- Hide "Already known" line for ensembles with uncollected items
-                    for i = 1, tooltip:NumLines() do
-                        local line = _G[tooltip:GetName() .. "TextLeft" .. i]
-                        if line and tostring(line:GetText()) == ITEM_SPELL_KNOWN then
-                            line:SetText("")
-                            line:Hide()
-                            break
-                        end
-                    end
-                end
-            end
-        end
-
         -- For merchant recipes (not sure if others), GetDisplayedItem returns the item created from the recipe rather than the recipe itself,
         -- so we compare to see if the ID from the tooltip data is the same as the item ID from the link.  If it's not, indicate it's an embedded item.
         local tooltipData = tooltip:GetPrimaryTooltipData()
@@ -567,6 +528,75 @@ function TooltipMixin:OnTooltipSetItem(tooltip)
     tooltip.caerdonProcessing = true
     xpcall(ShowItemTooltip, geterrorhandler(), tooltip)
     tooltip.caerdonProcessing = false
+end
+
+-- Whether an item is an ensemble that still has something to teach: a consumable that teaches
+-- a transmog set with a source the account has not collected. The set's own "collected" is
+-- not the answer: it says the looks are known, from whichever source, and an ensemble
+-- teaches sources (notes: Ensembles). Asked of the client each time, since the item's own
+-- data may not have come yet when its tooltip is filled.
+local function TeachesUncollectedSource(itemID)
+    local transmogSetID = C_Item.GetItemLearnTransmogSet(itemID)
+    if not transmogSetID then
+        return false
+    end
+    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemID)
+    if classID ~= Enum.ItemClass.Consumable then
+        return false
+    end
+    local setInfo = C_TransmogSets.GetSetInfo(transmogSetID)
+    if not setInfo then
+        return false
+    end
+    if not setInfo.collected then
+        return true
+    end
+    local sourceIDs = C_TransmogSets.GetAllSourceIDs(transmogSetID)
+    if sourceIDs then
+        for _, sourceID in ipairs(sourceIDs) do
+            local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+            if sourceInfo and not sourceInfo.isCollected then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- The client's "Already known" line is kept off the tooltip of an ensemble that still has a
+-- source to teach: the toon has used one like it, and using this one teaches the rest.
+--
+-- Asked by the client before it adds a requirement line to a tooltip, whichever tooltip it is
+-- filling (TooltipDataProcessor.AddLinePreCall). True keeps the line off; the tooltip's data
+-- still holds it. The line is known by its requirement type, and by the data line's words
+-- only where a requirement line names no type; the item by the data the tooltip is being
+-- filled from. No font string is read. A value the client keeps secret is left alone.
+function TooltipMixin:OnRequirementLine(tooltip, lineData)
+    if type(lineData) ~= "table" then
+        return nil
+    end
+    local requirementTypes = Enum.TooltipDataUsageRequirementType
+    local requirementType = lineData.requirementType
+    if issecretvalue(requirementType) then
+        return nil
+    elseif requirementType == nil then
+        local text = lineData.leftText
+        if text == nil or issecretvalue(text) or text ~= ITEM_SPELL_KNOWN then
+            return nil
+        end
+    elseif not requirementTypes or requirementType ~= requirementTypes.NotAlreadyKnown then
+        return nil
+    end
+    local info = tooltip and tooltip.GetProcessingTooltipInfo and tooltip:GetProcessingTooltipInfo()
+    local data = info and info.tooltipData
+    if type(data) ~= "table" or issecretvalue(data.type) or data.type ~= Enum.TooltipDataType.Item then
+        return nil
+    end
+    local itemID = data.id
+    if issecretvalue(itemID) or type(itemID) ~= "number" then
+        return nil
+    end
+    return TeachesUncollectedSource(itemID) or nil
 end
 
 -- Whether the tooltip carries the client's "Already known" line.
