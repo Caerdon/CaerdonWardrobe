@@ -93,6 +93,12 @@ return function(H, S)
             [900009] = { name = "Roasted Boar", quality = 1, level = 25, minLevel = 25, type = "Consumable",
                 subType = "Food & Drink", stack = 20, price = 100, classID = 0, subClassID = 5,
                 tooltip = { { text = "Use: Restores 874 health over 27 sec. Must remain seated while eating.", type = 0 } } },
+            -- Taken by a quest that only an item starts: whether the toon has that item is
+            -- asked of the client as the quest is judged.
+            [900010] = { name = "Sealed Crate", quality = 1, level = 20, minLevel = 0, type = "Miscellaneous",
+                subType = "Junk", stack = 1, price = 30, classID = 15, subClassID = 0 },
+            [900011] = { name = "Crumpled Order", quality = 1, level = 20, minLevel = 0, type = "Miscellaneous",
+                subType = "Junk", stack = 1, price = 0, classID = 15, subClassID = 0 },
             -- Named after the toon, so its link carries the toon's name into every question.
             [900003] = { name = "Zzyxa's Trophy", quality = 1, level = 1, minLevel = 0, type = "Miscellaneous",
                 subType = "Junk", stack = 1, price = 1, classID = 15, subClassID = 0 },
@@ -154,11 +160,14 @@ return function(H, S)
         local quests = {
             [7001] = { name = "Fangs for the Collector", objectives = { [3] = { { 900001 } } }, startedBy = { { 5 } },
                 requiredLevel = 25, questLevel = 28 },
+            -- Started by an item alone, which the toon does not have.
+            [7002] = { name = "The Sealed Crate", objectives = { [3] = { { 900010 } } }, startedBy = { [3] = { 900011 } },
+                requiredLevel = 25, questLevel = 28 },
         }
         game:Set("LibQuestieDB.RequireContract", function() return true end)
         game:Set("LibQuestieDB.Quest.GetAllIds", function()
             game.readAllQuests = (game.readAllQuests or 0) + 1
-            return { 7001 }
+            return { 7001, 7002 }
         end)
         game:Set("LibQuestieDB.Quest.Get", function(questID, field) return quests[questID] and quests[questID][field] end)
         game:Set("LibQuestieDB.Enum", { classKeys = { HUNTER = 4 }, raceMaskById = { [3] = 4 } })
@@ -231,7 +240,7 @@ return function(H, S)
     local untouched = game.names["C_Item.GetItemInfo"]
     local generation = client.env.CaerdonWardrobe.refreshGeneration
     T.RecordItems({ { itemID = 900001 }, { itemID = 900002 }, { itemID = 900003 }, { itemID = 123 },
-        { itemID = 900004 }, { itemID = 900005 }, { itemID = 900007 }, { itemID = 900008 } })
+        { itemID = 900004 }, { itemID = 900005 }, { itemID = 900007 }, { itemID = 900008 }, { itemID = 900010 } })
     Check(client:TickUntil(function() return not T.IsBusy() end, 60), "record: the job ends")
     -- The caches were emptied behind the icons on screen; the job owes them one redraw.
     Equal(client.env.CaerdonWardrobe.refreshGeneration, generation + 1, "record: the job ends in one full refresh")
@@ -245,7 +254,7 @@ return function(H, S)
     end
 
     local list = T.db.recordings.list
-    Equal(#list, 7, "record: seven recordings, and none for an item the game does not have")
+    Equal(#list, 8, "record: eight recordings, and none for an item the game does not have")
     local jerky = list[7] or {}
     Check(jerky.verdict and jerky.verdict.status == "sellable",
         "record: food the toon has outgrown, with better food in the bags, is for selling ("
@@ -256,6 +265,13 @@ return function(H, S)
     end
     Check(asked, "record: the addon asked about the other food again, although it had learned it this session")
     local fang, vest, helm, gloves, hide = list[1] or {}, list[2] or {}, list[4] or {}, list[5] or {}, list[6] or {}
+    -- The quest module asks whether the toon has the item that starts the crate's quest. It
+    -- asks the client's table at that moment: a function it had taken into a local as its
+    -- file loaded would be one the recorder's hook never hears.
+    local crate = list[8] or {}
+    local counted = crate.calls and crate.calls["C_Item.GetItemCount"]
+    Check(counted ~= nil and counted[H.Keys.Args(2, 900011, true)] ~= nil,
+        "record: whether the toon has the item that starts a quest is in the recording")
     Check(hide.verdict and hide.verdict.status == "auctionGoods",
         "record: trade goods worth more at auction say so (" .. tostring(hide.verdict and hide.verdict.status) .. ")")
     local keyAnswers = hide.calls and hide.calls["Auctionator.Utilities.DBKeyFromLink"]
@@ -344,12 +360,12 @@ return function(H, S)
     local log = {}
     local counts = H.Import(globals.CaerdonWardrobeTestsDB, { log = function(line) log[#log + 1] = line end,
         verbose = os.getenv("CAERDON_HARNESS_VERBOSE") ~= nil })
-    Equal(counts.written, 6, "import: six fixtures written (" .. table.concat(log, " | ") .. ")")
+    Equal(counts.written, 7, "import: seven fixtures written (" .. table.concat(log, " | ") .. ")")
     Equal(counts.rejected, 0, "import: none rejected")
     Equal(counts.unusable, 1, "import: the item whose link holds the toon's name is refused")
 
     local fixtures = H.ListFixtures()
-    Equal(#fixtures, 6, "fixtures: six are listed")
+    Equal(#fixtures, 7, "fixtures: seven are listed")
     local byItem = {}
     for _, fixture in ipairs(fixtures) do
         local text = H.ReadFile(fixture.path)
@@ -379,7 +395,7 @@ return function(H, S)
     -- Importing again changes nothing; a different recording of the same item needs --replace.
     do
         local again = H.Import(globals.CaerdonWardrobeTestsDB, { log = function() end })
-        Equal(again.same, 6, "import: a second import finds them as they are")
+        Equal(again.same, 7, "import: a second import finds them as they are")
         local changed = H.DeepCopy(globals.CaerdonWardrobeTestsDB)
         changed.recordings.list[2].note = "another take"
         local third = H.Import(changed, { log = function() end })

@@ -1,5 +1,5 @@
 return {
-    at = 1795383170,
+    at = 1795388373,
     calls = {
         ["Auctionator.API.v1.GetAuctionAgeByItemLink"] = {
             ["15:CaerdonWardrobe|61:|cnIQ1:|Hitem:4461::::::::37:1485:::::::::|h[Raptor Hide]|h|r"] = { { 2, n = 1 } },
@@ -183,7 +183,7 @@ return {
             AuctionMinProfit = "auto",
             AuctionTradeGoods = "skill",
             EnableAnimation = true,
-            IncludeTrivialQuests = false,
+            IncludeTrivialQuests = true,
             IngredientsForOtherToons = "skill",
             ItemLevelOverPawn = false,
             OffsetX = 0,
@@ -226,6 +226,7 @@ return {
             ShowOutdatedFood = true,
             ShowOutgrownIngredients = true,
             ShowQuestItems = true,
+            ShowQuestItemsInAuction = true,
             ShowRecipesForOtherToons = true,
             ShowSellable = { BankAndBags = true, GuildBank = false },
             ShowSpareBags = true,
@@ -242,7 +243,7 @@ return {
         Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-213250",
+    environment = "env-hunter37-20261122-225933",
     format = 1,
     itemID = 4461,
     link = "|cnIQ1:|Hitem:4461::::::::37:1485:::::::::|h[Raptor Hide]|h|r",

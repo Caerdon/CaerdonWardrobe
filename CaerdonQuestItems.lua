@@ -15,6 +15,11 @@
 --      It names further quests for an item, and a quest QuestieDB does not have is judged from
 --      its data.
 --
+-- Whichever of the two a quest is judged from, its level and whether it is trivial for the
+-- toon are the client's own word where it has the quest's data (CaerdonQuestClient.lua). For a
+-- quest that is not in the log it has to be asked for that, so the quest is judged from the
+-- quest data first and again when the client has answered.
+--
 -- A Quest-class item has the quest icon by its class. The same answer says when that is over:
 -- every quest known for the item is behind the toon (done, or one it can never take), which is
 -- how such an item loses the icon once its quest is turned in.
@@ -139,6 +144,12 @@ local namesHistory = { scansThatKept = 0, lastKept = nil, rechecks = 0 }
 
 -- AllTheThings, the second source of quest data (CaerdonQuestSourceATT.lua).
 local SecondSource = NS.QuestSourceATT
+-- The client's own word on a quest's level and on trivial (CaerdonQuestClient.lua).
+local QuestClient = NS.QuestClient
+-- For the export: how often the client's answers were compared with what the icons were made
+-- from, how often that was a change, and the last one; how many quests were judged again for
+-- it and what that took, always, since it runs with no window being drawn.
+local clientHistory = { checks = 0, changes = 0, lastChange = nil, judged = 0, ms = 0, longestMs = 0 }
 
 local provider = {
     state = "unchecked",  -- unchecked | missing | unsupported | building | ready | failed
@@ -190,7 +201,8 @@ end
 --
 -- changed: what the refresh is about (CaerdonWardrobe:RefreshItems), nil for anything. A quest
 -- is judged from the log, the completion flags, the quest data and the toon's level, race,
--- class, faction and professions (JudgeQuest, UpcomingBlocker), and the log's objectives name
+-- class, faction and professions, and the client's word on the quest's level and on trivial
+-- (JudgeQuest, UpcomingBlocker), and the log's objectives name
 -- items whatever is worn or learned. So a refresh about what is worn or about something
 -- learned keeps all of it: no quest is judged again and the log is not read again. The answers
 -- then hold quests of items that may not be drawn again, and a quest event judges those too:
@@ -202,6 +214,7 @@ function CaerdonQuestItems:InvalidateCaches(changed)
     wipe(verdicts)
     wipe(answered)
     SecondSource:InvalidateCaches()
+    QuestClient:InvalidateCaches()
     playerContext = nil
     questLog.dirty = true
 end
@@ -680,8 +693,6 @@ local function IsQuestDoneOrActive(questID)
         (C_QuestLog.IsQuestFlaggedCompleted(questID) or C_QuestLog.IsOnQuest(questID))
 end
 
-local GetItemCount = C_Item and C_Item.GetItemCount or GetItemCount
-
 -- A quest that can be done again (repeatable, daily, weekly, monthly).
 local function IsRepeating(questID, Get)
     if HasBit(Get(questID, "specialFlags") or 0, SPECIAL_FLAG_REPEATABLE) then
@@ -834,6 +845,34 @@ local function UpcomingBlocker(questID, verdict, Get)
     if maxLevel > 0 and player.level > maxLevel then
         Block("outleveled", true)
     end
+
+    -- The quest's own level and whether it is trivial are the client's to say, where it has
+    -- the quest's data (CaerdonQuestClient.lua); where it has none it is asked for it, the
+    -- quest data's level stands meanwhile, and the quest is judged again when the answer
+    -- comes (CompareWithClient). It is asked only where its word can change the verdict: not
+    -- of a quest that is behind the toon whatever its level, and not of one the level it is
+    -- known to ask for keeps out. The level a quest asks for is the quest data's: no client
+    -- has a function for it.
+    local client
+    local function ClientFacts()
+        if client == nil then
+            client = false
+            if not forGood then
+                local facts, why = QuestClient:GetFacts(questID)
+                if facts then
+                    client = facts
+                    if facts.level > 0 then
+                        questLevel = facts.level
+                        verdict.levelFromClient = true
+                    end
+                else
+                    verdict.clientState = why
+                end
+            end
+        end
+        return client or nil
+    end
+
     -- A later quest of a chain the toon is on is still to come, whatever its level: the
     -- quests before it are followed back, and only for a quest the level would keep out.
     -- Where the data has no level the quest asks for (0: over a hundred of the quests WoW
@@ -841,9 +880,13 @@ local function UpcomingBlocker(questID, verdict, Get)
     -- never below the level asked for, so it keeps out no quest the toon is of a level for
     -- by more than the difference between the two.
     local levelKnown = requiredLevel > 0
+    if not levelKnown then
+        ClientFacts()
+    end
     local levelAsked = levelKnown and requiredLevel or questLevel
-    if levelAsked > player.level + player.levelWindow and
-        not select(2, PrerequisitesBegun(questID, Get, {}, { left = CHAIN_BUDGET })) then
+    local beyondRange = levelAsked > player.level + player.levelWindow and
+        not select(2, PrerequisitesBegun(questID, Get, {}, { left = CHAIN_BUDGET }))
+    if beyondRange then
         verdict.optedOut = true
         if levelKnown then
             Block(format("needs level %d", requiredLevel))
@@ -851,11 +894,21 @@ local function UpcomingBlocker(questID, verdict, Get)
             Block(format("of level %d, and the level it asks for is not known", questLevel))
         end
     end
-    -- Zero and negative quest levels scale with the toon
-    if not player.includeTrivial and questLevel > 0 and questLevel < player.level - player.trivialRange then
-        verdict.optedOut = true
-        Block("trivial at this level")
+    if not player.includeTrivial then
+        local facts = not (beyondRange and levelKnown) and ClientFacts() or nil
+        local trivial
+        if facts then
+            trivial = facts.trivial
+        else
+            -- Zero and negative quest levels scale with the toon
+            trivial = questLevel > 0 and questLevel < player.level - player.trivialRange
+        end
+        if trivial then
+            verdict.optedOut = true
+            Block("trivial at this level")
+        end
     end
+    verdict.questLevel = questLevel
 
     if blocker then
         return blocker, false, forGood
@@ -869,7 +922,10 @@ local function UpcomingBlocker(questID, verdict, Get)
         local starterItems = startedBy[3]
         if not hasGiver and type(starterItems) == "table" and next(starterItems) ~= nil then
             for _, starterItemID in pairs(starterItems) do
-                if GetItemCount and (GetItemCount(starterItemID, true) or 0) > 0 then
+                -- Asked off C_Item at the time, which both clients have: a function taken
+                -- into a local as this file loads is one the test addon's recorder cannot
+                -- hear, and a recording of such an item then lacks the answer.
+                if (C_Item.GetItemCount(starterItemID, true) or 0) > 0 then
                     return nil, true
                 end
             end
@@ -914,13 +970,19 @@ local function JudgeQuest(questID)
                 (second ~= nil and second:IsRepeating(questID))
             verdict.over = (Get ~= nil or second ~= nil) and not verdict.repeating
         elseif second then
-            local blocker, forGood, repeating, minLevel, _, optedOut = second:Blocker(questID, GetPlayerContext())
+            local blocker, forGood, repeating, minLevel, _, optedOut, client = second:Blocker(questID, GetPlayerContext())
             verdict.eligible = blocker == nil
             verdict.reason = blocker or "upcoming"
             verdict.over = blocker ~= nil and forGood == true
             verdict.repeating = repeating == true
             verdict.requiredLevel = minLevel
             verdict.optedOut = optedOut == true
+            -- What the client said of it, or why it has not: AllTheThings has no quest level.
+            if client then
+                verdict.questLevel = client.level
+                verdict.levelFromClient = client.level ~= nil
+                verdict.clientState = client.state
+            end
         elseif not Get then
             verdict.reason = "no quest data"
         else
@@ -957,12 +1019,13 @@ local function EvaluateQuest(questID)
     return verdict
 end
 
--- What a verdict means for an icon, which is all a quest event is compared on. "Behind it" is
--- apart from "not wanted": a Quest-class item keeps its icon through the second and loses it
--- with the first.
+-- What a verdict means for an icon, which is all a quest event or the client's word is
+-- compared on. "Behind it" is apart from "not wanted": a Quest-class item keeps its icon
+-- through the second and loses it with the first. And "kept out by the options" is apart from
+-- "not wanted": where that is all that is left for an item, its class gives it no quest icon.
 local function StateOf(verdict)
     return verdict.isActive and "in the log" or verdict.eligible and "upcoming" or
-        verdict.over and "behind it" or "not wanted"
+        verdict.over and "behind it" or verdict.optedOut and "kept out by the options" or "not wanted"
 end
 
 -- The check after a run of quest events (accepted, removed, turned in): what differs from
@@ -998,6 +1061,57 @@ function CaerdonQuestItems:CompareWithAnswers()
     end
 
     return NS.Refresh:Difference(before, after)
+end
+
+-- The client's data of these quests has come (CaerdonQuestClient.lua). Each one that was
+-- answered since the caches were last dropped is judged again, now with the client's word on
+-- its level and on trivial, and the icons are drawn again only where that is another answer
+-- for an icon than the quest data's was. Only these quests: a quest's level decides about no
+-- other quest.
+--
+-- Returns what differs, in words, or nil; for the tests and the counters.
+function CaerdonQuestItems:CompareWithClient(questIDs)
+    local startedAt = debugprofilestop()
+    local before, after = {}, {}
+    for _, questID in ipairs(questIDs) do
+        local answer = answered[questID]
+        if answer then
+            local verdict, volatile = JudgeQuest(questID)
+            local key = "quest " .. questID
+            before[key], after[key] = StateOf(answer), StateOf(verdict)
+            -- Where nothing differs the new verdict stands in: its level is the export's.
+            answered[questID] = verdict
+            verdicts[questID] = not volatile and verdict or nil
+            clientHistory.judged = clientHistory.judged + 1
+        end
+    end
+
+    local what = NS.Refresh:Difference(before, after)
+    clientHistory.checks = clientHistory.checks + 1
+    local spent = debugprofilestop() - startedAt
+    clientHistory.ms = clientHistory.ms + spent
+    if spent > clientHistory.longestMs then
+        clientHistory.longestMs = spent
+    end
+    if what then
+        clientHistory.changes = clientHistory.changes + 1
+        clientHistory.lastChange = what
+        if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
+            CaerdonWardrobe:RefreshItems("quest data", "the client's word: " .. what)
+        end
+    end
+    return what
+end
+
+-- Through the table, so that the counters' wrapper is the one called.
+QuestClient.OnAnswers = function(questIDs)
+    CaerdonQuestItems:CompareWithClient(questIDs)
+end
+
+-- Forgets what the client said of quests this session, which a refresh rightly keeps. For the
+-- test addon's recorder: a replay starts a session of its own.
+function CaerdonQuestItems:ForgetClientAnswers()
+    QuestClient:Forget()
 end
 
 ----------------------------------------------------------------------------------------------
@@ -1085,7 +1199,8 @@ end
 --                  or trivial where those are not wanted (optedOut on each)
 --   quests         every candidate quest with its verdict, the rejected ones included:
 --                  { questID, name, role, isActive, eligible, over, repeating, setAside,
---                  reason, requiredLevel, questLevel }
+--                  reason, requiredLevel, questLevel, levelFromClient, clientState }; the
+--                  last one says why the client had no word where it was wanted
 function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
     EnsureQuestLog()
     EnsureProvider()
@@ -1120,6 +1235,8 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
             reason = verdict.reason,
             requiredLevel = verdict.requiredLevel,
             questLevel = verdict.questLevel,
+            levelFromClient = verdict.levelFromClient == true,
+            clientState = verdict.clientState,
         }
         byQuest[questID] = entry
         info.quests[#info.quests + 1] = entry
@@ -1254,6 +1371,13 @@ function CaerdonQuestItems:GetDebugState()
             error = provider.error,
         },
         second = SecondSource:GetDebugState(),
+        client = QuestClient:GetDebugState(),
+        clientChecks = clientHistory.checks,
+        clientChanges = clientHistory.changes,
+        clientLastChange = clientHistory.lastChange,
+        clientJudged = clientHistory.judged,
+        clientCompareMs = clientHistory.ms,
+        clientLongestCompareMs = clientHistory.longestMs,
         questie = {
             loaded = questieModules ~= nil,
             isReady = type(api) == "table" and api.isReady or nil,

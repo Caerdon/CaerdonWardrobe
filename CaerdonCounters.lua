@@ -607,6 +607,12 @@ function Counters:Attach()
     Probe("CaerdonAuctionValue", CaerdonAuctionValue, "OnBagsChanged")
     -- What a run of quest events costs where it refreshes nothing: the answered quests judged again.
     Probe("CaerdonQuestItems", CaerdonQuestItems, "CompareWithAnswers")
+    -- And a run of the client's answers about quests it was asked to load.
+    Probe("CaerdonQuestItems", CaerdonQuestItems, "CompareWithClient")
+    -- The client's word on a quest, asked inside a verdict, and the requests put for the
+    -- quests it had none for, which a timer puts.
+    Probe("QuestClient", NS and NS.QuestClient, "GetFacts")
+    Probe("QuestClient", NS and NS.QuestClient, "Pump")
 
     -- Each feature holds its own copy of the display rules, made when it registered.
     local features = type(core) == "table" and core.GetRegisteredFeatures and core:GetRegisteredFeatures()

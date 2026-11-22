@@ -287,8 +287,9 @@ end
 -- Why a quest that is neither in the log nor done will not be picked up, or nil when it still
 -- can be. Second value: the quest is behind this toon for good. Third: it can be done again.
 -- Fourth and fifth: the level it asks for and the one it stops being offered at, where the
--- data has them. The reason is the first one found; "for good" is asked of every rule that
--- can say so (as in CaerdonQuestItems.lua, UpcomingBlocker).
+-- data has them. Sixth: the player's own options keep it out. Seventh: what the client said
+-- of it where it was asked, { level } or { state }. The reason is the first one found; "for
+-- good" is asked of every rule that can say so (as in CaerdonQuestItems.lua, UpcomingBlocker).
 --
 -- player: { level, raceID, classID, faction, skillLines, levelWindow, includeTrivial }, the
 -- last two the player's settings: how many levels ahead a quest still counts as coming, and
@@ -302,6 +303,9 @@ function Source:Blocker(questID, player)
     local blocker, forGood, repeating, minLevel, maxLevel = nil, false, false, nil, nil
     -- Kept out by the player's own options: the range of levels, or trivial quests left out.
     local optedOut = false
+    -- What the client said of the quest where it was asked: { level } (nil where it names
+    -- none), or { state } with why it had no word.
+    local client
     local function Block(reason, behind)
         blocker = blocker or reason
         forGood = forGood or behind == true
@@ -377,25 +381,60 @@ function Source:Blocker(questID, player)
             Block("outleveled", true)
         end
 
+        -- The quest's own level and whether it is trivial are the client's to say, where it
+        -- has the quest's data (CaerdonQuestClient.lua): AllTheThings has neither. Where the
+        -- client has no data it is asked for it, and the quest is judged again when the
+        -- answer comes. Asked only where its word can change the verdict, as for QuestieDB's
+        -- quests (CaerdonQuestItems.lua, UpcomingBlocker).
+        local facts
+        local function ClientFacts()
+            if facts == nil then
+                facts = false
+                if not forGood then
+                    local said, why = NS.QuestClient:GetFacts(questID)
+                    if said then
+                        facts = said
+                        client = { level = said.level > 0 and said.level or nil }
+                    else
+                        client = { state = why }
+                    end
+                end
+            end
+            return facts or nil
+        end
+
         -- The level is what bounds a quest still to come, as it is for QuestieDB's quests: one
         -- within the player's range counts, whether its chain is begun or not. Beyond the
         -- range, a later quest of a chain the toon is on still counts, whatever its level: the
         -- quests before it are followed back, and only for a quest the level would keep out.
-        if type(minLevel) == "number" and minLevel > player.level + player.levelWindow then
+        -- Where the data has no level the quest asks for, the quest's own level stands in for
+        -- it, as for QuestieDB's quests; that one is the client's.
+        local levelKnown = type(minLevel) == "number"
+        local levelAsked = minLevel
+        if not levelKnown then
+            ClientFacts()
+            levelAsked = client and client.level or nil
+        end
+        local beyondRange = false
+        if levelAsked and levelAsked > player.level + player.levelWindow then
             local met, _, hasSources = SourcesBegun(app, group, {}, { left = CHAIN_BUDGET })
             if not (hasSources and met) then
+                beyondRange = true
                 optedOut = true
-                Block(format("needs level %d", minLevel))
+                if levelKnown then
+                    Block(format("needs level %d", minLevel))
+                else
+                    Block(format("of level %d, and the level it asks for is not known", levelAsked))
+                end
             end
         end
-        -- The client's own word on a quest that has turned gray, where it has the quest's
-        -- data. Without the data it has no word: asked of a quest that is not in the log it
-        -- gave no level (GetQuestDifficultyLevel 0, HaveQuestData false; WoW Forever
-        -- 1.60.1.71037), and what it says of "trivial" then is not to be built on.
-        if not player.includeTrivial and C_QuestLog.IsQuestTrivial and HaveQuestData and
-            HaveQuestData(questID) == true and C_QuestLog.IsQuestTrivial(questID) == true then
-            optedOut = true
-            Block("trivial at this level")
+        -- A quest that has turned gray. Without the client's word nothing says so here.
+        if not player.includeTrivial and not (beyondRange and levelKnown) then
+            local said = ClientFacts()
+            if said and said.trivial then
+                optedOut = true
+                Block("trivial at this level")
+            end
         end
     end)
     if not ok then
@@ -403,7 +442,7 @@ function Source:Blocker(questID, player)
         return "error: " .. tostring(problem), false
     end
 
-    return blocker, forGood, repeating, minLevel, maxLevel, optedOut
+    return blocker, forGood, repeating, minLevel, maxLevel, optedOut, client
 end
 
 -- Drops what is kept about quests. AllTheThings changes a quest's "u" as the session goes.

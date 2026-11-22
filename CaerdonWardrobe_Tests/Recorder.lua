@@ -502,6 +502,11 @@ local function EmptyTheAddonsCaches()
     if CaerdonEquipment.ForgetRefusedItems then
         CaerdonEquipment:ForgetRefusedItems()
     end
+    -- What the client said of a quest's level earlier this session, which the quest module
+    -- judges from while the client has dropped the quest's data.
+    if CaerdonQuestItems.ForgetClientAnswers then
+        CaerdonQuestItems:ForgetClientAnswers()
+    end
     -- And the sets of the class, with what a link said about the Catalyst.
     if CaerdonTransformLooks and CaerdonTransformLooks.ForgetEverything then
         CaerdonTransformLooks:ForgetEverything()

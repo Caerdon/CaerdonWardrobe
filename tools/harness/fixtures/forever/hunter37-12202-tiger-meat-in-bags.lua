@@ -1,5 +1,5 @@
 return {
-    at = 1795383171,
+    at = 1795388374,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["5|2"] = {
@@ -216,7 +216,7 @@ return {
             AuctionMinProfit = "auto",
             AuctionTradeGoods = "skill",
             EnableAnimation = true,
-            IncludeTrivialQuests = false,
+            IncludeTrivialQuests = true,
             IngredientsForOtherToons = "skill",
             ItemLevelOverPawn = false,
             OffsetX = 0,
@@ -259,6 +259,7 @@ return {
             ShowOutdatedFood = true,
             ShowOutgrownIngredients = true,
             ShowQuestItems = true,
+            ShowQuestItemsInAuction = true,
             ShowRecipesForOtherToons = true,
             ShowSellable = { BankAndBags = true, GuildBank = false },
             ShowSpareBags = true,
@@ -275,7 +276,7 @@ return {
         Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-213250",
+    environment = "env-hunter37-20261122-225933",
     format = 1,
     itemID = 12202,
     link = "|cnIQ1:|Hitem:12202::::::::37:1485:::::::::|h[Tiger Meat]|h|r",

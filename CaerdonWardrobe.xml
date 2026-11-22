@@ -21,6 +21,7 @@
     </Frame>
 
 	<Script file="CaerdonItem.lua" />
+	<Script file="CaerdonQuestClient.lua" />
 	<Script file="CaerdonQuestSourceATT.lua" />
 	<Script file="CaerdonQuestItems.lua" />
 	<Script file="CaerdonAuctionValue.lua" />

@@ -3391,14 +3391,42 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             end
         end
         addKV(1, "Quests Answered Since The Last Refresh", questState.answeredCount)
+        -- The client's own word on a quest's level and on trivial (CaerdonQuestClient.lua):
+        -- what it was asked to load and what came of it, this session.
+        local clientState = questState.client
+        if clientState then
+            if not clientState.supported then
+                addKV(1, "The Client's Quest Data", "not asked (this client lacks a function for it)")
+            else
+                addKV(1, "The Client's Quest Data", string.format(
+                    "since the last refresh %d quests judged with its word, %d with what it said earlier, %d without; this session asked for %d (%d waiting their turn, %d not answered yet): %d came%s, %d refused, %d not answered, %d answered late, %d were there by their turn",
+                    clientState.withData or 0, clientState.fromMemory or 0, clientState.without or 0,
+                    clientState.asked or 0, clientState.queued or 0, clientState.inFlight or 0,
+                    clientState.came or 0,
+                    clientState.averageWait and string.format(" (after %.2fs on average, %.2fs at the longest)",
+                        clientState.averageWait, clientState.longestWait or 0) or "",
+                    clientState.refused or 0, clientState.silent or 0, clientState.late or 0, clientState.already or 0))
+                -- What it costs with no window being drawn: the asking, and the judging again.
+                addKV(1, "The Client's Quest Data Cost", string.format(
+                    "putting the requests took %.2fms in all over %d frames, %.2fms at the most in one; judging %d quests again when their answers came took %.2fms in all, %.2fms at the most for one run",
+                    clientState.pumpMs or 0, clientState.pumps or 0, clientState.longestPumpMs or 0,
+                    questState.clientJudged or 0, questState.clientCompareMs or 0, questState.clientLongestCompareMs or 0))
+                addKV(1, "The Client's Answers Compared", string.format(
+                    "%d runs of answers, %d of them changed an icon and refreshed%s",
+                    questState.clientChecks or 0, questState.clientChanges or 0,
+                    questState.clientLastChange and (" (the last: " .. tostring(questState.clientLastChange) .. ")") or ""))
+            end
+        end
 
         if questItemInfo and #questItemInfo.quests > 0 then
             addLine(1, "Quests:")
             for _, quest in ipairs(questItemInfo.quests) do
                 local levelText = ""
-                if quest.questLevel or quest.requiredLevel then
-                    levelText = string.format(" [level %s, requires %s]",
-                        tostring(quest.questLevel or "?"), tostring(quest.requiredLevel or "?"))
+                if quest.questLevel or quest.requiredLevel or quest.clientState then
+                    levelText = string.format(" [level %s%s, requires %s%s]",
+                        tostring(quest.questLevel or "?"), quest.levelFromClient and " by the client" or "",
+                        tostring(quest.requiredLevel or "?"),
+                        quest.clientState and ("; " .. tostring(quest.clientState)) or "")
                 end
                 addLine(2, string.format("- %d %s%s (%s): %s%s%s",
                     quest.questID,

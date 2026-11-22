@@ -198,7 +198,11 @@ function H.StockGame(toon, items)
     Set("C_PaperDollInfo.IsRangedSlotShown", function() return true end)
     Set("C_QuestLog.GetNumQuestLogEntries", function() return 0 end)
     Set("C_QuestLog.IsQuestFlaggedCompleted", function() return false end)
+    -- A client that has no quest's data and never answers a request for one: no level, and
+    -- "not trivial", as a client answers without the data.
     Set("C_QuestLog.RequestLoadQuestByID", function() end)
+    Set("C_QuestLog.GetQuestDifficultyLevel", function() return 0 end)
+    Set("C_QuestLog.IsQuestTrivial", function() return false end)
     Set("C_Spell.RequestLoadSpellData", function() end)
     Set("C_Container.GetContainerNumSlots", function() return 0 end)
     Set("C_Container.GetContainerItemID", function() return nil end)

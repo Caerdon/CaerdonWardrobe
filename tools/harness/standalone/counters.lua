@@ -285,7 +285,8 @@ local function StartSession(options)
     CaerdonHousingMixin, CaerdonCurrencyMixin, CaerdonConduitMixin = { GetHousingInfo = function() end },
         { GetCurrencyInfo = function() end }, { GetConduitInfo = function() end }
     -- The quest module's check after a run of quest events is one of the profile's functions.
-    CaerdonQuestItems = { InvalidateCaches = function() end, CompareWithAnswers = function() end }
+    CaerdonQuestItems = { InvalidateCaches = function() end, CompareWithAnswers = function() end,
+        CompareWithClient = function() end }
     CaerdonWardrobeConfig = nil -- saved variables arrive after the files
     -- What the addon runs with no window open, as far as the counters time it: the two
     -- handlers of an item tooltip and the auction module's look at the bags.
@@ -293,6 +294,7 @@ local function StartSession(options)
     CaerdonAPI = { OnTooltipItem = function() Spend(0.25, 1) end,
         GetPlayerSpecializationIndex = function() return nil end }
     NS.Tooltip = { OnTooltipSetItem = function() Spend(0.5, 2) end, OnRequirementLine = function() end }
+    NS.QuestClient = { GetFacts = function() end, Pump = function() end }
     CaerdonAuctionValue = { OnBagsChanged = function() Spend(0.125, 0) end, InvalidateCaches = function() end,
         GetOwnedQuantity = function() end }
     Session.outside = { api = CaerdonAPI, tooltip = NS.Tooltip }

@@ -1,5 +1,5 @@
 return {
-    at = 1795383171,
+    at = 1795388374,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["1|11"] = {
@@ -120,6 +120,7 @@ return {
             ["116|16:requiredMaxLevel"] = { { 0, n = 1 } },
             ["116|23:availableUntilCompleted"] = { { 0, n = 1 } },
             ["116|4:name"] = { { "Dry Times", n = 1 } },
+            ["116|9:startedBy"] = { { { { 346 } }, n = 1 } },
         },
     },
     characterConfig = { Icon = { GearSetScales = { [0] = "\"Classic\":HUNTER1" } } },
@@ -144,7 +145,7 @@ return {
             AuctionMinProfit = "auto",
             AuctionTradeGoods = "skill",
             EnableAnimation = true,
-            IncludeTrivialQuests = false,
+            IncludeTrivialQuests = true,
             IngredientsForOtherToons = "skill",
             ItemLevelOverPawn = false,
             OffsetX = 0,
@@ -187,6 +188,7 @@ return {
             ShowOutdatedFood = true,
             ShowOutgrownIngredients = true,
             ShowQuestItems = true,
+            ShowQuestItemsInAuction = true,
             ShowRecipesForOtherToons = true,
             ShowSellable = { BankAndBags = true, GuildBank = false },
             ShowSpareBags = true,
@@ -203,7 +205,7 @@ return {
         Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-213250",
+    environment = "env-hunter37-20261122-225933",
     format = 1,
     itemID = 1942,
     link = "|cnIQ1:|Hitem:1942::::::::37:1485:::::::::|h[Bottle of Moonshine]|h|r",
