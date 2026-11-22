@@ -52,7 +52,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 
 Each later step only replaces the statuses listed, so an upgrade keeps its icon, and a learnable look keeps its own against everything but a quest.
 
-1. Old expansion and Quest-class items (early; the type branch may overwrite them). A Quest-class item whose known quests are all behind the toon (done, or never to be taken) gets no `quest` here (notes: Quest Value).
+1. Old expansion and Quest-class items (early; the type branch may overwrite them). A Quest-class item whose known quests are all behind the toon (done, or never to be taken) gets no `quest` here, and neither does one whose remaining quests the player's options keep out (the range of levels, trivial quests; notes: Quest Value).
 2. The branch for the item's type (equipment, consumable, recipe, pet, mount, toy, ...). A piece of equipment that would be `collected` and would gain an unknown look by an upgrade or at the Catalyst is `transform` here instead, so it is never `sellable` or `auction`; an upgrade keeps its arrow and a gear set's piece stays `collected` with the set's mark (notes: Looks After a Change).
    A book or a rune that teaches this toon a spell it does not know (no profession's recipe: it asks for no skill) is `own`, `lowSkill` below its level, by the tooltip's own lines (notes: What an Item Teaches).
 3. Equippable junk becomes `sellable` (replaces empty). So does such a spent Quest-class item with no use, no slot and no equip effect (replaces empty, `oldexpansion`); one that a repeatable quest can still take ends as `quest` with `sellable` or `auction` as its small mark (notes: Quest Value).

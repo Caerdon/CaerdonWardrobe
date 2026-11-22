@@ -444,16 +444,18 @@ function CaerdonWardrobeConfigIcons:Register()
     local showQuest = self:AddCheckbox({ key = "showQuestItems", text = "Show the quest icon", tooltip = "Marks quest items and items that a quest in your log takes. It comes before the learnable icons, because the item has to be in your bags when you hand the quest in. One switch for every window.", configSection = "Icon", configValue = "ShowQuestItems" })
     local showUpcoming = self:AddCheckbox({ key = "showUpcomingQuestItems", text = "Also for quests I have not picked up yet (needs QuestieDB or AllTheThings)", tooltip = "Also marks items that a quest you have not picked up yet will ask for. Uses the data of the QuestieDB or the AllTheThings addon, whichever is installed; without either only the quests in your log are checked.", configSection = "Icon", configValue = "ShowUpcomingQuestItems" },
         { indent = 1, dependsOn = showQuest })
-    self:AddDropdown({ key = "upcomingQuestLevels", text = "Quests I can take within:", configSection = "Icon", configValue = "UpcomingQuestLevels", width = 150 }, {
+    self:AddDropdown({ key = "upcomingQuestLevels", text = "Quests ahead of my level, within:", configSection = "Icon", configValue = "UpcomingQuestLevels", width = 150 }, {
         { title = "2 levels",  value = "2",   tooltip = "Only quests you can take almost now." },
         { title = "5 levels",  value = "5",   tooltip = "Quests you can take within the next five levels." },
         { title = "10 levels", value = "10",  tooltip = "Quests you can take within the next ten levels." },
         { title = "20 levels", value = "20",  tooltip = "Quests you can take within the next twenty levels." },
-        { title = "Any level", value = "any", tooltip = "Every quest you will be able to take, however far off." }
+        { title = "Any number of levels", value = "any", tooltip = "Every quest you will be able to take later, however far off. Quests you have outgrown are the option below." }
     }, { indent = 2, dependsOn = showUpcoming })
-    self:AddCheckbox({ key = "includeTrivialQuests", text = "Also quests that are trivial for this character", tooltip = "Counts quests that have turned gray for you as well, for those who do every quest.", configSection = "Icon", configValue = "IncludeTrivialQuests" },
+    self:AddCheckbox({ key = "includeTrivialQuests", text = "Also quests that have turned gray for this character", tooltip = "A quest turns gray once it is so far below your level that it gives almost no experience. Quests below your level that are not gray yet always count; this adds the gray ones, for those who do every quest.", configSection = "Icon", configValue = "IncludeTrivialQuests" },
         { indent = 2, dependsOn = showUpcoming })
-    self:AddLabel("A later quest of a chain you are on always counts, whatever its level.", { indent = 2 })
+    self:AddLabel("Quests below your level count until they turn gray. A later quest of a chain you are on always counts, whatever its level.", { indent = 2 })
+    self:AddCheckbox({ key = "showQuestItemsInAuction", text = "Show in the auction house", tooltip = "Also show the icon on auction house listings: an item one of your quests takes is one to buy.", configSection = "Icon", configValue = "ShowQuestItemsInAuction" },
+        { indent = 1, dependsOn = showQuest })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({

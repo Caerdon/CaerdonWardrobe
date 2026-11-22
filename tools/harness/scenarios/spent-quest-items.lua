@@ -39,8 +39,8 @@ return function(H, S)
         return item
     end
 
-    local PAGE, LETTER, TOOTH, HORN, BADGE, STONE, RELIC, SCRAP, TOKEN, COIN, SLIP, KEY = 993001, 993002, 993003,
-        993004, 993005, 993006, 993007, 993008, 993009, 993010, 993011, 993012
+    local PAGE, LETTER, TOOTH, HORN, BADGE, STONE, RELIC, SCRAP, TOKEN, COIN, SLIP, KEY, HALF, ORB = 993001, 993002,
+        993003, 993004, 993005, 993006, 993007, 993008, 993009, 993010, 993011, 993012, 993013, 993014
     local ITEMS = {
         -- A page of a book: no binding, a vendor price, stacks. A quest in the log asks for it.
         [PAGE] = QuestItem("Hill Page 25", { stack = 10, price = 375, bindType = 0, tooltip = { READ_LINE }, readable = true }),
@@ -67,6 +67,10 @@ return function(H, S)
         [SLIP] = QuestItem("Reading Slip"),
         -- For a quest twelve levels away that follows on another.
         [KEY] = QuestItem("Vault Key"),
+        -- No quest is known for it, and the item itself asks for level 50.
+        [HALF] = QuestItem("Top Half of a Manual", { minLevel = 50, bindType = 0 }),
+        -- For a quest of level 55 whose data has no level it asks for.
+        [ORB] = QuestItem("Flawless Orb", { stack = 20, bindType = 0 }),
     }
     local BAG = { PAGE, LETTER, TOOTH, HORN, BADGE, STONE, RELIC, SCRAP, TOKEN, COIN, SLIP }
     local SLOT = {}
@@ -100,8 +104,10 @@ return function(H, S)
         [8212] = { name = "The Vault", requiredLevel = 45, questLevel = 47, preQuestSingle = { 8213 },
             startedBy = { { 5 } }, objectives = { [3] = { { KEY } } } },
         [8213] = { name = "Word of the Vault", requiredLevel = 28, questLevel = 33, startedBy = { { 5 } } },
+        [8214] = { name = "To Serve the Orb", requiredLevel = 0, questLevel = 55, startedBy = { { 5 } },
+            objectives = { [3] = { { ORB } } } },
     }
-    local ALL_QUESTS = { 8201, 8202, 8203, 8204, 8205, 8206, 8207, 8208, 8209, 8210, 8211, 8212, 8213 }
+    local ALL_QUESTS = { 8201, 8202, 8203, 8204, 8205, 8206, 8207, 8208, 8209, 8210, 8211, 8212, 8213, 8214 }
     local onQuest = { [8201] = true, [8210] = true }
     local completed = { [8202] = true, [8205] = true }
 
@@ -250,7 +256,8 @@ return function(H, S)
     do
         local info = Info(STONE)
         Check(info and not info.isOver and not info.hasQuestValue, "later: a quest twelve levels away is not behind the toon")
-        Equal(InBag(STONE), "quest", "later: its stone keeps the quest icon")
+        Check(info and info.keptOutByOptions == true, "later: it is the player's range that keeps it out")
+        Equal(InBag(STONE), "", "later: its stone has no icon while its quest is beyond the range, and is not one to get rid of")
         info = Info(SCRAP)
         Check(info and not info.isOver, "again: a quest that is done and can be done again is not behind the toon")
         Equal(InBag(SCRAP), "quest", "again: its scrap keeps the quest icon")
@@ -263,15 +270,37 @@ return function(H, S)
             env.CaerdonWardrobe:RefreshItems()
         end
         Check(not Info(STONE).hasQuestValue, "range: twelve levels away is beyond the default's five")
+        -- The copy in the bags has the quest icon by its class all the same; a copy the toon
+        -- does not hold (an auction's) has it only within the range.
+        Equal(InBag(STONE), "", "range: the stone in the bags has no quest icon then")
+        -- A quest whose data has no level it asks for goes by its own level.
+        local orb = Info(ORB)
+        Check(orb and not orb.hasQuestValue and orb.keptOutByOptions == true,
+            "range: a quest of level 55 with no level it asks for is beyond the range")
+        Equal(orb and orb.quests[1] and orb.quests[1].reason, "of level 55, and the level it asks for is not known",
+            "range: and says why")
+        Equal(ByLink(ORB), "", "range: its orb has no quest icon")
+        Equal(Info(HALF), nil, "range: no quest is known for the half of a manual")
+        Equal(ByLink(HALF), "", "range: its own level of 50 is beyond the range, so it has no quest icon")
+        Equal(ByLink(LETTER), "quest", "range: a letter that asks for no level keeps the icon its class gives")
+        Equal(ByLink(STONE), "", "range: nor has one the toon does not hold")
         config.UpcomingQuestLevels = "20"
         Refresh()
         Check(Info(STONE).hasQuestValue and Info(STONE).isUpcoming, "range: and within twenty")
+        Equal(ByLink(STONE), "quest", "range: and the stone has the icon then")
+        -- An item no quest is known for goes by the level it asks for itself (17 above the toon).
+        Equal(ByLink(HALF), "quest", "range: an item no quest is known for, of level 50, is within twenty too")
+        Check(not Info(ORB).hasQuestValue, "range: the quest of level 55 is beyond twenty as well")
+        local row = Loaded(env.CaerdonItem:CreateFromItemID(HALF))
+        Equal(select(2, row:IsQuestItemBeyondRange()), 50, "range: the level it asks for is read")
+        Equal(InBag(STONE), "quest", "range: in the bags too")
         config.UpcomingQuestLevels = "2"
         Refresh()
         Check(not Info(STONE).hasQuestValue, "range: not within two")
         config.UpcomingQuestLevels = "any"
         Refresh()
         Check(Info(STONE).hasQuestValue, "range: and within any")
+        Check(Info(ORB).hasQuestValue, "range: so is the quest of level 55")
         config.UpcomingQuestLevels = "5"
         Refresh()
 
@@ -279,6 +308,7 @@ return function(H, S)
         config.IncludeTrivialQuests = true
         Refresh()
         Check(Info(COIN).hasQuestValue, "trivial: and does where the player asks for those")
+        Equal(InBag(COIN), "quest", "trivial: its coin has the quest icon then")
         config.IncludeTrivialQuests = false
         Refresh()
 
@@ -307,7 +337,7 @@ return function(H, S)
     -- from "not wanted" alike.
     do
         Equal(InBag(TOKEN), "quest", "excluded: the token of a quest still to come has the quest icon")
-        Equal(InBag(COIN), "quest", "excluded: the coin of a trivial quest keeps it by its class")
+        Equal(InBag(COIN), "", "excluded: the coin of a trivial quest has no icon while those are left out")
         Check(Info(COIN) and not Info(COIN).isOver, "excluded: a trivial quest is not behind the toon")
         completed[8207], completed[8209] = true, true
         After("QUEST_TURNED_IN")

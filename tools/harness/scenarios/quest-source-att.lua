@@ -121,7 +121,8 @@ return function(H, S)
 
     -- A world: the game, AllTheThings in it, and the addon. questie: the quests QuestieDB has.
     local function World(flavor, questie)
-        local world = { ready = true, handlers = {}, completed = {}, onQuest = {}, trivial = {}, caches = Caches() }
+        local world = { ready = true, handlers = {}, completed = {}, onQuest = {}, trivial = {}, haveData = {},
+            caches = Caches() }
         local game = H.StockGame(TOON, ITEMS)
         local app = {}
         function app.GetRawField(field, id)
@@ -160,6 +161,7 @@ return function(H, S)
         game:Set("C_QuestLog.IsQuestFlaggedCompleted", function(questID) return world.completed[questID] == true end)
         game:Set("C_QuestLog.GetTitleForQuestID", function(questID) return "Quest " .. tostring(questID) end)
         game:Set("C_QuestLog.IsQuestTrivial", function(questID) return world.trivial[questID] == true end)
+        game:Set("HaveQuestData", function(questID) return world.haveData[questID] == true end)
         -- What an item of the Quest type asks as it loads (types/QuestMixin.lua).
         game:Set("C_QuestLog.IsWorldQuest", function() return false end)
         game:Set("QuestInfoFrame", {})
@@ -276,13 +278,15 @@ return function(H, S)
         end
 
         -- What is only out of reach for now is not.
+        -- A quest the player's range keeps out gives its item no icon; one that is out of
+        -- reach for another reason keeps the icon its class gives.
         for _, case in ipairs({
-            { DAILY, "repeatable" }, { FAR, "needs level 60" },
+            { DAILY, "repeatable", "quest" }, { FAR, "needs level 60", "" },
         }) do
             quest = Only(case[1])
             Equal(quest.reason, case[2], "for now: " .. case[2])
             Check(quest.eligible == false and quest.over == false, "for now: not behind the toon (" .. case[2] .. ")")
-            Equal(Status(case[1]), "quest", "for now: its item keeps the quest icon (" .. case[2] .. ")")
+            Equal(Status(case[1]), case[3], "for now: its item's icon, and it is not one to get rid of (" .. case[2] .. ")")
         end
 
         -- A chain: its fifth step is not coming while the chain is not begun, and is from the
@@ -313,12 +317,16 @@ return function(H, S)
             world.trivial[9102] = true
             world.env.CaerdonWardrobe:RefreshItems()
             Equal(Only(FAR).reason, "needs level 60", "settings: and not within five")
-            Equal(Only(FANG).reason, "trivial at this level", "settings: a quest the client calls trivial does not count")
+            -- The client's word counts only where it has the quest's data.
+            Check(Only(FANG).eligible == true, "settings: trivial by a client that has no data of the quest is no word on it")
+            world.haveData[9102] = true
+            world.env.CaerdonWardrobe:RefreshItems()
+            Equal(Only(FANG).reason, "trivial at this level", "settings: a quest the client has and calls trivial does not count")
             config.IncludeTrivialQuests = true
             world.env.CaerdonWardrobe:RefreshItems()
             Check(Only(FANG).eligible == true, "settings: and does where the player asks for those")
             config.IncludeTrivialQuests = false
-            world.trivial[9102] = nil
+            world.trivial[9102], world.haveData[9102] = nil, nil
             world.env.CaerdonWardrobe:RefreshItems()
         end
 

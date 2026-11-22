@@ -184,7 +184,8 @@ local function ReadSlot(bag, slot)
             local questInfo = CaerdonQuestItems:GetItemQuestInfo(info.itemID, (C_Item.GetItemInfo(info.hyperlink)))
             local ofQuestClass = select(6, C_Item.GetItemInfoInstant(info.itemID)) == Enum.ItemClass.Questitem
             facts.questIcon = (questInfo ~= nil and questInfo.hasQuestValue == true) or
-                (ofQuestClass and not (questInfo ~= nil and questInfo.isOver == true and not questInfo.repeatableLeft))
+                (ofQuestClass and not (questInfo ~= nil and
+                    ((questInfo.isOver == true and not questInfo.repeatableLeft) or questInfo.keptOutByOptions == true)))
         end
     end
     -- The client's own answer to "is this copy in an equipment set".

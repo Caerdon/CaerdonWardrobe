@@ -4109,11 +4109,15 @@ return function(H, S)
             local auctionConfig = world.env.CaerdonWardrobeConfig.Auction
             Check(type(auctionConfig) == "table" and auctionConfig.IconColumn == nil and auctionConfig.UpgradeColumn == true,
                 "column: the gain's switch is on by default, and the icon's column has no setting")
-            Check(icon.ShowLearnable.Auction == true and icon.ShowLearnableByOther.Auction == true and icon.ShowOldExpansion.Auction == true,
-                "column: the three icons are on for the auction house by default")
-            local function IconsInAuction(own, other, old)
+            Check(icon.ShowLearnable.Auction == true and icon.ShowLearnableByOther.Auction == true and icon.ShowOldExpansion.Auction == true
+                    and icon.ShowQuestItemsInAuction == true,
+                "column: the four icons are on for the auction house by default")
+            local function IconsInAuction(own, other, old, quest)
                 icon.ShowLearnable.Auction, icon.ShowLearnableByOther.Auction, icon.ShowOldExpansion.Auction = own, other, old
+                icon.ShowQuestItemsInAuction = quest == true
             end
+            Equal(auction:GetDisplayInfo(nil, nil, auction, {}, {}, "quest", nil).questIcon.shouldShow, true,
+                "column: a listing shows the quest icon by default")
             IconsInAuction(false, false, false)
             Equal(Results(), "results price name", "column: with no icon switched on for the auction house the icon's column is gone, the gain's stays")
             Check(auction.resultsKinds == "results" and auction.resultsUpgradeLeft == 2,
@@ -4124,6 +4128,13 @@ return function(H, S)
             Equal(Results(), "icon results price name", "column: so does the switch of the icons for another toon")
             IconsInAuction(false, false, true)
             Equal(Results(), "icon results price name", "column: and that of an older expansion's mark")
+            IconsInAuction(false, false, false, true)
+            Equal(Results(), "icon results price name", "column: and the quest icon's")
+            icon.ShowQuestItems = false
+            Equal(Results(), "results price name", "column: not with the quest icon itself switched off")
+            Equal(auction:GetDisplayInfo(nil, nil, auction, {}, {}, "quest", nil).questIcon.shouldShow, false,
+                "column: and no listing shows it then")
+            icon.ShowQuestItems = true
             IconsInAuction(false, nil, false)
             Equal(Results(), "results price name", "column: a switch never set is not on")
             IconsInAuction(true, true, true)

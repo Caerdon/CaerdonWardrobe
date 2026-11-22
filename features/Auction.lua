@@ -237,26 +237,29 @@ end
 
 -- Which of the addon's icons the player has switched on for the auction house, each in its
 -- own block on the Icons page: the star of what this toon can learn, the icons of what is for
--- another toon, the mark of an older expansion.
+-- another toon, the mark of an older expansion, and the quest icon (an item a quest still to
+-- come takes is one to buy here; it needs the quest icon itself switched on).
 local function AuctionIcons()
 	local iconConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
 	local function On(section)
 		local windows = type(iconConfig) == "table" and iconConfig[section]
 		return type(windows) == "table" and windows.Auction and true or false
 	end
-	return On("ShowLearnable"), On("ShowLearnableByOther"), On("ShowOldExpansion")
+	local quest = type(iconConfig) == "table" and iconConfig.ShowQuestItems == true and
+		iconConfig.ShowQuestItemsInAuction == true
+	return On("ShowLearnable"), On("ShowLearnableByOther"), On("ShowOldExpansion"), quest
 end
 
 -- An icon with no switch of its own goes with the star's in the auction house: decor the toon
 -- owns and can have more of, a conduit that is an upgrade. (The grey gear of something to
 -- learn later is the star's stand-in in every window, by the core's drawing.) So every icon
--- that can be on a row is one of the three switches', and the three say whether the column
+-- that can be on a row is one of the four switches', and the four say whether the column
 -- would hold anything.
 local FOLLOWS_THE_STAR = { housingOwned = true, upgradeNonEquipment = true }
 
 local function WantsIconColumn()
-	local own, other, old = AuctionIcons()
-	return own or other or old
+	local own, other, old, quest = AuctionIcons()
+	return own or other or old or quest
 end
 
 local function WantsUpgradeColumn()
@@ -915,7 +918,7 @@ function AuctionMixin:GetTooltipData(item, locationInfo)
 end
 
 function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	local own, other, old = AuctionIcons()
+	local own, other, old, quest = AuctionIcons()
 	local info = {
 		bindingStatus = {
 			shouldShow = false
@@ -927,7 +930,7 @@ function AuctionMixin:GetDisplayInfo(button, item, feature, locationInfo, option
 			shouldShow = other
 		},
 		questIcon = {
-			shouldShow = false
+			shouldShow = quest
 		},
 		oldExpansionIcon = {
 			shouldShow = old

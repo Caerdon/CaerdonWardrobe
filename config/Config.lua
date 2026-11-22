@@ -253,6 +253,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems == nil then
             CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems = NS:GetDefaultConfig().Icon.ShowUpcomingQuestItems
         end
+        if CaerdonWardrobeConfig.Icon.ShowQuestItemsInAuction == nil then
+            CaerdonWardrobeConfig.Icon.ShowQuestItemsInAuction = NS:GetDefaultConfig().Icon.ShowQuestItemsInAuction
+        end
         if CaerdonWardrobeConfig.Icon.UpcomingQuestLevels == nil then
             CaerdonWardrobeConfig.Icon.UpcomingQuestLevels = NS:GetDefaultConfig().Icon.UpcomingQuestLevels
         end
@@ -523,6 +526,9 @@ function NS:GetDefaultConfig()
 
             ShowQuestItems = true,
             ShowUpcomingQuestItems = true,
+            -- The quest icon on auction house listings: where an item for a quest still to
+            -- come is bought.
+            ShowQuestItemsInAuction = true,
             -- How many levels ahead a quest the toon cannot take yet still counts as coming
             -- ("2", "5", "10", "20", "any": a dropdown's values are text), and whether a quest
             -- that is trivial for the toon counts.

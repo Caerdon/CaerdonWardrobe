@@ -836,12 +836,24 @@ local function UpcomingBlocker(questID, verdict, Get)
     end
     -- A later quest of a chain the toon is on is still to come, whatever its level: the
     -- quests before it are followed back, and only for a quest the level would keep out.
-    if requiredLevel > player.level + player.levelWindow and
+    -- Where the data has no level the quest asks for (0: over a hundred of the quests WoW
+    -- Forever added, all of level 50 and up), the quest's own level stands in for it. It is
+    -- never below the level asked for, so it keeps out no quest the toon is of a level for
+    -- by more than the difference between the two.
+    local levelKnown = requiredLevel > 0
+    local levelAsked = levelKnown and requiredLevel or questLevel
+    if levelAsked > player.level + player.levelWindow and
         not select(2, PrerequisitesBegun(questID, Get, {}, { left = CHAIN_BUDGET })) then
-        Block(format("needs level %d", requiredLevel))
+        verdict.optedOut = true
+        if levelKnown then
+            Block(format("needs level %d", requiredLevel))
+        else
+            Block(format("of level %d, and the level it asks for is not known", questLevel))
+        end
     end
     -- Zero and negative quest levels scale with the toon
     if not player.includeTrivial and questLevel > 0 and questLevel < player.level - player.trivialRange then
+        verdict.optedOut = true
         Block("trivial at this level")
     end
 
@@ -902,12 +914,13 @@ local function JudgeQuest(questID)
                 (second ~= nil and second:IsRepeating(questID))
             verdict.over = (Get ~= nil or second ~= nil) and not verdict.repeating
         elseif second then
-            local blocker, forGood, repeating, minLevel = second:Blocker(questID, GetPlayerContext())
+            local blocker, forGood, repeating, minLevel, _, optedOut = second:Blocker(questID, GetPlayerContext())
             verdict.eligible = blocker == nil
             verdict.reason = blocker or "upcoming"
             verdict.over = blocker ~= nil and forGood == true
             verdict.repeating = repeating == true
             verdict.requiredLevel = minLevel
+            verdict.optedOut = optedOut == true
         elseif not Get then
             verdict.reason = "no quest data"
         else
@@ -1049,6 +1062,13 @@ function CaerdonQuestItems:GetSlotQuestInfo(bag, slot)
     return type(info) == "table" and info or nil
 end
 
+-- How many levels ahead of the toon a quest still counts as coming, by the player's setting
+-- (a large number for "any"). For a quest's item no quest is known for, whose own required
+-- level is all there is to go by (CaerdonItemMixin:IsQuestItemBeyondRange).
+function CaerdonQuestItems:GetUpcomingLevelWindow()
+    return (UpcomingSettings())
+end
+
 -- Returns nil when no known quest takes the item. Otherwise:
 --   hasQuestValue  an unfinished quest that applies to this toon takes the item (honours the
 --                  "upcoming quests" setting)
@@ -1061,6 +1081,8 @@ end
 --                  behind the toon.
 --   repeatableLeft isOver is true by that alone: a quest that can be done again still takes
 --                  the item.
+--   keptOutByOptions  every quest not behind the toon is beyond the player's range of levels
+--                  or trivial where those are not wanted (optedOut on each)
 --   quests         every candidate quest with its verdict, the rejected ones included:
 --                  { questID, name, role, isActive, eligible, over, repeating, setAside,
 --                  reason, requiredLevel, questLevel }
@@ -1093,6 +1115,7 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
             eligible = verdict.eligible,
             over = verdict.over,
             source = verdict.source,
+            optedOut = verdict.optedOut == true,
             repeating = verdict.repeating == true,
             reason = verdict.reason,
             requiredLevel = verdict.requiredLevel,
@@ -1129,6 +1152,22 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
 
     table.sort(info.quests, SortQuests)
     info.isOver = info.isOver and #info.quests > 0
+
+    -- Every quest that is not behind the toon is one the player's own options keep out: beyond
+    -- the range of levels chosen, or trivial where those are not wanted. A quest's item has no
+    -- quest icon by its class then, in the bags as anywhere. One kept out for another reason
+    -- (it can be done again, an event's, a profession not learned) is not the player's choice,
+    -- and its item keeps the icon.
+    if not info.isOver and #info.quests > 0 then
+        local wanted = false
+        for _, entry in ipairs(info.quests) do
+            if not entry.over and not entry.optedOut then
+                wanted = true
+                break
+            end
+        end
+        info.keptOutByOptions = not wanted
+    end
 
     -- An item a quest handed over to be carried for that quest, the quest behind the toon: it
     -- hands over no more of them, and the item was that quest's own. A quest that can be done

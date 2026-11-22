@@ -300,6 +300,8 @@ function Source:Blocker(questID, player)
     end
 
     local blocker, forGood, repeating, minLevel, maxLevel = nil, false, false, nil, nil
+    -- Kept out by the player's own options: the range of levels, or trivial quests left out.
+    local optedOut = false
     local function Block(reason, behind)
         blocker = blocker or reason
         forGood = forGood or behind == true
@@ -382,11 +384,17 @@ function Source:Blocker(questID, player)
         if type(minLevel) == "number" and minLevel > player.level + player.levelWindow then
             local met, _, hasSources = SourcesBegun(app, group, {}, { left = CHAIN_BUDGET })
             if not (hasSources and met) then
+                optedOut = true
                 Block(format("needs level %d", minLevel))
             end
         end
-        -- The client's own word on a quest that has turned gray, where it has one.
-        if not player.includeTrivial and C_QuestLog.IsQuestTrivial and C_QuestLog.IsQuestTrivial(questID) == true then
+        -- The client's own word on a quest that has turned gray, where it has the quest's
+        -- data. Without the data it has no word: asked of a quest that is not in the log it
+        -- gave no level (GetQuestDifficultyLevel 0, HaveQuestData false; WoW Forever
+        -- 1.60.1.71037), and what it says of "trivial" then is not to be built on.
+        if not player.includeTrivial and C_QuestLog.IsQuestTrivial and HaveQuestData and
+            HaveQuestData(questID) == true and C_QuestLog.IsQuestTrivial(questID) == true then
+            optedOut = true
             Block("trivial at this level")
         end
     end)
@@ -395,7 +403,7 @@ function Source:Blocker(questID, player)
         return "error: " .. tostring(problem), false
     end
 
-    return blocker, forGood, repeating, minLevel, maxLevel
+    return blocker, forGood, repeating, minLevel, maxLevel, optedOut
 end
 
 -- Drops what is kept about quests. AllTheThings changes a quest's "u" as the session goes.

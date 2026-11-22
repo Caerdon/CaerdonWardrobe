@@ -3294,6 +3294,17 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 "false (one of them is in the log, still to come, can be done again, or is only out of reach for now)"
         end
         addKV(1, "Every Known Quest Behind The Toon", behindText)
+        -- A quest's item no quest is known for goes by the level it asks for itself.
+        if questItemInfo == nil and item.IsQuestItemBeyondRange and
+            select(6, C_Item.GetItemInfoInstant(item:GetItemID())) == Enum.ItemClass.Questitem then
+            local beyond, itemMinLevel = item:IsQuestItemBeyondRange()
+            addKV(1, "Its Own Required Level Is Beyond The Range", string.format("%s (it asks for level %s)",
+                tostring(beyond), tostring(itemMinLevel)))
+        end
+        if questItemInfo ~= nil and questItemInfo.keptOutByOptions then
+            addKV(1, "Every Quest Left Is Outside The Range Or Trivial",
+                "true (the player's options keep them out, so its class gives no quest icon)")
+        end
         if questItemInfo ~= nil and questItemInfo.repeatableLeft then
             addKV(1, "A Quest That Can Be Done Again Still Takes It",
                 "true (the quest icon stays, with what is left of the item as the small mark)")

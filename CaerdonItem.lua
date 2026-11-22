@@ -2226,6 +2226,19 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     return mogStatus, copyMark
 end
 
+-- A quest's item no quest is known for, whose own required level is beyond the range of levels
+-- the player chose for quests still to come: the level is all that says how far off its quest
+-- is (the two halves of a book that starts a quest at 50, on an auction). Second value: the
+-- level it asks for.
+function CaerdonItemMixin:IsQuestItemBeyondRange()
+    local link = self:GetItemLink()
+    local minLevel = link and select(5, C_Item.GetItemInfo(link))
+    if type(minLevel) ~= "number" or minLevel <= 0 then
+        return false, minLevel
+    end
+    return minLevel > (UnitLevel("player") or 0) + CaerdonQuestItems:GetUpcomingLevelWindow(), minLevel
+end
+
 -- Whether this is a copy the toon holds: one that lies in a slot of its own (bags, bank,
 -- worn), or one a window says is the toon's (extraData.ownCopy: its mailbox).
 function CaerdonItemMixin:IsOwnCopy()
@@ -2447,7 +2460,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
             CaerdonWardrobeConfig.Icon.ShowQuestItems == true
         if CaerdonWardrobeConfig.Icon.ShowQuestItems then
             hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue == true
-            if isQuestItem and not questsOver then
+            -- By its class, unless the player's own options keep every quest left for it out
+            -- (beyond the range of levels chosen, or trivial): in the bags as on an auction.
+            -- One no quest is known for goes by the level the item itself asks for.
+            if isQuestItem and not questsOver and
+                not (questItemInfo ~= nil and questItemInfo.keptOutByOptions == true) and
+                not (questItemInfo == nil and self:IsQuestItemBeyondRange()) then
                 mogStatus = "quest"
             end
         end
