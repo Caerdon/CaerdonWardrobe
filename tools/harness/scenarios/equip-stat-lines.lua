@@ -46,6 +46,7 @@ return function(H, S)
     }
 
     local FIRST_ID, NO_PRICE_ID, WORN_ID, MAIN_HAND = 970001, 970800, 970900, 16
+    local MIDDLE_ID, USE_LINE_ID, FLOOR_ID, ON_USE = 970801, 970802, 970803, 44
     local function Items()
         local items = {}
         for index, case in ipairs(CASES) do
@@ -71,6 +72,23 @@ return function(H, S)
             tooltip = { { text = "Equip: Increases damage done by Shadow spells and effects by up to 10.", type = NONE,
                 r = 0, g = 1, b = 0 } },
             appearance = { appearanceID = 5397, sourceID = 7497, collected = true } }
+        -- The word for an equip line where it does not start an untyped line: in the middle of
+        -- one, and on a line the client types as a use. Neither is an equip line. And retail's
+        -- PVP floor (recorded: the text of a retail fixture), an untyped line that is one.
+        items[MIDDLE_ID] = { name = "Wordy Charm", quality = 2, level = 31, minLevel = 26, type = "Armor",
+            subType = "Miscellaneous", stack = 1, equipLoc = "INVTYPE_HOLDABLE", price = 537, classID = 4,
+            subClassID = 0, bindType = 2, tooltip = { { text = "Set: As if by Equip: nothing at all.", type = NONE } },
+            appearance = { appearanceID = 5396, sourceID = 7496, collected = true } }
+        items[USE_LINE_ID] = { name = "Used Charm", quality = 2, level = 31, minLevel = 26, type = "Armor",
+            subType = "Miscellaneous", stack = 1, equipLoc = "INVTYPE_HOLDABLE", price = 537, classID = 4,
+            subClassID = 0, bindType = 2, tooltip = { { text = "Equip: this line is typed as a use.", type = ON_USE } },
+            appearance = { appearanceID = 5395, sourceID = 7495, collected = true } }
+        items[FLOOR_ID] = { name = "Arena Charm", quality = 2, level = 31, minLevel = 26, type = "Armor",
+            subType = "Miscellaneous", stack = 1, equipLoc = "INVTYPE_HOLDABLE", price = 537, classID = 4,
+            subClassID = 0, bindType = 2,
+            tooltip = { { text = "Equip: Increases item level to a minimum of 285 in Arenas, Battlegrounds, and War Mode.",
+                type = NONE } },
+            appearance = { appearanceID = 5394, sourceID = 7494, collected = true } }
         -- What the toon wields, as the hunter of the exports did: a two-handed sword of a lower
         -- level and nothing in the off-hand. A charm is then no upgrade (the slot is taken),
         -- no tie and not outdone by a better piece, so only its own lines decide.
@@ -198,6 +216,22 @@ return function(H, S)
         local label = "retail, " .. case[1]
         Equal(result.hasEquipEffectBeyondStats, true, label .. ": an effect")
         Equal(status, "collected", label .. ": kept")
+    end
+
+    -- Which line is an equip line at all, the same in both clients.
+    for _, pair in ipairs({ { "forever", forever }, { "retail", retail } }) do
+        local flavor, client = pair[1], pair[2]
+        Equal(client.env.Enum.TooltipDataLineType.ItemSpellTriggerOnUse, ON_USE,
+            flavor .. ": the type of a use line is the one the cases use")
+        Equal(client.listing.strings.ITEM_SPELL_TRIGGER_ONEQUIP, "Equip:", flavor .. ": the client's word for an equip line")
+        local _, result = Judge(client, MIDDLE_ID)
+        Equal(result.hasEquipEffect, false, flavor .. ", the word in the middle of a line: no equip line")
+        Equal(result.hasEquipEffectBeyondStats, false, flavor .. ", the word in the middle of a line: and no effect")
+        _, result = Judge(client, USE_LINE_ID)
+        Equal(result.hasEquipEffect, false, flavor .. ", the word on a line typed as a use: no equip line")
+        _, result = Judge(client, FLOOR_ID)
+        Equal(result.hasEquipEffect, true, flavor .. ", the PVP floor: an untyped equip line")
+        Equal(result.hasEquipEffectBeyondStats, true, flavor .. ", the PVP floor: and more than a stat, as before")
     end
     Equal(#retail.errors, 0, "retail: no error reached the error handler")
 

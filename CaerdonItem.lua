@@ -1018,11 +1018,13 @@ function CaerdonItemMixin:GetTooltipData(data)
             end
 
             if lineText then
-                -- Text fallback for clients that don't type the equip line
-                if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
+                -- An "Equip:" line the client does not type: a plain stat on WoW Forever (see
+                -- IsEquipStatLine), a skill bonus, retail's PVP floor. Only an untyped line is
+                -- read by its text, and only where it starts with the client's word for it.
+                if line.type == Enum.TooltipDataLineType.None and
+                    lineText:sub(1, #ITEM_SPELL_TRIGGER_ONEQUIP) == ITEM_SPELL_TRIGGER_ONEQUIP then
                     tooltipData.hasEquipEffect = true
-                    -- Only an untyped line can be a plain stat (see IsEquipStatLine).
-                    if line.type ~= Enum.TooltipDataLineType.None or not IsEquipStatLine(lineText) then
+                    if not IsEquipStatLine(lineText) then
                         tooltipData.hasEquipEffectBeyondStats = true
                     end
                 end
