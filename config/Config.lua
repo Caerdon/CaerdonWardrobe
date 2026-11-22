@@ -253,6 +253,12 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems == nil then
             CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems = NS:GetDefaultConfig().Icon.ShowUpcomingQuestItems
         end
+        if CaerdonWardrobeConfig.Icon.UpcomingQuestLevels == nil then
+            CaerdonWardrobeConfig.Icon.UpcomingQuestLevels = NS:GetDefaultConfig().Icon.UpcomingQuestLevels
+        end
+        if CaerdonWardrobeConfig.Icon.IncludeTrivialQuests == nil then
+            CaerdonWardrobeConfig.Icon.IncludeTrivialQuests = NS:GetDefaultConfig().Icon.IncludeTrivialQuests
+        end
         if CaerdonWardrobeConfig.Icon.ShowAuctionValue == nil then
             CaerdonWardrobeConfig.Icon.ShowAuctionValue = NS:GetDefaultConfig().Icon.ShowAuctionValue
         end
@@ -517,6 +523,11 @@ function NS:GetDefaultConfig()
 
             ShowQuestItems = true,
             ShowUpcomingQuestItems = true,
+            -- How many levels ahead a quest the toon cannot take yet still counts as coming
+            -- ("2", "5", "10", "20", "any": a dropdown's values are text), and whether a quest
+            -- that is trivial for the toon counts.
+            UpcomingQuestLevels = "5",
+            IncludeTrivialQuests = false,
             ShowAuctionValue = true,
             -- A piece whose own look is known and which would have an unknown one raised on
             -- its upgrade track or converted at the Catalyst (CaerdonTransformLooks.lua).

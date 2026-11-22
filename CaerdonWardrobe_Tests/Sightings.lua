@@ -45,10 +45,17 @@ T.SightingCases = {
     },
     {
         id = "readable",
-        rule = "a readable item is readable",
+        rule = "a readable item is readable, unless it has the quest icon",
         slotState = true,
         expect = { status = "readable" },
-        fits = function(facts) return facts.isReadable and not facts.hasLoot end,
+        fits = function(facts) return facts.isReadable and not facts.hasLoot and not facts.questIcon end,
+    },
+    {
+        id = "readableForQuest",
+        rule = "a readable item of a quest (a quest takes it, or a quest item whose quests are not all behind the toon) keeps the quest icon",
+        slotState = true,
+        expect = { status = "quest" },
+        fits = function(facts) return facts.isReadable and not facts.hasLoot and facts.questIcon end,
     },
     {
         id = "refundable",
@@ -166,6 +173,19 @@ local function ReadSlot(bag, slot)
     -- A caged pet's link is not an item link and has no bind type to ask for.
     if info.hyperlink:find("|Hitem:", 1, true) then
         facts.bindType = select(14, C_Item.GetItemInfo(info.hyperlink))
+    end
+    -- A readable item with the quest icon keeps it: one a quest takes, and one of the Quest
+    -- class until every quest known for it is behind the toon. No client API maps an item to
+    -- a quest: this is the quest module's answer, an input as in Facts.Item, and asked only of
+    -- what can be read.
+    if facts.isReadable and info.itemID then
+        facts.questIcon = false
+        if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowQuestItems then
+            local questInfo = CaerdonQuestItems:GetItemQuestInfo(info.itemID, (C_Item.GetItemInfo(info.hyperlink)))
+            local ofQuestClass = select(6, C_Item.GetItemInfoInstant(info.itemID)) == Enum.ItemClass.Questitem
+            facts.questIcon = (questInfo ~= nil and questInfo.hasQuestValue == true) or
+                (ofQuestClass and not (questInfo ~= nil and questInfo.isOver == true and not questInfo.repeatableLeft))
+        end
     end
     -- The client's own answer to "is this copy in an equipment set".
     if C_Container.GetContainerItemEquipmentSetInfo then

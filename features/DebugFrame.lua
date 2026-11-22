@@ -2605,9 +2605,15 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         locationKey = "debugframe-copy-" .. tostring(item:GetItemID() or "unknown"),
         isDebugFrame = true
     }
-    local isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo = item:GetCaerdonStatus(self, locationInfo)
+    local isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo, smallMark = item:GetCaerdonStatus(self,
+        locationInfo)
     addKV(1, "Status Ready", isReady)
     addKV(1, "Mog Status", mogStatus)
+    -- What a quest's item is beside that, drawn as the small mark on the quest icon: a copy
+    -- that can be read, or one to get rid of that a quest which can be done again still takes.
+    if smallMark then
+        addKV(1, "Small Mark On The Icon", smallMark)
+    end
     addKV(1, "Binding Status", bindingStatus)
     if bindingResult then
         -- unusableItem / skillTooLow come from the red-text tooltip scan and drive canEquipForPlayer
@@ -3280,6 +3286,25 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Has Quest Value", questItemInfo ~= nil and questItemInfo.hasQuestValue or false)
         addKV(1, "Active Quest", questItemInfo ~= nil and questItemInfo.isActive or false)
         addKV(1, "Upcoming Quest", questItemInfo ~= nil and questItemInfo.isUpcoming or false)
+        -- What takes the quest icon off a Quest-class item, and makes it one to get rid of
+        -- where it has no use, is worn nowhere and has no equip effect.
+        local behindText = "no quest is known for it"
+        if questItemInfo ~= nil then
+            behindText = questItemInfo.isOver and "true" or
+                "false (one of them is in the log, still to come, can be done again, or is only out of reach for now)"
+        end
+        addKV(1, "Every Known Quest Behind The Toon", behindText)
+        if questItemInfo ~= nil and questItemInfo.repeatableLeft then
+            addKV(1, "A Quest That Can Be Done Again Still Takes It",
+                "true (the quest icon stays, with what is left of the item as the small mark)")
+        end
+        if item.IsSpentQuestItem then
+            local _, _, _, _, _, exportClassID = C_Item.GetItemInfoInstant(item:GetItemID())
+            if exportClassID == Enum.ItemClass.Questitem then
+                addKV(1, "Nothing Else To It (no use, not worn, no equip effect)",
+                    item:IsSpentQuestItem(bindingResult))
+            end
+        end
         -- The client's own word for the copy in its bag slot, which no status is made from.
         local slotQuestInfo = item.GetSlotQuestInfo and item:GetSlotQuestInfo()
         if slotQuestInfo then
@@ -3297,6 +3322,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Show Quest Items", CaerdonWardrobeConfig.Icon.ShowQuestItems)
         addKV(1, "Show Upcoming Quest Items", CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems)
         addKV(1, "Upcoming Level Window", questState.upcomingLevelWindow)
+        addKV(1, "Include Trivial Quests", questState.includeTrivial)
         addKV(1, "Trivial Range", questState.trivialRange)
         addKV(1, "Profession Skill Lines", questState.professions or "not recognised (check skipped)")
 
@@ -3332,6 +3358,27 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
         addKV(1, "Questie Policy", questState.questie.loaded and
             ("loaded, ready=" .. tostring(questState.questie.isReady)) or "not loaded")
+        -- The second source of quest data (CaerdonQuestSourceATT.lua).
+        local second = questState.second
+        if second then
+            local secondText = tostring(second.state)
+            if second.version then
+                secondText = secondText .. ", version " .. tostring(second.version)
+            end
+            if second.state ~= "missing" then
+                secondText = secondText .. string.format(
+                    "; its ready call %s; since the last refresh asked about %d items and named %d quests for them",
+                    second.readySeen and "was heard" or (second.listening and "is listened for" or "is not listened for"),
+                    second.asked or 0, second.named or 0)
+            end
+            addKV(1, "AllTheThings", secondText)
+            if second.missingFunctions then
+                addKV(1, "AllTheThings Functions Not Found", second.missingFunctions)
+            end
+            if second.error then
+                addKV(1, "AllTheThings Error", second.error)
+            end
+        end
         addKV(1, "Quests Answered Since The Last Refresh", questState.answeredCount)
 
         if questItemInfo and #questItemInfo.quests > 0 then
@@ -3342,13 +3389,15 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                     levelText = string.format(" [level %s, requires %s]",
                         tostring(quest.questLevel or "?"), tostring(quest.requiredLevel or "?"))
                 end
-                addLine(2, string.format("- %d %s%s (%s): %s%s",
+                addLine(2, string.format("- %d %s%s (%s): %s%s%s",
                     quest.questID,
                     tostring(quest.name or "unknown"),
                     levelText,
                     tostring(quest.role),
                     quest.eligible and "" or "skipped, ",
-                    tostring(quest.reason)))
+                    tostring(quest.reason) .. (quest.source and (", judged from " .. quest.source) or ""),
+                    quest.over and " (behind the toon)" or
+                        quest.setAside and " (not counted: the quest that handed the item over is behind the toon)" or ""))
             end
         else
             addLine(1, "Quests: none")

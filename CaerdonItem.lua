@@ -82,8 +82,9 @@ end
 
 -- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state, and what
 -- else GetCaerdonStatus adds to the key). An entry is { isReady, mogStatus, bindingStatus,
--- bindingResult, transmogInfo }: the transmog info of a piece of equipment is kept with the
--- verdict made from it, so drawing reads the same table and it is computed once per entry.
+-- bindingResult, transmogInfo, questMark }: the transmog info of a piece of equipment is kept
+-- with the verdict made from it, so drawing reads the same table and it is computed once per
+-- entry; questMark is the small mark the verdict puts on a quest's icon.
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
 
@@ -1674,6 +1675,27 @@ function CaerdonItemMixin:IsEquippableJunk(bindingResult)
     return self:IsSellable()
 end
 
+-- A Quest-class item with nothing left to it once its quests are behind the toon (the caller
+-- says they are): it has no use, goes in no equipment slot and has no equip effect. Anything
+-- that can be used or worn may be kept for the fun of it and is left unmarked. Most such
+-- items have no vendor price and can only be destroyed; the icon is the same, since what it
+-- says is that nothing is left to do with the item. A copy that can be read shows that in its
+-- bag slot instead (GetCopyStatus).
+function CaerdonItemMixin:IsSpentQuestItem(bindingResult)
+    local itemLink = self:GetItemLink()
+    if not itemLink then
+        return false
+    end
+    local equipLoc = select(9, C_Item.GetItemInfo(itemLink))
+    if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE" then
+        return false
+    end
+    if self:GetHasUse() or (bindingResult and bindingResult.hasEquipEffect) then
+        return false
+    end
+    return self:IsSellable()
+end
+
 -- Consumables whose tooltip carries a red race / class requirement ("Classes: Mage" on a hunter).
 -- A level or skill shortfall can be fixed; this cannot, so the item is only worth selling. Kept
 -- to Consumables: class-restricted equipment has its own appearance logic, and recipes have
@@ -2108,10 +2130,18 @@ end
 -- cache lookup, on every call. Otherwise a verdict first asked for outside the bags (the mail,
 -- a loot window, a vendor) would stand for the copy in the bags, and two copies in different
 -- states would share one.
+--
+-- The quest icon stays on a copy that can be read: that the item belongs to a quest says more
+-- than that it has text, and what can be read is what gets sold or deleted unread. That it can
+-- be read is the second value then ("readable"), which the drawing puts on the quest icon as
+-- its small mark. The readable icon is back once every quest known for the item is behind the
+-- toon.
 function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     if not self:HasItemLocationBankOrBags() then
         return mogStatus
     end
+
+    local copyMark = nil
 
     local itemLocation = self:GetItemLocation()
 
@@ -2143,7 +2173,11 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
             mogStatus = "openable"
         end
     elseif readable then
-        mogStatus = "readable"
+        if mogStatus == "quest" then
+            copyMark = "readable"
+        else
+            mogStatus = "readable"
+        end
     else
         local isEquipped = false
         local money, itemCount, refundSec, currencyCount, hasEnchants
@@ -2186,7 +2220,10 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
         end
     end
 
-    return mogStatus
+    if copyMark and mogStatus ~= "quest" then
+        copyMark = nil
+    end
+    return mogStatus, copyMark
 end
 
 -- Whether this is a copy the toon holds: one that lies in a slot of its own (bags, bank,
@@ -2285,9 +2322,12 @@ end
 -- not when anything has (CaerdonWardrobe:RetryWaitingFor): a tooltip's instance as a number,
 -- "item:<ID>" for a set piece's data, "conversion:<GUID>" for the client's word on a copy,
 -- "gear" for the pieces it is compared with. nil where nothing says when (the timer asks).
--- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo. transmogInfo is what
--- GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it is shared
--- by every copy the cache entry stands for, so read it and do not ask the item data again.
+-- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo, smallMark. transmogInfo
+-- is what GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it
+-- is shared by every copy the cache entry stands for, so read it and do not ask the item data
+-- again. smallMark is what a quest's item is beside that, for the small mark on the quest icon:
+-- "sellable" or "auction" from the verdict (a quest that can be done again still takes an item
+-- with nothing else to it), or else "readable" for this copy in its bag slot (GetCopyStatus).
 --
 -- feature and locationInfo are for a Pet Cage alone: its link is the same for every pet, so
 -- the tooltip of the place it lies in is asked of the feature (FeatureMixin:GetTooltipData).
@@ -2308,7 +2348,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
         local cached = statusCache[statusCacheKey]
         if cached then
             if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end
-            return cached[1], self:GetCopyStatus(cached[2], cached[4]), cached[3], cached[4], cached[5]
+            local copyStatus, copyMark = self:GetCopyStatus(cached[2], cached[4])
+            return cached[1], copyStatus, cached[3], cached[4], cached[5],
+                (copyStatus == "quest" and cached[6]) or copyMark
         end
     end
 
@@ -2386,15 +2428,28 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     end
 
     local isQuestItem = itemClassID == Enum.ItemClass.Questitem
-    -- Items of any other class that an unfinished quest takes (a vendor drink, cloth, a crafted
+    -- Items of any class that an unfinished quest takes (a vendor drink, cloth, a crafted
     -- weapon). Applied after the type-specific status below, which would otherwise overwrite it.
     local hasQuestValue = false
-    if CaerdonWardrobeConfig.Icon.ShowQuestItems then
-        if isQuestItem then
-            mogStatus = "quest"
-        else
-            local questItemInfo = self:GetQuestItemInfo()
-            hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue
+    -- A Quest-class item has the quest icon by its class, until every quest known for it is
+    -- behind the toon (turned in, or never to be taken): then it is judged as what is left of
+    -- it. One no quest is known for keeps the icon, since nothing says it is done with. That
+    -- is asked with the quest icon off too: what is left of the item does not hang on it.
+    local questsOver = false
+    -- Among them one that can be done again and was set aside (the item was handed over by a
+    -- quest that is done): the quest icon stays, with what is left of the item as the small
+    -- mark on it, since that quest can still take it.
+    local questRepeats = false
+    if isQuestItem or CaerdonWardrobeConfig.Icon.ShowQuestItems then
+        local questItemInfo = self:GetQuestItemInfo()
+        questsOver = isQuestItem and questItemInfo ~= nil and questItemInfo.isOver == true
+        questRepeats = questsOver and questItemInfo.repeatableLeft == true and
+            CaerdonWardrobeConfig.Icon.ShowQuestItems == true
+        if CaerdonWardrobeConfig.Icon.ShowQuestItems then
+            hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue == true
+            if isQuestItem and not questsOver then
+                mogStatus = "quest"
+            end
         end
     end
 
@@ -2864,6 +2919,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
         mogStatus = "sellable"
     end
 
+    -- A quest's item whose quests are all behind the toon, and that does nothing else.
+    if questsOver and (mogStatus == nil or mogStatus == "" or mogStatus == "oldexpansion") and
+        self:IsSpentQuestItem(bindingResult) then
+        mogStatus = "sellable"
+    end
+
     -- Bags (ordinary, reagent and profession bags, quivers) against the toon's own bag slots: one that
     -- belongs in a slot now (a slot it fits is empty or holds a bag it improves on) gets the
     -- learnable icon, wherever it is seen; one that would improve none of them, with every
@@ -2973,6 +3034,19 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
         end
     end
 
+    -- A quest's item whose one quest left can be done again: the quest icon, and what the
+    -- item came out as ("sellable", "auction") beside it for the small mark. One with a use or
+    -- an equip effect came out as nothing and has the quest icon alone.
+    local questMark = nil
+    if questRepeats then
+        if mogStatus == "sellable" or mogStatus == "auction" then
+            questMark = mogStatus
+            mogStatus = "quest"
+        elseif mogStatus == nil or mogStatus == "" or mogStatus == "oldexpansion" then
+            mogStatus = "quest"
+        end
+    end
+
     if lookPending then
         -- Not ready, and nothing kept: the queue asks again, and the data is here by then.
         if CaerdonCounters.on then CaerdonCounters:Mark("look data not ready") end
@@ -2982,10 +3056,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     -- Everything up to here follows from the link and the toon, and is kept per link. What
     -- belongs to this copy in its bag slot is added after the lookup (GetCopyStatus).
     if statusCacheKey then
-        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo}
+        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo, questMark}
     end
 
-    return isReady, self:GetCopyStatus(mogStatus, bindingResult), bindingStatus, bindingResult, statusTransmogInfo
+    local copyStatus, copyMark = self:GetCopyStatus(mogStatus, bindingResult)
+    return isReady, copyStatus, bindingStatus, bindingResult, statusTransmogInfo,
+        (copyStatus == "quest" and questMark) or copyMark
 end
 
 function CaerdonItemMixin:GetItemData()

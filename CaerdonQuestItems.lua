@@ -10,6 +10,14 @@
 --      accepted yet - the "guide has you buy it early" case. Its own item -> quest field
 --      (Item.relatedQuests) only covers a fraction of the pairs, so a reverse index is built
 --      from every quest's objectives, a few milliseconds a frame.
+--   3. AllTheThings, when it is loaded (CaerdonQuestSourceATT.lua): a second source of the
+--      same two answers, for retail, where there is no QuestieDB, and beside it on WoW Forever.
+--      It names further quests for an item, and a quest QuestieDB does not have is judged from
+--      its data.
+--
+-- A Quest-class item has the quest icon by its class. The same answer says when that is over:
+-- every quest known for the item is behind the toon (done, or one it can never take), which is
+-- how such an item loses the icon once its quest is turned in.
 --
 -- CaerdonItemMixin:GetQuestItemInfo() is the entry point for callers; the Debug Frame export
 -- prints the full verdict list ("[Quest Value]").
@@ -23,7 +31,25 @@ local QUESTIEDB_CONTRACT = 2
 
 -- A quest that is not in the log counts as "upcoming" when the toon can take it within this
 -- many levels and it is not trivial (gray) for the toon yet.
-local UPCOMING_LEVEL_WINDOW = 5
+-- (Icon.UpcomingQuestLevels; this is the value where the setting is not there.)
+local DEFAULT_UPCOMING_LEVELS = 5
+-- "Any level", as a number of levels.
+local ANY_LEVEL = 1000
+-- How many quests one question follows back along a chain before it gives up.
+local CHAIN_BUDGET = 200
+
+-- The player's choices for quests not picked up yet: how many levels ahead one still counts,
+-- and whether one that is trivial for the toon does.
+local function UpcomingSettings()
+    local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local levels = icon and icon.UpcomingQuestLevels
+    if levels == "any" then
+        levels = ANY_LEVEL
+    else
+        levels = tonumber(levels) or DEFAULT_UPCOMING_LEVELS
+    end
+    return levels, icon ~= nil and icon.IncludeTrivialQuests == true
+end
 -- Used only if the client cannot report the trivial range.
 local FALLBACK_TRIVIAL_RANGE = 7
 
@@ -111,10 +137,14 @@ local objectiveNames = {}
 -- For the export: how often a scan kept a name, when last, and the rechecks made by timer.
 local namesHistory = { scansThatKept = 0, lastKept = nil, rechecks = 0 }
 
+-- AllTheThings, the second source of quest data (CaerdonQuestSourceATT.lua).
+local SecondSource = NS.QuestSourceATT
+
 local provider = {
     state = "unchecked",  -- unchecked | missing | unsupported | building | ready | failed
     lib = nil,
     index = nil,          -- itemID -> { [questID] = role }
+    known = nil,          -- [questID] = true for every quest QuestieDB has
     starters = nil,       -- itemID -> { [questID] = true } for items that start a quest
     itemCount = 0,
     questCount = 0,
@@ -171,6 +201,7 @@ function CaerdonQuestItems:InvalidateCaches(changed)
     end
     wipe(verdicts)
     wipe(answered)
+    SecondSource:InvalidateCaches()
     playerContext = nil
     questLog.dirty = true
 end
@@ -427,7 +458,7 @@ end
 local function BuildIndex(lib, yieldIfNeeded)
     local Get = lib.Quest.Get
     local ids = lib.Quest.GetAllIds()
-    local index, starters = {}, {}
+    local index, starters, known = {}, {}, {}
     local itemCount = 0
 
     local function Add(itemID, questID, role)
@@ -440,13 +471,19 @@ local function BuildIndex(lib, yieldIfNeeded)
             index[itemID] = quests
             itemCount = itemCount + 1
         end
-        if not quests[questID] then
+        -- A quest can name an item twice: what it hands over is often an objective too, and
+        -- which of them it is decides whether the item was that quest's own.
+        local had = quests[questID]
+        if not had then
             quests[questID] = role
+        elseif not had:find(role, 1, true) then
+            quests[questID] = had .. ", " .. role
         end
     end
 
     for position = 1, #ids do
         local questID = ids[position]
+        known[questID] = true
 
         -- { creatures, objects, items, reputation, killCredit, spells }
         local objectives = Get(questID, "objectives")
@@ -502,7 +539,7 @@ local function BuildIndex(lib, yieldIfNeeded)
         yieldIfNeeded()
     end
 
-    return index, starters, itemCount, #ids
+    return index, starters, itemCount, #ids, known
 end
 
 local function StartBuild(lib)
@@ -520,7 +557,7 @@ local function StartBuild(lib)
 
     local function Step()
         sliceStart = debugprofilestop()
-        local ok, index, starters, itemCount, questCount = coroutine.resume(builder)
+        local ok, index, starters, itemCount, questCount, known = coroutine.resume(builder)
         workMs = workMs + (debugprofilestop() - sliceStart)
 
         if not ok then
@@ -537,6 +574,7 @@ local function StartBuild(lib)
 
         provider.index = index
         provider.starters = starters
+        provider.known = known
         provider.itemCount = itemCount
         provider.questCount = questCount
         provider.buildMs = workMs
@@ -617,8 +655,13 @@ local function GetPlayerContext()
         trivialRange = GetQuestGreenRange and GetQuestGreenRange() or FALLBACK_TRIVIAL_RANGE
     end
 
+    local levelWindow, includeTrivial = UpcomingSettings()
     playerContext = {
+        levelWindow = levelWindow,
+        includeTrivial = includeTrivial,
         level = UnitLevel("player") or 0,
+        raceID = raceID,
+        classID = classID,
         raceFlag = raceFlag,
         classFlag = classFlag,
         faction = UnitFactionGroup("player"),
@@ -639,16 +682,92 @@ end
 
 local GetItemCount = C_Item and C_Item.GetItemCount or GetItemCount
 
+-- A quest that can be done again (repeatable, daily, weekly, monthly).
+local function IsRepeating(questID, Get)
+    if HasBit(Get(questID, "specialFlags") or 0, SPECIAL_FLAG_REPEATABLE) then
+        return true
+    end
+    local questFlags = Get(questID, "questFlags") or 0
+    for _, flag in ipairs(REPEATING_QUEST_FLAGS) do
+        if HasBit(questFlags, flag) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Whether a quest has quests before it, and whether those are done, in the log, or
+-- themselves further along a chain the toon is on: every one of preQuestGroup, and one of
+-- preQuestSingle. A first step that is neither done nor in the log is a chain not begun.
+local ChainQuestBegun
+local function PrerequisitesBegun(questID, Get, seen, budget)
+    local has, begun = false, true
+    local group = Get(questID, "preQuestGroup")
+    if type(group) == "table" then
+        for _, beforeID in pairs(group) do
+            if type(beforeID) == "number" and beforeID ~= 0 then
+                has = true
+                if not ChainQuestBegun(math.abs(beforeID), Get, seen, budget) then
+                    begun = false
+                end
+            end
+        end
+    end
+    local single = Get(questID, "preQuestSingle")
+    if type(single) == "table" then
+        local any, one = false, false
+        for _, beforeID in pairs(single) do
+            if type(beforeID) == "number" and beforeID ~= 0 then
+                any = true
+                if ChainQuestBegun(math.abs(beforeID), Get, seen, budget) then
+                    one = true
+                end
+            end
+        end
+        if any then
+            has = true
+            begun = begun and one
+        end
+    end
+    return has, has and begun
+end
+
+ChainQuestBegun = function(questID, Get, seen, budget)
+    if IsQuestDoneOrActive(questID) then
+        return true
+    end
+    if seen[questID] or budget.left <= 0 then
+        return false
+    end
+    seen[questID] = true
+    budget.left = budget.left - 1
+    return (select(2, PrerequisitesBegun(questID, Get, seen, budget)))
+end
+
 -- Why a quest that is neither in the log nor completed will not be picked up, or nil when it
 -- still can be. Second value: the answer depends on bag contents and must not be cached.
+-- Third: the quest is behind this toon for good (another faction's, a chain that has gone
+-- past it). A blocker that time, a level or a profession can lift does not say that, and
+-- neither does one that only says the quest is not offered now.
+--
+-- The reason given is the first one found. Whether the quest is behind the toon is asked of
+-- every rule that can say so, whichever was found first: otherwise a quest a chain had gone
+-- past would stop being behind the toon when a quest it is exclusive with is accepted, which
+-- is found earlier and is not for good.
 local function UpcomingBlocker(questID, verdict, Get)
+    local blocker, forGood = nil, false
+    local function Block(reason, behind)
+        blocker = blocker or reason
+        forGood = forGood or behind == true
+    end
+
     local hiddenReason = CaerdonQuestItems:GetQuestieHiddenReason(questID)
     if hiddenReason then
-        return hiddenReason
+        Block(hiddenReason)
     end
 
     if EVENT_QUEST_SORTS[Get(questID, "zoneOrSort") or 0] then
-        return "event quest"
+        Block("event quest")
     end
 
     local player = GetPlayerContext()
@@ -658,40 +777,35 @@ local function UpcomingBlocker(questID, verdict, Get)
         local factionOfMask = CLASSIC_FACTION_MASK[raceMask]
         if factionOfMask then
             if factionOfMask ~= player.faction then
-                return "other faction"
+                Block("other faction", true)
             end
         elseif not HasBit(raceMask, player.raceFlag) then
-            return "other race"
+            Block("other race", true)
         end
     end
 
     local classMask = Get(questID, "requiredClasses") or 0
     if classMask ~= 0 and player.classFlag and not HasBit(classMask, player.classFlag) then
-        return "other class"
+        Block("other class", true)
     end
 
-    local specialFlags = Get(questID, "specialFlags") or 0
-    if HasBit(specialFlags, SPECIAL_FLAG_REPEATABLE) then
-        return "repeatable"
-    end
-    local questFlags = Get(questID, "questFlags") or 0
-    for _, flag in ipairs(REPEATING_QUEST_FLAGS) do
-        if HasBit(questFlags, flag) then
-            return "repeatable"
-        end
+    if IsRepeating(questID, Get) then
+        verdict.repeating = true
+        Block("repeatable")
     end
 
     local requiredSkill = Get(questID, "requiredSkill")
     local skillLine = type(requiredSkill) == "table" and requiredSkill[1]
     if skillLine and PROFESSION_SKILL_LINES[skillLine] and player.skillLines and not player.skillLines[skillLine] then
-        return "profession not learned"
+        Block("profession not learned")
     end
 
     local exclusiveTo = Get(questID, "exclusiveTo")
     if type(exclusiveTo) == "table" then
         for _, otherQuestID in pairs(exclusiveTo) do
             if IsQuestDoneOrActive(otherQuestID) then
-                return "exclusive with quest " .. tostring(otherQuestID)
+                -- For good once the other one is done; one in the log can still be abandoned.
+                Block("exclusive with quest " .. tostring(otherQuestID), IsQuestDone(otherQuestID) == true)
             end
         end
     end
@@ -699,16 +813,16 @@ local function UpcomingBlocker(questID, verdict, Get)
     -- A later quest of the chain being active or done means this one is behind the toon.
     local nextQuest = Get(questID, "nextQuestInChain")
     if IsQuestDoneOrActive(nextQuest) then
-        return "chain already past it"
+        Block("chain already past it", true)
     end
 
     -- Only offered while its parent is in progress
     if IsQuestDone(Get(questID, "parentQuest")) then
-        return "parent quest completed"
+        Block("parent quest completed", true)
     end
 
     if IsQuestDone(Get(questID, "availableUntilCompleted")) then
-        return "no longer offered"
+        Block("no longer offered", true)
     end
 
     local requiredLevel = Get(questID, "requiredLevel") or 0
@@ -718,14 +832,21 @@ local function UpcomingBlocker(questID, verdict, Get)
 
     local maxLevel = Get(questID, "requiredMaxLevel") or 0
     if maxLevel > 0 and player.level > maxLevel then
-        return "outleveled"
+        Block("outleveled", true)
     end
-    if requiredLevel > player.level + UPCOMING_LEVEL_WINDOW then
-        return format("needs level %d", requiredLevel)
+    -- A later quest of a chain the toon is on is still to come, whatever its level: the
+    -- quests before it are followed back, and only for a quest the level would keep out.
+    if requiredLevel > player.level + player.levelWindow and
+        not select(2, PrerequisitesBegun(questID, Get, {}, { left = CHAIN_BUDGET })) then
+        Block(format("needs level %d", requiredLevel))
     end
     -- Zero and negative quest levels scale with the toon
-    if questLevel > 0 and questLevel < player.level - player.trivialRange then
-        return "trivial at this level"
+    if not player.includeTrivial and questLevel > 0 and questLevel < player.level - player.trivialRange then
+        Block("trivial at this level")
+    end
+
+    if blocker then
+        return blocker, false, forGood
     end
 
     -- A quest only an item can start is not upcoming unless that item is already owned.
@@ -749,10 +870,23 @@ end
 
 -- One quest judged from the client and the quest data as they are now; nothing is kept.
 -- Second value: the answer depends on what is in the bags and must not be kept.
+-- verdict.over: the quest is behind this toon, done or never to be taken. A quest that is
+-- done and can be done again is not, and without quest data nothing says which it is.
 local function JudgeQuest(questID)
-    local verdict = { questID = questID, eligible = false, isActive = false }
+    local verdict = { questID = questID, eligible = false, isActive = false, over = false }
 
     local Get = provider.lib and provider.lib.Quest.Get
+    -- A quest QuestieDB does not have is judged from AllTheThings' data, where that has it.
+    -- While the index is not built yet nothing says which quests QuestieDB has, and it is
+    -- asked as before.
+    local second = nil
+    if not (Get and (provider.known == nil or provider.known[questID])) then
+        Get = nil
+        if SecondSource:Knows(questID) then
+            second = SecondSource
+            verdict.source = "AllTheThings"
+        end
+    end
     local volatile = false
 
     local ok, failure = pcall(function()
@@ -764,19 +898,31 @@ local function JudgeQuest(questID)
             verdict.reason = "in quest log"
         elseif C_QuestLog.IsQuestFlaggedCompleted(questID) then
             verdict.reason = "completed"
+            verdict.repeating = (Get ~= nil and IsRepeating(questID, Get)) or
+                (second ~= nil and second:IsRepeating(questID))
+            verdict.over = (Get ~= nil or second ~= nil) and not verdict.repeating
+        elseif second then
+            local blocker, forGood, repeating, minLevel = second:Blocker(questID, GetPlayerContext())
+            verdict.eligible = blocker == nil
+            verdict.reason = blocker or "upcoming"
+            verdict.over = blocker ~= nil and forGood == true
+            verdict.repeating = repeating == true
+            verdict.requiredLevel = minLevel
         elseif not Get then
             verdict.reason = "no quest data"
         else
-            local blocker, dependsOnBags = UpcomingBlocker(questID, verdict, Get)
+            local blocker, dependsOnBags, forGood = UpcomingBlocker(questID, verdict, Get)
             volatile = dependsOnBags or false
             verdict.eligible = blocker == nil
             verdict.reason = blocker or "upcoming"
+            verdict.over = blocker ~= nil and forGood == true
         end
     end)
 
     if not ok then
         verdict.eligible = false
         verdict.isActive = false
+        verdict.over = false
         verdict.reason = "error: " .. tostring(failure)
     end
 
@@ -798,9 +944,12 @@ local function EvaluateQuest(questID)
     return verdict
 end
 
--- What a verdict means for an icon, which is all a quest event is compared on.
+-- What a verdict means for an icon, which is all a quest event is compared on. "Behind it" is
+-- apart from "not wanted": a Quest-class item keeps its icon through the second and loses it
+-- with the first.
 local function StateOf(verdict)
-    return verdict.isActive and "in the log" or verdict.eligible and "upcoming" or "not wanted"
+    return verdict.isActive and "in the log" or verdict.eligible and "upcoming" or
+        verdict.over and "behind it" or "not wanted"
 end
 
 -- The check after a run of quest events (accepted, removed, turned in): what differs from
@@ -808,7 +957,8 @@ end
 --
 -- Most quests take no item that is carried or shown, and their events change no icon. An
 -- icon follows from two things here: whether a quest it was asked about is in the log, still
--- to come or neither, and which items the log's objectives name. Both are read again. Every
+-- to come, behind the toon or none of those, and which items the log's objectives name. Both
+-- are read again. Every
 -- answered quest is judged again, not only the quest of the event: that one can decide about
 -- others (the one before it in a chain, one it excludes, one offered only until it is done).
 function CaerdonQuestItems:CompareWithAnswers()
@@ -858,7 +1008,32 @@ function CaerdonQuestItems:GetIndexedQuests(itemID)
     if not itemID then
         return nil, nil
     end
-    return provider.index and provider.index[itemID] or nil, provider.starters and provider.starters[itemID] or nil
+    local indexed = provider.index and provider.index[itemID] or nil
+    local started = provider.starters and provider.starters[itemID] or nil
+
+    -- What AllTheThings names beside that. The index's tables are not written to.
+    local takes, starts = SecondSource:GetItemQuests(itemID)
+    if takes then
+        local merged = {}
+        for questID, role in pairs(indexed or {}) do
+            merged[questID] = role
+        end
+        for questID, role in pairs(takes) do
+            merged[questID] = merged[questID] or role
+        end
+        indexed = merged
+    end
+    if starts then
+        local merged = {}
+        for questID in pairs(started or {}) do
+            merged[questID] = true
+        end
+        for questID in pairs(starts) do
+            merged[questID] = true
+        end
+        started = merged
+    end
+    return indexed, started
 end
 
 -- What the client itself says about the item in a bag slot, as Blizzard's bags read it for
@@ -879,8 +1054,16 @@ end
 --                  "upcoming quests" setting)
 --   isActive       a quest in the log takes it
 --   isUpcoming     a quest the toon has not accepted yet takes it
+--   isOver         every quest known for it is behind the toon: done, or never to be taken.
+--                  False while one of them is only out of reach for now (a level, a
+--                  profession, an event) or can be done again. One that can be done again
+--                  does not count (setAside) where a quest that handed the item over is
+--                  behind the toon.
+--   repeatableLeft isOver is true by that alone: a quest that can be done again still takes
+--                  the item.
 --   quests         every candidate quest with its verdict, the rejected ones included:
---                  { questID, name, role, isActive, eligible, reason, requiredLevel, questLevel }
+--                  { questID, name, role, isActive, eligible, over, repeating, setAside,
+--                  reason, requiredLevel, questLevel }
 function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
     EnsureQuestLog()
     EnsureProvider()
@@ -891,7 +1074,7 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
         return nil
     end
 
-    local info = { hasQuestValue = false, isActive = false, isUpcoming = false, quests = {} }
+    local info = { hasQuestValue = false, isActive = false, isUpcoming = false, isOver = true, quests = {} }
     local byQuest = {}
 
     local function Add(questID, role)
@@ -908,6 +1091,9 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
             role = role,
             isActive = verdict.isActive,
             eligible = verdict.eligible,
+            over = verdict.over,
+            source = verdict.source,
+            repeating = verdict.repeating == true,
             reason = verdict.reason,
             requiredLevel = verdict.requiredLevel,
             questLevel = verdict.questLevel,
@@ -919,6 +1105,9 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
             info.isActive = true
         elseif verdict.eligible then
             info.isUpcoming = true
+        end
+        if not verdict.over then
+            info.isOver = false
         end
     end
 
@@ -939,6 +1128,36 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
     end
 
     table.sort(info.quests, SortQuests)
+    info.isOver = info.isOver and #info.quests > 0
+
+    -- An item a quest handed over to be carried for that quest, the quest behind the toon: it
+    -- hands over no more of them, and the item was that quest's own. A quest that can be done
+    -- again and takes such an item (a scrip to exchange for the book the first quest speaks
+    -- of) is the first one's helper, which the quest data does not say, and would keep the
+    -- item wanted for ever. It is set aside, unless it is in the log.
+    if not info.isOver then
+        local handedOutAndOver = false
+        for _, entry in ipairs(info.quests) do
+            if entry.over and entry.role:find("provided", 1, true) then
+                handedOutAndOver = true
+                break
+            end
+        end
+        if handedOutAndOver then
+            local over = true
+            for _, entry in ipairs(info.quests) do
+                if not entry.over then
+                    if entry.repeating and not entry.isActive then
+                        entry.setAside = true
+                    else
+                        over = false
+                    end
+                end
+            end
+            info.isOver = over
+            info.repeatableLeft = over
+        end
+    end
 
     local showUpcoming = not CaerdonWardrobeConfig or not CaerdonWardrobeConfig.Icon or
         CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems ~= false
@@ -995,11 +1214,13 @@ function CaerdonQuestItems:GetDebugState()
             buildMs = provider.buildMs,
             error = provider.error,
         },
+        second = SecondSource:GetDebugState(),
         questie = {
             loaded = questieModules ~= nil,
             isReady = type(api) == "table" and api.isReady or nil,
         },
-        upcomingLevelWindow = UPCOMING_LEVEL_WINDOW,
+        upcomingLevelWindow = player.levelWindow >= ANY_LEVEL and "any" or player.levelWindow,
+        includeTrivial = player.includeTrivial,
         trivialRange = player.trivialRange,
         -- How many quests a quest event judges again (CompareWithAnswers).
         answeredCount = answeredCount,
@@ -1010,6 +1231,32 @@ end
 -- Events
 ----------------------------------------------------------------------------------------------
 
+-- AllTheThings builds its data at login and says when it is through, which is listened for
+-- where it was loaded before this addon. Where that call was missed (it loaded later, or was
+-- through already), its data being there is looked for a few times instead. Either way what
+-- was answered without it is dropped and the icons are drawn again.
+local secondSourceChecks = 0
+SecondSource.OnReady = function()
+    CaerdonQuestItems:InvalidateCaches()
+    RequestRefresh("quest data", "AllTheThings is ready")
+end
+local function WatchSecondSource()
+    local state = SecondSource:GetDebugState()
+    if state.readySeen or state.state == "missing" or state.state == "unsupported" then
+        return
+    end
+    if state.state == "ready" then
+        if state.asked > 0 or secondSourceChecks > 0 then
+            SecondSource.OnReady()
+        end
+        return
+    end
+    secondSourceChecks = secondSourceChecks + 1
+    if secondSourceChecks <= 30 then
+        C_Timer.After(2, WatchSecondSource)
+    end
+end
+
 local eventFrame = CreateFrame("Frame")
 
 eventFrame:SetScript("OnEvent", function(_, event)
@@ -1019,6 +1266,7 @@ eventFrame:SetScript("OnEvent", function(_, event)
         questLog.rescanAttempts = 0
         -- Build the index before the bags are first opened rather than on that first lookup.
         C_Timer.After(3, EnsureProvider)
+        C_Timer.After(3, WatchSecondSource)
     elseif event == "QUEST_LOG_UPDATE" then
         -- Fires on every objective tick. The set of item objectives only changes with the
         -- quests themselves (the watch below), so this only matters until the log has loaded.

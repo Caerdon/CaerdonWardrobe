@@ -25,6 +25,7 @@ return {
 
     -- Globals of other addons and of the embedded libraries. Not checked against a client.
     thirdParty = {
+        AllTheThings = "AllTheThings",
         AngrierWorldQuests = "Angrier World Quests",
         AngrierWorldQuestsHeader = "Angrier World Quests",
         ArkInventory = "ArkInventory",

@@ -1011,6 +1011,26 @@ return function(H, S)
                 return { upgradeItemLevelDelta = 5, isUpgrade = true, canEquip = true, pawnIdentifiedUpgrade = true,
                     upgradeStatus = status == "own" and "upgrade" or "upgradeLowSkill" }
             end },
+        -- A copy in the bags that can be read (smallMark, the status's sixth value): the mark
+        -- for that rides on a quest's icon as the small one. Where the window draws no quest
+        -- icon the copy is drawn as the readable one it is, and an upgrade's arrow comes first.
+        { name = "a copy that can be read", smallMark = "readable" },
+        { name = "a copy that can be read, quest icon off", smallMark = "readable", hide = { "questIcon" } },
+        { name = "a copy that can be read, and an upgrade", smallMark = "readable",
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true } },
+        { name = "a copy that can be read, no window", smallMark = "readable", feature = false },
+        -- An item with nothing else to it that a quest which can be done again still takes:
+        -- the bag or the auction house's mark on the quest icon, by the window's rules for
+        -- those icons.
+        { name = "one to sell that a quest still takes", smallMark = "sellable" },
+        { name = "one to sell that a quest still takes, sellable icon off", smallMark = "sellable",
+            hide = { "sellableIcon" } },
+        { name = "one to sell that a quest still takes, quest icon off", smallMark = "sellable", hide = { "questIcon" } },
+        { name = "one to auction that a quest still takes", smallMark = "auction", item = { inBags = true },
+            config = function(config) config.Icon.ShowAuctionValue = true end },
+        { name = "one to auction that a quest still takes, auction icon off", smallMark = "auction",
+            hide = { "auctionIcon" } },
     }
 
     -- One button drawn with every status in turn, the way the queue draws it, with a frame
@@ -1050,7 +1070,8 @@ return function(H, S)
             core:SetupCaerdonButton(button, item, feature, nil, options)
             if direct then
                 -- As the layout editor calls them: each half asks for the display rules itself.
-                core:SetItemButtonStatus(button, item, feature, nil, options, status, variant.binding, info)
+                core:SetItemButtonStatus(button, item, feature, nil, options, status, variant.binding, info, nil,
+                    variant.smallMark)
                 core:SetItemButtonMogStatusFilter(button, options.isFiltered)
                 core:SetItemButtonBindType(button, item, feature, nil, options, status, variant.binding)
             else
@@ -1058,7 +1079,8 @@ return function(H, S)
                 -- The binding result carries the status code's own upgrade verdict, which
                 -- ProcessItem puts on the transmog info for the badge.
                 function drawItem:GetCaerdonStatus()
-                    return true, status, variant.binding, { upgradeStatus = info and info.upgradeStatus }, info
+                    return true, status, variant.binding, { upgradeStatus = info and info.upgradeStatus }, info,
+                        variant.smallMark
                 end
                 core:ProcessItem(button, drawItem, feature, nil, options)
             end
@@ -1080,6 +1102,8 @@ return function(H, S)
                 badgeColour = icon.upgradeBadge and world.Value(icon.upgradeBadge).colour or nil,
                 badgeRingColour = icon.upgradeBadgeRing and world.Value(icon.upgradeBadgeRing).colour or nil,
                 routeBadge = overlay.caerdonHasRouteBadge == true,
+                readableBadge = overlay.caerdonSmallMark == "readable",
+                smallMark = overlay.caerdonSmallMark,
                 badgeTexture = icon.upgradeBadge and icon.upgradeBadge:IsShown() and
                     (icon.upgradeBadge:GetAtlas() or icon.upgradeBadge:GetTexture()) or nil,
                 badgeWidth = icon.upgradeBadge and icon.upgradeBadge:IsShown() and icon.upgradeBadge:GetWidth() or nil,
@@ -1365,6 +1389,75 @@ return function(H, S)
         local hidden = results["look at the Catalyst, icons switched off"]
         Equal(hidden.transform.hasIcon, false, "looks: a window that shows no learnable icon shows no mark")
         Equal(hidden.transform.routeBadge, false, "looks: and no small mark without it")
+
+        -- A quest's item that can be read: the quest icon with the readable mark as the small
+        -- one, both ways of drawing.
+        local QUEST, READ = "Interface\\MINIMAP\\MapQuestHub_Icon32", "Interface\\Store\\category-icon-services"
+        for label, set in pairs({ queue = results, direct = direct }) do
+            local read = set["a copy that can be read"]
+            Equal(read.quest.texture, QUEST, "read, " .. label .. ": a quest's item keeps the quest icon")
+            Equal(read.quest.readableBadge, true, "read, " .. label .. ": with the readable mark on it")
+            Equal(read.quest.badgeTexture, READ, "read, " .. label .. ": the readable icon's texture")
+            Check(NoTexture(read.quest.ringTexture), "read, " .. label .. ": with no ring of its own")
+            Equal(read.quest.badge, false, "read, " .. label .. ": which is no upgrade's badge")
+            Equal(read.quest.routeBadge, false, "read, " .. label .. ": and no mark of a look")
+            Equal(read.quest.playing, false, "read, " .. label .. ": the icon stands still")
+            for _, status in ipairs(STATUSES) do
+                if status ~= "quest" then
+                    Equal(read[status].readableBadge, false, "read, " .. label .. ": no other status carries the mark (" .. status .. ")")
+                end
+            end
+            Equal(read.collected.badgeTexture, nil, "read, " .. label .. ": and it is gone with the next draw")
+            Equal(set["plain"].quest.readableBadge, false, "read, " .. label .. ": a copy that cannot be read has none")
+            Equal(set["plain"].quest.badgeTexture, nil, "read, " .. label .. ": and no badge at all")
+            -- A window that draws no quest icon: the readable icon, as the copy had before.
+            local off = set["a copy that can be read, quest icon off"]
+            Equal(off.quest.texture, READ, "read, " .. label .. ": where the window draws no quest icon, the readable icon")
+            Equal(off.quest.readableBadge, false, "read, " .. label .. ": with no small mark")
+            Equal(off.quest.width, set["plain"].readable.width, "read, " .. label .. ": at the readable icon's size")
+            Equal(set["a copy that can be read, no window"].quest.texture, READ, "read, " .. label .. ": the same with no window")
+            -- An upgrade's arrow comes first.
+            local both = set["a copy that can be read, and an upgrade"]
+            Equal(both.quest.texture, QUEST, "read, " .. label .. ": an upgrade among them keeps the quest icon")
+            Equal(both.quest.badge, true, "read, " .. label .. ": with the arrow as the badge")
+            Equal(both.quest.readableBadge, false, "read, " .. label .. ": and not the readable mark")
+        end
+
+        -- An item with nothing else to it that a quest which can be done again still takes:
+        -- the quest icon, with the bag or the auction house's mark as the small one.
+        local BAG, GOLD = "Interface\\Store\\category-icon-bag", "Interface\\MoneyFrame\\UI-GoldIcon"
+        for label, set in pairs({ queue = results, direct = direct }) do
+            local sell = set["one to sell that a quest still takes"]
+            Equal(sell.quest.texture, QUEST, "still taken, " .. label .. ": the quest icon")
+            Equal(sell.quest.smallMark, "sellable", "still taken, " .. label .. ": with the mark of one to sell on it")
+            Equal(sell.quest.badgeTexture, BAG, "still taken, " .. label .. ": the bag")
+            Check(NoTexture(sell.quest.ringTexture), "still taken, " .. label .. ": with no ring of its own")
+            Equal(sell.quest.badge, false, "still taken, " .. label .. ": which is no upgrade's badge")
+            for _, status in ipairs(STATUSES) do
+                if status ~= "quest" then
+                    Equal(sell[status].smallMark, nil, "still taken, " .. label .. ": no other status carries the mark (" .. status .. ")")
+                end
+            end
+            -- The mark goes by the window's rule for the icon it is.
+            local sellOff = set["one to sell that a quest still takes, sellable icon off"]
+            Equal(sellOff.quest.texture, QUEST, "still taken, " .. label .. ": where the window draws no sell icon, the quest icon")
+            Equal(sellOff.quest.smallMark, nil, "still taken, " .. label .. ": alone")
+            Equal(sellOff.quest.badgeTexture, nil, "still taken, " .. label .. ": with nothing on it")
+            -- A window that draws no quest icon: the item as one to sell, as that status is drawn.
+            local questOff = set["one to sell that a quest still takes, quest icon off"]
+            Equal(questOff.quest.texture, BAG, "still taken, " .. label .. ": where the window draws no quest icon, the bag")
+            Equal(questOff.quest.smallMark, nil, "still taken, " .. label .. ": with no small mark")
+            Equal(questOff.quest.width, set["plain"].sellable.width, "still taken, " .. label .. ": at the sell icon's size")
+            Equal(questOff.quest.alpha, set["plain"].sellable.alpha, "still taken, " .. label .. ": and as see-through")
+            -- The auction house's mark where the window shows that icon, the bag where not.
+            local auction = set["one to auction that a quest still takes"]
+            Equal(auction.quest.texture, QUEST, "still taken, " .. label .. ": one to auction keeps the quest icon")
+            Equal(auction.quest.smallMark, "auction", "still taken, " .. label .. ": with the auction house's mark")
+            Equal(auction.quest.badgeTexture, GOLD, "still taken, " .. label .. ": its texture")
+            local auctionOff = set["one to auction that a quest still takes, auction icon off"]
+            Equal(auctionOff.quest.smallMark, "sellable", "still taken, " .. label .. ": where the window draws no auction icon, the bag's mark")
+            Equal(auctionOff.quest.badgeTexture, BAG, "still taken, " .. label .. ": the bag")
+        end
 
         local searched = results["relative frame, small, searched"]
         Equal(searched.own.alpha, 0.3, "search: an icon on a slot the search has dimmed is dimmed")

@@ -784,6 +784,24 @@ local function SetRingIcon(mogStatus, texture)
     return true
 end
 
+-- The small mark on a quest's icon: the icon of the status the item also has, as that status
+-- draws it. "readable" for a copy that can be read; "sellable" and "auction" for an item a
+-- quest that can be done again still takes and that has nothing else to it.
+local function SetSmallMark(texture, mark)
+    if mark == "auction" then
+        texture:SetTexCoord(0, 1, 0, 1)
+        if texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("Auctioneer") then
+            texture:SetAtlas("Auctioneer", false)
+        else
+            texture:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+        end
+    elseif mark == "sellable" then
+        SetRingIcon(texture, "Interface\\Store\\category-icon-bag")
+    else
+        SetRingIcon(texture, "Interface\\Store\\category-icon-services")
+    end
+end
+
 local function ApplyUpgradeArrowColor(arrow, transmogInfo, allowMismatchedSpecUpgrades, defaultR, defaultG, defaultB)
     if transmogInfo and transmogInfo.pawnOffTreeUpgrade then
         -- Pawn only rates it higher for another talent tree's scale: same "usable but
@@ -943,8 +961,11 @@ end
 
 -- displayInfo: the feature's display rules when the caller already has them (ProcessItem asks
 -- once for both this and SetItemButtonBindType); asked for here otherwise.
+-- smallMark: what a quest's item is beside that (the sixth value of GetCaerdonStatus):
+-- "readable" on a copy that can be read, "sellable" or "auction" on one a quest that can be
+-- done again still takes and that has nothing else to it.
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status,
-                                                  bindingStatus, transmogInfo, displayInfo)
+                                                  bindingStatus, transmogInfo, displayInfo, smallMark)
     local caerdonButton = self:GetCaerdonButton(originalButton)
     if not caerdonButton then
         return
@@ -1130,6 +1151,24 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     if not displayInfo and feature then
         displayInfo = feature:GetDisplayInfoInternal(originalButton, item, feature, locationInfo, options, status,
             bindingStatus)
+    end
+    -- A quest's item that is something else as well (smallMark): the quest icon, with the
+    -- other status's icon on it as the small badge, so it is seen to be both. Where the window
+    -- draws no quest icon the item is drawn as the other thing it is. The small mark goes by
+    -- the window's rules for that icon, as the icon itself does.
+    local markBadge = nil
+    if status == "quest" and smallMark then
+        if displayInfo and displayInfo.questIcon.shouldShow then
+            markBadge = smallMark
+            if markBadge == "auction" and not (displayInfo.auctionIcon and displayInfo.auctionIcon.shouldShow) then
+                markBadge = "sellable"
+            end
+            if markBadge == "sellable" and not displayInfo.sellableIcon.shouldShow then
+                markBadge = nil
+            end
+        else
+            status = smallMark
+        end
     end
     -- A feature can leave the level gain out (levelGain = { shouldShow = false }), for a window
     -- that already shows the upgrade its own way. No other feature sets it.
@@ -1520,9 +1559,10 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     -- The second place of a piece kept for a look uses the badge's textures and corner: its
     -- mark alone, without the ring, at the ring's size. An upgrade's arrow comes first; the two
-    -- do not meet, since an upgrade is not marked for a look to gain.
+    -- do not meet, since an upgrade is not marked for a look to gain. The small mark of a
+    -- quest's item is drawn the same way, and gives way to an upgrade's arrow too.
     local plainBadge = false
-    if routeBadge and not showBadge then
+    if (routeBadge or markBadge) and not showBadge then
         local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
         if statusTexture ~= nil and statusTexture ~= "" and statusTexture ~= 0 then
             showBadge, plainBadge = true, true
@@ -1543,8 +1583,14 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus.caerdonBadgeActive = showBadge
     mogStatus.caerdonBadgePlain = plainBadge or laterBadge
     caerdonButton.caerdonHasUpgradeBadge = showBadge and not plainBadge
-    caerdonButton.caerdonHasRouteBadge = plainBadge
-    if plainBadge then
+    caerdonButton.caerdonHasRouteBadge = plainBadge and not markBadge
+    -- Which small mark is on the quest icon, if one is ("readable", "sellable", "auction").
+    caerdonButton.caerdonSmallMark = plainBadge and markBadge or nil
+    if plainBadge and markBadge then
+        upgradeBadgeRing:SetTexture("")
+        upgradeBadge:SetVertexColor(1, 1, 1)
+        SetSmallMark(upgradeBadge, markBadge)
+    elseif plainBadge then
         upgradeBadgeRing:SetTexture("")
         upgradeBadge:SetTexCoord(0, 1, 0, 1)
         upgradeBadge:SetVertexColor(1, 1, 1)
@@ -2246,8 +2292,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
 
     -- The transmog info comes with the status: it is the table the verdict was made from, kept
     -- with it, so a draw never computes it again.
-    local isReady, transmogInfo
-    isReady, mogStatus, bindingStatus, bindingResult, transmogInfo = item:GetCaerdonStatus(feature, locationInfo)
+    local isReady, transmogInfo, smallMark
+    isReady, mogStatus, bindingStatus, bindingResult, transmogInfo, smallMark = item:GetCaerdonStatus(feature,
+        locationInfo)
     if not isReady then
         -- Tooltip data shows "Retrieving item information". Instead of
         -- polling through the queue, stash the item and let a single
@@ -2372,7 +2419,7 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                 bindingStatus)
         end
         self:SetItemButtonStatus(button, item, feature, locationInfo, options, mogStatus, bindingStatus, transmogInfo,
-            displayInfo)
+            displayInfo, smallMark)
         self:SetItemButtonMogStatusFilter(button, options.isFiltered)
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus,
             displayInfo)
@@ -2421,10 +2468,11 @@ function CaerdonWardrobeMixin:GetAskedOf(frame)
             local hasIcon, hasText, hasGain = self:GetDrawnParts(frame)
             local caerdonButton = self:GetCaerdonButton(frame)
             local feature = asked.feature
-            return asked.item, format("asked for by %s; on it now: icon %s, upgrade badge %s, level gain %s, text %s",
+            return asked.item, format("asked for by %s; on it now: icon %s, upgrade badge %s, small mark %s, level gain %s, text %s",
                 tostring(feature and feature.GetName and feature:GetName() or "a window"),
                 hasIcon and "yes" or "no",
                 caerdonButton and caerdonButton.caerdonHasUpgradeBadge and "yes" or "no",
+                caerdonButton and caerdonButton.caerdonSmallMark or "none",
                 hasGain and "yes" or "no", hasText and "yes" or "no")
         end
         frame = type(frame.GetParent) == "function" and frame:GetParent() or nil

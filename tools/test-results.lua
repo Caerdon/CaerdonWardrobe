@@ -982,8 +982,8 @@ end
 
 -- Bag states that were checked when an item showed one. A case nobody has carried an item for
 -- is listed as not seen: that is the coverage.
-local SIGHTING_CASES = { "openable", "locked", "readable", "refundable", "soulbound", "bindOnEquip", "accountBindType",
-    "lootOnCooldown", "longCooldown" }
+local SIGHTING_CASES = { "openable", "locked", "readable", "readableForQuest", "refundable", "soulbound", "bindOnEquip",
+    "accountBindType", "lootOnCooldown", "longCooldown" }
 
 -- What made item data leave the client's cache (/cwtest cache). A mark is where an item was
 -- first found gone: seconds while idle, items loaded since in the stream; "-" is one still
