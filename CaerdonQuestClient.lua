@@ -30,9 +30,17 @@ NS.QuestClient = Client
 
 -- How many quests the client is asked for at a time. Blizzard's own code asks without a
 -- limit, a quest at a time as a frame needs it; a bag or an auction list can name a hundred.
-local MAX_IN_FLIGHT = 10
--- A request that is not answered within this many seconds is given up on.
-local ANSWER_TIMEOUT = 10
+-- An item's icon can wait for an answer (MAX_WAIT), so the limit is as long as a list's
+-- icons take: asking costs about two hundredths of a millisecond a quest, and an answer
+-- took 0.3 s on WoW Forever and 0.6 s on retail with ten at a time.
+local MAX_IN_FLIGHT = 25
+-- A request that is not answered within this many seconds is given up on. The longest answer
+-- seen took 1.9 s (retail, a refusal).
+local ANSWER_TIMEOUT = 5
+-- For how long after a quest was first asked for a verdict may be put off for the answer
+-- (GetFacts' third value). It is below what the queue's own retries of a button that is not
+-- ready add up to, so a button is never left without its draw.
+local MAX_WAIT = 6
 -- The answers of a run are handed on together: this long after one came, and while more are
 -- on their way no later than MAX_HOLD after the first that was not handed on.
 local ANSWERS_DELAY = 0.5
@@ -43,6 +51,7 @@ local MAX_HOLD = 3
 -- refused or never answered is not asked for again this session.
 local requests = {}
 local queue = {}        -- quest IDs, in the order they were asked for
+local queuedAt = {}     -- questID -> when it was first asked for, while its answer is out
 local sentAt = {}       -- questID -> when, for the ones in flight
 local inFlight = 0
 local pumpScheduled = false
@@ -92,6 +101,15 @@ local function IsSupported()
             type(CaerdonQuestEventListener) == "table"
     end
     return supported
+end
+
+-- A quest has its answer, of whatever kind: the buttons whose verdict was put off for it are
+-- asked again, and no others (CaerdonWardrobe:RetryWaitingFor).
+local function TellWaiting(questID)
+    queuedAt[questID] = nil
+    if CaerdonWardrobe and CaerdonWardrobe.RetryWaitingFor then
+        CaerdonWardrobe:RetryWaitingFor("quest:" .. questID)
+    end
 end
 
 local function SchedulePump()
@@ -156,6 +174,7 @@ local function OnAnswer(questID, success)
         requests[questID] = "refused"
         stats.refused = stats.refused + 1
     end
+    TellWaiting(questID)
 
     if #queue > 0 then
         SchedulePump()
@@ -172,6 +191,7 @@ local function Watchdog()
             requests[questID] = "silent"
             inFlight = inFlight - 1
             stats.silent = stats.silent + 1
+            TellWaiting(questID)
         end
     end
     if inFlight > 0 then
@@ -197,6 +217,7 @@ function Client:Pump()
                 -- Somebody else's request brought it meanwhile.
                 requests[questID] = nil
                 stats.already = stats.already + 1
+                TellWaiting(questID)
                 arrived[#arrived + 1] = questID
                 firstArrival = firstArrival or GetTime()
                 if not answersTimer then
@@ -238,7 +259,8 @@ local WORDS = {
 
 -- What the client says of a quest that is not in the log: { level, trivial }, the level 0
 -- where it names none. nil while it has no word, and why as the second value; the quest is
--- then asked for, once.
+-- then asked for, once. Third value: the answer is on its way and may be waited for (for
+-- MAX_WAIT at most); false once the client has refused, was given up on, or took too long.
 function Client:GetFacts(questID)
     if type(questID) ~= "number" or questID <= 0 or not IsSupported() then
         return nil, "the client is not asked"
@@ -268,10 +290,14 @@ function Client:GetFacts(questID)
     stats.without = stats.without + 1
     if not requests[questID] then
         requests[questID] = "queued"
+        queuedAt[questID] = GetTime()
         queue[#queue + 1] = questID
         SchedulePump()
     end
-    return nil, WORDS[requests[questID]]
+    local state = requests[questID]
+    local waiting = (state == "queued" or state == "sent") and queuedAt[questID] ~= nil and
+        GetTime() - queuedAt[questID] < MAX_WAIT
+    return nil, WORDS[state], waiting
 end
 
 -- With the quest module's caches: the counts of one refresh start over. What the client said

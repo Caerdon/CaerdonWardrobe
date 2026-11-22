@@ -20,6 +20,7 @@ VerdictCases.lua
 Journal.lua
 Counters.lua
 Snapshot.lua
+QuestProbe.lua
 Sightings.lua
 Integrations.lua
 Rotation.lua

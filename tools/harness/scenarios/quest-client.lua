@@ -120,6 +120,14 @@ return function(H, S)
             return refreshItems(self, reason, detail, changed)
         end
 
+        -- What the queue was told has come, by its key.
+        world.retried = {}
+        local retryWaitingFor = core.RetryWaitingFor
+        function core:RetryWaitingFor(key)
+            world.retried[tostring(key)] = (world.retried[tostring(key)] or 0) + 1
+            return retryWaitingFor(self, key)
+        end
+
         function world.Loaded(item)
             local loaded = false
             item:ContinueOnItemLoad(function() loaded = true end)
@@ -142,6 +150,15 @@ return function(H, S)
                 return ready
             end, 10)
             return ready and (status or "") or "<not ready>"
+        end
+        -- The status as it is at this moment, with what it waits for where it is not ready.
+        function world.StatusNow(id)
+            local item = world.Loaded(env.CaerdonItem:CreateFromItemID(id))
+            local ready, status, key = item:GetCaerdonStatus()
+            if ready then
+                return true, status or ""
+            end
+            return false, status, key
         end
         function world.Row(id, label)
             local feature = env.CaerdonWardrobe:GetFeature("DebugFrame")
@@ -213,9 +230,9 @@ return function(H, S)
             [7011] = Quest("Answered at Once", SYNC),
             [7012] = Quest("Asked Later", PLAIN),
         }
-        -- Twenty-five more, to be asked for in one frame.
+        -- Sixty more, to be asked for in one frame.
         local MANY = {}
-        for index = 1, 25 do
+        for index = 1, 60 do
             local item, questID = 996100 + index, 7100 + index
             ITEMS[item] = QuestItem("Token " .. index)
             QUESTS[questID] = Quest("Errand " .. index, item)
@@ -241,6 +258,8 @@ return function(H, S)
             Equal(quest.reason, "of level 55, and the level it asks for is not known", "orb: judged from the quest data first")
             Equal(quest.clientState, "the client is asked for it", "orb: and the client is asked")
             Check(info and not info.hasQuestValue and info.keptOutByOptions == true, "orb: kept out by the range meanwhile")
+            local ready = world.StatusNow(ORB)
+            Equal(ready, true, "orb: its verdict does not wait: the quest data has a level to go by")
             Equal(Status(ORB), "", "orb: no icon meanwhile")
             Equal(#world.requested, 0, "orb: the request is not put from inside the question")
             world.client:Tick(1)
@@ -375,7 +394,7 @@ return function(H, S)
         -- Many at a time: a few are out at once, and the run of answers is one check.
         do
             for index, entry in ipairs(MANY) do
-                -- Two of them the client calls trivial.
+                -- Six of them the client calls trivial.
                 world.answers[entry.questID] = { level = 33, trivial = index % 10 == 0, after = 0.4 }
             end
             local before = #world.requested
@@ -385,16 +404,17 @@ return function(H, S)
                 world.env.CaerdonQuestItems:GetItemQuestInfo(entry.item, ITEMS[entry.item].name)
             end
             world.client:Tick(1)
-            Equal(#world.requested - before, 10, "many: ten requests are put on the first frame")
-            Equal(world.ClientState().client.queued, 15, "many: the others wait their turn")
+            Equal(#world.requested - before, 25, "many: twenty-five requests are put on the first frame")
+            Equal(world.ClientState().client.queued, 35, "many: the others wait their turn")
             world.Seconds(5)
-            Equal(#world.requested - before, 25, "many: all of them are put in the end")
-            Check(world.mostOutstanding <= 10, "many: never more than ten at a time (" .. world.mostOutstanding .. ")")
+            Equal(#world.requested - before, 60, "many: all of them are put in the end")
+            Check(world.mostOutstanding <= 25, "many: never more than twenty-five at a time (" .. world.mostOutstanding .. ")")
             Equal(world.ClientState().client.handedOn - runs, 1, "many: the answers are one run")
             local refreshes = world.NewRefreshes()
-            Equal(#refreshes, 1, "many: and one refresh, for the two the client calls trivial")
+            Equal(#refreshes, 1, "many: and one refresh, for the six the client calls trivial")
             Equal(refreshes[1], "quest data: the client's word: quest 7110: upcoming -> kept out by the options; " ..
-                "quest 7120: upcoming -> kept out by the options", "many: named")
+                "quest 7120: upcoming -> kept out by the options; quest 7130: upcoming -> kept out by the options; " ..
+                "and 3 more", "many: named")
             Equal(world.ClientState().client.inFlight, 0, "many: nothing is left on its way")
         end
 
@@ -477,10 +497,13 @@ return function(H, S)
     do
         local TOON = { name = "Zzyxa", realm = "Farrealm", class = "Hunter", classFile = "HUNTER", race = "Dwarf",
             faction = "Alliance", level = 33 }
-        local FANG, HIGH, FAR, BANNER = 997001, 997002, 997003, 997004
+        local FANG, HIGH, FAR, BANNER, EAR, NOPE, MUTE, BOTH, OFF = 997001, 997002, 997003, 997004, 997005,
+            997006, 997007, 997008, 997009
         local ITEMS = {
             [FANG] = QuestItem("Wolf Fang"), [HIGH] = QuestItem("High Token"), [FAR] = QuestItem("Far Token"),
-            [BANNER] = QuestItem("Horde Banner"),
+            [BANNER] = QuestItem("Horde Banner"), [EAR] = QuestItem("Gnoll Ear"), [NOPE] = QuestItem("Unknown Token"),
+            [MUTE] = QuestItem("Silent Token"), [BOTH] = QuestItem("Token of Two Quests"),
+            [OFF] = QuestItem("Token for Later"),
         }
         local function Quest(questID, fields)
             fields.questID = questID
@@ -493,12 +516,23 @@ return function(H, S)
             [9202] = Quest(9202, { cost = { { "i", HIGH, 1 } } }),
             [9203] = Quest(9203, { cost = { { "i", FAR, 1 } }, lvl = 60 }),
             [9204] = Quest(9204, { cost = { { "i", BANNER, 1 } }, r = 1 }),
+            [9205] = Quest(9205, { cost = { { "i", EAR, 1 } }, lvl = 30 }),
+            [9206] = Quest(9206, { cost = { { "i", NOPE, 1 } }, lvl = 30 }),
+            [9207] = Quest(9207, { cost = { { "i", MUTE, 1 } }, lvl = 30 }),
+            -- Two quests take one item, and the toon is on the first.
+            [9208] = Quest(9208, { lvl = 30 }),
+            [9209] = Quest(9209, { lvl = 30 }),
+            [9210] = Quest(9210, { cost = { { "i", OFF, 1 } }, lvl = 30 }),
         }
         local caches = { questID = {}, itemIDAsCost = {}, qItemID = {} }
         for questID, quest in pairs(QUESTS) do
             caches.questID[questID] = { quest }
-            caches.itemIDAsCost[quest.cost[1][2]] = { quest }
+            if quest.cost then
+                caches.itemIDAsCost[quest.cost[1][2]] = { quest }
+            end
         end
+        QUESTS[9208].cost, QUESTS[9209].cost = { { "i", BOTH, 1 } }, { { "i", BOTH, 1 } }
+        caches.itemIDAsCost[BOTH] = { QUESTS[9208], QUESTS[9209] }
         local app = {
             GetRawField = function(field, id) return caches[field] and caches[field][id] or nil end,
             GetRawFieldContainer = function(field) return caches[field] end,
@@ -515,36 +549,92 @@ return function(H, S)
         }
 
         local world = World("retail", TOON, ITEMS, nil, app)
-        local Only, Status = world.Only, world.Status
+        local Only, Status, StatusNow = world.Only, world.Status, world.StatusNow
+        -- AllTheThings' data is looked for a few seconds after the world is entered, which
+        -- is a refresh of its own.
+        world.Seconds(3)
         world.Refresh()
         world.NewRefreshes()
 
-        -- Trivial: nothing says so until the client does.
+        -- Nothing in this data says whether a quest is trivial, and at the level cap nearly
+        -- every older quest is. So while the client is asked the item's verdict is put off,
+        -- and the button that waits is asked again when the answer is in: no icon is drawn to
+        -- be taken away, and nothing is refreshed.
         world.answers[9201] = { level = 20, trivial = true }
-        local quest = Only(FANG)
-        Check(quest.eligible == true and quest.source == "AllTheThings", "AllTheThings: still to come while the client has no word")
-        Equal(quest.clientState, "the client is asked for it", "AllTheThings: and the client is asked")
+        local ready, why, key = StatusNow(FANG)
+        Equal(ready, false, "AllTheThings: the verdict waits while the client is asked")
+        Equal(why, "the client's word on a quest", "AllTheThings: and says what for")
+        Equal(key, "quest:9201", "AllTheThings: with the quest's key for the queue")
+        local quest, info = Only(FANG)
+        Check(quest.pending == true and quest.clientState == "the client is asked for it",
+            "AllTheThings: the quest's verdict says it waits")
+        Equal(info and info.waitingFor, 9201, "AllTheThings: and the item names the quest")
         world.Seconds(2)
-        Equal(world.NewRefreshes()[1], "quest data: the client's word: quest 9201: upcoming -> kept out by the options",
-            "AllTheThings: its answer is a refresh")
-        quest = Only(FANG)
+        Equal(world.retried["quest:9201"], 1, "AllTheThings: the answer asks the buttons that wait for that quest again")
+        Equal(#world.NewRefreshes(), 0, "AllTheThings: and nothing is refreshed for it")
+        ready = StatusNow(FANG)
+        Equal(ready, true, "AllTheThings: the verdict is ready then")
+        quest, info = Only(FANG)
         Equal(quest.reason, "trivial at this level", "AllTheThings: trivial by the client")
         Equal(quest.questLevel, 20, "AllTheThings: with the client's level for it")
-        Equal(Status(FANG), "", "AllTheThings: and no quest icon")
+        Equal(info and info.waitingFor, nil, "AllTheThings: nothing is waited for")
+        Equal(Status(FANG), "", "AllTheThings: and no quest icon, which was never drawn")
+
+        -- A quest the client does not call trivial: the icon comes with the answer.
+        world.answers[9205] = { level = 33 }
+        Equal(StatusNow(EAR), false, "not trivial: the verdict waits as well")
+        world.Seconds(2)
+        Equal(select(2, StatusNow(EAR)), "quest", "not trivial: and is the quest icon once the client has answered")
+        Equal(#world.NewRefreshes(), 0, "not trivial: with no refresh")
 
         -- A quest with no level it asks for goes by its own level, which is the client's.
         world.answers[9202] = { level = 60 }
-        quest = Only(HIGH)
-        Check(quest.eligible == true, "AllTheThings: a quest with no level it asks for counts while nothing says its level")
+        Equal(StatusNow(HIGH), false, "no level: the verdict waits")
         world.Seconds(2)
-        Equal(world.NewRefreshes()[1], "quest data: the client's word: quest 9202: upcoming -> kept out by the options",
-            "AllTheThings: the client's level for it is a refresh")
         Equal(Only(HIGH).reason, "of level 60, and the level it asks for is not known",
-            "AllTheThings: of level 60 by the client, it is beyond the range")
+            "no level: of level 60 by the client, it is beyond the range")
+        Equal(select(2, StatusNow(HIGH)), "", "no level: and its item has no icon")
+        Equal(#world.NewRefreshes(), 0, "no level: with no refresh")
 
-        -- Not asked where its word changes nothing.
+        -- The client refuses: the wait ends with the refusal, and the quest is judged without.
+        world.answers[9206] = { refuse = true }
+        Equal(StatusNow(NOPE), false, "refused: the verdict waits for the answer")
+        world.Seconds(2)
+        Equal(world.retried["quest:9206"], 1, "refused: a refusal is an answer for the buttons that wait")
+        Equal(select(2, StatusNow(NOPE)), "quest", "refused: judged without the client, the quest is still to come")
+        Equal(Only(NOPE).clientState, "the client has no data of it", "refused: and its line says why")
+
+        -- The client never answers: the wait ends when the request is given up on.
+        Equal(StatusNow(MUTE), false, "silent: the verdict waits")
+        world.Seconds(3)
+        Equal(StatusNow(MUTE), false, "silent: three seconds on it still does")
+        world.Seconds(5)
+        Equal(world.retried["quest:9207"], 1, "silent: giving up on the request asks the waiting buttons again")
+        Equal(select(2, StatusNow(MUTE)), "quest", "silent: judged without the client")
+        Equal(Only(MUTE).clientState, "the client did not answer", "silent: and its line says why")
+        Equal(#world.NewRefreshes(), 0, "refused, silent: nothing is refreshed")
+
+        -- A quest in the log takes the item too: the quest icon whatever the client says of
+        -- the other quest, so nothing is waited for.
+        world.onQuest[9208] = true
+        world.Refresh()
+        ready, why = StatusNow(BOTH)
+        Check(ready == true and why == "quest", "in the log: an item a quest in the log takes does not wait (" .. tostring(why) .. ")")
+        Equal(world.Info(BOTH).waitingFor, nil, "in the log: and names no quest to wait for")
+
+        -- With the quest icon switched off no icon hangs on the answer.
+        local config = world.env.CaerdonWardrobeConfig.Icon
+        config.ShowQuestItems = false
+        world.Refresh()
+        Equal(StatusNow(OFF), true, "off: with the quest icon off nothing waits")
+        config.ShowQuestItems = true
+        world.Refresh()
+
+        -- Not asked where its word changes nothing, and so not waited for either.
         Equal(Only(FAR).reason, "needs level 60", "AllTheThings: a quest the level it asks for keeps out")
         Check(Only(BANNER).over == true, "AllTheThings: one of another faction")
+        Equal(StatusNow(FAR), true, "AllTheThings: the first does not wait")
+        Equal(StatusNow(BANNER), true, "AllTheThings: nor the second")
         world.Seconds(2)
         Equal(world.timesAsked[9203], nil, "AllTheThings: the first is not asked for")
         Equal(world.timesAsked[9204], nil, "AllTheThings: nor the second")

@@ -3427,6 +3427,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                         tostring(quest.questLevel or "?"), quest.levelFromClient and " by the client" or "",
                         tostring(quest.requiredLevel or "?"),
                         quest.clientState and ("; " .. tostring(quest.clientState)) or "")
+                    if quest.pending then
+                        levelText = levelText .. " (the item's icon waits for the answer)"
+                    end
                 end
                 addLine(2, string.format("- %d %s%s (%s): %s%s%s",
                     quest.questID,

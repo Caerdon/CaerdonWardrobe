@@ -313,6 +313,31 @@ return function(H, S)
             local bare = client:NewFrame("Button", nil, window)
             auction:OnItemBuyInitializedFrame(list, bare, 1)
             Equal(bare.caerdonDebugItemLink, link, "listings: a row without the column is read all the same")
+
+            -- A row of the results opened. A commodity opens in a view of its own, with a big
+            -- icon of its own, and that is the one asked for; any other item's is the page's.
+            do
+                local commodityBig = client:NewFrame("Button", nil, window)
+                local itemBig = client:NewFrame("Button", nil, window)
+                rawset(client.env, "AuctionHouseFrame", {
+                    ItemBuyFrame = { ItemDisplay = { ItemButton = itemBig } },
+                    CommoditiesBuyFrame = { BuyDisplay = { ItemDisplay = { ItemButton = commodityBig } } },
+                })
+                local commodity = false
+                world.game:Set("C_AuctionHouse.GetItemKeyInfo", function() return { isCommodity = commodity } end)
+                local key = { itemID = 930001, itemLevel = 0, itemSuffix = 0 }
+                commodity = true
+                auction:OnSelectBrowseResult(nil, { itemKey = key })
+                client:Tick(2)
+                Check(core:GetAskedOf(commodityBig) ~= nil and core:GetAskedOf(commodityBig):GetItemID() == 930001,
+                    "opened: a commodity's own big icon is asked for")
+                Check(core:GetAskedOf(itemBig) == nil, "opened: and not the other view's")
+                commodity = false
+                auction:OnSelectBrowseResult(nil, { itemKey = key })
+                client:Tick(2)
+                Check(core:GetAskedOf(itemBig) ~= nil and core:GetAskedOf(itemBig):GetItemID() == 930001,
+                    "opened: an item that is no commodity has the page's big icon asked for")
+            end
             rawset(client.env, "AuctionHouseFrame", nil)
         end
 

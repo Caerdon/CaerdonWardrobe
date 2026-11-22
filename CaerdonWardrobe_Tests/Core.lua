@@ -206,6 +206,7 @@ local function NewDB()
         timing = {},    -- timing runs
         logins = {},    -- what each login and reload cost
         probes = {},    -- toon -> item ID -> what the client and the addon say about it
+        questProbes = {}, -- toon -> quest ID -> what the client, AllTheThings and the addon say of it
         sources = {},   -- toon -> appearance sources whose item the client does not have
         search = {},    -- toon -> items found for the verdict tests' pools
         teaches = {},   -- what the items of two classes teach, by shape (/cwtest teaches)

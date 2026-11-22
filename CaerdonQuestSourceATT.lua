@@ -304,7 +304,7 @@ function Source:Blocker(questID, player)
     -- Kept out by the player's own options: the range of levels, or trivial quests left out.
     local optedOut = false
     -- What the client said of the quest where it was asked: { level } (nil where it names
-    -- none), or { state } with why it had no word.
+    -- none), or { state, waiting } with why it had no word and whether one is on its way.
     local client
     local function Block(reason, behind)
         blocker = blocker or reason
@@ -391,12 +391,14 @@ function Source:Blocker(questID, player)
             if facts == nil then
                 facts = false
                 if not forGood then
-                    local said, why = NS.QuestClient:GetFacts(questID)
+                    local said, why, waiting = NS.QuestClient:GetFacts(questID)
                     if said then
                         facts = said
                         client = { level = said.level > 0 and said.level or nil }
                     else
-                        client = { state = why }
+                        -- waiting: the answer is on its way. Nothing here says whether the
+                        -- quest is trivial meanwhile, so the caller may put its verdict off.
+                        client = { state = why, waiting = waiting == true }
                     end
                 end
             end

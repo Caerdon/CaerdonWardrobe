@@ -1099,7 +1099,18 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 		item = self:MakeItemForKey(itemKey, browseResult.appearanceLink)
 	end
 
+	-- A commodity opens in a view of its own, with a big icon of its own: the client goes by
+	-- the key info's isCommodity (AuctionHouseFrameMixin:SelectBrowseResult, both clients).
+	-- Only the other view's icon was asked for, so a commodity's had nothing on it, which
+	-- showed once a quest's item could have an icon here.
+	local isCommodity = itemKeyInfo ~= nil and itemKeyInfo.isCommodity == true
+	local buyDisplay = AuctionHouseFrame.CommoditiesBuyFrame and AuctionHouseFrame.CommoditiesBuyFrame.BuyDisplay
+	local commodityButton = buyDisplay and buyDisplay.ItemDisplay and buyDisplay.ItemDisplay.ItemButton
 	local button = AuctionHouseFrame.ItemBuyFrame.ItemDisplay.ItemButton
+	local locationKey = "BrowseResultButton"
+	if isCommodity and commodityButton then
+		button, locationKey = commodityButton, "BrowseCommodityButton"
+	end
 	button.caerdonDebugItemLink = item:GetItemLink()
 
 	local function doUpdate()
@@ -1108,7 +1119,7 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 			return
 		end
 		CaerdonWardrobe:UpdateButton(button, item, self, {
-			locationKey = "BrowseResultButton",
+			locationKey = locationKey,
 			itemKey = itemKey
 		},
 		{

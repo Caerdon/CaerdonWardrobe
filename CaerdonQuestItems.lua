@@ -982,6 +982,13 @@ local function JudgeQuest(questID)
                 verdict.questLevel = client.level
                 verdict.levelFromClient = client.level ~= nil
                 verdict.clientState = client.state
+                -- The client's answer is on its way, and this data has no level to judge the
+                -- quest by meanwhile: at the level cap nearly every older quest turns out
+                -- trivial, and an icon drawn now would be taken away a second later (seen on
+                -- retail). So the verdict is not for drawing yet: the item waits for the
+                -- answer (GetItemQuestInfo's waitingFor), and the verdict is not kept.
+                verdict.pending = client.waiting == true
+                volatile = verdict.pending
             end
         elseif not Get then
             verdict.reason = "no quest data"
@@ -1054,7 +1061,11 @@ function CaerdonQuestItems:CompareWithAnswers()
     for questID, answer in pairs(answered) do
         local verdict, volatile = JudgeQuest(questID)
         local key = "quest " .. questID
-        before[key], after[key] = StateOf(answer), StateOf(verdict)
+        -- No icon was made from a verdict that waited for the client: its item's button
+        -- waits too, and is asked again when the answer is in.
+        if not answer.pending then
+            before[key], after[key] = StateOf(answer), StateOf(verdict)
+        end
         -- Where nothing differs the new verdict stands in: its reason is the export's.
         answered[questID] = verdict
         verdicts[questID] = not volatile and verdict or nil
@@ -1078,7 +1089,11 @@ function CaerdonQuestItems:CompareWithClient(questIDs)
         if answer then
             local verdict, volatile = JudgeQuest(questID)
             local key = "quest " .. questID
-            before[key], after[key] = StateOf(answer), StateOf(verdict)
+            -- No icon was made from a verdict that waited for this answer: the buttons that
+            -- waited are asked again by the quest client, with no refresh.
+            if not answer.pending then
+                before[key], after[key] = StateOf(answer), StateOf(verdict)
+            end
             -- Where nothing differs the new verdict stands in: its level is the export's.
             answered[questID] = verdict
             verdicts[questID] = not volatile and verdict or nil
@@ -1197,6 +1212,9 @@ end
 --                  the item.
 --   keptOutByOptions  every quest not behind the toon is beyond the player's range of levels
 --                  or trivial where those are not wanted (optedOut on each)
+--   waitingFor     a quest ID: the client was asked about that quest and has not answered,
+--                  and nothing else says whether it is trivial, so what is above is not for
+--                  drawing yet (GetCaerdonStatus puts the item's verdict off for it)
 --   quests         every candidate quest with its verdict, the rejected ones included:
 --                  { questID, name, role, isActive, eligible, over, repeating, setAside,
 --                  reason, requiredLevel, questLevel, levelFromClient, clientState }; the
@@ -1237,6 +1255,7 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
             questLevel = verdict.questLevel,
             levelFromClient = verdict.levelFromClient == true,
             clientState = verdict.clientState,
+            pending = verdict.pending == true,
         }
         byQuest[questID] = entry
         info.quests[#info.quests + 1] = entry
@@ -1269,6 +1288,17 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
 
     table.sort(info.quests, SortQuests)
     info.isOver = info.isOver and #info.quests > 0
+
+    -- A quest whose verdict waits for the client's answer: the item's icon waits with it,
+    -- unless a quest in the log takes the item, which gives it the quest icon whatever the
+    -- answer is. One quest is named (the lowest ID), and the next when that one is in.
+    if not info.isActive then
+        for _, entry in ipairs(info.quests) do
+            if entry.pending and (info.waitingFor == nil or entry.questID < info.waitingFor) then
+                info.waitingFor = entry.questID
+            end
+        end
+    end
 
     -- Every quest that is not behind the toon is one the player's own options keep out: beyond
     -- the range of levels chosen, or trivial where those are not wanted. A quest's item has no

@@ -2334,7 +2334,8 @@ end
 -- and the third names it for the queue, which asks this button again when that has come and
 -- not when anything has (CaerdonWardrobe:RetryWaitingFor): a tooltip's instance as a number,
 -- "item:<ID>" for a set piece's data, "conversion:<GUID>" for the client's word on a copy,
--- "gear" for the pieces it is compared with. nil where nothing says when (the timer asks).
+-- "gear" for the pieces it is compared with, "quest:<ID>" for the client's word on a quest.
+-- nil where nothing says when (the timer asks).
 -- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo, smallMark. transmogInfo
 -- is what GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it
 -- is shared by every copy the cache entry stands for, so read it and do not ask the item data
@@ -2455,6 +2456,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     local questRepeats = false
     if isQuestItem or CaerdonWardrobeConfig.Icon.ShowQuestItems then
         local questItemInfo = self:GetQuestItemInfo()
+        -- The client was asked about one of its quests and nothing else says whether that
+        -- quest is trivial: not ready, and asked again when the answer is in (the quest
+        -- client names the quest to the queue), so no icon is drawn to be taken away.
+        if questItemInfo ~= nil and questItemInfo.waitingFor and CaerdonWardrobeConfig.Icon.ShowQuestItems then
+            return false, "the client's word on a quest", "quest:" .. tostring(questItemInfo.waitingFor)
+        end
         questsOver = isQuestItem and questItemInfo ~= nil and questItemInfo.isOver == true
         questRepeats = questsOver and questItemInfo.repeatableLeft == true and
             CaerdonWardrobeConfig.Icon.ShowQuestItems == true

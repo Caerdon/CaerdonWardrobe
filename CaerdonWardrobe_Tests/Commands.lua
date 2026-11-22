@@ -172,6 +172,7 @@ local HELP = {
     "/cwtest timing idle [seconds] - time standing still",
     "/cwtest timing open - with the bags closed: one refresh, then open the bags when told; times what the opening draws",
     "/cwtest probe <item ID> ... - record everything about some items",
+    "/cwtest quest <quest ID> [item ID ...] - what the client, AllTheThings and the addon say of a quest and of items it takes",
     "/cwtest cache - measure what makes item data leave the client's cache (a minute and a half, standing still, bags closed)",
     "/cwtest cache evict - load other items until the worn pieces' data has left the cache, and leave it so",
     "/cwtest record <item ID or link> ... | slot <bag> <slot> | bags | list | clear - record the client's answers behind a verdict, for the offline harness",
@@ -268,6 +269,19 @@ COMMANDS.probe = function(rest)
         T.Print("give item IDs or links: /cwtest probe 2969 6550")
     else
         T.ProbeItems(itemIDs)
+    end
+end
+
+COMMANDS.quest = function(rest)
+    local ids = {}
+    for id in rest:gmatch("%d+") do
+        ids[#ids + 1] = tonumber(id)
+    end
+    if #ids == 0 then
+        T.Print("give a quest ID, and the IDs of items it should take: /cwtest quest 12068 36758 36757")
+    else
+        local questID = table.remove(ids, 1)
+        T.ProbeQuest(questID, ids)
     end
 end
 

@@ -805,6 +805,67 @@ local function printProbes(db)
     end
 end
 
+-- /cwtest quest: what the client, AllTheThings and the addon each said of one quest.
+local function printQuestProbes(db)
+    local function word(said)
+        if type(said) ~= "table" then
+            return "nothing"
+        end
+        return ("%s, level %s, %s, %s, %s, title %s"):format(said.haveData and "has its data" or "no data",
+            tostring(said.level), said.trivial and "trivial" or "not trivial", said.completed and "done" or "not done",
+            said.inLog and "in the log" or "not in the log", tostring(said.title))
+    end
+    for _, toon in ipairs(sortedKeys(db.questProbes or {})) do
+        print("  Quest probes, " .. toon .. ":")
+        for _, questID in ipairs(sortedKeys(db.questProbes[toon])) do
+            local probe = db.questProbes[toon][questID]
+            print(("    quest %s, toon of level %s  (%s, build %s)"):format(tostring(questID), tostring(probe.level),
+                when(probe.at), tostring(probe.build)))
+            print("        the client before:  " .. word(probe.before))
+            if probe.asked then
+                print(("        asked for its data: %s after %.2f s"):format(probe.came and "came" or "did not come",
+                    probe.waited or 0))
+            else
+                print("        asked for its data: no, the client had it")
+            end
+            print("        the client after:   " .. word(probe.after))
+            if #(probe.objectives or {}) == 0 then
+                print("        objectives:         " .. (probe.hasObjectives and "none" or "the client gave no list"))
+            end
+            for index, objective in ipairs(probe.objectives or {}) do
+                print(("        objective %d:        %s, needs %s, text %s"):format(index, tostring(objective.type),
+                    tostring(objective.required), tostring(objective.text)))
+            end
+            for _, entry in ipairs(probe.items or {}) do
+                print(("        item %s %s: the client's objectives %s it%s; the addon %s this quest for it (it names: %s)"):format(
+                    tostring(entry.id), tostring(entry.name or entry.note),
+                    entry.clientNamesIt and "name" or "do not name",
+                    entry.clientObjectiveType and (" (as " .. tostring(entry.clientObjectiveType) .. ")") or "",
+                    entry.addonNamesThisQuest and "names" or "does not name", tostring(entry.addonQuests)))
+            end
+            local app = probe.allTheThings or {}
+            print("        AllTheThings:       " .. tostring(app.state))
+            for _, group in ipairs(app.quest or {}) do
+                print(("          the quest as %s: qis %s, cost %s, providers %s, qss %s, lvl %s, sourceQuests %s"):format(
+                    tostring(group.where), tostring(group.qis), tostring(group.cost), tostring(group.providers),
+                    tostring(group.qss), tostring(group.lvl), tostring(group.sourceQuests)))
+            end
+            if #(app.quest or {}) == 0 and app.state == "read" then
+                print("          it has no such quest")
+            end
+            for _, itemID in ipairs(sortedKeys(app.items or {})) do
+                local found = app.items[itemID]
+                if #found == 0 then
+                    print(("          item %s: not in its item, cost or quest item lists"):format(tostring(itemID)))
+                end
+                for _, where in ipairs(found) do
+                    print(("          item %s listed under %s"):format(tostring(itemID), tostring(where)))
+                end
+            end
+        end
+    end
+end
+
 local function printSources(db)
     for _, toon in ipairs(sortedKeys(db.sources)) do
         local record = db.sources[toon]
@@ -1306,6 +1367,7 @@ for _, file in ipairs(files) do
             if wants("counters") then printCounters(db) end
             if wants("journal") then printJournal(db) end
             if wants("probes") then printProbes(db) end
+            if wants("probes") then printQuestProbes(db) end
             if wants("sources") then printSources(db) end
             if wants("search") then printSearch(db) end
             if wants("teaches") then printTeaches(db) end
