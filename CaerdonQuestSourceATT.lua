@@ -375,18 +375,15 @@ function Source:Blocker(questID, player)
             Block("outleveled", true)
         end
 
-        -- The quests before it. A quest further along a chain the toon is on is still to
-        -- come, however many steps away: its item is one to keep from the chain's first step.
-        -- A chain the toon has not begun is not, or every later quest of every chain in the
-        -- game would be (retail quests scale, so no level bounds them).
-        local met, missing, hasSources = SourcesBegun(app, group, {}, { left = CHAIN_BUDGET })
-        -- A later quest of a chain the toon is on is still to come, whatever its level.
-        if type(minLevel) == "number" and minLevel > player.level + player.levelWindow and
-            not (hasSources and met) then
-            Block(format("needs level %d", minLevel))
-        end
-        if not met then
-            Block("quest " .. tostring(missing) .. " comes first")
+        -- The level is what bounds a quest still to come, as it is for QuestieDB's quests: one
+        -- within the player's range counts, whether its chain is begun or not. Beyond the
+        -- range, a later quest of a chain the toon is on still counts, whatever its level: the
+        -- quests before it are followed back, and only for a quest the level would keep out.
+        if type(minLevel) == "number" and minLevel > player.level + player.levelWindow then
+            local met, _, hasSources = SourcesBegun(app, group, {}, { left = CHAIN_BUDGET })
+            if not (hasSources and met) then
+                Block(format("needs level %d", minLevel))
+            end
         end
         -- The client's own word on a quest that has turned gray, where it has one.
         if not player.includeTrivial and C_QuestLog.IsQuestTrivial and C_QuestLog.IsQuestTrivial(questID) == true then

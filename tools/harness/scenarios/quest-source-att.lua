@@ -277,7 +277,7 @@ return function(H, S)
 
         -- What is only out of reach for now is not.
         for _, case in ipairs({
-            { LATER, "quest 9199 comes first" }, { DAILY, "repeatable" }, { FAR, "needs level 60" },
+            { DAILY, "repeatable" }, { FAR, "needs level 60" },
         }) do
             quest = Only(case[1])
             Equal(quest.reason, case[2], "for now: " .. case[2])
@@ -322,6 +322,12 @@ return function(H, S)
             world.env.CaerdonWardrobe:RefreshItems()
         end
 
+        -- A quest whose chain is not begun counts where its level is within the range.
+        quest = Only(LATER)
+        Check(quest.eligible == true and quest.reason == "upcoming",
+            "chain: a quest within the range is still to come though the quest before it is not begun (" ..
+            tostring(quest.reason) .. ")")
+
         -- A finished quest.
         world.completed[9111] = true
         world.env.CaerdonWardrobe:RefreshItems()
@@ -333,8 +339,6 @@ return function(H, S)
         Equal(Status(EITHER), "quest", "events: a quest another one would lock is still to come")
         world.completed[9199], world.completed[9116] = true, true
         world.After("QUEST_TURNED_IN")
-        quest = Only(LATER)
-        Check(quest.eligible == true, "events: the quest before it done, the quest is still to come (" .. tostring(quest.reason) .. ")")
         quest = Only(EITHER)
         Equal(quest.reason, "exclusive with quest 9116", "events: the other quest done locks this one")
         Equal(quest.over, true, "events: for good")

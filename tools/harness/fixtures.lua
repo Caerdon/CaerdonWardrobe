@@ -277,6 +277,9 @@ local function CollectNames(environment, recordings)
                 for _, realm in ipairs(realms) do
                     isRealm = isRealm or (type(realmKey) == "string" and realmKey:find(realm, 1, true) ~= nil)
                 end
+                -- Where the client gives no realm name the saved data is filed under the server
+                -- number (CaerdonAPI:GetRealmKey), which no answer about the realm holds.
+                isRealm = isRealm or (type(realmKey) == "string" and realmKey:match("^server %d+$") ~= nil)
                 if isRealm and type(toons) == "table" then
                     for toonKey in pairs(toons) do
                         if type(toonKey) == "string" and not names[toonKey] then
