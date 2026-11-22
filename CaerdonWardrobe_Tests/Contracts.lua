@@ -836,6 +836,117 @@ T.Contract({
     end,
 })
 
+-- The account-bound label is read from what the binding line says as a number (`bonding`;
+-- CaerdonItem.lua, ACCOUNT_BONDING), and from the line's text only where a line has no such
+-- field. So the two have to say the same: a line whose bonding is one of the four account
+-- values has one of the four account texts, and no other line has one. Asked of both
+-- tooltips, the slot's and the link's, of every item in the bags. Which value came with which
+-- text is kept and added to over the runs: a toon without an account-bound item answers for
+-- the other lines only, and its result says so.
+
+local function MergeBindingLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "bindingLines", "accountLines", "withoutField" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.seen = merged.seen or {}
+    for pair, count in pairs(new.seen or {}) do
+        merged.seen[pair] = (merged.seen[pair] or 0) + count
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.accountBonding",
+    version = 1,
+    title = "A binding line's bonding says account bound where its text does",
+    accumulate = true,
+    merge = MergeBindingLines,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local enum = Enum.TooltipDataItemBinding
+        if not c:Check(type(enum) == "table", "Enum.TooltipDataItemBinding is a %s", TypeOf(enum)) then
+            return
+        end
+        local accountValues, names = {}, {}
+        for name, value in pairs(enum) do
+            names[value] = name
+        end
+        for _, name in ipairs({ "Account", "BnetAccount", "BindToAccount", "BindToBnetAccount" }) do
+            if c:Check(type(enum[name]) == "number", "Enum.TooltipDataItemBinding.%s is a %s", name, TypeOf(enum[name])) then
+                accountValues[enum[name]] = true
+            end
+        end
+        local accountTexts = {
+            [ITEM_ACCOUNTBOUND] = true,
+            [ITEM_BNETACCOUNTBOUND] = true,
+            [ITEM_BIND_TO_ACCOUNT] = true,
+            [ITEM_BIND_TO_BNETACCOUNT] = true,
+        }
+
+        local bindingLines, accountLines, withoutField, seen = 0, 0, 0, {}
+        local function Read(side, data, itemID)
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                local text, bonding = line.leftText, line.bonding
+                if issecretvalue(text) or issecretvalue(bonding) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's text or bonding is a secret value", itemID, side)
+                else
+                    local isBindingLine = line.type == Enum.TooltipDataLineType.ItemBinding
+                    local saysAccount = accountTexts[text] == true
+                    local shown = ("%s (%s) \"%s\""):format(tostring(bonding), tostring(names[bonding]), tostring(text))
+                    if isBindingLine then
+                        bindingLines = bindingLines + 1
+                        local pair = side .. ": " .. shown
+                        seen[pair] = (seen[pair] or 0) + 1
+                        if bonding == nil then
+                            withoutField = withoutField + 1
+                        end
+                        c:Check(type(bonding) == "number", "item %d, the %s's tooltip: the binding line has no bonding, it is %s",
+                            itemID, side, shown)
+                    elseif bonding ~= nil then
+                        -- The addon reads the field on the line types it reads texts from.
+                        c:Check(false, "item %d, the %s's tooltip: a line of type %s carries a bonding, %s", itemID, side,
+                            tostring(line.type), shown)
+                    end
+                    if saysAccount or accountValues[bonding] then
+                        accountLines = accountLines + 1
+                    end
+                    if bonding ~= nil then
+                        c:Check(saysAccount == (accountValues[bonding] == true),
+                            "item %d, the %s's tooltip: the bonding and the text do not agree, %s", itemID, side, shown)
+                    elseif saysAccount then
+                        c:Check(isBindingLine, "item %d, the %s's tooltip: an account-bound text on a line of type %s", itemID,
+                            side, tostring(line.type))
+                    end
+                end
+            end
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                Read("link", C_TooltipInfo.GetHyperlink(link), itemID)
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("bindingLines", bindingLines)
+        c:Note("accountLines", accountLines)
+        c:Note("withoutField", withoutField)
+        c:Note("seen", seen)
+        if accountLines == 0 then
+            return "info", "no account-bound line in these bags: only the other lines were asked"
+        end
+    end,
+})
+
 -- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
 -- of the client's answer has its row, and every field of the line is on it. An item in a bag
 -- has two tooltips, the slot's and the bare link's, which is the one the addon computes the

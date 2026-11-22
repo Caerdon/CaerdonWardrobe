@@ -39,7 +39,20 @@ CaerdonItemBind = {
     WarboundUntilEquip = "Warbound until Equip"
 }
 
--- Static lookup table for binding text in tooltip parsing (constant, avoids per-call recreation)
+-- A tooltip's binding line that says the item is, or will be, bound to the account. The line
+-- carries what it says as a number (`bonding`, Enum.TooltipDataItemBinding), which is read
+-- first; the four texts are for a line that has no such field.
+local ACCOUNT_BONDING = {}
+do
+    local bondings = Enum.TooltipDataItemBinding
+    if bondings then
+        for _, name in ipairs({ "Account", "BnetAccount", "BindToAccount", "BindToBnetAccount" }) do
+            if bondings[name] ~= nil then
+                ACCOUNT_BONDING[bondings[name]] = true
+            end
+        end
+    end
+end
 local bindTextTable = {
     [ITEM_ACCOUNTBOUND]        = L["BoA"],
     [ITEM_BNETACCOUNTBOUND]    = L["BoA"],
@@ -207,7 +220,6 @@ local function ResetTooltipData(embeddedLink)
     t.isRelearn = false
     t.bindingStatus = nil
     t.isRetrieving = false
-    t.isSoulbound = false
     t.isKnownSpell = false
     t.isLocked = false
     t.isOpenable = false
@@ -915,7 +927,6 @@ function CaerdonItemMixin:GetTooltipData(data)
 
     if not data then return ResetTooltipData(nil) end
 
-    -- bindTextTable is now module-level (constant)
     -- tooltipData is recycled to avoid per-call allocation
     local tooltipData = ResetTooltipData(data.hyperlink)
 
@@ -1050,8 +1061,13 @@ function CaerdonItemMixin:GetTooltipData(data)
                 -- end
 
                 if not tooltipData.bindingStatus then
-                    -- Check binding status - TODO: Is there a non-scan way?
-                    tooltipData.bindingStatus = bindTextTable[lineText]
+                    if line.bonding ~= nil then
+                        if ACCOUNT_BONDING[line.bonding] then
+                            tooltipData.bindingStatus = L["BoA"]
+                        end
+                    else
+                        tooltipData.bindingStatus = bindTextTable[lineText]
+                    end
                 end
 
                 if strmatch(lineText, L["Use: .* ([%d,]+) reputation"]) then
@@ -1065,8 +1081,6 @@ function CaerdonItemMixin:GetTooltipData(data)
                     -- TODO: Review - removed because I think this is handled by recipe management
                     -- elseif strmatch(lineText, L["Use: Study to increase your"]) then
                     -- 	tooltipData.canLearn = true
-                elseif lineText == ITEM_SOULBOUND then
-                    tooltipData.isSoulbound = true
                 elseif lineText == ITEM_SPELL_KNOWN then
                     tooltipData.isKnownSpell = true
                 elseif lineText == LOCKED then

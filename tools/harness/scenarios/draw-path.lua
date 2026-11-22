@@ -31,7 +31,7 @@ return function(H, S)
                 stack = 20, price = 5, classID = 15, subClassID = 0 },
             [930002] = { name = "Field Tunic", quality = 2, level = 20, minLevel = 20, type = "Armor", subType = "Leather",
                 stack = 1, equipLoc = "INVTYPE_CHEST", price = 500, classID = 4, subClassID = 2, bindType = 2,
-                tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 } },
+                tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 } },
                 appearance = { appearanceID = 6201, sourceID = 8201 } },
         }
     end

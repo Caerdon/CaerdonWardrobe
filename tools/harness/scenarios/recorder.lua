@@ -62,14 +62,14 @@ return function(H, S)
             [900002] = { name = "Sturdy Vest", quality = 2, level = 25, minLevel = 20, type = "Armor",
                 subType = "Leather", stack = 1, equipLoc = "INVTYPE_CHEST", price = 900, classID = 4, subClassID = 2,
                 bindType = 2,
-                tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "Chest", type = 21 } },
+                tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 }, { text = "Chest", type = 21 } },
                 appearance = { appearanceID = 5001, sourceID = 7001 } },
             -- A requirement the toon does not meet: a red line, which is a color with methods
             -- in the client and plain numbers in a recording.
             [900004] = { name = "Lofty Helm", quality = 2, level = 25, minLevel = 20, type = "Armor",
                 subType = "Leather", stack = 1, equipLoc = "INVTYPE_HEAD", price = 1200, classID = 4, subClassID = 2,
                 bindType = 2,
-                tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "Head", type = 21 },
+                tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 }, { text = "Head", type = 21 },
                     { text = "Requires Engineering (300)", type = 43, r = 1, g = 0.125, b = 0.125 } },
                 appearance = { appearanceID = 5002, sourceID = 7002 } },
             -- Two sources of one look, one of them collected: the same question asked about
@@ -77,7 +77,7 @@ return function(H, S)
             [900005] = { name = "Plain Gloves", quality = 2, level = 25, minLevel = 20, type = "Armor",
                 subType = "Leather", stack = 1, equipLoc = "INVTYPE_HAND", price = 700, classID = 4, subClassID = 2,
                 bindType = 2,
-                tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "Hands", type = 21 } },
+                tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 }, { text = "Hands", type = 21 } },
                 appearance = { appearanceID = 5003, sourceID = 7005 } },
             [900006] = { name = "Old Gloves", quality = 1, level = 10, minLevel = 5, type = "Armor",
                 subType = "Leather", stack = 1, equipLoc = "INVTYPE_HAND", price = 50, classID = 4, subClassID = 2,
@@ -438,10 +438,10 @@ return function(H, S)
 
         -- 4. The code reads a name the environment does not have.
         local environment = H.DeepCopy(vestFixture.environment)
-        environment.values.LOCKED, environment.values.ITEM_SOULBOUND = nil, nil
+        environment.values.LOCKED = nil
         result = H.Replay(environment, vestFixture.recording)
         local fromMirror = table.concat(result.fromMirror or {}, ",")
-        Check(fromMirror:find("ITEM_SOULBOUND", 1, true) ~= nil or fromMirror:find("LOCKED", 1, true) ~= nil,
+        Check(fromMirror:find("LOCKED", 1, true) ~= nil,
             "fault: a string the recording lacks comes from the listings mirror and is counted (" .. fromMirror .. ")")
 
         -- The quest verdict came out of the replay through the seam, with the addon's own

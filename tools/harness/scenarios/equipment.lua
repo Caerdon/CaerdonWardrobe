@@ -19,7 +19,7 @@ return function(H, S)
     local function Armor(name, slot, appearance, more)
         local item = { name = name, quality = 2, level = 25, minLevel = 20, type = "Armor", subType = "Leather",
             stack = 1, equipLoc = slot, price = 500, classID = 4, subClassID = 2, bindType = 2,
-            tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 } }, appearance = appearance }
+            tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 } }, appearance = appearance }
         for key, value in pairs(more or {}) do
             item[key] = value
         end
@@ -46,7 +46,7 @@ return function(H, S)
                 { subType = "Plate", subClassID = 4 }),
             -- A piece above the toon's level: the client writes the requirement in red.
             [910006] = Armor("Lofty Vest", "INVTYPE_CHEST", { appearanceID = 5106, sourceID = 7106 }, { minLevel = 40,
-                tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 },
+                tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 },
                     { text = "Requires Level 40", type = 0, r = 1, g = 0.125, b = 0.125 } } }),
             -- Something that is no equipment at all.
             [910007] = { name = "Cracked Fang", quality = 0, level = 5, minLevel = 0, type = "Miscellaneous",
@@ -342,7 +342,7 @@ return function(H, S)
             if greaves then
                 Equal((Status(late, greaves)), "<not ready>",
                     "late tooltip: no verdict while the line is there, as a line of type " .. lineType)
-                lateTooltip[1] = { text = "Binds when equipped", type = 20, bonding = 2 }
+                lateTooltip[1] = { text = "Binds when equipped", type = 20, bonding = 7 }
                 Equal((Status(late, greaves)), "own", "late tooltip: and the piece's own once the tooltip is")
                 late.env.CaerdonWardrobe:RefreshItems("test")
             end

@@ -49,7 +49,7 @@ return function(H, S)
     local function Items()
         local items = {}
         for index, case in ipairs(CASES) do
-            local tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 } }
+            local tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 } }
             local lines = type(case[2]) == "table" and case[2] or { { case[2], case[3] } }
             for _, line in ipairs(lines) do
                 tooltip[#tooltip + 1] = { text = line[1], type = line[2], r = 0, g = 1, b = 0 }

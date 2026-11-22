@@ -24,7 +24,7 @@ return function(H, S)
     local function Armor(name, slot, level, appearance, more)
         local item = { name = name, quality = 2, level = level, minLevel = 20, type = "Armor", subType = "Leather",
             stack = 1, equipLoc = slot, price = 500, classID = 4, subClassID = 2, bindType = 2,
-            tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 } }, appearance = appearance }
+            tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 } }, appearance = appearance }
         for key, value in pairs(more or {}) do
             item[key] = value
         end
@@ -37,7 +37,7 @@ return function(H, S)
             -- is the lower piece the better one (30 against 25, where the levels say 15 and 20).
             -- The floors count where the client applies them: the toon is in War Mode here.
             [920001] = Armor("Field Gloves", "INVTYPE_HAND", 15, { appearanceID = 5201, sourceID = 7201, collected = true },
-                { tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = PVP_FLOOR:format(30) } } }),
+                { tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 }, { text = PVP_FLOOR:format(30) } } }),
             [920002] = Armor("Worn Gloves", "INVTYPE_HAND", 20, { appearanceID = 5202, sourceID = 7202, collected = true },
                 { tooltip = { { text = PVP_FLOOR:format(25) } } }),
             -- An auction row's item: its link says level 10, the row says otherwise.
@@ -51,10 +51,10 @@ return function(H, S)
             [920020] = Armor("Worn Vest", "INVTYPE_CHEST", 20, { appearanceID = 5220, sourceID = 7220, collected = true },
                 { tooltip = { { text = "+3 Stamina" } } }),
             [920021] = Armor("Tied Vest", "INVTYPE_CHEST", 20, { appearanceID = 5221, sourceID = 7221, collected = true },
-                { tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "+3 Agility" } } }),
+                { tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 }, { text = "+3 Agility" } } }),
             [920022] = Armor("Tied Hauberk", "INVTYPE_CHEST", 20, { appearanceID = 5222, sourceID = 7222, collected = true },
                 { subType = "Mail", subClassID = 3,
-                    tooltip = { { text = "Binds when equipped", type = 20, bonding = 2 }, { text = "+3 Agility" },
+                    tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 }, { text = "+3 Agility" },
                         { text = "Mail", r = 1, g = 0.125, b = 0.125 } } }),
             -- A crafted piece, worse than the worn boots: junk by its link alone, and kept in
             -- its bag slot, where the client says it can be recrafted.

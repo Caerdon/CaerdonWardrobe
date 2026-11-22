@@ -24,7 +24,7 @@ return function(H, S)
     local PVP_FLOOR = "Equip: Increases item level to a minimum of %d in Arenas and Battlegrounds."
 
     local function Armor(name, slot, level, appearance, tooltip)
-        local lines = { { text = "Binds when equipped", type = 20, bonding = 2 } }
+        local lines = { { text = "Binds when equipped", type = 20, bonding = 7 } }
         for _, line in ipairs(tooltip or {}) do
             lines[#lines + 1] = line
         end
