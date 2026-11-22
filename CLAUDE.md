@@ -106,6 +106,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 - **Classic stats are "Equip:" lines:** spell power, attack power, crit and the like come as green "Equip:" lines of type `None`, built from the client's `TOOLTIP_ITEM_STAT_*` strings. A real effect is typed `ItemSpellTriggerOnEquip` (notes: Sellable Rules).
 - **Classic ranged slot** (`INVSLOT_RANGED`, `C_PaperDollInfo.IsRangedSlotShown()` true) and no profession gear slots: tools are carried in the bags.
 - **Bag slots:** four normal slots plus a reagent slot that also takes profession bags.
+- **No realm name:** `GetRealmName()` is an empty text there. Anything saved by realm and toon is filed under `CaerdonAPI:GetRealmKey()` (the realm's name, or the server number in the toon's GUID), never under `GetRealmName()` itself (notes: WoW Forever Client).
 - **Mixin-based mail frame** (`InboxFrame:Update()`), camelot bank panel, a wardrobe UI that hides uncollected appearances. The `C_TransmogCollection` APIs are unchanged.
 
 ## Notes Index (`docs/dev-notes.md`)

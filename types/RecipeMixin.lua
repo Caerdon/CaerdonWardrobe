@@ -11,7 +11,9 @@ local function EnsureVariables()
 
     -- Initialize per-character table for known recipes
     local playerName = UnitName("player")
-    local realmName = GetRealmName()
+    -- The realm's key, and "" while the client can name none yet: what is filed there is
+    -- taken over when it can (CaerdonAPI:GetRealmKey).
+    local realmName = CaerdonAPI:GetRealmKey() or ""
 
     if not CaerdonProfessionData then
         CaerdonProfessionData = {}
@@ -328,7 +330,7 @@ end
 -- { [toon name] = its recipes table }.
 function CaerdonRecipe:GetRealmRecordedRecipes()
     local found = {}
-    local realmRecipes = CaerdonRecipeData and CaerdonRecipeData[GetRealmName()]
+    local realmRecipes = CaerdonRecipeData and CaerdonRecipeData[CaerdonAPI:GetRealmKey() or ""]
     if type(realmRecipes) == "table" then
         for toonName, toonData in pairs(realmRecipes) do
             if type(toonData) == "table" and type(toonData.recipes) == "table" then

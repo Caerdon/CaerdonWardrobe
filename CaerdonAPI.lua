@@ -453,6 +453,149 @@ function CaerdonAPIMixin:IsForeverClient()
     return type(tocVersion) == "number" and tocVersion >= 16000 and tocVersion < 20000
 end
 
+-- The realm a toon's saved data is filed under, with the toon's name (CaerdonRecipeData,
+-- CaerdonProfessionData, CaerdonRefreshData: [realm][toon]). The realm's name where the client
+-- gives it. WoW Forever stopped giving it (GetRealmName is an empty text there since a hotfix
+-- of November 2026): everything was then filed under "", every toon's records began again
+-- (its recorded recipes, its standings, the gear set it last put on), and all of an
+-- account's toons there were one realm. So where there is no name the realm is the server
+-- number in the toon's GUID ("Player-6928-..."), as "server 6928".
+--
+-- The first time a toon is filed under such a key, what was saved for it before is taken
+-- over (TakeOverRealmData), so that nothing has to be recorded again.
+-- Returns the key and where it is from; nil while the client has neither a name nor a GUID.
+local REALM_TABLES = { "CaerdonProfessionData", "CaerdonRecipeData", "CaerdonRefreshData" }
+local SERVER_KEY = "^server %d+$"
+local realmKey, realmKeyFrom, realmTakeOver
+
+-- What `into` lacks is taken from `from`: a field it has not, and within a field that is a
+-- table in both, each entry it has not. So of two records of one toon the newer keeps what it
+-- says and the older adds what the newer does not have: a profession recorded before and not
+-- opened since, a recipe known, a faction's standing, the gear set last put on.
+local function FillFrom(into, from)
+    for field, value in pairs(from) do
+        local mine = into[field]
+        if mine == nil then
+            into[field] = value
+        elseif type(mine) == "table" and type(value) == "table" then
+            for entry, old in pairs(value) do
+                if mine[entry] == nil then
+                    mine[entry] = old
+                end
+            end
+        end
+    end
+end
+
+-- A toon's record goes under `key`: as it is where there is none, else filling what is missing.
+local function Adopt(saved, key, toon, record)
+    local mine = saved[key]
+    if type(mine) ~= "table" then
+        mine = {}
+        saved[key] = mine
+    end
+    if type(mine[toon]) == "table" then
+        FillFrom(mine[toon], record)
+    else
+        mine[toon] = record
+    end
+end
+
+-- What was saved before the realm had this key, taken over into it. Two places hold it:
+--   The key "", where everything was filed while the realm had no name: this toon's record
+--   there alone, since the other toons under it may be another server's (each takes its own
+--   when it is played).
+--   The realm's old name. Which name that was is not known, so it is the one old key that
+--   holds a toon of this toon's name, where exactly one does: that key is then this server's,
+--   and every toon under it comes along, so that what the toon's other toons can use is
+--   known at once and not after each has been played. With none or several nothing is taken:
+--   a toon that is new, or a name the account has on two realms.
+-- A toon that has a record in more than one of them has them made one (FillFrom), and what
+-- is newer wins where both say something: the record under the new key, then the one under
+-- "", then the old realm's.
+-- Not safe against one case: a toon made since, with the name of an older toon on another
+-- realm that is the only one of that name in the saved data. That realm's records are then
+-- taken for this server's.
+local function TakeOverRealmData(key, toon)
+    local report = { toons = 0, fromEmpty = false, candidates = 0 }
+    local oldKeys = {}
+    for _, name in ipairs(REALM_TABLES) do
+        local saved = _G[name]
+        for realm, toons in pairs(type(saved) == "table" and saved or {}) do
+            if type(realm) == "string" and realm ~= "" and realm ~= key and not realm:find(SERVER_KEY) and
+                type(toons) == "table" and type(toons[toon]) == "table" and not oldKeys[realm] then
+                oldKeys[realm] = true
+                report.candidates = report.candidates + 1
+            end
+        end
+    end
+    local old = report.candidates == 1 and next(oldKeys) or nil
+    report.from = old
+    for _, name in ipairs(REALM_TABLES) do
+        local saved = _G[name]
+        if type(saved) == "table" then
+            local unnamed = saved[""]
+            if type(unnamed) == "table" and type(unnamed[toon]) == "table" then
+                Adopt(saved, key, toon, unnamed[toon])
+                unnamed[toon] = nil
+                if next(unnamed) == nil then
+                    saved[""] = nil
+                end
+                report.fromEmpty = true
+            end
+            local before = old and saved[old]
+            if type(before) == "table" then
+                local counted = {}
+                for otherToon, record in pairs(before) do
+                    if type(record) == "table" then
+                        Adopt(saved, key, otherToon, record)
+                        counted[#counted + 1] = otherToon
+                    end
+                end
+                for _, otherToon in ipairs(counted) do
+                    before[otherToon] = nil
+                end
+                report.toons = math.max(report.toons, #counted)
+                if next(before) == nil then
+                    saved[old] = nil
+                end
+            end
+        end
+    end
+    return report
+end
+
+function CaerdonAPIMixin:GetRealmKey()
+    if realmKey then
+        return realmKey, realmKeyFrom
+    end
+    local name = GetRealmName()
+    if type(name) == "string" and name ~= "" then
+        realmKey, realmKeyFrom = name, "the realm's name"
+        return realmKey, realmKeyFrom
+    end
+    local guid = UnitGUID and UnitGUID("player")
+    local server = type(guid) == "string" and guid:match("^Player%-(%d+)%-")
+    if not server then
+        return nil, "the client gives no realm name, and no GUID of the toon's yet"
+    end
+    local key = "server " .. server
+    local from = "the server number in the toon's GUID (the client gives no realm name)"
+    local toon = UnitName("player")
+    if toon and toon ~= UNKNOWNOBJECT then
+        -- Kept from here on, and what was saved before is taken over, once.
+        realmKey, realmKeyFrom = key, from
+        local ok, report = pcall(TakeOverRealmData, key, toon)
+        realmTakeOver = ok and report or { problem = tostring(report) }
+    end
+    return key, from
+end
+
+-- For the export: what the realm key's first use took over this session, or nil.
+function CaerdonAPIMixin:GetRealmTakeOver()
+    return realmTakeOver
+end
+
 function CaerdonAPIMixin:GetClientFlavor()
     if self:IsForeverClient() then
         return "Forever", WOW_PROJECT_ID

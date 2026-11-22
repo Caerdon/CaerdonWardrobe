@@ -1724,7 +1724,7 @@ end
 -- (CaerdonRefreshData[realm][toon].chosenGearSet, beside what the refresh watcher keeps there).
 -- nil for a toon the client has no name for yet. set: the ID to keep.
 local function ChosenGearSet(set)
-    local realm, toon = GetRealmName(), UnitName("player")
+    local realm, toon = CaerdonAPI:GetRealmKey(), UnitName("player")
     if not realm or not toon or toon == UNKNOWNOBJECT then
         return nil
     end

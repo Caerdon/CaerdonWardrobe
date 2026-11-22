@@ -2408,6 +2408,22 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     local genderID = UnitSex("player")
     local genderText = genderID == 2 and "Male" or genderID == 3 and "Female" or "Unknown"
     addKV(1, "Gender", genderText .. " (" .. tostring(genderID or "nil") .. ")")
+    -- What the toon's saved data is filed under, and what its first use took over.
+    do
+        local key, from = CaerdonAPI:GetRealmKey()
+        addKV(1, "Saved Under", string.format("%s (%s)", key and ("\"" .. tostring(key) .. "\"") or "nothing yet", tostring(from)))
+        local taken = CaerdonAPI:GetRealmTakeOver()
+        if taken then
+            if taken.problem then
+                addKV(1, "Saved Data Taken Over", "failed: " .. tostring(taken.problem))
+            else
+                addKV(1, "Saved Data Taken Over", string.format("%s; this toon's record under the empty key: %s",
+                    taken.from and string.format("%d toons from the realm's old key \"%s\"", taken.toons, tostring(taken.from)) or
+                        string.format("none from an old realm key (%d hold a toon of this name)", taken.candidates),
+                    taken.fromEmpty and "taken" or "none"))
+            end
+        end
+    end
 
     addLine(0, "")
     addLine(0, "[Item]")

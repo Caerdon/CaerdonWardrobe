@@ -375,7 +375,16 @@ end
 local unnamedStandings = {}
 
 local function KnownStandings()
-    local realm, toon = GetRealmName(), UnitName("player")
+    -- By the realm's key (CaerdonAPI:GetRealmKey: the realm's name, or the server's number
+    -- where the client gives no name). This file is also run by itself (the harness), with
+    -- no CaerdonAPI: the realm's name then, as it was.
+    local realm
+    if CaerdonAPI and CaerdonAPI.GetRealmKey then
+        realm = CaerdonAPI:GetRealmKey()
+    else
+        realm = GetRealmName()
+    end
+    local toon = UnitName("player")
     -- A toon the client has no name for yet has nothing saved to be compared with: every
     -- faction is new to it, which is a refresh too many and not one too few.
     if not realm or not toon or toon == UNKNOWNOBJECT then
