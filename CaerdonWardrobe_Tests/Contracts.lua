@@ -973,7 +973,7 @@ local function MergeUnmetLines(old, new)
         merged[key] = (old[key] or 0) + (new[key] or 0)
     end
     merged.red = new.red or old.red
-    for _, key in ipairs({ "redElsewhere", "fieldsElsewhere" }) do
+    for _, key in ipairs({ "redElsewhere", "fieldsElsewhere", "unmet" }) do
         merged[key] = merged[key] or {}
         for lineType, entry in pairs(new[key] or {}) do
             local target = merged[key][lineType]
@@ -1015,6 +1015,9 @@ T.Contract({
         local REQUIREMENT, SLOT = Enum.TooltipDataLineType.UsageRequirement, Enum.TooltipDataLineType.EquipSlot
         local requirementLines, slotLines, unmetByField = 0, 0, 0
         local redElsewhere, fieldsElsewhere = {}, {}
+        -- The lines a field calls unmet, by the field: which of the three a client has shown
+        -- at false, and on what text.
+        local unmet = {}
         local function Collect(into, lineType, example)
             local key = tostring(lineType)
             local entry = into[key]
@@ -1039,6 +1042,8 @@ T.Contract({
             end
             if value == false then
                 unmetByField = unmetByField + 1
+                Collect(unmet, field, ("%s: \"%s\""):format(side,
+                    tostring(column == "left" and line.leftText or line.rightText)))
             end
             c:Check((value == false) == IsRed(color),
                 "item %d, the %s's tooltip: %s is %s and the %s column is %s (\"%s\")", itemID, side, field,
@@ -1083,6 +1088,7 @@ T.Contract({
         c:Note("requirementLines", requirementLines)
         c:Note("slotLines", slotLines)
         c:Note("unmetByField", unmetByField)
+        c:Note("unmet", unmet)
         c:Note("redElsewhere", redElsewhere)
         c:Note("fieldsElsewhere", fieldsElsewhere)
         if unmetByField == 0 then

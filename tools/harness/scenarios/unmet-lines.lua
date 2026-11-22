@@ -266,6 +266,14 @@ return function(H, S)
         Equal(detail.requirementLines, 4, flavor .. ", contract: two requirement lines, in the slot's and the link's tooltip")
         Equal(detail.slotLines, 4, flavor .. ", contract: and two slot lines")
         Equal(detail.unmetByField, 4, flavor .. ", contract: the mail's type and its level, on both sides")
+        -- Which field said so, on what text: a client's first unmet line is named, not counted.
+        local unmet = detail.unmet or {}
+        Equal((unmet.usable or {}).lines, 2, flavor .. ", contract: the level is unmet by usable, twice")
+        Equal(((unmet.usable or {}).examples or {})[1], "slot: \"Requires Level 40\"", flavor .. ", contract: in the slot's tooltip")
+        Equal(((unmet.usable or {}).examples or {})[2], "link: \"Requires Level 40\"", flavor .. ", contract: and in the link's")
+        Equal((unmet.isValidItemType or {}).lines, 2, flavor .. ", contract: the mail by isValidItemType, twice")
+        Equal(((unmet.isValidItemType or {}).examples or {})[1], "slot: \"Mail\"", flavor .. ", contract: with the right column's text")
+        Equal(unmet.isValidInvSlot, nil, flavor .. ", contract: a field nothing was unmet by is not listed")
         local elsewhere = (detail.redElsewhere or {})[tostring(ERROR)] or {}
         Equal(elsewhere.lines, 2, flavor .. ", contract: the lockbox's red line is of a type with no field")
         Equal((elsewhere.examples or {})[1], "Locked", flavor .. ", contract: with its text, once")
@@ -276,6 +284,9 @@ return function(H, S)
         Equal((result.detail or {}).requirementLines, 8, flavor .. ", contract: a second run adds to the first")
         Equal((((result.detail or {}).redElsewhere or {})[tostring(ERROR)] or {}).lines, 4,
             flavor .. ", contract: also to the red lines elsewhere")
+        Equal((((result.detail or {}).unmet or {}).usable or {}).lines, 4, flavor .. ", contract: and to the unmet lines by field")
+        Equal(#((((result.detail or {}).unmet or {}).usable or {}).examples or {}), 2,
+            flavor .. ", contract: whose examples are kept once each")
 
         -- Bags whose lines are all met answer for those only.
         bag = { MET_ID, BOX_ID }
