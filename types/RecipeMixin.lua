@@ -529,6 +529,60 @@ local function GetRecipeNameFromItem(item)
     return CaerdonRecipe:GetRecipeNameFromItemName(item:GetItemName())
 end
 
+-- A name with its first letter as a capital, nil where that letter is none this knows or is
+-- one already. The client's string.upper goes by bytes and knows a to z only; this knows the
+-- two-byte letters of the Latin and the Cyrillic alphabet as well (é, ñ, э), which is what
+-- Spanish and Russian names start with.
+function CaerdonRecipe:CapitalizeFirstLetter(name)
+    if type(name) ~= "string" then
+        return nil
+    end
+    local first, second = name:byte(1, 2)
+    if not first then
+        return nil
+    end
+    if first >= 97 and first <= 122 then
+        return string.char(first - 32) .. name:sub(2)
+    end
+    if not second then
+        return nil
+    end
+    local lead, trail
+    if first == 0xC3 and second >= 0xA0 and second <= 0xBE and second ~= 0xB7 then
+        lead, trail = 0xC3, second - 0x20 -- à to þ, without the division sign
+    elseif first == 0xD0 and second >= 0xB0 and second <= 0xBF then
+        lead, trail = 0xD0, second - 0x20 -- а to п
+    elseif first == 0xD1 and second >= 0x80 and second <= 0x8F then
+        lead, trail = 0xD0, second + 0x20 -- р to я
+    elseif first == 0xD1 and second == 0x91 then
+        lead, trail = 0xD0, 0x81 -- ё
+    end
+    if not lead then
+        return nil
+    end
+    return string.char(lead, trail) .. name:sub(3)
+end
+
+-- What a table keyed by the profession list's recipe names has for the name a recipe item
+-- gave. Spanish and Russian write the recipe's name in lower case after the item's prefix
+-- ("Receta: elixir de agilidad menor") and with a capital in the list ("Elixir de agilidad
+-- menor"), so a name the table lacks is asked once more with its first letter as a capital.
+-- That is all it mends: where the item and the list word the name differently, as Classic's
+-- data does for some recipes in both languages, the item finds no recipe by its name.
+function CaerdonRecipe:FindByName(names, recipeName)
+    if type(names) ~= "table" or recipeName == nil then
+        return nil
+    end
+    local found = names[recipeName]
+    if found == nil then
+        local capitalized = CaerdonRecipe:CapitalizeFirstLetter(recipeName)
+        if capitalized then
+            found = names[capitalized]
+        end
+    end
+    return found
+end
+
 -- The saved skill line a toon has for a profession name. A parent profession and its child skill
 -- line can share a name. On WoW Forever every profession has a single child line named exactly
 -- like its parent ("Cooking" > "Cooking"), and the secondary professions have no parent skill
@@ -576,7 +630,7 @@ local function GetRecipe(item)
     -- print(item:GetItemLink())
     local recipeName = GetRecipeNameFromItem(item)
 
-    local recipeID = CaerdonRecipeData.globalRecipeNameToID[recipeName]
+    local recipeID = CaerdonRecipe:FindByName(CaerdonRecipeData.globalRecipeNameToID, recipeName)
     if recipeID then
         -- DevTools_Dump(C_TradeSkillUI.GetRecipeInfo(recipeID))
         return C_TradeSkillUI.GetRecipeInfo(recipeID)
@@ -658,7 +712,7 @@ local function IsInRecordedList(toonRecipes, professionName, recipeName)
         end
         recordedNames[entry] = names
     end
-    return names[recipeName] == true
+    return CaerdonRecipe:FindByName(names, recipeName) == true
 end
 
 -- The cap a toon's recording of the profession was made at, where the profession is one skill
@@ -738,7 +792,7 @@ function CaerdonRecipe:GetOtherToonRecipeInfo(item)
                 table.insert(toons, {
                     name = toonName,
                     rank = rank,
-                    knowsRecipe = (type(knownRecipes) == "table" and knownRecipes[recipeName] ~= nil) or false,
+                    knowsRecipe = CaerdonRecipe:FindByName(knownRecipes, recipeName) ~= nil,
                     recipesRecorded = (type(scanned) == "table" and scanned[professionName] == true) or false,
                     inRecordedList = IsInRecordedList(toonRecipes, professionName, recipeName),
                     cap = RecordedCap(toonRecipes, professionName),

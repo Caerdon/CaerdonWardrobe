@@ -399,6 +399,54 @@ return function(H, S)
         Equal(env.CaerdonRecipe:GetRecipeNameFromItemName(nil), "", "recipe name of an item with no name")
     end
 
+    -- The name an item gave against the profession list's. Each pair is Wowhead's name of a
+    -- recipe item and of the spell it teaches (the list's name), not a client's: Classic's
+    -- items 2553, 6342, 6325 and 2406 with spells 3230, 7443, 7751 and 2158, and retail's
+    -- Russian spell 3230. Spanish and Russian write the item's in lower case; where the two
+    -- are worded differently nothing finds the recipe, and that is said here, not mended.
+    if env.CaerdonRecipe.FindByName then
+        local Recipe = env.CaerdonRecipe
+        local FOUND = {
+            { "Recipe: Elixir of Minor Agility", "Elixir of Minor Agility" },
+            { "Receta: elixir de agilidad menor", "Elixir de agilidad menor" },
+            { "Fórmula: encantar pechera: maná menor", "Encantar pechera: maná menor" },
+            { "Рецепт: слабый эликсир ловкости", "Слабый эликсир ловкости" },
+            { "Recette : Elixir d'Agilité mineure", "Elixir d'Agilité mineure" },
+        }
+        for _, case in ipairs(FOUND) do
+            local names = { [case[2]] = 7 }
+            Equal(Recipe:FindByName(names, Recipe:GetRecipeNameFromItemName(case[1])), 7, "\"" .. case[1] .. "\" finds \"" .. case[2] .. "\"")
+        end
+        local NOT_FOUND = {
+            { "Receta: pececito luminoso", "Pececito brillante" },
+            { "Patrón: botas de cuero refinado", "Botas finas de cuero" },
+            { "Рецепт: слабый эликсир ловкости", "Эликсир ловкости II ступени" },
+            { "Рецепт: блестящая рыбка", "Рецепт блестящей рыбки" },
+            { "Формула чар для нагрудника: мана I", "Чары для нагрудника: мана I" },
+        }
+        for _, case in ipairs(NOT_FOUND) do
+            local names = { [case[2]] = 7 }
+            Equal(Recipe:FindByName(names, Recipe:GetRecipeNameFromItemName(case[1])), nil,
+                "\"" .. case[1] .. "\" does not find \"" .. case[2] .. "\" (another wording)")
+        end
+        -- The exact name comes first, and a capital is tried for nothing else.
+        Equal(Recipe:FindByName({ ["elixir"] = 1, ["Elixir"] = 2 }, "elixir"), 1, "the name as it is comes before its capital")
+        Equal(Recipe:FindByName({ ["elixir"] = 1 }, "Elixir"), nil, "a capital is not made small")
+        Equal(Recipe:FindByName({ ["Elixir"] = false }, "Elixir"), false, "a false is an answer")
+        Equal(Recipe:FindByName(nil, "Elixir"), nil, "no table, no answer")
+        Equal(Recipe:FindByName({}, nil), nil, "no name, no answer")
+        local CAPITALS = {
+            { "elixir", "Elixir" }, { "Elixir", nil }, { "", nil }, { "9 lives", nil },
+            { "élixir", "Élixir" }, { "ñu", "Ñu" }, { "þ", "Þ" }, { "÷", nil }, { "ÿ", nil }, { "É", nil },
+            { "а", "А" }, { "п", "П" }, { "р", "Р" }, { "я", "Я" }, { "ё", "Ё" }, { "эликсир", "Эликсир" },
+            { "Э", nil }, { "配方", nil }, { "\195", nil },
+        }
+        for _, case in ipairs(CAPITALS) do
+            Equal(Recipe:CapitalizeFirstLetter(case[1]), case[2], "the capital of \"" .. case[1] .. "\"")
+        end
+        Equal(Recipe:CapitalizeFirstLetter(nil), nil, "the capital of no name")
+    end
+
     -- The builder on formats no client has today.
     local FormatPattern = namespace.FormatPattern
     if FormatPattern then
