@@ -3024,6 +3024,26 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- What the item teaches by its tooltip, for one that is no profession's recipe (a class's
+    -- spell book, a rune): the rule's inputs and its answer (LearnableByTeachingLine).
+    local teaching = item.GetTeachingInfo and item:GetTeachingInfo() or nil
+    if teaching then
+        addLine(0, "")
+        addLine(0, "[Teaches]")
+        addKV(1, "Taught Spell ID", teaching.spellID or "none on the line")
+        addKV(1, "Taught Spell Name", teaching.spellID and C_Spell.GetSpellName(teaching.spellID) or nil)
+        addKV(1, "Asks For A Skill", teaching.asksForSkill)
+        addKV(1, "Its Class Line Is Unmet", teaching.classUnmet)
+        addKV(1, "Its Level Line Is Unmet", teaching.levelUnmet)
+        addKV(1, "Tooltip Says Already Known", teaching.saysKnown)
+        addKV(1, "Client Calls The Spell Known", teaching.spellKnown)
+        if teaching.asksForSkill then
+            addKV(1, "Learnable By This Rule", "not judged: it asks for a skill, so it is a profession's")
+        else
+            addKV(1, "Learnable By This Rule", teaching.status or "no")
+        end
+    end
+
     if identifiedType == CaerdonItemType.Recipe then
         addLine(0, "")
         addLine(0, "[Recipe]")

@@ -54,6 +54,7 @@ Each later step only replaces the statuses listed, so an upgrade keeps its icon,
 
 1. Old expansion and Quest-class items (early; the type branch may overwrite them).
 2. The branch for the item's type (equipment, consumable, recipe, pet, mount, toy, ...). A piece of equipment that would be `collected` and would gain an unknown look by an upgrade or at the Catalyst is `transform` here instead, so it is never `sellable` or `auction`; an upgrade keeps its arrow and a gear set's piece stays `collected` with the set's mark (notes: Looks After a Change).
+   A book or a rune that teaches this toon a spell it does not know (no profession's recipe: it asks for no skill) is `own`, `lowSkill` below its level, by the tooltip's own lines (notes: What an Item Teaches).
 3. Equippable junk becomes `sellable` (replaces empty).
 4. Bags against the bag slots: `own` / `lowSkill` or `sellable` (replaces empty, `oldexpansion`).
 5. Consumables for another class become `sellable` (replaces empty, `collected`).
@@ -130,6 +131,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Ensembles | Ensembles |
 | Upgrade arrow, Pawn, equal item level, badge | Upgrades |
 | What is and is not `sellable` | Sellable Rules |
+| A class's spell book, a rune, anything with a teaching line | What an Item Teaches |
 | Tools, bags, recipes, food and drink | Profession Tools; Bags for the Bag Slots; Recipes This Toon Has No Use For; Outgrown Food and Drink |
 | Trade goods a recipe takes, recipes recorded with their difficulty | Ingredients |
 | Quest icon on non-quest items | Quest Value |

@@ -95,9 +95,18 @@ local QUEST_REPLACES = {
 }
 local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
 local copySpellLoads = {} -- spell ID -> "asked" or "answered": its data was asked for this session
+-- spell ID -> true: a kept verdict rests on whether the toon knows this spell (a class book, a
+-- rune; LearnableByTeachingLine). Learning one of them is a reason to judge again.
+local taughtSpellsJudged = {}
 function CaerdonItem:InvalidateStatusCache()
     wipe(statusCache)
     wipe(copySpellCache)
+    wipe(taughtSpellsJudged)
+end
+
+-- Whether a kept verdict rests on the toon not knowing this spell yet.
+function CaerdonItem:IsTaughtSpellJudged(spellID)
+    return spellID ~= nil and taughtSpellsJudged[spellID] == true
 end
 
 -- Whether the copy of an item in a bag slot is locked (a lockbox that has not been opened).
@@ -286,6 +295,10 @@ local function ResetTooltipData(embeddedLink)
     t.skillRequirementMet = false
     t.hasSkillRequirement = false
     t.upgradeLevelDisabled = false
+    t.teachesSpell = nil
+    t.ownClassUnmet = false
+    t.ownLevelUnmet = false
+    t.ownSkillLine = false
     t.embeddedLink = embeddedLink
     return t
 end
@@ -1028,6 +1041,16 @@ function CaerdonItemMixin:GetTooltipData(data)
             break
         end
 
+        -- What the item itself teaches ("Use: Teaches you ...", with the spell). A tooltip
+        -- holds the lines of an item it makes before its own, so what stood above this line
+        -- was the made item's and what follows is the item's own: its class, its level, the
+        -- skill it asks for. With several such lines the last is the item's.
+        if line.type == Enum.TooltipDataLineType.ItemSpellTriggerLearn and line.type ~= nil then
+            local taught = line.spellID
+            tooltipData.teachesSpell = (not issecretvalue(taught) and type(taught) == "number") and taught or true
+            tooltipData.ownClassUnmet, tooltipData.ownLevelUnmet, tooltipData.ownSkillLine = false, false, false
+        end
+
         -- A line that says the toon does not meet something right now: level, class, skill,
         -- reputation, "Already known" (UsageRequirement, by its field), the slot or the armor /
         -- weapon proficiency (the EquipSlot line, by its fields: "Wrist | Mail" on a hunter below
@@ -1200,9 +1223,19 @@ function CaerdonItemMixin:GetTooltipData(data)
                 -- never changes for the toon, so the item is permanently unusable here.
                 if leftUnmet then
                     tooltipData.raceClassRestricted = true
+                    if tooltipData.teachesSpell then
+                        tooltipData.ownClassUnmet = true
+                    end
+                end
+            elseif reqType == Enum.TooltipDataUsageRequirementType.Level then
+                if leftUnmet and tooltipData.teachesSpell then
+                    tooltipData.ownLevelUnmet = true
                 end
             elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
                 tooltipData.hasSkillRequirement = true
+                if tooltipData.teachesSpell then
+                    tooltipData.ownSkillLine = true
+                end
                 -- "Requires Engineering (50)" met: the client's own verdict that this toon has
                 -- the skill at that rank.
                 local skillMet = IsMet(line.usable, leftHex)
@@ -1426,6 +1459,54 @@ function CaerdonItemMixin:GetSkillRequirement()
         return nil
     end
     return { skillName = skillName, rank = rank, useNumber = useNumber }
+end
+
+-- Whether this toon can learn what an item teaches, for an item that is no profession's
+-- recipe: a class's spell book ("Tome of Enchanted Flare", "Classes: Hunter"), a rune. By the
+-- tooltip's own lines, as the client judges them: "own" where the item has a teaching line of
+-- its own, the tooltip does not say "Already known" and no class line of the item's own is
+-- unmet; "lowSkill" where its own level line is unmet. nil where there is nothing for this
+-- toon to learn, and for an item that asks for a skill: that is a profession's and has its
+-- own rules. The client is asked about the spell as well (C_SpellBook.IsSpellKnown), which
+-- agreed with "Already known" on every recipe item of a WoW Forever client; a learned book
+-- or rune has not been seen there, so either word is taken.
+local function LearnableByTeachingLine(tooltipData)
+    local spellID = tooltipData and tooltipData.teachesSpell
+    if not spellID or tooltipData.ownSkillLine then
+        return nil
+    end
+    local known = tooltipData.isKnownSpell
+    if type(spellID) == "number" then
+        taughtSpellsJudged[spellID] = true
+        known = known or C_SpellBook.IsSpellKnown(spellID) == true
+    end
+    if known or tooltipData.ownClassUnmet then
+        return nil
+    end
+    return tooltipData.ownLevelUnmet and "lowSkill" or "own"
+end
+
+-- What the item's own teaching line and the lines below it say, and what the rule above
+-- makes of them, for the export: nil for an item whose tooltip teaches nothing.
+--   { spellID, classUnmet, levelUnmet, asksForSkill, saysKnown, spellKnown, status }
+function CaerdonItemMixin:GetTeachingInfo()
+    local tooltipData = self:GetItemLink() and self:GetTooltipData() or nil
+    local spellID = tooltipData and tooltipData.teachesSpell
+    if not spellID then
+        return nil
+    end
+    local info = {
+        spellID = type(spellID) == "number" and spellID or nil,
+        classUnmet = tooltipData.ownClassUnmet,
+        levelUnmet = tooltipData.ownLevelUnmet,
+        asksForSkill = tooltipData.ownSkillLine,
+        saysKnown = tooltipData.isKnownSpell,
+    }
+    if info.spellID then
+        info.spellKnown = C_SpellBook.IsSpellKnown(info.spellID) == true
+    end
+    info.status = LearnableByTeachingLine(tooltipData)
+    return info
 end
 
 -- The spell a recipe item teaches: the spellID of its tooltip's "Use: Teaches you how to ..."
@@ -2279,7 +2360,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
             -- 		mogStatus = "own"
             -- 	end
         else
-            mogStatus = "collected"
+            -- Something that teaches this toon a spell it does not know (a rune).
+            mogStatus = LearnableByTeachingLine(tooltipData) or "collected"
         end
     elseif caerdonType == CaerdonItemType.Currency then
         local currencyInfo = itemData:GetCurrencyInfo()
@@ -2650,7 +2732,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
             -- 		end
             -- 	end
         else
-            mogStatus = "collected"
+            -- No profession's recipe for this toon. An item of this class may still teach it
+            -- something: a class's spell book asks for no skill.
+            mogStatus = LearnableByTeachingLine(tooltipData) or "collected"
         end
     elseif caerdonType == CaerdonItemType.Toy then
         local toyInfo = itemData:GetToyInfo()

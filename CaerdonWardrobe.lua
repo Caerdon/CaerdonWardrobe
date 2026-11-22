@@ -193,6 +193,7 @@ function CaerdonWardrobeMixin:OnLoad()
     pcall(self.RegisterEvent, self, "UPDATE_EXPANSION_LEVEL")
     self:RegisterEvent "VARIABLES_LOADED"
     self:RegisterEvent "NEW_RECIPE_LEARNED"
+    self:RegisterEvent "LEARNED_SPELL_IN_SKILL_LINE"
     -- Skill lines, the player's flags and the housing events are not here: each also comes
     -- when nothing changed, so the watcher compares before it refreshes (CaerdonRefresh.lua).
     self:RegisterEvent "PLAYER_EQUIPMENT_CHANGED"
@@ -3061,6 +3062,15 @@ end
 
 function CaerdonWardrobeMixin:NEW_RECIPE_LEARNED()
     self:RefreshItems(nil, nil, "collection")
+end
+
+-- A spell was learned. Only one that a kept verdict rests on is a reason to judge again: the
+-- star on a second copy of the book or rune that taught it. The event comes for every spell a
+-- toon gains.
+function CaerdonWardrobeMixin:LEARNED_SPELL_IN_SKILL_LINE(spellID)
+    if CaerdonItem:IsTaughtSpellJudged(spellID) then
+        self:RefreshItems("spell learned", tostring(spellID))
+    end
 end
 
 function CaerdonWardrobeMixin:PLAYER_REGEN_ENABLED()
