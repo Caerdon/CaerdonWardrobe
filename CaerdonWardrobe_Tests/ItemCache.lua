@@ -34,6 +34,12 @@ local IDLE_SECONDS = 30
 local GROUP = 8             -- items in a watched group
 local BATCH = 100           -- items of the stream loaded at a time
 local STREAM = 8000         -- items of the stream
+-- Where the stream's items are looked for: from the low item IDs up. An item the client has a
+-- record of is not one its game has: on WoW Forever the IDs from 120000 on exist by
+-- C_Item.DoesItemExistByID and 7998 of 8000 of them never loaded, so nothing pressed on the
+-- cache and the run said nothing (1.60.1.71037). The low IDs are the oldest items, which both
+-- clients' games have.
+local STREAM_FROM = 25
 local ORDER_EVERY = 1000    -- a new watched group after this many loaded
 local KEEP_RUNS = 6
 
@@ -71,7 +77,28 @@ local function FindUncached(from, count, stride)
 end
 
 -- Inside a job: asks for the items' data and waits for it. Returns those that came.
-local function Load(itemIDs, timeout)
+local Load
+
+-- Inside a job: `count` items found as above and loaded, looked for again past the ones the
+-- client would not give, so that a watched group is as large as it is meant to be in a client
+-- that has records of items its game has not. Returns them and where the next search may start.
+local function FindLoaded(from, count, stride)
+    local loaded, rounds = {}, 0
+    while #loaded < count and rounds < 8 do
+        local found
+        found, from = FindUncached(from, count - #loaded, stride)
+        if #found == 0 then
+            break
+        end
+        for _, itemID in ipairs(Load(found)) do
+            loaded[#loaded + 1] = itemID
+        end
+        rounds = rounds + 1
+    end
+    return loaded, from
+end
+
+Load = function(itemIDs, timeout)
     for _, itemID in ipairs(itemIDs) do
         C_Item.RequestLoadItemDataByID(itemID)
     end
@@ -195,11 +222,24 @@ local function Run()
     local worn = WornItems()
     run.wornAtStart = WornAnswers(worn)
 
+    -- The stream's items, found before anything of it is loaded, and before the groups that
+    -- are watched: those are looked for past the stream's last, so that no item is in both.
+    local stream, streamID, looked = {}, STREAM_FROM, 0
+    while #stream < STREAM and looked < 600000 do
+        if C_Item.DoesItemExistByID(streamID) and not Cached(streamID) then
+            stream[#stream + 1] = streamID
+        end
+        streamID = streamID + 1
+        looked = looked + 1
+        if looked % 2000 == 0 then
+            T.Yield()
+        end
+    end
+
     -- Idle.
-    local nextFrom = 23000
+    local nextFrom = streamID
     local idleIDs
-    idleIDs, nextFrom = FindUncached(nextFrom, GROUP, 37)
-    idleIDs = Load(idleIDs)
+    idleIDs, nextFrom = FindLoaded(nextFrom, GROUP, 37)
     Load(WornIDs(worn))
     local idle, idleWorn = NewWatch(idleIDs), NewWatch(WornIDs(worn))
     infoEvents, loadEvents, counting = 0, 0, true
@@ -213,24 +253,10 @@ local function Run()
     run.idle = { seconds = IDLE_SECONDS, untouched = Result(idle), worn = Result(idleWorn), events = { info = infoEvents, load = loadEvents } }
     T.Print("item cache: idle done; loading %d other items", STREAM)
 
-    -- The stream's items, found before anything of it is loaded.
-    local stream, streamID, looked = {}, 120000, 0
-    while #stream < STREAM and looked < 600000 do
-        if C_Item.DoesItemExistByID(streamID) and not Cached(streamID) then
-            stream[#stream + 1] = streamID
-        end
-        streamID = streamID + 1
-        looked = looked + 1
-        if looked % 2000 == 0 then
-            T.Yield()
-        end
-    end
-
     -- What is watched through it.
     local touchedIDs, untouchedIDs, orderIDs
-    touchedIDs, nextFrom = FindUncached(nextFrom, GROUP, 37)
-    untouchedIDs, nextFrom = FindUncached(nextFrom, GROUP, 37)
-    touchedIDs, untouchedIDs = Load(touchedIDs), Load(untouchedIDs)
+    touchedIDs, nextFrom = FindLoaded(nextFrom, GROUP, 37)
+    untouchedIDs, nextFrom = FindLoaded(nextFrom, GROUP, 37)
     Load(WornIDs(worn))
     local touched, untouched, streamWorn = NewWatch(touchedIDs, 0), NewWatch(untouchedIDs, 0), NewWatch(WornIDs(worn), 0)
     local order = {}
@@ -282,8 +308,7 @@ local function Run()
         end
         if loaded >= nextOrder and #order < 6 then
             nextOrder = nextOrder + ORDER_EVERY
-            orderIDs, nextFrom = FindUncached(nextFrom, 4, 37)
-            orderIDs = Load(orderIDs)
+            orderIDs, nextFrom = FindLoaded(nextFrom, 4, 37)
             order[#order + 1] = NewWatch(orderIDs, loaded)
         end
     end
@@ -377,7 +402,7 @@ local function Evict()
         return gone
     end
     T.Print("item cache: loading other items until the worn pieces' data is gone; keep the bags closed")
-    local streamID, loaded = 120000, 0
+    local streamID, loaded = STREAM_FROM, 0
     while Gone() < #worn and loaded < 6000 do
         local batch, looked = {}, 0
         while #batch < BATCH and looked < 20000 do
