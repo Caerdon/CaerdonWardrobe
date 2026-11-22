@@ -1207,6 +1207,236 @@ T.Contract({
     end,
 })
 
+-- The addon finds a recipe item's recipe by the item's name: what follows the first colon,
+-- looked up among the names the profession window gave. That fails wherever the item and the
+-- list word the recipe differently, which Classic's data does in Spanish and Russian. The
+-- tooltip has a line of a type of its own for what an item teaches (ItemSpellTriggerLearn),
+-- and in every recording made so far it carries a spell ID that looks like the recipe's.
+-- Whether it is, asked of a client: for every item of the class Recipe in the bags, the line's
+-- spell in the slot's and the link's tooltip, and beside it what the addon has by other ways:
+-- the recipe ID its name finds, and the entry of that ID in a recorded profession list (the
+-- lists are kept by recipe ID). Where a recorded list has the name's recipe, the line has to
+-- name the same one. What else carries such a line is kept by item class. Nothing is decided
+-- from this yet. So that a toon that carries no recipe answers too, a few recipe items of
+-- the old world are asked by their ID as well (the link's tooltip alone): of Alchemy and
+-- Tailoring first, then one each of four other professions. The IDs are from memory and
+-- from the recordings; one that is no recipe in the client at hand is left out and counted.
+
+T.TaughtSpellPool = {
+    2553, 2555, 3393, 3394, 3396, 5640, 6211,   -- Alchemy
+    2598, 2601, 4292, 5771, 5772, 6270, 6271, 6272, 6274, -- Tailoring
+    7084, 7086,                                 -- Tailoring, a name two recipes of the list have
+    10424, 6342, 6325, 2406,                    -- Blacksmithing, Enchanting, Cooking, Leatherworking
+}
+
+local function MergeTaughtSpells(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "recipeItems", "byID", "learnLines", "withoutLine", "inRecordedList", "nameAgrees", "nameFindsNone",
+        "nameFindsAnother" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.poolNotRecipes, merged.poolNotLoaded = new.poolNotRecipes, new.poolNotLoaded
+    merged.recipes = merged.recipes or {}
+    for itemID, entry in pairs(new.recipes or {}) do
+        merged.recipes[itemID] = entry
+    end
+    merged.elsewhere = merged.elsewhere or {}
+    for shape, count in pairs(new.elsewhere or {}) do
+        merged.elsewhere[shape] = (merged.elsewhere[shape] or 0) + count
+    end
+    return merged
+end
+
+T.Contract({
+    id = "recipe.taughtSpell",
+    version = 2,
+    title = "A recipe item's tooltip names the spell it teaches, that spell is the recipe's ID in the profession's list, and the addon finds the recipe by it",
+    accumulate = true,
+    merge = MergeTaughtSpells,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local LEARN = Enum.TooltipDataLineType.ItemSpellTriggerLearn
+        if not c:Check(type(LEARN) == "number", "Enum.TooltipDataLineType.ItemSpellTriggerLearn is a %s", TypeOf(LEARN)) then
+            return
+        end
+        local RECIPE = Enum.ItemClass.Recipe
+        local kinds = Enum.TooltipDataUsageRequirementType
+        local KNOWN = type(kinds) == "table" and kinds.NotAlreadyKnown or nil
+        local recorded = CaerdonRecipe and CaerdonRecipe.GetRealmRecordedRecipes and CaerdonRecipe:GetRealmRecordedRecipes() or {}
+        local names = type(CaerdonRecipeData) == "table" and CaerdonRecipeData.globalRecipeNameToID or nil
+
+        local learnLines, elsewhere = 0, {}
+        -- The spells of the tooltip's teaching lines in their order, and whether it says known.
+        local function Read(side, data, itemID, classID)
+            local spells, saysKnown = {}, false
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                if issecretvalue(line.type) or issecretvalue(line.spellID) or issecretvalue(line.requirementType) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's type, spell or requirement type is a secret value", itemID, side)
+                elseif line.type == LEARN then
+                    learnLines = learnLines + 1
+                    if c:Check(type(line.spellID) == "number", "item %d, the %s's tooltip: the teaching line's spellID is a %s",
+                            itemID, side, type(line.spellID)) then
+                        spells[#spells + 1] = line.spellID
+                    end
+                    if classID ~= RECIPE then
+                        local shape = ("%s: an item of class %s"):format(side, tostring(classID))
+                        elsewhere[shape] = (elsewhere[shape] or 0) + 1
+                    end
+                elseif KNOWN and line.requirementType == KNOWN then
+                    saysKnown = true
+                end
+            end
+            return spells, saysKnown
+        end
+
+        -- The entry a recorded list of the profession has for a recipe ID, with the toon whose
+        -- list it is: this toon's first.
+        local player = UnitName("player")
+        local function Recorded(profession, recipeID)
+            local found, of
+            for toon, lists in pairs(recorded) do
+                local list = type(lists) == "table" and lists[profession]
+                local entry = type(list) == "table" and type(list.recipes) == "table" and list.recipes[recipeID]
+                if type(entry) == "table" and (not found or toon == player) then
+                    found, of = entry, toon == player and "this toon" or "another toon"
+                end
+            end
+            return found, of
+        end
+
+        local recipes, recipeItems, withoutLine, inRecordedList, nameAgrees, nameFindsNone = {}, 0, 0, 0, 0, 0
+        local nameFindsAnother = 0
+        -- What is kept of one recipe item, from the spells its tooltips teach.
+        local function Judge(itemID, asked, slotSpells, linkSpells, saysKnown)
+            recipeItems = recipeItems + 1
+            local name = C_Item.GetItemNameByID(itemID)
+            local profession = select(7, C_Item.GetItemInfo(itemID))
+            local spell = linkSpells[1] or slotSpells[1]
+            if #slotSpells > 0 and #linkSpells > 0 then
+                c:Check(slotSpells[1] == linkSpells[1], "item %d: the slot's tooltip teaches spell %s and the link's %s", itemID,
+                    tostring(slotSpells[1]), tostring(linkSpells[1]))
+            end
+            local recipeName = CaerdonRecipe and CaerdonRecipe:GetRecipeNameFromItemName(name) or nil
+            local byName = CaerdonRecipe and names and CaerdonRecipe:FindByName(names, recipeName) or nil
+            local entry = {
+                name = name,
+                asked = asked,
+                profession = profession,
+                slotSpells = table.concat(slotSpells, ", "),
+                linkSpells = table.concat(linkSpells, ", "),
+                saysKnown = saysKnown,
+                recipeName = recipeName,
+                byName = byName,
+            }
+            if not spell then
+                withoutLine = withoutLine + 1
+            else
+                entry.spellName = C_Spell.GetSpellName(spell)
+                local info = C_TradeSkillUI.GetRecipeInfo(spell)
+                if type(info) == "table" then
+                    entry.infoName, entry.infoLearned, entry.infoRecipeID = info.name, info.learned, info.recipeID
+                end
+                local listed, of = Recorded(profession, spell)
+                if listed then
+                    inRecordedList = inRecordedList + 1
+                    entry.listedName, entry.listedLearned, entry.listedOf = listed.name, listed.learned, of
+                    -- A spell a recorded list has is the recipe the addon finds, whatever the name finds.
+                    if CaerdonRecipe and CaerdonRecipe.FindRecipeID then
+                        local found, by = CaerdonRecipe:FindRecipeID(CaerdonItem:CreateFromItemID(itemID))
+                        entry.foundID, entry.foundBy = found, by
+                        c:Check(found == spell and by == "spell",
+                            "item %d (%s): its tooltip teaches spell %s, which a recorded list has, and the addon finds recipe %s by its %s",
+                            itemID, tostring(name), tostring(spell), tostring(found), tostring(by))
+                    end
+                end
+                if byName == nil then
+                    nameFindsNone = nameFindsNone + 1
+                elseif byName == spell then
+                    nameAgrees = nameAgrees + 1
+                else
+                    -- The name's recipe is another one than the line names: two recipes of one
+                    -- name, of which the name finds whichever was read last.
+                    nameFindsAnother = nameFindsAnother + 1
+                    entry.nameFindsAnother = true
+                end
+            end
+            recipes[tostring(itemID)] = entry
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            local classID = select(6, C_Item.GetItemInfoInstant(itemID))
+            local slotSpells, slotKnown = Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID, classID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local linkSpells, linkKnown = {}, false
+            if link then
+                linkSpells, linkKnown = Read("link", C_TooltipInfo.GetHyperlink(link), itemID, classID)
+            end
+            if classID == RECIPE then
+                Judge(itemID, "in the bags", slotSpells, linkSpells, slotKnown or linkKnown)
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+
+        -- Recipes the toon does not carry, asked by their ID: the link's tooltip alone. An ID
+        -- the client has no recipe for is left out and counted.
+        local byID, notRecipes, notLoaded = 0, 0, 0
+        for _, itemID in ipairs(T.TaughtSpellPool) do
+            if not recipes[tostring(itemID)] then
+                if select(6, C_Item.GetItemInfoInstant(itemID)) ~= RECIPE then
+                    notRecipes = notRecipes + 1
+                else
+                    local item = T.LoadItem(itemID, 5)
+                    local link = item and item:GetItemLink()
+                    local data
+                    -- The tooltip of an item just loaded may still be the client's "retrieving" one.
+                    for _ = 1, 10 do
+                        data = link and C_TooltipInfo.GetHyperlink(link)
+                        local first = type(data) == "table" and data.lines and data.lines[1]
+                        if not link or (first and not issecretvalue(first.leftText) and first.leftText ~= RETRIEVING_ITEM_INFO) then
+                            break
+                        end
+                        data = nil
+                        T.Sleep(0.3)
+                    end
+                    if data then
+                        byID = byID + 1
+                        local linkSpells, linkKnown = Read("link", data, itemID, RECIPE)
+                        Judge(itemID, "by its ID", {}, linkSpells, linkKnown)
+                    else
+                        notLoaded = notLoaded + 1
+                    end
+                end
+            end
+        end
+
+        c:Note("items", #slots)
+        c:Note("recipeItems", recipeItems)
+        c:Note("byID", byID)
+        c:Note("poolNotRecipes", notRecipes)
+        c:Note("poolNotLoaded", notLoaded)
+        c:Note("learnLines", learnLines)
+        c:Note("withoutLine", withoutLine)
+        c:Note("inRecordedList", inRecordedList)
+        c:Note("nameAgrees", nameAgrees)
+        c:Note("nameFindsNone", nameFindsNone)
+        c:Note("nameFindsAnother", nameFindsAnother)
+        c:Note("recipes", recipes)
+        c:Note("elsewhere", elsewhere)
+        if recipeItems == 0 then
+            return "info", "no recipe in these bags and none of the asked IDs is one here: nothing was asked"
+        end
+        if inRecordedList == 0 then
+            return "info", "no recipe asked teaches a spell that a recorded profession list has: nothing to compare"
+        end
+    end,
+})
+
 -- The addon keeps that line off a tooltip by answering true when the client asks before it
 -- adds a requirement line (TooltipDataProcessor.AddLinePreCall). Blizzard's code says an
 -- addon may: this asks a client. A tooltip of the tests' own is filled twice with a bag item
