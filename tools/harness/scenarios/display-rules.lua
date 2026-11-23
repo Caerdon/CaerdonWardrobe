@@ -3,13 +3,16 @@
 -- Every window used to answer with a function that built a table of six answers at each draw,
 -- in some twenty spellings. A window whose answers do not depend on the draw now declares them
 -- (FeatureMixin.lua), and GetDisplayInfoInternal lays them over what the core has for every
--- window. A window whose answer depends on the item or the button keeps a function, laid over
--- the declaration; a feature that draws another's content answers with that feature's rules.
+-- window. A window whose rules depend on the place or the item has a declaration for each
+-- case and chooses among them (GetDisplayRules, which is handed the draw); what a declaration
+-- cannot say stays a function, laid over it; a feature that draws another's content answers
+-- with that feature's rules.
 --
 --   1. The shipped declarations: every file that has one loads, and names only rules there
 --      are and settings the default settings have.
 --   2. The declaration itself, with windows of the scenario's own: what is not named, each
---      kind of value, a function beside it, the binding settings, a rule misnamed.
+--      kind of value, a choice by the draw, a function beside it, the binding settings, a
+--      rule misnamed.
 --   3. Every shipped window that declares, against the answers its function gave (Reference
 --      below, with the core's part as it was), over each setting alone and every draw. Six
 --      of them differ from their functions in one answer, on purpose: the quest icon.
@@ -143,10 +146,46 @@ return function(H, S)
         BetterBagsGuildBank = GUILD_BANK,
         DialogueUI = QUEST_LOG,
     }
+    -- The windows whose function went by the draw. The vendor: nothing to learn on an item of
+    -- which a copy is carried. Three bag addons: a view kept of bags that are not open by the
+    -- bags' settings, a guild bank by the guild bank's, the toon's own bags as the core has them.
+    local function Vendor(config, draw)
+        return {
+            bindingStatus = config.Binding.ShowStatus.Merchant,
+            ownIcon = config.Icon.ShowLearnable.Merchant and not draw.carried,
+            otherIcon = config.Icon.ShowLearnableByOther.Merchant and not draw.carried,
+            oldExpansionIcon = false,
+            sellableIcon = false,
+        }
+    end
+    local function BagView(config, draw)
+        if draw.offline then
+            return {
+                bindingStatus = config.Binding.ShowStatus.BankAndBags,
+                ownIcon = config.Icon.ShowLearnable.BankAndBags,
+                otherIcon = config.Icon.ShowLearnableByOther.BankAndBags,
+                sellableIcon = config.Icon.ShowSellable.BankAndBags,
+            }
+        elseif not draw.inBags then
+            return {
+                bindingStatus = config.Binding.ShowStatus.GuildBank,
+                ownIcon = config.Icon.ShowLearnable.GuildBank,
+                otherIcon = config.Icon.ShowLearnableByOther.GuildBank,
+                sellableIcon = config.Icon.ShowSellable.GuildBank,
+            }
+        end
+        return {}
+    end
+    FUNCTIONS.Merchant, FUNCTIONS.BetterBagsVendor = Vendor, Vendor
+    FUNCTIONS.ArkInventory, FUNCTIONS.Bagnon, FUNCTIONS.Bagnonium = BagView, BagView, BagView
 
     -- GetDisplayInfoInternal as it was, with the window's function standing as a table.
-    local function Reference(config, L, answers, inBags, bindingStatus, ownArrow)
+    local function Reference(config, L, answers, draw, bindingStatus, ownArrow)
+        local inBags = draw.inBags
         local elsewhere = not inBags
+        if type(answers) == "function" then
+            answers = answers(config, draw)
+        end
         local info = {
             upgradeIcon = (config.Icon.ShowUpgradeIcon ~= false) and (elsewhere or config.Icon.ShowUpgrades.BankAndBags),
             bindingStatus = elsewhere or config.Binding.ShowStatus.BankAndBags,
@@ -210,6 +249,18 @@ return function(H, S)
             end
         end
         Window("ByDraw", ByDraw)
+        local elsewhere = { ownIcon = false, otherIcon = "Mail" }
+        local ByPlace = { displayRules = { ownIcon = true } }
+        function ByPlace:GetDisplayRules(button, item, feature, locationInfo)
+            world.chose = { button = button, item = item, feature = feature, locationInfo = locationInfo }
+            if locationInfo and locationInfo.held then
+                return elsewhere
+            elseif locationInfo and locationInfo.isOffline then
+                return nil
+            end
+            return self.displayRules
+        end
+        Window("ByPlace", ByPlace)
         Window("Misnamed", { displayRules = { questIcon = "Mail" } })
 
         client:Fire("ADDON_LOADED", "CaerdonWardrobe")
@@ -231,6 +282,9 @@ return function(H, S)
     local button = {}
     function button:DoesButtonHaveMarker(kind) return ownArrow and kind == "upgrade" end
 
+    -- Whether the vendor finds a copy of the item in the bags.
+    local carried = false
+
     for _, flavor in ipairs({ "forever", "retail" }) do
         local label = flavor .. ": "
         local world = Start(flavor)
@@ -247,6 +301,32 @@ return function(H, S)
             for _, path in ipairs(SETTINGS) do
                 Set(config, path, value)
             end
+        end
+        -- Every declaration a window answers with, over the draws a window chooses by.
+        local function Declarations(feature)
+            local seen, all = {}, {}
+            local function Add(rules)
+                if rules ~= nil and not seen[rules] then
+                    seen[rules] = true
+                    all[#all + 1] = rules
+                end
+            end
+            Add(feature.displayRules)
+            local wasInBags, wasCarried = inBags, carried
+            for _, bags in ipairs({ false, true }) do
+                for _, place in ipairs({ {}, { isOffline = true }, { held = true } }) do
+                    for _, copy in ipairs({ false, true }) do
+                        inBags, carried = bags, copy
+                        local ok, rules = H.Guards.pcall(feature.GetDisplayRules, feature, button, item, feature, place, {}, "own")
+                        Check(ok, label .. feature:GetName() .. ": its rules can be asked for (" .. tostring(rules) .. ")")
+                        if ok then
+                            Add(rules)
+                        end
+                    end
+                end
+            end
+            inBags, carried = wasInBags, wasCarried
+            return all
         end
 
         ------------------------------------------------------------------------------------
@@ -283,12 +363,18 @@ return function(H, S)
                     tostring(problem or client.errors[#client.errors]) .. ")")
             end
 
-            local declaring, named = 0, 0
+            local vendorFeature = core:GetFeature("Merchant")
+            if vendorFeature then
+                function vendorFeature:IsItemInBags(asked) return asked == item and carried end
+            end
+
+            local declaring, named, choosing = 0, 0, 0
             for name, feature in pairs(core:GetRegisteredFeatures()) do
-                local rules = feature:GetDisplayRules()
                 -- (The scenario's own window with a mistake in it is section 2's.)
-                if rules ~= nil and name ~= "Misnamed" then
-                    declaring = declaring + 1
+                local all = name ~= "Misnamed" and Declarations(feature) or {}
+                declaring = declaring + (#all > 0 and 1 or 0)
+                choosing = choosing + (#all > 1 and 1 or 0)
+                for _, rules in ipairs(all) do
                     Equal(type(rules), "table", label .. name .. ": the declaration is a table")
                     for rule, shown in pairs(type(rules) == "table" and rules or {}) do
                         named = named + 1
@@ -305,8 +391,10 @@ return function(H, S)
                     end
                 end
             end
-            -- The scenario's own four, and the shipped ones.
-            Check(declaring >= 4 + 23, label .. "the windows that declare were read (" .. declaring .. ", " .. named .. " rules)")
+            -- The scenario's own five, and the shipped ones.
+            Check(declaring >= 5 + 28, label .. "the windows that declare were read (" .. declaring .. ", " .. named .. " rules)")
+            -- The vendor and its window in BetterBags, three bag addons, and the scenario's own.
+            Equal(choosing, 6, label .. "the windows that choose among declarations by the draw")
         end
 
         ------------------------------------------------------------------------------------
@@ -390,6 +478,23 @@ return function(H, S)
             Equal(answer.otherIcon.shouldShow, true, label .. "by the draw: what it leaves out stays as declared")
             Equal(answer.levelGain and answer.levelGain.shouldShow, false, label .. "by the draw: and it can name a rule more")
 
+            -- A window that chooses among declarations by the draw.
+            local byPlace = core:GetFeature("ByPlace")
+            AllSettings(true)
+            inBags = true
+            Set(config, { "Icon", "ShowLearnable", "BankAndBags" }, false)
+            Set(config, { "Icon", "ShowLearnableByOther", "Mail" }, false)
+            local spot = {}
+            Equal(Shown(byPlace, spot).ownIcon.shouldShow, true, label .. "by the place: the window's own declaration")
+            Check(world.chose and world.chose.button == button and world.chose.item == item and world.chose.feature == byPlace and
+                world.chose.locationInfo == spot, label .. "by the place: the choice is handed the draw")
+            local other = Shown(byPlace, { held = true })
+            Equal(other.ownIcon.shouldShow, false, label .. "by the place: another declaration for another place")
+            Equal(other.otherIcon.shouldShow, false, label .. "by the place: with its setting read")
+            Equal(Shown(byPlace, { isOffline = true }).ownIcon.shouldShow, false, label .. "by the place: none chosen is the core's own answer")
+            AllSettings(true)
+            inBags = false
+
             -- The binding settings come last, over a declared true.
             inBags = false
             for _, kind in ipairs({ "BoA", "BoE", "WuE" }) do
@@ -415,26 +520,35 @@ return function(H, S)
         do
             local BINDINGS = { "none", L["BoA"], L["BoE"], L["WuE"], "Soulbound" }
             local compared, differing, first = 0, 0, nil
-            local function Walk(name, feature, answers, state)
-                for _, bags in ipairs({ false, true }) do
-                    inBags = bags
-                    for _, binding in ipairs(BINDINGS) do
-                        local bindingStatus = binding ~= "none" and binding or nil
+            local DRAWS = {}
+            for _, bags in ipairs({ false, true }) do
+                for _, offline in ipairs({ false, true }) do
+                    for _, copy in ipairs({ false, true }) do
                         for _, arrow in ipairs({ false, true }) do
-                            ownArrow = arrow
-                            local want = Describe(Reference(config, L, answers, bags, bindingStatus,
-                                arrow and name == "DialogueUI"))
-                            local got = Describe(Shown(feature, {}, bindingStatus))
-                            compared = compared + 1
-                            if got ~= want then
-                                differing = differing + 1
-                                first = first or string.format("%s, %s, in the bags %s, text %s: %s, by its function %s", name, state,
-                                    tostring(bags), binding, got, want)
-                            end
+                            DRAWS[#DRAWS + 1] = { inBags = bags, offline = offline, carried = copy, arrow = arrow,
+                                place = offline and { isOffline = true } or {} }
                         end
                     end
                 end
-                inBags, ownArrow = false, false
+            end
+            local function Walk(name, feature, answers, state)
+                for _, draw in ipairs(DRAWS) do
+                    inBags, carried, ownArrow = draw.inBags, draw.carried, draw.arrow
+                    for _, binding in ipairs(BINDINGS) do
+                        local bindingStatus = binding ~= "none" and binding or nil
+                        local want = Describe(Reference(config, L, answers, draw, bindingStatus,
+                            draw.arrow and name == "DialogueUI"))
+                        local got = Describe(Shown(feature, draw.place, bindingStatus))
+                        compared = compared + 1
+                        if got ~= want then
+                            differing = differing + 1
+                            first = first or string.format("%s, %s, in the bags %s, a kept view %s, a copy carried %s, text %s: %s, " ..
+                                "by its function %s", name, state, tostring(draw.inBags), tostring(draw.offline),
+                                tostring(draw.carried), binding, got, want)
+                        end
+                    end
+                end
+                inBags, carried, ownArrow = false, false, false
             end
             local windows = 0
             for name, answers in pairs(FUNCTIONS) do
@@ -460,8 +574,8 @@ return function(H, S)
                 end
                 Set(config, path, value)
             end
-            Equal(windows, 24, label .. "every window of the list was compared")
-            Check(compared > 20000, label .. "each setting alone was compared (" .. compared .. ")")
+            Equal(windows, 29, label .. "every window of the list was compared")
+            Check(compared > 100000, label .. "each setting alone was compared (" .. compared .. ")")
             Equal(differing, 0, label .. "the declared rules give what the functions gave (first: " .. tostring(first) .. ")")
 
             -- The quest icon follows its setting in every window that shows it.
@@ -483,11 +597,12 @@ return function(H, S)
             -- Nothing shipped shows it whatever the setting says; three windows never show it.
             local always, never = {}, {}
             for name, feature in pairs(core:GetRegisteredFeatures()) do
-                local rules = feature:GetDisplayRules()
-                if rules and rules.questIcon == true then
-                    always[#always + 1] = name
-                elseif rules and rules.questIcon == false and name ~= "Offers" then
-                    never[#never + 1] = name
+                for _, rules in ipairs(name ~= "Misnamed" and Declarations(feature) or {}) do
+                    if rules.questIcon == true then
+                        always[#always + 1] = name
+                    elseif rules.questIcon == false and name ~= "Offers" then
+                        never[#never + 1] = name
+                    end
                 end
             end
             table.sort(never)
@@ -511,22 +626,50 @@ return function(H, S)
                     label .. "Dialogue UI: with its own arrow, no arrow and no level gain of the addon's")
                 ownArrow = false
 
-                -- The vendor's answer depends on what is carried, and its window in BetterBags
-                -- gives the same; a declaration the vendor gained would reach it too.
-                local carried = false
-                function vendor:IsItemInBags() return carried end
+                -- The vendor chooses by what is carried, and its window in BetterBags answers
+                -- with the declaration the vendor chose.
+                AllSettings(true)
                 for _, held in ipairs({ false, true }) do
                     carried = held
-                    Equal(Describe(Shown(bagsVendor, {})), Describe(Shown(vendor, {})),
-                        label .. "BetterBags' vendor answers as the vendor does, an item carried: " .. tostring(held))
+                    local chosen = vendor:GetDisplayRules(button, item)
+                    Equal(Describe(chosen), held and "bindingStatus=Merchant oldExpansionIcon=false otherIcon=false ownIcon=false sellableIcon=false"
+                        or "bindingStatus=Merchant oldExpansionIcon=false otherIcon=Merchant ownIcon=Merchant sellableIcon=false",
+                        label .. "the vendor's declaration, a copy carried: " .. tostring(held))
+                    Check(bagsVendor:GetDisplayRules(button, item) == chosen and chosen ~= nil,
+                        label .. "BetterBags' vendor answers with the vendor's rules themselves, a copy carried: " .. tostring(held))
                     Equal(Shown(bagsVendor, {}).ownIcon.shouldShow, not held,
                         label .. "BetterBags' vendor: the star only on what is not carried (" .. tostring(held) .. ")")
+                    Equal(Shown(bagsVendor, {}).otherIcon.shouldShow, not held,
+                        label .. "BetterBags' vendor: and the icon for another toon (" .. tostring(held) .. ")")
                 end
-                vendor.displayRules = { questIcon = false }
-                Check(bagsVendor:GetDisplayRules() == vendor.displayRules, label .. "BetterBags' vendor answers with the vendor's rules themselves")
-                Equal(Shown(bagsVendor, {}).questIcon.shouldShow, false, label .. "BetterBags' vendor: and they are applied there")
-                vendor.displayRules = nil
-                Equal(Shown(bagsVendor, {}).questIcon.shouldShow, true, label .. "BetterBags' vendor: without one the quest icon is by its setting")
+                carried = false
+                Check(vendor:GetDisplayRules(button, item) == vendor.displayRules, label .. "the vendor: nothing carried is its own declaration")
+
+                -- Neither the vendor nor the guild bank answers for a draw beyond its
+                -- declaration, so BetterBags' windows have nothing more to pass on.
+                for _, pair in ipairs({ { vendor, bagsVendor, "vendor" }, { guildBank, bagsGuildBank, "guild bank" } }) do
+                    Equal(pair[1]:GetDisplayInfo(button, item), nil, label .. "the " .. pair[3] .. " answers for no draw beyond its declaration")
+                    Equal(pair[2]:GetDisplayInfo(button, item), nil, label .. "BetterBags' " .. pair[3] .. ": nor does its window there")
+                end
+
+                -- The bag addons with views of their own choose by the place.
+                for _, name in ipairs({ "ArkInventory", "Bagnon", "Bagnonium" }) do
+                    local feature = core:GetFeature(name)
+                    if feature then
+                        inBags = false
+                        Equal(Describe(feature:GetDisplayRules(button, item, feature, { isOffline = true })),
+                            "bindingStatus=BankAndBags otherIcon=BankAndBags ownIcon=BankAndBags sellableIcon=BankAndBags",
+                            label .. name .. ": a view kept of bags that are not open goes by the bags' settings")
+                        inBags = true
+                        Equal(Describe(feature:GetDisplayRules(button, item, feature, { isOffline = true })),
+                            "bindingStatus=BankAndBags otherIcon=BankAndBags ownIcon=BankAndBags sellableIcon=BankAndBags",
+                            label .. name .. ": whatever the item says of its place")
+                        Equal(feature:GetDisplayRules(button, item, feature, {}), nil, label .. name .. ": the toon's own bags are the core's")
+                        inBags = false
+                        Equal(Describe(feature:GetDisplayRules(button, item, feature, {})), Describe(guildBank:GetDisplayRules()),
+                            label .. name .. ": a guild bank is declared as the guild bank's window is")
+                    end
+                end
             else
                 Check(false, label .. "the windows that draw another's content are registered")
             end

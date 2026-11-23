@@ -265,15 +265,11 @@ function BetterBagsVendorMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetMerchantItem(locationInfo.slot)
 end
 
--- The vendor's own display rules, what it declares and what it answers for a draw.
-function BetterBagsVendorMixin:GetDisplayRules()
+-- The vendor's own display rules for the draw, which go by whether a copy is carried. The
+-- vendor has no GetDisplayInfo; one it gained would have to be passed on here as well.
+function BetterBagsVendorMixin:GetDisplayRules(...)
     local merchantFeature = CaerdonWardrobe:GetFeature("Merchant")
-    return merchantFeature and merchantFeature:GetDisplayRules()
-end
-
-function BetterBagsVendorMixin:GetDisplayInfo(button, item)
-    local merchantFeature = CaerdonWardrobe:GetFeature("Merchant")
-    return merchantFeature and merchantFeature:GetDisplayInfo(button, item)
+    return merchantFeature and merchantFeature:GetDisplayRules(...)
 end
 
 function BetterBagsVendorMixin:Refresh()
@@ -376,15 +372,11 @@ function BetterBagsGuildBankMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
 
--- The guild bank's own display rules, what it declares and what it answers for a draw.
-function BetterBagsGuildBankMixin:GetDisplayRules()
+-- The guild bank's own display rules. The guild bank has no GetDisplayInfo; one it gained
+-- would have to be passed on here as well.
+function BetterBagsGuildBankMixin:GetDisplayRules(...)
     local guildBankFeature = CaerdonWardrobe:GetFeature("GuildBank")
-    return guildBankFeature and guildBankFeature:GetDisplayRules()
-end
-
-function BetterBagsGuildBankMixin:GetDisplayInfo(button, item)
-    local guildBankFeature = CaerdonWardrobe:GetFeature("GuildBank")
-    return guildBankFeature and guildBankFeature:GetDisplayInfo(button, item)
+    return guildBankFeature and guildBankFeature:GetDisplayRules(...)
 end
 
 function BetterBagsGuildBankMixin:Refresh()

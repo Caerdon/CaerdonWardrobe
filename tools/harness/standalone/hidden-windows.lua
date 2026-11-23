@@ -252,14 +252,14 @@ do
     Check(#requests == 0 and cleared == 0, "parked: nothing is asked for and nothing cleared: " .. #requests .. ", " .. cleared)
     -- The vendor window that stands in for it reads this feature's rules, which need the
     -- bags as they are now: the item carried is swapped for another while it is parked.
-    local rules = feature:GetDisplayInfo({}, CaerdonItem:CreateFromItemLink("1003"))
-    Check(rules.ownIcon.shouldShow == false, "parked: the rules know what is in the bags")
+    local rules = feature:GetDisplayRules({}, CaerdonItem:CreateFromItemLink("1003"))
+    Check(rules.ownIcon == false, "parked: the rules know what is in the bags")
     carried = 1004
     feature:BAG_UPDATE_DELAYED()
-    rules = feature:GetDisplayInfo({}, CaerdonItem:CreateFromItemLink("1004"))
-    Check(rules.ownIcon.shouldShow == false, "parked: and follow a change in them")
-    rules = feature:GetDisplayInfo({}, CaerdonItem:CreateFromItemLink("1003"))
-    Check(rules.ownIcon.shouldShow == true, "parked: an item no longer carried gets its icon back")
+    rules = feature:GetDisplayRules({}, CaerdonItem:CreateFromItemLink("1004"))
+    Check(rules.ownIcon == false, "parked: and follow a change in them")
+    rules = feature:GetDisplayRules({}, CaerdonItem:CreateFromItemLink("1003"))
+    Check(rules.ownIcon == "Merchant", "parked: an item no longer carried gets its icon back, by the vendor's setting")
     Check(#requests == 0, "parked: still nothing asked for")
 
     parking.shown = true

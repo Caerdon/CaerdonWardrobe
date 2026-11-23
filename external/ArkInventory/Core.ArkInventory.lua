@@ -36,44 +36,27 @@ function ArkInventoryMixin:Refresh()
 	ArkInventory.Frame_Main_Generate( nil, ArkInventory.Const.Window.Draw.Recalculate )
 end
 
-function ArkInventoryMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+-- What this window shows of an item (FeatureMixin.lua, displayRules), by the place: a view
+-- kept of bags that are not open goes by the settings for the bags, a guild bank by the guild
+-- bank's, and the toon's own bags are as the core has them.
+local OFFLINE_RULES = {
+	bindingStatus = "BankAndBags",
+	ownIcon = "BankAndBags",
+	otherIcon = "BankAndBags",
+	sellableIcon = "BankAndBags",
+}
+local GUILD_BANK_RULES = {
+	bindingStatus = "GuildBank",
+	ownIcon = "GuildBank",
+	otherIcon = "GuildBank",
+	sellableIcon = "GuildBank",
+}
+
+function ArkInventoryMixin:GetDisplayRules(button, item, feature, locationInfo)
 	if locationInfo.isOffline then
-		local showBindingStatus = CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
-		local showOwnIcon = CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
-		local showOtherIcon = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
-		local showSellableIcon = CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
-	
-		return {
-			bindingStatus = {
-				shouldShow = showBindingStatus
-			},
-			ownIcon = {
-				shouldShow = showOwnIcon
-			},
-			otherIcon = {
-				shouldShow = showOtherIcon
-			},
-			sellableIcon = {
-				shouldShow = showSellableIcon
-			}
-		}
+		return OFFLINE_RULES
 	elseif not item:HasItemLocationBankOrBags() then
-		return {
-			bindingStatus = {
-				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
-			},
-			ownIcon = {
-				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
-			},
-			otherIcon = {
-				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
-			},
-			sellableIcon = {
-				shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
-			}
-		}
-	else
-		return {}
+		return GUILD_BANK_RULES
 	end
 end
 

@@ -155,26 +155,25 @@ function MerchantMixin:Refresh()
     end
 end
 
-function MerchantMixin:GetDisplayInfo(button, item)
-    local hasBagCopy = self:IsItemInBags(item)
+-- What the vendor shows of an item (FeatureMixin.lua, displayRules): by its own settings, and
+-- nothing to learn on an item of which a copy is already carried.
+MerchantMixin.displayRules = {
+    bindingStatus = "Merchant",
+    ownIcon = "Merchant",
+    otherIcon = "Merchant",
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
+local CARRIED_RULES = {
+    bindingStatus = "Merchant",
+    ownIcon = false,
+    otherIcon = false,
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
 
-    return {
-        bindingStatus = {
-            shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.Merchant
-        },
-        ownIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and not hasBagCopy
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and not hasBagCopy
-        },
-        oldExpansionIcon = {
-            shouldShow = false
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
+function MerchantMixin:GetDisplayRules(button, item)
+    return self:IsItemInBags(item) and CARRIED_RULES or self.displayRules
 end
 
 function MerchantMixin:ShowLegionRemixHelperWarning()

@@ -186,10 +186,10 @@ end
 -- or the bank by the settings for those. So a window that shows what the toon holds declares
 -- nothing, and one that offers items names what it shows whatever the bags' settings say.
 --
--- A window whose answer depends on the item or the button (the vendor's copy already in the
--- bags, the two parts of an auction row) has a GetDisplayInfo of its own beside or in place of
--- the declaration; what that returns is laid over it. A feature that draws another feature's
--- content in its own frames answers with that feature's rules, both of them.
+-- A window whose rules depend on the place or the item (a vendor's item of which a copy is
+-- already carried, a bag addon's view of a guild bank) has a declaration for each case and a
+-- GetDisplayRules of its own that chooses among them; it is handed the draw. A feature that
+-- draws another feature's content in its own frames answers with that feature's rules.
 local WINDOW_SETTINGS = {
     bindingStatus = { "Binding", "ShowStatus" },
     ownIcon = { "Icon", "ShowLearnable" },
@@ -197,12 +197,14 @@ local WINDOW_SETTINGS = {
     sellableIcon = { "Icon", "ShowSellable" },
 }
 
-function CaerdonWardrobeFeatureMixin:GetDisplayRules()
+function CaerdonWardrobeFeatureMixin:GetDisplayRules(button, item, feature, locationInfo, options, mogStatus,
+                                                     bindingStatus)
     return self.displayRules
 end
 
--- For a window whose rules depend on the draw: a table of the rules it answers for, each as
--- { shouldShow = ... }, or nothing.
+-- For what a declaration cannot say (the auction house's own switches and the two parts of its
+-- rows, an arrow the host addon has put on the button): a table of the rules answered for,
+-- each as { shouldShow = ... }, or nothing. It is laid over the declaration.
 function CaerdonWardrobeFeatureMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
     return nil
@@ -267,7 +269,7 @@ function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, featur
         }
     }
 
-    local rules = self:GetDisplayRules()
+    local rules = self:GetDisplayRules(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
     if rules then
         ApplyDisplayRules(self, displayInfo, rules)
     end
