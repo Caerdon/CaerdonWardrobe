@@ -87,6 +87,8 @@ CaerdonWardrobe = {
         hasOverlay[button], owed[button] = true, nil
     end,
     ClearButton = function() cleared = cleared + 1 end,
+    -- As the core's, for an item whose data is here: answered from inside the call.
+    WhenItemLoaded = function(_, button, item, callback) callback() end,
     -- As the core's (scenarios/draw-path.lua has the real one): nothing is noted for a button
     -- on screen or one never asked for, and a request settles what was owed.
     AskWhenOnScreen = function(_, button, feature, context)

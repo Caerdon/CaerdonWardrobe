@@ -45,25 +45,13 @@ function ItemConversionMixin:OnOutputSlotRefreshIcon(outputSlot)
 		return
 	end
 
-	local item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink)
-	local locationInfo = {
-		locationKey = "itemConversion-output"
-	}
-
 	-- The default slot look on the 48 px output slot: a square, unmasked icon with nothing clipping it.
-	local options = {
+	self:Decorate(outputSlot, tooltipData.hyperlink, {
+		locationKey = "itemConversion-output"
+	},
+	{
 		statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(outputSlot:GetSize())
-	}
-
-	local function doUpdate()
-		CaerdonWardrobe:UpdateButton(outputSlot, item, self, locationInfo, options)
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	})
 end
 
 function ItemConversionMixin:GetTooltipData(item, locationInfo)

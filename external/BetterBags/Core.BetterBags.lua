@@ -181,22 +181,17 @@ function BetterBagsVendorMixin:UpdateVendorButton(vendorButton)
         isBuyback = mode == "buyback"
     }
 
+    -- Same as the Merchant feature: the item's data is there before the button is asked for.
     local item = CaerdonItem:CreateFromItemLink(itemLink)
-    local function doUpdate()
-        -- The button may have been redrawn for something else while the item loaded.
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- BetterBags' own word on the card: it may stand for something else by now with no
+        -- draw that came through here.
         local current = (vendorButton.mode == "buy" and vendorButton.item) or
             (vendorButton.mode == "buyback" and vendorButton.buyback) or nil
         if vendorButton.mode == mode and current and current.link == itemLink then
             CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
         end
-    end
-
-    -- Same as the Merchant feature: item data has to be loaded before UpdateButton.
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 -- BetterBags sends no message when a vendor button is drawn, only when one is created
@@ -339,19 +334,14 @@ function BetterBagsGuildBankMixin:UpdateGuildButton(guildButton)
     }
 
     local item = CaerdonItem:CreateFromItemLink(itemLink)
-    local function doUpdate()
-        -- The button may have been redrawn for something else while the item loaded.
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- The guild bank's own word on the slot: another item can lie in it by now with no
+        -- draw of the button.
         local currentTab, currentSlot = GetGuildTabAndSlot(guildButton)
         if currentTab == tab and currentSlot == slot and GetGuildBankItemLink(tab, slot) == itemLink then
             CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
         end
-    end
-
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 BetterBagsGuildBankMixin.integration = {

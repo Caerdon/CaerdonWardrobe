@@ -136,20 +136,10 @@ function DialogueUIMixin:UpdateRewardButton(button)
     }
     local options = GetRewardOptions(button)
 
-    local item = CaerdonItem:CreateFromItemLink(itemLink)
-    local function doUpdate()
-        -- The button may have been released, or set to something else, while the item loaded.
-        if trackedButtons[button] == drawn then
-            CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
-        end
-    end
-
-    -- Item data has to be loaded before UpdateButton.
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    -- A button that is released or set to something else while its item loads is cleared or
+    -- asked for anew above, each time what is tracked for it changes, so the answer that comes
+    -- late is not drawn (Decorate).
+    self:Decorate(button, itemLink, locationInfo, options)
 end
 
 -- Dialogue UI has put its arrow on a button, either inside SetItem (the button is not tracked

@@ -45,19 +45,10 @@ function EncounterJournalMixin:OnItemSetsInitializedFrame(listFrame, frame, elem
     }
 
     for j = 1, #items do
-        local itemButton = frame.ItemButtons[j];
-        local item = CaerdonItem:CreateFromItemID(items[j].itemID)
-        if item:IsItemDataCached() then
-            CaerdonWardrobe:UpdateButton(itemButton, item, self, {
-                locationKey = format("itemset-" .. "%d-%d", elementData.setID, item:GetItemID())
-            }, options)
-        else
-            item:ContinueOnItemLoad(function()
-                CaerdonWardrobe:UpdateButton(itemButton, item, self, {
-                    locationKey = format("itemset-" .. "%d-%d", elementData.setID, item:GetItemID())
-                }, options)
-            end)
-        end
+        local itemID = items[j].itemID
+        self:Decorate(frame.ItemButtons[j], itemID, {
+            locationKey = format("itemset-" .. "%d-%d", elementData.setID, itemID)
+        }, options)
     end
 end
 

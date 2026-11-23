@@ -11,6 +11,12 @@
 --   3. A row asked for again, or cleared, while its item loads is not drawn by the late answer.
 --   4. The vendor window's own file goes through it: a page turned while its items load.
 --   5. The auction house's sell slot: an item put in has its icon, and the slot emptied has none.
+--   6. An item that answers more than once (a piece of equipment, when the other items of its
+--      look have loaded): every answer of a wait asks, until the window says something else.
+--
+-- In 3 also: what the core itself says about a button while its item loads (a refresh, a
+-- retry, a request the queue drops) is not the window's word, and a row that is two buttons
+-- (WhenItemLoaded).
 --
 -- The game is hand-made, and the scenario says when an item's data comes. Real code: the core,
 -- FeatureMixin.lua, CaerdonItem.lua and features/Merchant.lua.
@@ -21,14 +27,17 @@ return function(H, S)
     local TOON = { name = "Zzyxa", realm = "Farrealm", class = "Hunter", classFile = "HUNTER", race = "Dwarf",
         faction = "Alliance", level = 29 }
 
-    local function Start(flavor)
+    local function Start(flavor, more)
         local items = {}
-        for id = 940001, 940016 do
+        for id = 940001, 940024 do
             items[id] = { name = "Scrap " .. id, quality = 1, level = 5, minLevel = 0, type = "Miscellaneous", subType = "Junk",
                 stack = 20, price = 5, classID = 15, subClassID = 0 }
         end
+        for id, item in pairs(more or {}) do
+            items[id] = item
+        end
         local game = H.StockGame(TOON, items)
-        local world = { game = game, asked = {}, cleared = {}, held = {}, here = {} }
+        local world = { game = game, asked = {}, cleared = {}, held = {}, here = {}, notSame = {} }
 
         -- An item's data is with the client once the scenario says so (Arrive). The client is
         -- asked by ID or by link.
@@ -36,7 +45,15 @@ return function(H, S)
             return tonumber(reference) or tonumber(tostring(reference):match("item:(%d+)"))
         end
         game:Set("C_Item.IsItemDataCachedByID", function(reference) return world.here[IDOf(reference)] == true end)
-        game:Set("C_Item.RequestLoadItemDataByID", function(reference) world.held[IDOf(reference)] = true end)
+        -- As the client: an item it has is answered from inside the call.
+        game:Set("C_Item.RequestLoadItemDataByID", function(reference)
+            local id = IDOf(reference)
+            if world.here[id] then
+                world.client:Fire("ITEM_DATA_LOAD_RESULT", id, true)
+            else
+                world.held[id] = true
+            end
+        end)
 
         local client = H.Client.New({ flavor = flavor, provider = game })
         game.client = client
@@ -49,6 +66,8 @@ return function(H, S)
         function WindowMixin:GetName() return "Window" end
         function WindowMixin:Init() end
         function WindowMixin:GetTooltipData() return nil end
+        -- A row the scenario says shows another item by now (the queue asks before it draws).
+        function WindowMixin:IsSameItem(button) return not world.notSame[button] end
         client.env.CaerdonWardrobe:RegisterFeature(WindowMixin)
 
         client:Fire("ADDON_LOADED", "CaerdonWardrobe")
@@ -99,6 +118,15 @@ return function(H, S)
                 end
             end
             return table.concat(ids, ",")
+        end
+        function world.TimesAsked(button)
+            local count = 0
+            for _, ask in ipairs(world.asked) do
+                if ask.button == button then
+                    count = count + 1
+                end
+            end
+            return count
         end
         return world
     end
@@ -241,6 +269,102 @@ return function(H, S)
         client:Tick(2)
         Equal(world.AskedFor(one), "940012", label .. "moved on: what is said about another button changes nothing for this one")
         Equal(#client.errors, 0, label .. "moved on: no error (" .. tostring(client.errors[1]) .. ")")
+
+        -- What the core says about a button is not its window's word. The row shows the item
+        -- that loads all the while, so its answer is still the row's.
+
+        -- A refresh asks again for what the button was last asked for.
+        local refreshed = world.Button()
+        window:Decorate(refreshed, game.Link(940001), { locationKey = "refreshed" }, {})
+        client:Tick(2)
+        window:Decorate(refreshed, game.Link(940017), { locationKey = "refreshed" }, {})
+        core:RefreshItems("the scenario")
+        client:Tick(6)
+        Equal(world.AskedFor(refreshed), "940001,940001", label .. "the core's word: a refresh asks again for what the button had")
+        world.Arrive(940017)
+        client:Tick(2)
+        Equal(world.AskedFor(refreshed), "940001,940001,940017", label .. "the core's word: and the item that loaded meanwhile is still drawn")
+
+        -- The queue drops a request whose row shows another item by now, and clears the button.
+        local dropped = world.Button()
+        core:UpdateButton(dropped, CaerdonItem:CreateFromItemLink(game.Link(940002)), window, { locationKey = "dropped" }, {})
+        window:Decorate(dropped, game.Link(940018), { locationKey = "dropped" }, {})
+        world.notSame[dropped] = true
+        local clearedBefore = world.cleared[dropped] or 0
+        client:Tick(2)
+        Check((world.cleared[dropped] or 0) > clearedBefore, label .. "the core's word: the queue clears a row that shows another item by now")
+        world.notSame[dropped] = nil
+        world.Arrive(940018)
+        client:Tick(2)
+        Equal(world.AskedFor(dropped), "940002,940018", label .. "the core's word: and that item is drawn when it comes")
+
+        -- A verdict that is not ready is asked for again in a moment.
+        local retried = world.Button()
+        local unready = CaerdonItem:CreateFromItemLink(game.Link(940003))
+        function unready:GetCaerdonStatus() return false, "something of the scenario's" end
+        core:UpdateButton(retried, unready, window, { locationKey = "retried" }, {})
+        client:Tick(2)
+        window:Decorate(retried, game.Link(940019), { locationKey = "retried" }, {})
+        client:Tick(25)
+        Check(world.TimesAsked(retried) >= 2, label .. "the core's word: a verdict that was not ready is asked for again (" ..
+            world.AskedFor(retried) .. ")")
+        world.Arrive(940019)
+        client:Tick(2)
+        Equal(world.asked[#world.asked].button == retried and world.asked[#world.asked].id, 940019,
+            label .. "the core's word: and the item that loaded meanwhile is drawn all the same")
+
+        -- A draw that fails costs the button its icon.
+        local failed = world.Button()
+        local broken = CaerdonItem:CreateFromItemLink(game.Link(940003))
+        function broken:GetCaerdonStatus() error("the scenario's own error") end
+        core:UpdateButton(failed, broken, window, { locationKey = "failed" }, {})
+        window:Decorate(failed, game.Link(940020), { locationKey = "failed" }, {})
+        clearedBefore = world.cleared[failed] or 0
+        client:Tick(2)
+        Equal(#client.errors, 1, label .. "the core's word: a draw that fails is reported")
+        Check(tostring(client.errors[1]):find("the scenario's own error", 1, true) ~= nil,
+            label .. "the core's word: as the error it was (" .. tostring(client.errors[1]) .. ")")
+        client.errors[1] = nil
+        Check((world.cleared[failed] or 0) > clearedBefore, label .. "the core's word: and its button is cleared")
+        world.Arrive(940020)
+        client:Tick(2)
+        Equal(world.AskedFor(failed), "940003,940020", label .. "the core's word: the item that loaded meanwhile is drawn after it")
+
+        -- A row that is two of the core's buttons: one wait, which is the row's.
+        local row, part = world.Button(), world.Button()
+        local function AskRow(id)
+            local item = CaerdonItem:CreateFromItemLink(game.Link(id))
+            core:WhenItemLoaded(row, item, function()
+                core:UpdateButton(row, item, window, { locationKey = "row" }, {})
+                core:UpdateButton(part, item, window, { locationKey = "row-part" }, {})
+            end)
+        end
+        AskRow(940021)
+        Equal(world.AskedFor(row) .. "/" .. world.AskedFor(part), "/", label .. "two buttons: neither is asked for before the item's data is here")
+        world.Arrive(940021)
+        client:Tick(2)
+        Equal(world.AskedFor(row) .. "/" .. world.AskedFor(part), "940021/940021", label .. "two buttons: both are when it comes")
+        AskRow(940022)
+        AskRow(940001)
+        world.Arrive(940022)
+        client:Tick(2)
+        Equal(world.AskedFor(row) .. "/" .. world.AskedFor(part), "940021,940001/940021,940001",
+            label .. "two buttons: a row that moved on has neither drawn by the late answer")
+        -- The row's own button cleared by the window (its column switched off): the wait is over.
+        AskRow(940023)
+        core:ClearButton(row)
+        world.Arrive(940023)
+        client:Tick(2)
+        Equal(world.AskedFor(part), "940021,940001", label .. "two buttons: nor one whose row the window cleared")
+        -- An item the window has loaded already is answered from inside the call.
+        local loaded = CaerdonItem:CreateFromItemLink(game.Link(940002))
+        loaded:ContinueOnItemLoad(function() end)
+        local answers = 0
+        core:WhenItemLoaded(row, loaded, function() answers = answers + 1 end)
+        Equal(answers, 1, label .. "two buttons: an item that has its data is answered at once")
+        client:Tick(2)
+        Equal(answers, 1, label .. "two buttons: and once")
+        Equal(#client.errors, 0, label .. "the core's word, two buttons: no error (" .. tostring(client.errors[1]) .. ")")
     end
 
     --------------------------------------------------------------------------------------
@@ -438,6 +562,158 @@ return function(H, S)
             Equal(world.cleared[commodities] or 0, clearedBefore, label .. "a display that refuses to be emptied keeps its icon")
         end
         env.ScrollUtil.AddInitializedFrameCallback = addCallback
+        Equal(#client.errors, 0, label .. "no error (" .. tostring(client.errors[1]) .. ")")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- 6. An item that answers more than once
+    --------------------------------------------------------------------------------------
+
+    -- A piece of equipment answers when its own data is here, and again when the other items
+    -- of its look have loaded (CaerdonEquipmentMixin:LoadSources, which is the real one here).
+    -- Four looks of two pieces each: the first of a pair is here and asked for, the second
+    -- comes later.
+    local function Piece(name, appearanceID, sourceID)
+        return { name = name, quality = 2, level = 25, minLevel = 20, type = "Armor", subType = "Leather",
+            stack = 1, equipLoc = "INVTYPE_HAND", price = 500, classID = 4, subClassID = 2, bindType = 2,
+            tooltip = { { text = "Binds when equipped", type = 20, bonding = 7 } },
+            appearance = { appearanceID = appearanceID, sourceID = sourceID } }
+    end
+    for _, flavor in ipairs({ "forever", "retail" }) do
+        local label = flavor .. ", more than one answer: "
+        local pieces = {}
+        for pair = 0, 3 do
+            pieces[940101 + pair * 2] = Piece("Glove " .. pair, 5501 + pair, 7501 + pair * 2)
+            pieces[940102 + pair * 2] = Piece("Other Glove " .. pair, 5501 + pair, 7502 + pair * 2)
+        end
+        local world = Start(flavor, pieces)
+        local core, client, window, game = world.core, world.client, world.window, world.game
+        -- What is asked for is the matter here, not the piece's verdict.
+        function core:ProcessItem() end
+        world.Arrive(940001)
+        for pair = 0, 3 do
+            world.Arrive(940101 + pair * 2)
+        end
+
+        -- Nothing else said: the answer that comes with the look's other piece asks again.
+        local piece = world.Button()
+        window:Decorate(piece, game.Link(940101), { locationKey = "piece" }, {})
+        local atOnce = world.TimesAsked(piece)
+        Check(atOnce >= 1, label .. "a piece whose own data is here is asked for at once")
+        client:Tick(2)
+        Equal(world.TimesAsked(piece), atOnce, label .. "and not again while its look's other piece loads")
+        world.Arrive(940102)
+        client:Tick(2)
+        Equal(world.TimesAsked(piece), atOnce + 1, label .. "the other piece come, it is asked for again")
+        Equal(world.asked[#world.asked].id, 940101, label .. "with the piece itself")
+
+        -- The row moved on in between.
+        local moved = world.Button()
+        window:Decorate(moved, game.Link(940103), { locationKey = "moved" }, {})
+        window:Decorate(moved, game.Link(940001), { locationKey = "moved" }, {})
+        local before = world.AskedFor(moved)
+        world.Arrive(940104)
+        client:Tick(2)
+        Equal(world.AskedFor(moved), before, label .. "a row that shows another item by then is left alone")
+
+        -- The row cleared in between.
+        local emptied = world.Button()
+        window:Decorate(emptied, game.Link(940105), { locationKey = "emptied" }, {})
+        core:ClearButton(emptied)
+        before = world.AskedFor(emptied)
+        world.Arrive(940106)
+        client:Tick(2)
+        Equal(world.AskedFor(emptied), before, label .. "and so is one the window cleared")
+
+        -- A refresh in between is the core's word: the wait goes on.
+        local kept = world.Button()
+        window:Decorate(kept, game.Link(940107), { locationKey = "kept" }, {})
+        client:Tick(2)
+        before = world.TimesAsked(kept)
+        core:RefreshItems("the scenario")
+        client:Tick(6)
+        Equal(world.TimesAsked(kept), before + 1, label .. "a refresh asks for the piece again")
+        world.Arrive(940108)
+        client:Tick(2)
+        Equal(world.TimesAsked(kept), before + 2, label .. "and the other piece, come after it, still does")
+        Equal(#client.errors, 0, label .. "no error (" .. tostring(client.errors[1]) .. ")")
+    end
+
+    --------------------------------------------------------------------------------------
+    -- 7. The auction house's results
+    --------------------------------------------------------------------------------------
+
+    -- A row of the results waits twice: for what the client knows of its key, then for its
+    -- item's data. The list gives a row to another result as it scrolls, and neither answer may
+    -- then draw on it. The feature's own file, with rows that are plain buttons.
+    for _, flavor in ipairs({ "forever", "retail" }) do
+        local label = flavor .. ", results: "
+        local world = Start(flavor)
+        local core, client, game, env = world.core, world.client, world.game, world.env
+        function core:ProcessItem() end
+        world.Arrive(940001)
+        world.Arrive(940002)
+
+        -- What the client knows of a key, once the scenario says it does.
+        local known = {}
+        local function Key(id) return { itemID = id, itemLevel = 5, itemSuffix = 0, battlePetSpeciesID = 0 } end
+        game:Set("C_AuctionHouse.GetItemKeyInfo", function(itemKey) return known[itemKey.itemID] and { quality = 1 } or nil end)
+        game:Set("C_AuctionHouse.GetItemKeyRequiredLevel", function() return 0 end)
+        game:Set("C_TooltipInfo.GetItemKey", function(id) return { hyperlink = game.Link(id) } end)
+
+        client:LoadAddonFile("CaerdonWardrobe", H.addonDir, "features/Auction.lua", world.namespace)
+        local auction = core:GetFeature("Auction")
+        Check(auction ~= nil, label .. "the file registers its feature")
+        if auction then
+            auction.waitingForItemKeyInfo = {}
+            local function Show(row, id)
+                row.rowData = { itemKey = Key(id) }
+                auction:OnInitializedFrame(nil, row, {})
+            end
+
+            -- The row's item loads, and the row is given another result meanwhile.
+            known[940003], known[940001] = true, true
+            local row = world.Button()
+            Show(row, 940003)
+            Equal(world.AskedFor(row), "", label .. "a row waits for its item's data")
+            Show(row, 940001)
+            Equal(world.AskedFor(row), "940001", label .. "given another result, it is asked for with that")
+            world.Arrive(940003)
+            client:Tick(2)
+            Equal(world.AskedFor(row), "940001", label .. "and the first result's item, come late, is not drawn over it")
+
+            -- Left alone, it is asked for when its item comes.
+            known[940004] = true
+            local patient = world.Button()
+            Show(patient, 940004)
+            world.Arrive(940004)
+            client:Tick(2)
+            Equal(world.AskedFor(patient), "940004", label .. "a row left alone is asked for when its item's data comes")
+
+            -- The client does not know the key yet, and the row is given another result
+            -- before it does.
+            world.Arrive(940005)
+            local scrolled = world.Button()
+            Show(scrolled, 940005)
+            Equal(world.AskedFor(scrolled), "", label .. "a row whose key the client does not know yet is not asked for")
+            Show(scrolled, 940002)
+            known[940002] = true
+            Show(scrolled, 940002)
+            Equal(world.AskedFor(scrolled), "940002", label .. "given a result whose key is known, it is")
+            known[940005] = true
+            auction:ITEM_KEY_ITEM_INFO_RECEIVED(940005)
+            client:Tick(2)
+            Equal(world.AskedFor(scrolled), "940002", label .. "and the first key's answer, come late, draws nothing on it")
+
+            -- Left alone, it is asked for when the client knows the key.
+            world.Arrive(940006)
+            local waiting = world.Button()
+            Show(waiting, 940006)
+            known[940006] = true
+            auction:ITEM_KEY_ITEM_INFO_RECEIVED(940006)
+            client:Tick(2)
+            Equal(world.AskedFor(waiting), "940006", label .. "a row left alone is asked for when its key's answer comes")
+        end
         Equal(#client.errors, 0, label .. "no error (" .. tostring(client.errors[1]) .. ")")
     end
 end

@@ -263,22 +263,15 @@ function DressingRoomMixin:UpdateSetSelectionButton(button)
         statusProminentSize = button.Icon and CaerdonWardrobe:GetSlotStatusSize(button.Icon:GetSize()) or 13
     }
 
-    local function doUpdate()
-        -- Guard: button may have been recycled while waiting for item data
+    -- The item's data (a piece's sources with it) is there before the button is asked for.
+    -- What the Debug Frame is told of the row goes with the ask.
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- The list can give the button another item with no word to this feature.
         if button.elementData and button.elementData.itemID == itemID then
             CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
             SetDebugContext(button, item, appearanceID)
         end
-    end
-
-    -- Ensure item data (including Equipment source loading) is fully cached before
-    -- entering the coroutine pipeline. Without this, customDataLoaded stays false
-    -- and items are never processed by ProcessItem.
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 function DressingRoomMixin:UpdateOutfitSlot(slotFrame, transmogIDOverride)
@@ -344,16 +337,11 @@ function DressingRoomMixin:UpdateOutfitSlot(slotFrame, transmogIDOverride)
         statusProminentSize = slotFrame.Icon and CaerdonWardrobe:GetSlotStatusSize(slotFrame.Icon:GetSize()) or 14
     }
 
-    local function doUpdate()
+    -- What the Debug Frame is told of the slot goes with the ask.
+    CaerdonWardrobe:WhenItemLoaded(slotFrame, item, function()
         CaerdonWardrobe:UpdateButton(slotFrame, item, self, locationInfo, options)
         SetDebugContext(slotFrame, item, transmogID)
-    end
-
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 function DressingRoomMixin:ClearOutfitSlot(slotFrame)

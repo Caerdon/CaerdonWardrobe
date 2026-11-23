@@ -328,9 +328,11 @@ function NarcissusMixin:UpdateNarcissusSetButton(button)
         statusOffsetY = 1
     }
 
+    -- The item's data (a piece's sources with it) is there before the button is asked for.
+    -- What the Debug Frame is told of the row goes with the ask.
     local feature = self
-    local function doUpdate()
-        -- Guard: button may have been recycled while waiting for item data
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- Narcissus can give the button another item with no word to this feature.
         if button.itemID == itemID then
             dbg("doUpdate: calling UpdateButton for", itemID)
             CaerdonWardrobe:UpdateButton(button, item, feature, locationInfo, options)
@@ -338,18 +340,7 @@ function NarcissusMixin:UpdateNarcissusSetButton(button)
         else
             dbg("doUpdate: button recycled, skip. current=", button.itemID, "expected=", itemID)
         end
-    end
-
-    -- Ensure item data (including Equipment source loading) is fully cached
-    -- before entering the coroutine pipeline. Without this, customDataLoaded
-    -- stays false and items are never processed by ProcessItem.
-    if item:IsItemDataCached() then
-        dbg("UpdateSetButton: item cached, calling doUpdate directly")
-        doUpdate()
-    else
-        dbg("UpdateSetButton: item not cached, deferring via ContinueOnItemLoad")
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 function NarcissusMixin:RefreshNarcissusSetButtons(setFrame)
@@ -463,17 +454,12 @@ function NarcissusMixin:UpdateNarcissusOutfitButton(button)
         statusOffsetY = 3
     }
 
+    -- What the Debug Frame is told of the slot goes with the ask.
     local feature = self
-    local function doUpdate()
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
         CaerdonWardrobe:UpdateButton(button, item, feature, locationInfo, options)
         feature:SetDebugContext(button, item, sourceID)
-    end
-
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 function NarcissusMixin:EnsureHoverHook(frame)

@@ -2067,6 +2067,37 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     end
 end
 
+-- How often a window has asked for each button or cleared it. A window's item that is still
+-- loading (WhenItemLoaded, Decorate) is drawn only if the window said nothing about its button
+-- in the meantime.
+local askSerials = setmetatable({}, { __mode = "k" })
+
+local function NextAskSerial(button)
+    local serial = (askSerials[button] or 0) + 1
+    askSerials[button] = serial
+    return serial
+end
+
+-- The core's own word about a button is not its window's. Asking again for what a button was
+-- last asked for (a refresh, a retry, a draw that was owed) and clearing what the queue could
+-- not draw say nothing new about what the button shows, so a wait of the window's for the
+-- button stays its own: the item it waits for is still the one the row shows.
+local function AskAsCore(self, button, item, feature, locationInfo, options)
+    local serial = button and askSerials[button]
+    self:UpdateButton(button, item, feature, locationInfo, options)
+    if button then
+        askSerials[button] = serial
+    end
+end
+
+local function ClearAsCore(self, button)
+    local serial = button and askSerials[button]
+    self:ClearButton(button)
+    if button then
+        askSerials[button] = serial
+    end
+end
+
 -- How often one request is tried again while its tooltip still says "Retrieving item information".
 local NOT_READY_MAX_RETRIES = 10
 -- How long the requests that were not ready wait to be tried again where nothing says sooner.
@@ -2132,7 +2163,7 @@ function CaerdonWardrobeMixin:RunNotReadyRetries(early, keys)
                     retryState.notReadyRetries = retryState.notReadyRetries - 1
                 end
             end
-            self:UpdateButton(info.button, info.item, info.feature, info.locationInfo, info.options)
+            AskAsCore(self, info.button, info.item, info.feature, info.locationInfo, info.options)
         end
     end
 end
@@ -2476,16 +2507,6 @@ function CaerdonWardrobeMixin:AskWhenOnScreen(button, feature, context)
     return true
 end
 
--- How often each button has been asked for or cleared. A window's item that is still loading
--- (Decorate) is drawn only if nothing was said about its button in the meantime.
-local askSerials = setmetatable({}, { __mode = "k" })
-
-local function NextAskSerial(button)
-    local serial = (askSerials[button] or 0) + 1
-    askSerials[button] = serial
-    return serial
-end
-
 function CaerdonWardrobeMixin:ClearButton(button)
     if button then
         NextAskSerial(button)
@@ -2518,7 +2539,7 @@ function CaerdonWardrobeMixin:AskAgainFor(button, feature)
     if not asked or asked.feature ~= feature then
         return false
     end
-    self:UpdateButton(button, asked.item, feature, asked.locationInfo, asked.options)
+    AskAsCore(self, button, asked.item, feature, asked.locationInfo, asked.options)
     return true
 end
 
@@ -2643,14 +2664,42 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
     end
 end
 
+-- `callback` once `item` has its data: at once where it has, when it comes where it has not.
+-- For a window that does more with the answer than ask for one button (a row that is two of
+-- the core's buttons, something of its own that goes with the ask); a window with one button
+-- to ask for uses Decorate.
+--
+-- The wait belongs to `button` (the row, where the row is more than one button) as it was when
+-- the window asked: an answer that comes after the window asked for the button again or
+-- cleared it is dropped. A window that waited itself and then asked drew a row's old item over
+-- what the row had come to show (a vendor's page turned while its items loaded).
+--
+-- An item can answer more than once: a piece of equipment does at once and again when the
+-- other items of its look have loaded (LoadSources), and the later answer asks with those
+-- there. Every answer of one wait is its own, so what the callback itself says about the
+-- button does not end the wait; what the window says does. An answer that comes late runs
+-- contained.
+function CaerdonWardrobeMixin:WhenItemLoaded(button, item, callback)
+    if item:IsItemDataCached() then
+        callback()
+        return
+    end
+
+    local serial = NextAskSerial(button)
+    item:ContinueOnItemLoad(function()
+        if askSerials[button] == serial then
+            Contained(callback)
+            serial = askSerials[button]
+        end
+    end)
+end
+
 -- One button of a window, from what the window has for it: an item link, an item ID, an item
 -- the window made itself (CaerdonItem), or nothing, which clears the button. Returns the item.
 --
--- The item's data is waited for here, before the button is asked for (UpdateButton), and the
--- wait belongs to the button as it was when the window asked: a row that was cleared or asked
--- for again while its item loaded is not drawn by the answer that comes late. A window that
--- waited itself and then asked drew a row's old item over what the row had come to show (a
--- vendor's page turned while its items loaded).
+-- The item's data is waited for here, before the button is asked for (UpdateButton), as
+-- WhenItemLoaded waits: a row that was cleared or asked for again while its item loaded is not
+-- drawn by the answer that comes late.
 function CaerdonWardrobeMixin:Decorate(feature, button, source, locationInfo, options)
     local item = source
     if type(source) == "string" then
@@ -2668,11 +2717,8 @@ function CaerdonWardrobeMixin:Decorate(feature, button, source, locationInfo, op
         return item
     end
 
-    local serial = NextAskSerial(button)
-    item:ContinueOnItemLoad(function()
-        if askSerials[button] == serial then
-            Contained(self.UpdateButton, self, button, item, feature, locationInfo, options)
-        end
+    self:WhenItemLoaded(button, item, function()
+        self:UpdateButton(button, item, feature, locationInfo, options)
     end)
     return item
 end
@@ -2717,7 +2763,7 @@ end
 function CaerdonWardrobeMixin:ProcessQueuedItem(button, item, feature, locationInfo, options)
     if not Contained(self.ProcessItem, self, button, item, feature, locationInfo, options) then
         Counters:Unwound()
-        Contained(self.ClearButton, self, button)
+        Contained(ClearAsCore, self, button)
     end
 end
 
@@ -2733,7 +2779,7 @@ function CaerdonWardrobeMixin:ProcessRequest(queueKey, request)
         return
     end
     if not feature:IsSameItem(button, item, locationInfo) then
-        self:ClearButton(button)
+        ClearAsCore(self, button)
         return
     end
 

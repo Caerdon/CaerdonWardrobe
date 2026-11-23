@@ -68,7 +68,9 @@ function AuctionMixin:ITEM_KEY_ITEM_INFO_RECEIVED(itemID)
 	if processQueue then
 		for locationKey, processInfo in pairs(processQueue) do
 			local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(processInfo.itemKey)
-			if itemKeyInfo then
+			-- The list gives a row to another result as it scrolls: only a row that still
+			-- shows the key this was asked for.
+			if itemKeyInfo and self:RowShowsKey(processInfo.frame, processInfo.itemKey) then
 				self:ProcessItemKeyInfo(processInfo.itemKey, itemKeyInfo, processInfo.frame)
 			end
 		end
@@ -494,6 +496,14 @@ function AuctionMixin:MakeItemForKey(itemKey, appearanceLink)
 	return item
 end
 
+-- Whether a row of the results still shows the result of this key.
+function AuctionMixin:RowShowsKey(row, itemKey)
+	local rowData = row and row.rowData
+	local shown = type(rowData) == "table" and rowData.itemKey
+	return type(shown) == "table" and type(itemKey) == "table" and KeyText(shown) == KeyText(itemKey) and
+		shown.battlePetSpeciesID == itemKey.battlePetSpeciesID
+end
+
 function AuctionMixin:OnItemBuyInitializedFrame(itemList, frame, elementData)
 	if not elementData then return end
 
@@ -517,19 +527,13 @@ function AuctionMixin:OnItemBuyInitializedFrame(itemList, frame, elementData)
 	frame.caerdonAuctionID = auctionID
 	frame.caerdonDebugItemLink = rowData.itemLink
 
-	local function doUpdate()
-		-- The row stands for another listing by the time the item's data came.
-		if frame.caerdonAuctionID ~= auctionID then
-			return
+	-- The row is not a button of the core's: what it shows is the feature's own text, and a
+	-- row with no listing says nothing to the core. So the listing is asked after as well.
+	CaerdonWardrobe:WhenItemLoaded(frame, item, function()
+		if frame.caerdonAuctionID == auctionID then
+			self:ShowListingGain(frame, item, rowData)
 		end
-		self:ShowListingGain(frame, item, rowData)
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	end)
 end
 
 -- A listing whose item's data is there: its percentage for its cell, and its word to the
@@ -587,8 +591,9 @@ function AuctionMixin:UpdateListingButton()
 	page.shownLink = link
 
 	local item = CaerdonItem:CreateFromItemLink(link)
-	local function doUpdate()
-		-- Another page, or a better listing, by the time the item's data came.
+	CaerdonWardrobe:WhenItemLoaded(button, item, function()
+		-- Another page by now (a commodity's has a button of its own, so this one hears
+		-- nothing of it), or a better listing.
 		if self.listingPage ~= page or page.shownLink ~= link then
 			return
 		end
@@ -601,13 +606,7 @@ function AuctionMixin:UpdateListingButton()
 			statusOffsetX = 5,
 			statusOffsetY = 5
 		})
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	end)
 end
 
 -- A refresh: the buttons the core drew are asked for again as any window's are. Then what is
@@ -779,7 +778,7 @@ function AuctionMixin:ClearResultsRow(row)
 end
 
 function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
-	local item
+	local item, noUpgrade
 	local rowData = button.rowData
 
 	local locationKey = format("%d-%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, ((itemKeyInfo and itemKeyInfo.quality) or 0))
@@ -788,15 +787,8 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
 		button.caerdonDebugItemLink = itemKeyInfo.battlePetLink
 
-		local function doUpdate()
-			self:AskResultsRow(button, item, format("pet-%s", itemKeyInfo.battlePetLink), itemKey, true)
-		end
-
-		if item:IsItemDataCached() then
-			doUpdate()
-		else
-			item:ContinueOnItemLoad(doUpdate)
-		end
+		locationKey = format("pet-%s", itemKeyInfo.battlePetLink)
+		noUpgrade = true
 	elseif rowData.appearanceLink then
 		-- Using appearance link if it's available due to not getting full item link from AH in any other way right now.
 		-- This fixes Nimble Hexweave Cloak, for example, but doesn't fix Ceremonious Greaves (which doesn't have appearanceLink)
@@ -822,16 +814,6 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		button.caerdonDebugItemLink = itemLink or item:GetItemLink()
 
 		CaerdonAPI:CompareCIMI(self, item)
-
-		local function doUpdate()
-			self:AskResultsRow(button, item, locationKey, itemKey)
-		end
-
-		if item:IsItemDataCached() then
-			doUpdate()
-		else
-			item:ContinueOnItemLoad(doUpdate)
-		end
 	else
 		-- Pass itemKey.itemLevel directly as overrideItemLevel since item links from AH don't encode the actual listing's ilvl
 		local extraData = NoteKeySuffix({ overrideItemLevel = itemKey.itemLevel }, itemKey, itemKeyInfo)
@@ -863,17 +845,13 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		button.caerdonDebugItemLink = item:GetItemLink()
 
 		CaerdonAPI:CompareCIMI(self, item)
-
-		local function doUpdate()
-			self:AskResultsRow(button, item, locationKey, itemKey)
-		end
-
-		if item:IsItemDataCached() then
-			doUpdate()
-		else
-			item:ContinueOnItemLoad(doUpdate)
-		end
 	end
+
+	-- One wait for the row's two parts, which is the row's: its parts are asked for when the
+	-- item's data is there, unless the row was given another result or cleared by then.
+	CaerdonWardrobe:WhenItemLoaded(button, item, function()
+		self:AskResultsRow(button, item, locationKey, itemKey, noUpgrade)
+	end)
 end
 
 function AuctionMixin:OnInitializedFrame(auctionFrame, frame, elementData)
@@ -1002,8 +980,9 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 	end
 	button.caerdonDebugItemLink = item:GetItemLink()
 
-	local function doUpdate()
-		-- A listing has spoken for the button, or another row was opened, since.
+	CaerdonWardrobe:WhenItemLoaded(button, item, function()
+		-- Another row was opened since (a commodity's page has a button of its own, so this
+		-- one hears nothing of it), or a listing has spoken for the button.
 		if self.listingPage ~= page or page.shownLink then
 			return
 		end
@@ -1016,13 +995,7 @@ function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 			statusOffsetX = 5,
 			statusOffsetY = 5
 		})
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	end)
 end
 
 function AuctionMixin:OnSetPostItem(frame, itemLocation)
