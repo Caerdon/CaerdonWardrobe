@@ -27,28 +27,14 @@ function AngrierWorldQuestsMixin:IsSameItem(button, item, locationInfo)
 	return isSame
 end
 
-function AngrierWorldQuestsMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = true
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+AngrierWorldQuestsMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	questIcon = true,
+	sellableIcon = false,
+}
 
 function AngrierWorldQuestsMixin:OnQuestLog_Update()
 	if self.questTimer then

@@ -16,28 +16,14 @@ function MissionMixin:OnGarrisonLoaded()
         self.OnGarrisonLandingScrollBoxRangeChanged, self);
 end
 
-function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = true
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = false
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+MissionMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = true,
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
 
 function MissionMixin:OnCovenantMissionScrollBoxRangeChanged(sortPending)
     local scrollBox = CovenantMissionFrameMissions.ScrollBox

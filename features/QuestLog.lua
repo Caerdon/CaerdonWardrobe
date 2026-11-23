@@ -61,28 +61,13 @@ local function GetRewardOptions(questItem)
     }
 end
 
-function QuestLogMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.QuestLog ~= false
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+QuestLogMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = "QuestLog",
+    sellableIcon = false,
+}
 
 function QuestLogMixin:QUEST_ITEM_UPDATE()
     self:OnQuestInfoShowRewards()

@@ -76,27 +76,14 @@ function ItemConversionMixin:Refresh()
 	end
 end
 
-function ItemConversionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = false
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = false
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-		sellableIcon = {
-			shouldShow = false
-		}
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+ItemConversionMixin.displayRules = {
+	bindingStatus = false,
+	ownIcon = true,
+	otherIcon = true,
+	questIcon = false,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 CaerdonWardrobe:RegisterFeature(ItemConversionMixin)

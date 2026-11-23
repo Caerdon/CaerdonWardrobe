@@ -53,27 +53,12 @@ function LootMixin:OnLootInitializedFrame(listFrame, frame, elementData)
     end
 end
 
-function LootMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Loot ~= false
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+LootMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = "Loot",
+    sellableIcon = false,
+}
 
 CaerdonWardrobe:RegisterFeature(LootMixin)

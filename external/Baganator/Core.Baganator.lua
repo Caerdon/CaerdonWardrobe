@@ -145,10 +145,6 @@ end
 -- than Pawn's (another talent tree's upgrade, a level too low, a gear set item). Which of two
 -- arrows shows is the player's choice in Baganator's Icon Corners: in the same corner only the
 -- higher one shows.
-function BaganatorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {}
-end
-
 -- Has the item on this button drawn. One request serves all three widgets.
 function BaganatorMixin:RequestDraw(itemButton, details, state, bag, slot)
     local item, locationInfo

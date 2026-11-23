@@ -38,28 +38,15 @@ function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
     })
 end
 
-function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = false
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.CustomerOrders ~= false
-		},
-		questIcon = {
-			shouldShow = false
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+CustomerOrdersMixin.displayRules = {
+	bindingStatus = false,
+	ownIcon = true,
+	otherIcon = "CustomerOrders",
+	questIcon = false,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function CustomerOrdersMixin:OnSchematicFormInit(frame)
     -- DevTools_Dump(frame)

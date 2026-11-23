@@ -265,12 +265,15 @@ function BetterBagsVendorMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetMerchantItem(locationInfo.slot)
 end
 
+-- The vendor's own display rules, what it declares and what it answers for a draw.
+function BetterBagsVendorMixin:GetDisplayRules()
+    local merchantFeature = CaerdonWardrobe:GetFeature("Merchant")
+    return merchantFeature and merchantFeature:GetDisplayRules()
+end
+
 function BetterBagsVendorMixin:GetDisplayInfo(button, item)
     local merchantFeature = CaerdonWardrobe:GetFeature("Merchant")
-    if merchantFeature then
-        return merchantFeature:GetDisplayInfo(button, item)
-    end
-    return {}
+    return merchantFeature and merchantFeature:GetDisplayInfo(button, item)
 end
 
 function BetterBagsVendorMixin:Refresh()
@@ -373,12 +376,15 @@ function BetterBagsGuildBankMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
 
+-- The guild bank's own display rules, what it declares and what it answers for a draw.
+function BetterBagsGuildBankMixin:GetDisplayRules()
+    local guildBankFeature = CaerdonWardrobe:GetFeature("GuildBank")
+    return guildBankFeature and guildBankFeature:GetDisplayRules()
+end
+
 function BetterBagsGuildBankMixin:GetDisplayInfo(button, item)
     local guildBankFeature = CaerdonWardrobe:GetFeature("GuildBank")
-    if guildBankFeature then
-        return guildBankFeature:GetDisplayInfo(button, item)
-    end
-    return {}
+    return guildBankFeature and guildBankFeature:GetDisplayInfo(button, item)
 end
 
 function BetterBagsGuildBankMixin:Refresh()

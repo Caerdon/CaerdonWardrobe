@@ -205,10 +205,16 @@ end
 
 -- The same icons as on Blizzard's quest rewards, under the same settings, minus the upgrade arrow
 -- and the level gain where Dialogue UI shows its own arrow.
+function DialogueUIMixin:GetDisplayRules()
+    local questLogFeature = CaerdonWardrobe:GetFeature("QuestLog")
+    return questLogFeature and questLogFeature:GetDisplayRules()
+end
+
 function DialogueUIMixin:GetDisplayInfo(button, ...)
     local questLogFeature = CaerdonWardrobe:GetFeature("QuestLog")
-    local displayInfo = questLogFeature and questLogFeature:GetDisplayInfo(button, ...) or {}
+    local displayInfo = questLogFeature and questLogFeature:GetDisplayInfo(button, ...)
     if HasOwnUpgradeArrow(button) then
+        displayInfo = displayInfo or {}
         displayInfo.upgradeIcon = { shouldShow = false }
         displayInfo.levelGain = { shouldShow = false }
     end

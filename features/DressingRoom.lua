@@ -369,24 +369,12 @@ function DressingRoomMixin:Refresh()
     end
 end
 
-function DressingRoomMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = false
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.DressingRoom ~= false
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+DressingRoomMixin.displayRules = {
+    bindingStatus = false,
+    ownIcon = true,
+    otherIcon = "DressingRoom",
+    sellableIcon = false,
+}
 
 CaerdonWardrobe:RegisterFeature(DressingRoomMixin)

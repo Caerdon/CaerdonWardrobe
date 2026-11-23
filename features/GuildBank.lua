@@ -17,22 +17,13 @@ function GuildBankMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
 
-function GuildBankMixin:GetDisplayInfo()
-	return {
-		bindingStatus = {
-			shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
-		},
-		ownIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
-		},
-		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
-		},
-		sellableIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
-		}
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+GuildBankMixin.displayRules = {
+	bindingStatus = "GuildBank",
+	ownIcon = "GuildBank",
+	otherIcon = "GuildBank",
+	sellableIcon = "GuildBank",
+}
 
 function GuildBankMixin:OnGuildBankFrameUpdate()
 	-- TODO: They moved these local to Blizzard_GuildBankUI so hard-coding here for now.

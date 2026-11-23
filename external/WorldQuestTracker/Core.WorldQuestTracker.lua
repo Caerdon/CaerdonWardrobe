@@ -28,28 +28,15 @@ function WorldQuestTrackerMixin:IsSameItem(button, item, locationInfo)
 	return isSame
 end
 
-function WorldQuestTrackerMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+WorldQuestTrackerMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	questIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function WorldQuestTrackerMixin:IsValidItem(type)
   return 

@@ -25,28 +25,14 @@ function WeeklyRewardsMixin_Feature:Refresh()
 	end
 end
 
-function WeeklyRewardsMixin_Feature:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-		sellableIcon = {
-			shouldShow = false
-		}
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+WeeklyRewardsMixin_Feature.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function WeeklyRewardsMixin_Feature:UpdateActivities()
 	for i, activityFrame in ipairs(WeeklyRewardsFrame.Activities) do

@@ -77,27 +77,14 @@ function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
     end)
 end
 
-function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.TradeSkill ~= false
-		},
-		questIcon = {
-			shouldShow = false
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+TradeSkillMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = "TradeSkill",
+	questIcon = false,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 CaerdonWardrobe:RegisterFeature(TradeSkillMixin)

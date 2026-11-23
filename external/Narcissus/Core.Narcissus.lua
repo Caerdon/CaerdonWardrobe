@@ -663,25 +663,13 @@ function NarcissusMixin:Refresh()
     self:RefreshNarcissusOutfitButtons()
 end
 
-function NarcissusMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = false
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = true
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+NarcissusMixin.displayRules = {
+    bindingStatus = false,
+    ownIcon = true,
+    otherIcon = true,
+    sellableIcon = false,
+}
 
 local Version = nil
 local isActive = false

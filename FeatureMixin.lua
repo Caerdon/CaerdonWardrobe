@@ -168,14 +168,67 @@ function CaerdonWardrobeFeatureMixin:IsSameItem(button, item, locationInfo)
     return true
 end
 
+-- What a window shows of a draw: its display rules. On the feature's mixin:
+--     SomeMixin.displayRules = {
+--         bindingStatus = true,      -- the binding text
+--         ownIcon = true,            -- what this toon can learn (the star, the grey gear in its place)
+--         otherIcon = "Mail",        -- what another toon can learn
+--         questIcon = false,         -- the quest icon
+--         oldExpansionIcon = false,  -- the older expansion's mark
+--         sellableIcon = false,      -- the sell icon
+--     }
+-- A value is true, false, or the window's key among that rule's own settings (WINDOW_SETTINGS
+-- below: "Mail" for otherIcon is Icon.ShowLearnableByOther.Mail), read at each draw. The other
+-- rules of a draw can be named the same way (upgradeIcon, levelGain, statusIcon, auctionIcon).
+--
+-- What a window does not name is as the core has it (GetDisplayInfoInternal): the quest icon by
+-- its setting, the older expansion's mark shown, and the rest shown, but for an item in the bags
+-- or the bank by the settings for those. So a window that shows what the toon holds declares
+-- nothing, and one that offers items names what it shows whatever the bags' settings say.
+--
+-- A window whose answer depends on the item or the button (the vendor's copy already in the
+-- bags, the two parts of an auction row) has a GetDisplayInfo of its own beside or in place of
+-- the declaration; what that returns is laid over it. A feature that draws another feature's
+-- content in its own frames answers with that feature's rules, both of them.
+local WINDOW_SETTINGS = {
+    bindingStatus = { "Binding", "ShowStatus" },
+    ownIcon = { "Icon", "ShowLearnable" },
+    otherIcon = { "Icon", "ShowLearnableByOther" },
+    sellableIcon = { "Icon", "ShowSellable" },
+}
+
+function CaerdonWardrobeFeatureMixin:GetDisplayRules()
+    return self.displayRules
+end
+
+-- For a window whose rules depend on the draw: a table of the rules it answers for, each as
+-- { shouldShow = ... }, or nothing.
 function CaerdonWardrobeFeatureMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus,
                                                     bindingStatus)
-    return {}
+    return nil
+end
+
+local function ApplyDisplayRules(feature, displayInfo, rules)
+    for rule, shown in pairs(rules) do
+        if type(shown) == "string" then
+            local settings = WINDOW_SETTINGS[rule]
+            if not settings then
+                error(format("Caerdon Wardrobe: %s declares %s by a setting (%s), and that rule has none per window",
+                    feature:GetName(), tostring(rule), shown))
+            end
+            shown = CaerdonWardrobeConfig[settings[1]][settings[2]][shown]
+        end
+        local entry = displayInfo[rule]
+        if entry then
+            entry.shouldShow = shown
+        else
+            displayInfo[rule] = { shouldShow = shown }
+        end
+    end
 end
 
 function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, feature, locationInfo, options, mogStatus,
                                                             bindingStatus)
-    -- TODO: Temporary for merging - revisit after pushing everything into Mixins
     local showBindingStatus = not item:HasItemLocationBankOrBags() or
         CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
     local globalUpgradeEnabled = CaerdonWardrobeConfig.Icon.ShowUpgradeIcon ~= false
@@ -214,8 +267,14 @@ function CaerdonWardrobeFeatureMixin:GetDisplayInfoInternal(button, item, featur
         }
     }
 
-    CaerdonAPI:MergeTable(displayInfo,
-        self:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus))
+    local rules = self:GetDisplayRules()
+    if rules then
+        ApplyDisplayRules(self, displayInfo, rules)
+    end
+    local ofThisDraw = self:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
+    if ofThisDraw then
+        CaerdonAPI:MergeTable(displayInfo, ofThisDraw)
+    end
 
     -- TODO: BoA and BoE settings should be per feature
     if not CaerdonWardrobeConfig.Binding.ShowBoA and bindingStatus == L["BoA"] then

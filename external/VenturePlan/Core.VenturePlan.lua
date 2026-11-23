@@ -41,28 +41,15 @@ function VenturePlanMixin:Init()
 	end)
 end
 
-function VenturePlanMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+VenturePlanMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	questIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function VenturePlanMixin:UpdateButton(button)
 	local options = {

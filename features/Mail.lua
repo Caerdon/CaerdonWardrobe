@@ -39,28 +39,14 @@ function MailMixin:GetTooltipData(item, locationInfo)
     end
 end
 
-function MailMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Mail ~= false
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = false
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+MailMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = "Mail",
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
 
 function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
     for i = 1, ATTACHMENTS_MAX_RECEIVE do

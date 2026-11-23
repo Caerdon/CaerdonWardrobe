@@ -13,28 +13,14 @@ function BlackMarketMixin:OnBlackMarketLoaded()
 	BlackMarketFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self);
 end
 
-function BlackMarketMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BlackMarket ~= false
-		},
-		questIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+BlackMarketMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = "BlackMarket",
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function BlackMarketMixin:BLACK_MARKET_ITEM_UPDATE()
 	if BlackMarketFrame:IsShown() then

@@ -114,28 +114,13 @@ function EncounterJournalMixin:Refresh()
     end
 end
 
-function EncounterJournalMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.EncounterJournal ~= false
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+EncounterJournalMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = "EncounterJournal",
+    sellableIcon = false,
+}
 
 function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
     local button = suggestion.reward

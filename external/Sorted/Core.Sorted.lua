@@ -160,28 +160,14 @@ function SortedMixin:GetTooltipData(item, locationInfo)
     end
 end
 
-function SortedMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = false
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = true
-		},
-        sellableIcon = {
-            shouldShow = true
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+SortedMixin.displayRules = {
+	bindingStatus = false,
+	ownIcon = true,
+	otherIcon = true,
+	questIcon = true,
+	sellableIcon = true,
+}
 
 local Version = nil
 local isActive = false
