@@ -77,6 +77,20 @@ return function(H, S)
             end
         end)
         game:Set("C_EquipmentSet.DeleteEquipmentSet", function(setID) world.deleted = setID end)
+        -- The character window's two ways of saying which spec a set is for. No event follows.
+        local function Unassign(setID)
+            for specIndex, assigned in pairs(world.setForSpec or {}) do
+                if assigned == setID then
+                    world.setForSpec[specIndex] = nil
+                end
+            end
+        end
+        game:Set("C_EquipmentSet.AssignSpecToEquipmentSet", function(setID, specIndex)
+            Unassign(setID)
+            world.setForSpec = world.setForSpec or {}
+            world.setForSpec[specIndex] = setID
+        end)
+        game:Set("C_EquipmentSet.UnassignEquipmentSetSpec", Unassign)
         -- A dropdown's menu, as far as the entries it is given.
         world.menu = {}
         game:Set("UIDropDownMenu_CreateInfo", function() return {} end)
@@ -141,6 +155,7 @@ return function(H, S)
         local refreshItems = core.RefreshItems
         function core:RefreshItems(reason, detail, changed)
             world.refreshes[#world.refreshes + 1] = reason
+            world.lastDetail = detail
             return refreshItems(self, reason, detail, changed)
         end
 
@@ -531,6 +546,7 @@ return function(H, S)
     Equal(equipment:IsGearSetWanted(41), true, "its own switch: and the equipment code takes the set as wanted")
     Click(world, Tick("Arena"), false)
     Equal(own.Icon.OtherSets[41], false, "its own switch: a click is written to the toon's table, by the set's ID")
+    Equal(world.lastDetail, "Icon.OtherSets.41 = false, this toon's", "its own switch: and the refresh says which value the click wrote")
     Equal(env.CaerdonWardrobeConfig.Icon.OtherSets, nil, "its own switch: and not to the player's settings")
     Equal(own.Icon.OtherSpecs, nil, "its own switch: nor as a spec's")
     Equal(#world.refreshes, 1, "its own switch: with one refresh")
@@ -697,6 +713,28 @@ return function(H, S)
     menu, titles = Open(list.rows[2])
     Equal(titles, "By its specialization (Guardian) | Druid: Feral (used by  feral ) | Druid: Guardian | My tanking",
         "by name: the scale is that set's for the other sets")
+    -- A spec given to the set in the character window, with the settings shut as that window
+    -- needs them to be. The game sends no event for it: the client's function is watched and
+    -- the addon refreshes, so the page says what the set is now when it is next opened, and
+    -- not what the equipment code had kept from before.
+    Check(Says(equipment:GetGearSetScaleDescription(), "(a spec given to a set or taken from it is heard: yes)"),
+        "assigned: the export says the client's two functions are watched: " .. tostring(equipment:GetGearSetScaleDescription()))
+    world.page:Hide()
+    world.refreshes = {}
+    env.C_EquipmentSet.AssignSpecToEquipmentSet(41, 2)
+    Equal(table.concat(world.refreshes, ","), "gear sets", "assigned: one refresh of the addon's for a spec given to a set")
+    world.page:Show()
+    world.page.OnRefresh()
+    Equal(list.rows[1].text:GetText(), "By its specialization (Feral)", "assigned: the page opened after it says what the set is now")
+    world.page:Hide()
+    world.refreshes = {}
+    env.C_EquipmentSet.UnassignEquipmentSetSpec(41)
+    Equal(table.concat(world.refreshes, ","), "gear sets", "unassigned: one refresh for a spec taken from a set")
+    world.page:Show()
+    world.page.OnRefresh()
+    Equal(list.rows[1].text:GetText(), "By its name (Feral)", "unassigned: and the page opened after it has the set by its name again")
+    Check(Tick(" feral "):IsEnabled() == true and Ticked(" feral ") == true, "unassigned: with the set's own switch, on as it was")
+
     -- The player's own tie comes first, and the spec is one without a set again.
     own.Icon.GearSetScales[41] = OWN
     Reread()

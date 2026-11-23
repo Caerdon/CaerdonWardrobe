@@ -2004,6 +2004,24 @@ if C_EquipmentSet and type(C_EquipmentSet.DeleteEquipmentSet) == "function" then
     end)
 end
 
+-- A spec given to a gear set in the character window, or taken from it, comes with no event
+-- (retail 12.1.5: no EQUIPMENT_SETS_CHANGED in two sessions that did both), and it changes
+-- which scale a set is scored on and which sets go by their names. So the client's two
+-- functions for it are watched as its delete function is, and the refresh is one about what
+-- is worn: what the client said about the sources of a look stands.
+local function OnSpecAssignment()
+    if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
+        CaerdonWardrobe:RefreshItems("gear sets", "a spec given to a set or taken from it", "worn")
+    end
+end
+local assignHooked, unassignHooked = false, false
+if C_EquipmentSet and type(C_EquipmentSet.AssignSpecToEquipmentSet) == "function" then
+    assignHooked = pcall(hooksecurefunc, C_EquipmentSet, "AssignSpecToEquipmentSet", OnSpecAssignment)
+end
+if C_EquipmentSet and type(C_EquipmentSet.UnassignEquipmentSetSpec) == "function" then
+    unassignHooked = pcall(hooksecurefunc, C_EquipmentSet, "UnassignEquipmentSetSpec", OnSpecAssignment)
+end
+
 -- The gear sets tied to a scale, as loadouts (both clients; after the client's own ties have
 -- been read, and what the set worn is).
 --   The set being worn (loadouts.activeSet): what is worn is its loadout, on its scale, named
@@ -3928,8 +3946,10 @@ function CaerdonEquipment:GetGearSetScaleDescription()
     if #parts == 0 then
         return nil
     end
-    return format("%s (a deleted set's tie goes with it: %s)", table.concat(parts, "; "),
-        deleteHooked and "yes" or "no, the client's delete function could not be hooked")
+    return format("%s (a deleted set's tie goes with it: %s) (a spec given to a set or taken from it is heard: %s)",
+        table.concat(parts, "; "),
+        deleteHooked and "yes" or "no, the client's delete function could not be hooked",
+        assignHooked and unassignHooked and "yes" or "no, the client's functions for it could not be hooked")
 end
 
 -- For the settings page: the toon's gear sets in the client's order, each with the scale the

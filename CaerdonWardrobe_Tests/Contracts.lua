@@ -1114,21 +1114,26 @@ T.Contract({
 -- The addon keeps the client's "Already known" line off the tooltip of an ensemble that still
 -- teaches something (features/Tooltip.lua, OnRequirementLine), and knows that line by its
 -- requirement type, where it used to compare the text on the tooltip's font string. So the
--- two have to name the same line in a client: a line is a requirement line of the kind
--- NotAlreadyKnown exactly where its text is ITEM_SPELL_KNOWN. Asked of both tooltips, the
--- slot's and the link's, of every item in the bags. What was seen is kept and added to over
--- the runs, and beside it every bag item that teaches a transmog set: is the set collected,
--- how many of its sources are not, does its tooltip say known. A toon that carries nothing it
--- already knows answers for no line, and its result says so.
+-- kind has to hold every line with that text in a client: a line whose text is
+-- ITEM_SPELL_KNOWN is a requirement line of the kind NotAlreadyKnown. Not the other way
+-- round: retail writes other words on a line of the kind ("Already Known" on a cosmetic piece
+-- whose look is collected, seen in 12.1.5), so such a line's words are kept with its item and
+-- not checked. Asked of both tooltips, the slot's and the link's, of every item in the bags.
+-- What was seen is kept and added to over the runs, and beside it every bag item that teaches
+-- a transmog set: is the set collected, how many of its sources are not, does its tooltip say
+-- known. A toon that carries nothing with the client's words for a spell it knows answers for
+-- no such line, and its result says so.
 
 local function MergeKnownLines(old, new)
     local merged = old
-    for _, key in ipairs({ "items", "knownLines" }) do
+    for _, key in ipairs({ "items", "knownLines", "spellKnownLines" }) do
         merged[key] = (old[key] or 0) + (new[key] or 0)
     end
-    merged.seen = merged.seen or {}
-    for shape, count in pairs(new.seen or {}) do
-        merged.seen[shape] = (merged.seen[shape] or 0) + count
+    for _, key in ipairs({ "seen", "otherWords" }) do
+        merged[key] = merged[key] or {}
+        for shape, count in pairs(new[key] or {}) do
+            merged[key][shape] = (merged[key][shape] or 0) + count
+        end
     end
     merged.ensembles = merged.ensembles or {}
     for itemID, entry in pairs(new.ensembles or {}) do
@@ -1139,8 +1144,8 @@ end
 
 T.Contract({
     id = "tooltip.alreadyKnown",
-    version = 1,
-    title = "The \"Already known\" line is a requirement line of its own kind, and nothing else is",
+    version = 2,
+    title = "The \"Already known\" text is on a requirement line of its own kind",
     accumulate = true,
     merge = MergeKnownLines,
     run = function(c)
@@ -1156,7 +1161,7 @@ T.Contract({
         local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
         c:Check(type(ITEM_SPELL_KNOWN) == "string", "ITEM_SPELL_KNOWN is a %s", TypeOf(ITEM_SPELL_KNOWN))
 
-        local knownLines, seen, ensembles = 0, {}, {}
+        local knownLines, spellKnownLines, seen, otherWords, ensembles = 0, 0, {}, {}, {}
         -- Whether the tooltip has the line, by its kind or by its text.
         local function Read(side, data, itemID)
             local says = false
@@ -1174,8 +1179,12 @@ T.Contract({
                     c:Check(line.type == REQUIREMENT and kind == KNOWN,
                         "item %d, the %s's tooltip: the text \"%s\" is on a line of type %s with requirement type %s", itemID,
                         side, tostring(text), tostring(line.type), tostring(kind))
-                    c:Check(text == ITEM_SPELL_KNOWN,
-                        "item %d, the %s's tooltip: a line of the kind NotAlreadyKnown says \"%s\"", itemID, side, tostring(text))
+                    if text == ITEM_SPELL_KNOWN then
+                        spellKnownLines = spellKnownLines + 1
+                    else
+                        local words = ("\"%s\" on item %d"):format(tostring(text), itemID)
+                        otherWords[words] = (otherWords[words] or 0) + 1
+                    end
                 end
             end
             return says
@@ -1213,10 +1222,14 @@ T.Contract({
         end
         c:Note("items", #slots)
         c:Note("knownLines", knownLines)
+        c:Note("spellKnownLines", spellKnownLines)
         c:Note("seen", seen)
+        c:Note("otherWords", otherWords)
         c:Note("ensembles", ensembles)
         if knownLines == 0 then
             return "info", "nothing in these bags is already known: no such line was asked"
+        elseif spellKnownLines == 0 then
+            return "info", "the bags have lines of the kind, none with the client's words for a spell that is known"
         end
     end,
 })

@@ -496,9 +496,26 @@ return function(H, S)
             Fault(ID, "the words on a requirement line of another kind", function() line.requirementType = LEVEL end,
                 function() line.requirementType = KNOWN end,
                 "the text \"Already known\" is on a line of type 43 with requirement type 5")
-            Fault(ID, "other words on a line of the kind", function() line.text = "Known already" end,
-                function() line.text = KNOWN_TEXT end, "a line of the kind NotAlreadyKnown says \"Known already\"")
             Equal(Run(ID).status, "pass", flavor .. ", " .. ID .. ": and passes again without a fault")
+
+            -- Other words on a line of the kind are no fault: retail writes "Already Known" on
+            -- a cosmetic piece whose look is collected. They are kept by what they say.
+            line.text = "Already Known"
+            result = Run(ID, true)
+            Equal(result.status, "pass", flavor .. ", " .. ID .. ": other words on a line of the kind are no fault (" .. tostring(result.message) .. ")")
+            detail = result.detail or {}
+            Equal(detail.knownLines, 6, flavor .. ", " .. ID .. ": the line counts as one of the kind")
+            Equal(detail.spellKnownLines, 4, flavor .. ", " .. ID .. ": and not as one with the client's words for a spell")
+            Equal((detail.otherWords or {})["\"Already Known\" on item " .. BOOK], 2, flavor .. ", " .. ID .. ": its words are kept with its item")
+            result = Run(ID)
+            Equal(((result.detail or {}).otherWords or {})["\"Already Known\" on item " .. BOOK], 4, flavor .. ", " .. ID .. ": and added to by a second run")
+            world.bag = { PEBBLE, BOOK, GLOVES }
+            result = Run(ID, true)
+            Equal(result.status, "info", flavor .. ", " .. ID .. ": bags with other words alone say nothing of the client's words")
+            Equal((result.detail or {}).spellKnownLines, 0, flavor .. ", " .. ID .. ": and count none of them")
+            line.text = KNOWN_TEXT
+            world.bag = { PEBBLE, BOOK, OPEN, DONE, GLOVES }
+            Equal(Run(ID, true).status, "pass", flavor .. ", " .. ID .. ": and with the client's words back it passes")
         end
 
         -- tooltip.linePreCall: a callback of an addon's is asked, and obeyed.

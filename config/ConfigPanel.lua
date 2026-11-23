@@ -83,6 +83,8 @@ local function GetValue(info)
     return value
 end
 
+local written = { count = 0, last = nil }
+
 local function SetValue(info, value)
     local root
     if info.perCharacter then
@@ -95,14 +97,28 @@ local function SetValue(info, value)
         root = CaerdonWardrobeConfig
     end
     GetSection(root, info, true)[info.configValue] = value
+    -- For the refresh's reason: which value the click wrote, and how many more with it.
+    local name = tostring(info.configSection)
+    if info.configSubsection ~= nil then
+        name = name .. "." .. tostring(info.configSubsection)
+    end
+    written.count = written.count + 1
+    written.last = string.format("%s.%s = %s%s", name, tostring(info.configValue), tostring(value),
+        info.perCharacter and ", this toon's" or "")
 end
 
 -- The player changed something on a page: the icons follow at once, with the windows that are
 -- open behind the settings. Once per click, whatever number of values the click wrote. (The
--- settings window's own "commit" comes only as it closes.)
+-- settings window's own "commit" comes only as it closes.) The refresh names the value
+-- written, so that a session's record says which option was clicked and when.
 local function Changed()
+    local detail = written.last
+    if detail and written.count > 1 then
+        detail = string.format("%s, and %d more", detail, written.count - 1)
+    end
+    written.count, written.last = 0, nil
     if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-        CaerdonWardrobe:RefreshItems("settings")
+        CaerdonWardrobe:RefreshItems("settings", detail)
     end
 end
 

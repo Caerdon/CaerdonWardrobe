@@ -384,7 +384,7 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         end
         NS:LoadCharacterConfig()
 
-        CaerdonWardrobe:RefreshItems("settings")
+        CaerdonWardrobe:RefreshItems("settings", "the saved settings were loaded")
     end
 end
 
@@ -435,8 +435,11 @@ end
 
 function CaerdonWardrobeConfigMixin:OnSave()
     -- Make sure that errors aren't swallowed for InterfaceOption callbacks
+    -- A click has refreshed already (the page's own, which names the value it wrote); this one
+    -- is the settings window's own commit, which comes as it shuts, and says so: a session's record
+    -- tells the two apart.
     xpcall(function()
-        CaerdonWardrobe:RefreshItems("settings")
+        CaerdonWardrobe:RefreshItems("settings", "the settings window's commit")
     end, geterrorhandler())
 end
 
