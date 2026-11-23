@@ -8,7 +8,6 @@ end
 -- TODO: Look into ScrollUtil.AddAcquiredFrameCallback and friends for all the ScrollBox integrations
 function AuctionMixin:Init(frame)
 	self.waitingForItemKeyInfo = {}
-	self.auctionContinuableContainer = ContinuableContainer:Create()
 	self.shouldHookAuction = true
 
 	return {

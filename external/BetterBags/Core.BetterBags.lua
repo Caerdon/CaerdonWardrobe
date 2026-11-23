@@ -384,6 +384,9 @@ function BetterBagsGuildBankMixin:Refresh()
 
     for guildButton in pairs(trackedGuildButtons) do
         -- Pooled buttons and free slots have no item; BetterBags draws them again when they do.
+        -- Shown, not on screen: BetterBags lets go of every button when the visit ends, so
+        -- none here is of a closed guild bank, and a panel that a hidden parent took off
+        -- screen (the interface hidden) is not drawn again when it comes back.
         if GetGuildTabAndSlot(guildButton) and guildButton.frame and guildButton.frame:IsShown() then
             self:UpdateGuildButton(guildButton)
         end

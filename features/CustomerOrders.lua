@@ -9,8 +9,6 @@ end
 CustomerOrdersMixin.statusRules = { otherSpec = true, noLoot = true }
 
 function CustomerOrdersMixin:Init(frame)
-	self.orderContinuableContainer = ContinuableContainer:Create()
-
 	self:WhenAddOnLoaded("Blizzard_ProfessionsCustomerOrders", self.OnCustomerOrdersLoaded)
 	return {}
 end

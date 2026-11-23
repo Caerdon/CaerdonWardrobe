@@ -150,29 +150,6 @@ function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
     end
 end
 
-function EncounterJournalMixin:OnConfigureItemButton(button)
-    local options = {
-        relativeFrame = button.icon,
-        statusOffsetX = 8,
-        statusOffsetY = 7
-    }
-
-    -- TODO: Confirm once this is turned on and check if button has an index instead.
-    -- local itemLink = button.itemLink
-    if button.itemID then
-        local _, itemLink, itemQuality = C_Item.GetItemInfo(button.itemID);
-        -- print(itemLink)
-        if itemLink then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
-            CaerdonWardrobe:UpdateButton(button, item, self, {
-                locationKey = format("itemSets%d", button.itemID)
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(button)
-        end
-    end
-end
-
 function EncounterJournalMixin:OnEncounterJournalUpdateSearchPreview()
     if not EncounterJournal.searchBox:IsCurrentTextValidForSearch() then
         return;

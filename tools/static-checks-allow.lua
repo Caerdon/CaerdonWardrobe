@@ -64,7 +64,6 @@ return {
         Questie = "Questie",
         QuestieLoader = "Questie",
         VWQL = "World Quests List",
-        WQT_REWARDTYPE = "World Quest Tracker",
         WorldQuestList = "World Quests List",
         WorldQuestTrackerAddon = "World Quest Tracker",
         ZygorGuidesViewer = "Zygor Guides Viewer",

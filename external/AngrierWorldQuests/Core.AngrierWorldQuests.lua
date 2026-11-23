@@ -46,7 +46,6 @@ function AngrierWorldQuestsMixin:OnQuestLog_Update()
 	
 		local pool = headerButton.titleFramePool
 
-		local count = 1
 		for button in pool:EnumerateActive() do
 			local options = {
 				fixedLayout = true,
@@ -82,7 +81,7 @@ function AngrierWorldQuestsMixin:OnQuestLog_Update()
 					else
 						local item = CaerdonItem:CreateFromItemLink(itemLink)
 						CaerdonWardrobe:UpdateButton(button, item, self, { 
-							locationKey = format("button%dquest%d", count, questID),
+							locationKey = format("quest%d", questID),
 							questID = questID,
 							questItem
 						}, options)
