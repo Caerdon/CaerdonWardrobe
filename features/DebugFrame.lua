@@ -3074,11 +3074,14 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             elseif not cannotHandOver then
                 addKV(1, "Other Toons", "none of this realm has a record")
             end
-            local sendStatus = item.GetLearnerStatus and item:GetLearnerStatus(teaching.answer) or nil
+            local sendStatus = item.GetLearnerStatus and item:GetLearnerStatus(teaching.answer, bindingResult) or nil
             addKV(1, "Mail Icon By This Rule", sendStatus and "yes" or
                 (teaching.status and "no: this toon can learn it itself") or
                 (CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == false and "no: switched off") or
                 (cannotHandOver and "no: it cannot be handed over") or
+                (bindingResult and bindingResult.spareCopies and string.format(
+                    "no: this toon has %d to send already, for the %d that could learn it",
+                    bindingResult.spareCopies.spare, bindingResult.spareCopies.wanting)) or
                 (learners and #learners.covered > 0 and "no: every toon that could learn it has a copy or one on its way") or
                 "no: no other toon said it can learn it")
             local learnerState = CaerdonLearners and CaerdonLearners.GetDebugState and CaerdonLearners:GetDebugState() or nil
@@ -3113,11 +3116,12 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "This Is A Copy It Holds", item.IsOwnCopy and item:IsOwnCopy() or false)
         addKV(1, "Star Held Back For A Copy It Has", (bindingResult and bindingResult.ownCopies) and "yes" or "no")
         addKV(1, "This Toon's Ledger", string.format(
-            "%d kinds asked about, %d in the bags, %d in the bank, %d in the mailbox (%s%s), %d on their way; this session: bags read %d times, mailbox %d, %d mails noted with %d kinds, %d bought, %d refreshes",
+            "%d kinds asked about, %d in the bags, %d in the bank, %d in the mailbox (%s%s), %d on their way; this session: bags read %d times, mailbox %d (%d copies taken out of a mail were seen in the bags, %.2f s after at the latest; %d never were), %d mails noted with %d kinds, %d bought, %d refreshes",
             ledgerState.askedItems, ledgerState.bagItems, ledgerState.bankItems, ledgerState.mailItems,
             ledgerState.mailSeen and ("read " .. date("%Y-%m-%d %H:%M", ledgerState.mailSeen)) or "never read",
             ledgerState.mailPartial and ", a part of it shown" or "", ledgerState.sentItems,
-            ledgerState.bagReads, ledgerState.mailReads, ledgerState.sends, ledgerState.noted,
+            ledgerState.bagReads, ledgerState.mailReads, ledgerState.landed or 0, ledgerState.landingSlowest or 0,
+            ledgerState.landingLost or 0, ledgerState.sends, ledgerState.noted,
             ledgerState.bought, ledgerState.refreshes))
         addKV(1, "Bank Window", BankFrame and BankFrame:IsShown() and "open" or "closed")
         addKV(1, "Client's Count Of It", string.format("%s in the bags, %s with the bank, %s with the reagent bank too, %s with the account's bank too",
@@ -3261,6 +3265,11 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Show Recipes For Other Toons", CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons ~= false)
             addKV(1, "Show Recipe Learners In Tooltip",
                 not (CaerdonWardrobeConfig.Tooltip and CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == false))
+            if bindingResult and bindingResult.spareCopies then
+                addKV(1, "Mail Icon Held Back", string.format(
+                    "this toon has %d to send already, for the %d other toons that could learn it and have none",
+                    bindingResult.spareCopies.spare, bindingResult.spareCopies.wanting))
+            end
         end
     end
 

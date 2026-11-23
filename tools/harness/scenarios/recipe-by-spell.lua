@@ -29,6 +29,11 @@ return function(H, S)
     -- Smoky 11827 has 15049 "Summon Robot" and then 15633, the recipe). The list words the
     -- recipe another way than the item, so only the spell finds it.
     local PET_ID, PET_SUMMON_SPELL, PET_RECIPE_SPELL = 992008, 71008, 71009
+    -- A recipe's higher rank, which the toon cannot learn before the rank below it. The
+    -- client's line for that is an error line on retail 12.1.5 (Recipe: Famine Evaluator And
+    -- Snack Table 170211, rank 3); it is asked here as that and as an untyped line.
+    local RANK_ERROR_ID, RANK_PLAIN_ID, RANK_SPELL = 992009, 992010, 71010
+    local ERROR_LINE = 41
 
     local function Recipe(name, spell, lineType)
         local tooltip = { { text = "Binds when picked up", type = 20, bonding = 6 } }
@@ -49,6 +54,7 @@ return function(H, S)
         [PLAIN_SPELL] = "Plain Potion",
         [PET_SUMMON_SPELL] = "Summon Test Pet",
         [PET_RECIPE_SPELL] = "Test Pet Crate",
+        [RANK_SPELL] = "Ranked Feast",
     }
 
     local function Start(flavor)
@@ -64,6 +70,12 @@ return function(H, S)
         }
         table.insert(items[PET_ID].tooltip, 2,
             { text = "Use: Teaches you how to summon this companion.", type = LEARN_LINE, spellID = PET_SUMMON_SPELL })
+        items[RANK_ERROR_ID] = Recipe("Recipe: Ranked Feast", RANK_SPELL)
+        table.insert(items[RANK_ERROR_ID].tooltip, 3,
+            { text = "Requires Previous Rank", type = ERROR_LINE, r = 1, g = 0.125, b = 0.125 })
+        items[RANK_PLAIN_ID] = Recipe("Recipe: Ranked Feast", RANK_SPELL)
+        table.insert(items[RANK_PLAIN_ID].tooltip, 3,
+            { text = "Requires Previous Rank", type = 0, r = 1, g = 0.125, b = 0.125 })
         local saved = {
             CaerdonProfessionData = { Farrealm = {
                 Zzyxa = { Alchemy = { skillLevel = 120 } },
@@ -245,6 +257,33 @@ return function(H, S)
         info = data:GetRecipeInfo() or {}
         Check(info.foundBy == "spell" and info.recipeID == OLD_SPELL and info.learned == true,
             flavor .. ": with the line, the same item's recipe is the spell's")
+
+        -- A rank the toon cannot learn yet: the grey gear, not the star, whatever type the
+        -- client gives the line.
+        Equal(env.Enum.TooltipDataLineType.ErrorLine, ERROR_LINE, flavor .. ": the error line's type is the client's")
+        Equal(env.TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN, "Requires Previous Rank", flavor .. ": the client's line for a rank not yet to learn")
+        local skill = env.Enum.TooltipDataUsageRequirementType.Skill
+        for _, itemID in ipairs({ RANK_ERROR_ID, RANK_PLAIN_ID, REWORDED_ID }) do
+            for _, line in ipairs(items[itemID].tooltip) do
+                if line.type == REQUIREMENT_LINE then
+                    line.requirementType = skill
+                end
+            end
+        end
+        env.CaerdonWardrobe:RefreshItems("test")
+        client:Tick(20)
+        local function Status(itemID)
+            local item = Item(itemID)
+            local ready, status
+            client:TickUntil(function()
+                ready, status = item:GetCaerdonStatus()
+                return ready
+            end, 10)
+            return status
+        end
+        Equal(Status(REWORDED_ID), "own", flavor .. ": a recipe to learn has the star")
+        Equal(Status(RANK_ERROR_ID), "lowSkill", flavor .. ": a rank that needs the one before it has the grey gear, its line an error line")
+        Equal(Status(RANK_PLAIN_ID), "lowSkill", flavor .. ": and with its line untyped")
 
         Equal(#client.errors, 0, flavor .. ": no error reached the error handler (" .. tostring(client.errors[1]) .. ")")
         Check(#asked > 0, flavor .. ": the client was asked for recipe info")

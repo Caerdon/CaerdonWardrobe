@@ -57,7 +57,7 @@ Each later step only replaces the statuses listed, so an upgrade keeps its icon,
    A book or a rune that teaches this toon a spell it does not know (no profession's recipe: it asks for no skill) is `own`, `lowSkill` below its level, by the tooltip's own lines (notes: What an Item Teaches).
 3. Equippable junk becomes `sellable` (replaces empty). So does such a spent Quest-class item with no use, no slot and no equip effect (replaces empty, `oldexpansion`); one that a repeatable quest can still take ends as `quest` with `sellable` or `auction` as its small mark (notes: Quest Value).
 4. Bags against the bag slots: `own` / `lowSkill` or `sellable` (replaces empty, `oldexpansion`).
-   A recipe, book or rune it could learn and already has a copy of (bags, bank, mailbox, bought and not fetched) is `collected` on a copy it does not hold, and keeps its icon on the one it holds (notes: What an Item Teaches).
+   A recipe, book or rune it could learn and already has a copy of (bags, bank, mailbox, bought and not fetched) is `collected` on a copy it does not hold, and keeps its icon on the one it holds (notes: What an Item Teaches). The same holds for `send` in steps 5 and 7: a copy it does not hold has no mail icon once the toon has one for each toon that wants it.
 5. A book or a rune this toon has no use for (another class's, or learned) that can be handed over: `send` when another toon of the realm said it can learn it, now or at a later level, and has no copy the ledger knows of (replaces `collected`; notes: What an Item Teaches).
 6. Consumables for another class become `sellable` (replaces empty, `collected`).
 7. Recipes this toon has no use for: `send` / `sellable` (replaces `collected`).

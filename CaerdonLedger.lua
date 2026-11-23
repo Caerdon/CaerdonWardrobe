@@ -175,7 +175,52 @@ end
 -- The toon that is played: its bags and its mailbox
 ------------------------------------------------------------------------------------------
 
-local stats = { bagReads = 0, mailReads = 0, sends = 0, noted = 0, bought = 0, refreshes = 0 }
+local stats = { bagReads = 0, mailReads = 0, sends = 0, noted = 0, bought = 0, refreshes = 0,
+    landed = 0, landingSlowest = 0, landingLost = 0 }
+
+-- A copy taken out of a mail is between the mailbox and the bags for a while: the mailbox
+-- shows it gone before the bags have it, and a reading of the bags a second later did not
+-- have it either (a retail client). Counted nowhere, it would be a copy the toon lost and
+-- found again, and everything would be judged again twice for each one taken. So it is
+-- counted as on its way until the client's count of the bags has risen, and for
+-- LANDING_SECONDS at most: a mail that went with its copy (sent back, deleted) never lands.
+--   landing[itemID] = { count, at = GetTime(), bags = the client's count when it left the mail }
+local LANDING_SECONDS = 10
+local landing = {}
+
+-- How many copies of an item are still on their way from a mail into the bags, given the
+-- client's count of the bags now.
+local function StillLanding(itemID, inBags)
+    local entry = landing[itemID]
+    if not entry then
+        return 0
+    end
+    local waited = GetTime() - entry.at
+    if inBags > entry.bags then
+        landing[itemID] = nil
+        stats.landed = stats.landed + 1
+        stats.landingSlowest = math.max(stats.landingSlowest, waited)
+        return 0
+    elseif waited >= LANDING_SECONDS then
+        landing[itemID] = nil
+        stats.landingLost = stats.landingLost + 1
+        return 0
+    end
+    return entry.count
+end
+
+-- The items whose count a verdict was made from, and not only whether the toon has one
+-- (NoteCountJudged): for these a changed count judges again.
+local countJudged = {}
+
+-- A verdict compared how many copies the toon has of an item with how many of its other toons
+-- want one (CaerdonItem.lua: a copy it does not hold is no longer one to send once it has
+-- enough).
+function CaerdonLedger:NoteCountJudged(itemID)
+    if type(itemID) == "number" then
+        countJudged[itemID] = true
+    end
+end
 
 -- The client's count of an item in the bags, and in the bank and the reagent bank.
 local function ClientCounts(itemID)
@@ -184,7 +229,7 @@ local function ClientCounts(itemID)
     return bags, math.max(all - bags, 0)
 end
 
--- Which of the counted items the toon has a copy of at all, as of the last look (CheckHeld).
+-- How many of each counted item the toon has, wherever, as of the last look (CheckHeld).
 local lastHeld
 
 -- What the toon that is played has of an item, wherever: asked of the client for the bags and
@@ -204,7 +249,8 @@ function CaerdonLedger:GetOwnCopies(itemID)
     copies.bags, copies.bank = ClientCounts(itemID)
     local record = OwnRecord()
     if record then
-        copies.mail = tonumber(record.mail[itemID]) or 0
+        -- One taken out of a mail and not in the bags yet is said to be in the mailbox still.
+        copies.mail = (tonumber(record.mail[itemID]) or 0) + StillLanding(itemID, copies.bags)
         copies.coming = PendingSent(record.sent[itemID], time())
     end
     copies.total = copies.bags + copies.bank + copies.mail + copies.coming
@@ -214,7 +260,7 @@ function CaerdonLedger:GetOwnCopies(itemID)
         record.bank[itemID] = copies.bank > 0 and copies.bank or nil
         -- Known from here on, so the next reading does not take it for a change.
         if lastHeld then
-            lastHeld[itemID] = copies.total > 0 or nil
+            lastHeld[itemID] = copies.total > 0 and copies.total or nil
         end
     end
     return copies
@@ -222,7 +268,8 @@ end
 
 -- A verdict was made from which items the toon has a copy of (a second copy has no star),
 -- so the items are judged again when that is no longer so for one of them; a copy moved from
--- the bags to the bank changes nothing.
+-- the bags to the bank, or from a mail into the bags, changes nothing. How many it has
+-- matters only for an item a verdict counted (NoteCountJudged).
 local function CheckHeld(why)
     local record = OwnRecord()
     if not record then
@@ -230,42 +277,63 @@ local function CheckHeld(why)
     end
     local now = time()
     local held = {}
+    local function Add(itemID, count)
+        count = tonumber(count) or 0
+        if count > 0 then
+            held[itemID] = (held[itemID] or 0) + count
+        end
+    end
+    -- First what is between a mail and the bags: one that has landed since the bags were
+    -- last read is in the client's count and not yet in the record's.
+    for itemID in pairs(landing) do
+        local inBags = ClientCounts(itemID)
+        local flying = StillLanding(itemID, inBags)
+        if flying > 0 then
+            Add(itemID, flying)
+        else
+            record.bags[itemID] = inBags > 0 and inBags or nil
+        end
+    end
     for _, counts in ipairs({ record.bags, record.bank, record.mail }) do
         for itemID, count in pairs(counts) do
-            if (tonumber(count) or 0) > 0 then
-                held[itemID] = true
-            end
+            Add(itemID, count)
         end
     end
     for itemID, notes in pairs(record.sent) do
-        if PendingSent(notes, now) > 0 then
-            held[itemID] = true
-        end
+        Add(itemID, PendingSent(notes, now))
     end
     local before = lastHeld
     lastHeld = held
     if not before then
         return
     end
-    local changed
-    for itemID in pairs(held) do
+    -- One that came or went altogether is named before one whose count changed.
+    local changed, counted
+    for itemID, count in pairs(held) do
         if not before[itemID] then
-            changed = itemID
+            changed, counted = itemID, false
             break
+        elseif before[itemID] ~= count and countJudged[itemID] and not changed then
+            changed, counted = itemID, true
         end
     end
-    if not changed then
+    if not changed or counted then
         for itemID in pairs(before) do
             if not held[itemID] then
-                changed = itemID
+                changed, counted = itemID, false
                 break
             end
         end
     end
     if changed and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
         stats.refreshes = stats.refreshes + 1
-        CaerdonWardrobe:RefreshItems("copies held", string.format("item %d: %s (%s)", changed,
-            held[changed] and "the toon has one now" or "the toon has none now", why))
+        local what
+        if counted then
+            what = string.format("the toon has %d now, had %d", held[changed], before[changed])
+        else
+            what = held[changed] and "the toon has one now" or "the toon has none now"
+        end
+        CaerdonWardrobe:RefreshItems("copies held", string.format("item %d: %s (%s)", changed, what, why))
     end
 end
 
@@ -350,15 +418,22 @@ local function ReadMailbox()
     if not record.mailPartial then
         record.sent = {}
     end
-    -- A copy taken out of a mail is on its way into the bags, and the mailbox's event can come
-    -- before the bags' reading has it. Judged here, the toon would have none for a moment and
-    -- everything would be judged again for that; so the bags are read first, and that reading
-    -- judges both.
+    -- A copy the mailbox no longer shows is on its way into the bags (landing, above). The
+    -- bags are read once more when it can no longer be, which is when a mail that went with
+    -- its copy is found out.
+    local took = false
     for itemID, count in pairs(before) do
-        if (tonumber(counts[itemID]) or 0) < (tonumber(count) or 0) then
-            ReadBagsSoon()
-            return
+        local fewer = (tonumber(count) or 0) - (tonumber(counts[itemID]) or 0)
+        if fewer > 0 then
+            local entry = landing[itemID]
+            landing[itemID] = { count = (entry and entry.count or 0) + fewer, at = GetTime(),
+                bags = entry and entry.bags or ClientCounts(itemID) }
+            took = true
         end
+    end
+    if took then
+        ReadBagsSoon()
+        C_Timer.After(LANDING_SECONDS + 0.1, ReadBagsSoon)
     end
     CheckHeld("the mailbox was read")
 end
@@ -562,7 +637,9 @@ function CaerdonLedger:GetDebugState()
         return items
     end
     return {
-        bagReads = stats.bagReads, mailReads = stats.mailReads, sends = stats.sends, noted = stats.noted,
+        bagReads = stats.bagReads, mailReads = stats.mailReads,
+        landed = stats.landed, landingSlowest = stats.landingSlowest, landingLost = stats.landingLost,
+        sends = stats.sends, noted = stats.noted,
         bought = stats.bought, refreshes = stats.refreshes,
         askedItems = record and Count(record.asked) or 0,
         bankItems = record and Count(record.bank) or 0,

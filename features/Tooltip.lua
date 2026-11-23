@@ -405,8 +405,9 @@ end
 
 -- A copy the toon does not hold of something it could learn and already has a copy of: why
 -- it has no star (CaerdonItem.lua, GetCaerdonStatus: bindingResult.ownCopies), and where the
--- copy is. Not on the copy it holds: a tooltip filled from a copy of the toon's own names it
--- (the data's guid), and then nothing is asked.
+-- copy is. And of something its other toons could learn, once it has a copy for each of them:
+-- why it has no mail icon (bindingResult.spareCopies). Not on the copy it holds: a tooltip
+-- filled from a copy of the toon's own names it (the data's guid), and then nothing is asked.
 -- Tooltip.ShowRecipeLearners turns it off with the lines that name other toons.
 function TooltipMixin:AddOwnCopies(tooltip, item)
     local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
@@ -421,13 +422,23 @@ function TooltipMixin:AddOwnCopies(tooltip, item)
         return
     end
     local isReady, _, _, bindingResult = item:GetCaerdonStatus()
-    local copies = isReady and bindingResult and bindingResult.ownCopies or nil
-    if not copies then
+    if not (isReady and bindingResult) then
         return
     end
-    local where = (copies.bags > 0 and L["in your bags"]) or (copies.bank > 0 and L["in your bank"]) or
-        (copies.mail > 0 and L["in your mailbox"]) or L["on its way to your mailbox"]
-    tooltip:AddLine(format(L["You already have one to learn (%s)"], where), 0.6, 0.6, 0.6, true)
+    local function Where(copies)
+        return (copies.bags > 0 and L["in your bags"]) or (copies.bank > 0 and L["in your bank"]) or
+            (copies.mail > 0 and L["in your mailbox"]) or L["on its way to your mailbox"]
+    end
+    local copies = bindingResult.ownCopies
+    if copies then
+        tooltip:AddLine(format(L["You already have one to learn (%s)"], Where(copies)), 0.6, 0.6, 0.6, true)
+    end
+    local spare = bindingResult.spareCopies
+    if spare and spare.spare == 1 and not copies then
+        tooltip:AddLine(format(L["You already have one to send (%s)"], Where(spare)), 0.6, 0.6, 0.6, true)
+    elseif spare then
+        tooltip:AddLine(format(L["You already have %d to send"], spare.spare), 0.6, 0.6, 0.6, true)
+    end
 end
 
 -- A piece of equipment that would be an upgrade: for what is worn (the yellow arrow), and for

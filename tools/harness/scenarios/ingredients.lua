@@ -756,6 +756,19 @@ return function(H, S)
             Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send", "ledger: one sent longer ago than a mail lives does not")
             rawset(world.env, "CaerdonLedgerData", nil)
             Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send", "rank: at the rank it asks for it is one to send")
+            -- Enough to send: this toon has a copy on its way for the one toon that lacks it,
+            -- so a copy it does not hold is left as it is, and is no spare to sell either. A
+            -- copy it keeps to learn itself is not one of those to send.
+            local ownName = world.env.UnitName("player")
+            rawset(world.env, "CaerdonLedgerData", { [realmKey] = { [ownName] = { bags = {}, bank = {}, mail = {}, asked = {},
+                sent = { [PATTERN] = { { count = 1, at = world.env.time(), from = "the auction house" } } } } } })
+            local verdict = { alreadyKnown = true }
+            Equal(pattern:GetUnneededRecipeStatus(verdict), nil, "enough: with a copy for the one toon that lacks it, another is not one to get")
+            Check(verdict.spareCopies ~= nil and verdict.spareCopies.spare == 1 and verdict.spareCopies.wanting == 1,
+                "enough: and the verdict says what it has for whom")
+            verdict = { alreadyKnown = false, ownCopies = world.env.CaerdonLedger:GetOwnCopies(PATTERN) }
+            Equal(pattern:GetUnneededRecipeStatus(verdict), "send", "enough: the copy it keeps to learn itself is not one to send")
+            rawset(world.env, "CaerdonLedgerData", nil)
             -- A skill the toon has no saved rank for is not held against it.
             ITEMS[PATTERN].tooltip = { { text = "Requires Outland Cooking (50)", type = lineTypes.UsageRequirement, requirementType = SKILL } }
             Equal(pattern:GetUnneededRecipeStatus({ alreadyKnown = true }), "send",

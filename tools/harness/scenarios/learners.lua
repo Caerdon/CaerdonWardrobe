@@ -503,6 +503,16 @@ return function(H, S)
         hunterWorld.inbox = {}
         hunter:Fire("MAIL_INBOX_UPDATE")
         Equal(#reasons, 3, label .. "taken: the mailbox without it is not judged before the bags are read")
+        -- The mailbox's event can come again for the one copy taken, before the bags are read
+        -- (a retail client: the second event found the mailbox as the first had left it,
+        -- compared, and the toon had none).
+        hunter:Fire("MAIL_INBOX_UPDATE")
+        Equal(#reasons, 3, label .. "taken: nor at a second event of the mailbox's before the bags are read")
+        -- And the bags can be read before the copy is in them (the same client: a reading a
+        -- second after the mailbox's event had none, the next one had it).
+        hunter:Tick(3, 1)
+        Equal(#reasons, 3, label .. "taken: nor at a reading of the bags that comes before the copy")
+        Equal(hunter.env.CaerdonLedger:GetOwnCopies(HIGH_HUNTER_BOOK).total, 1, label .. "taken: on its way it is still a copy the toon has")
         hunterWorld.bags = { HIGH_HUNTER_BOOK }
         hunter:Fire("BAG_UPDATE_DELAYED")
         hunter:Tick(4, 1)
@@ -519,6 +529,8 @@ return function(H, S)
         hunter:Fire("MAIL_INBOX_UPDATE")
         Equal(#reasons, 3, label .. "taken: a mail gone with its copy is not judged at the mailbox's event")
         hunter:Tick(4, 1)
+        Equal(#reasons, 3, label .. "taken: nor while its copy could still be on its way into the bags")
+        hunter:Tick(10, 1)
         Equal(reasons[4], "copies held: item " .. HIGH_HUNTER_BOOK .. ": the toon has none now (the bags and the bank were read)",
             label .. "taken: but once the bags were read and have none, and it says why")
         Equal(#reasons, 4, label .. "taken: once")
@@ -551,5 +563,78 @@ return function(H, S)
         Equal(status, "collected", label .. "bank: a copy in the mage's bank is no reason to send it another")
         Equal(#hunter.errors + #mage.errors, 0, label .. "no error with own copies (" .. tostring(hunter.errors[1] or mage.errors[1]) .. ")")
         Equal(#mage.errors + #hunter.errors, 0, label .. "no error with the ledger (" .. tostring(mage.errors[1] or hunter.errors[1]) .. ")")
+
+        -- 9. Enough to send. A copy the toon does not hold of something its other toons could
+        --    learn has the mail icon until it has a copy for each of them; the copies it holds
+        --    keep it (a retail client: a recipe bought for the one other toon, and the mail
+        --    icon stayed on every other listing).
+        hunter, known, hunterWorld, namespace = Login(flavor, HUNTER, emptyBags)
+        core = hunter.env.CaerdonWardrobe
+        reasons = {}
+        plainRefresh = core.RefreshItems
+        core.RefreshItems = function(self, reason, detail, ...)
+            reasons[#reasons + 1] = tostring(reason) .. ": " .. tostring(detail)
+            return plainRefresh(self, reason, detail, ...)
+        end
+        Equal(Status(hunter, MAGE_BOOK), "send", label .. "enough: with none, a book the mage could learn is one to get for it")
+        hunterWorld.auctions = { [601] = MAGE_BOOK }
+        hunter.env.C_AuctionHouse.PlaceBid(601, 100)
+        hunter:Fire("AUCTION_HOUSE_PURCHASE_COMPLETED", 601)
+        Equal(reasons[1], "copies held: item " .. MAGE_BOOK .. ": the toon has one now (bought at the auction house)",
+            label .. "enough: buying one refreshes")
+        status, item = Status(hunter, MAGE_BOOK)
+        Equal(status, "collected", label .. "enough: with one bought for the one toon, another copy has no mail icon")
+        Equal(Held(hunter, MAGE_BOOK), "send", label .. "enough: the copy it holds keeps the mail icon")
+        ownLines = {}
+        ownTooltip.GetPrimaryTooltipData = function() return { lines = {} } end
+        namespace.Tooltip:AddOwnCopies(ownTooltip, item)
+        Equal(ownLines[1], "You already have one to send (on its way to your mailbox)", label .. "enough: and the other copy's tooltip says why")
+        Equal(#ownLines, 1, label .. "enough: in one line")
+        core.RefreshItems = plainRefresh
+
+        -- Three toons that lack it: two copies are not enough, the third is, and one gone is
+        -- too few again. The count is what the verdict was made from, so a count that changes
+        -- judges again.
+        hunter, known, hunterWorld, namespace = Login(flavor, HUNTER, crowd)
+        core = hunter.env.CaerdonWardrobe
+        reasons = {}
+        plainRefresh = core.RefreshItems
+        core.RefreshItems = function(self, reason, detail, ...)
+            reasons[#reasons + 1] = tostring(reason) .. ": " .. tostring(detail)
+            return plainRefresh(self, reason, detail, ...)
+        end
+        hunterWorld.bags = { MAGE_BOOK, MAGE_BOOK }
+        hunter:Fire("BAG_UPDATE_DELAYED")
+        hunter:Tick(4, 1)
+        Equal(Status(hunter, MAGE_BOOK), "send", label .. "enough: two copies for three toons, and another copy is still one to get")
+        local counted = #reasons
+        hunterWorld.auctions = { [602] = MAGE_BOOK }
+        hunter.env.C_AuctionHouse.PlaceBid(602, 100)
+        hunter:Fire("AUCTION_HOUSE_PURCHASE_COMPLETED", 602)
+        Equal(reasons[counted + 1], "copies held: item " .. MAGE_BOOK .. ": the toon has 3 now, had 2 (bought at the auction house)",
+            label .. "enough: a third copy refreshes, since the count was judged, and says so")
+        status, item = Status(hunter, MAGE_BOOK)
+        Equal(status, "collected", label .. "enough: three copies for three toons, and another copy has no mail icon")
+        Equal(Held(hunter, MAGE_BOOK), "send", label .. "enough: the copies it holds keep theirs")
+        ownLines = {}
+        namespace.Tooltip:AddOwnCopies(ownTooltip, item)
+        Equal(ownLines[1], "You already have 3 to send", label .. "enough: the tooltip says how many it has")
+        hunterWorld.bags = { MAGE_BOOK }
+        hunter:Fire("BAG_UPDATE_DELAYED")
+        hunter:Tick(4, 1)
+        Equal(reasons[counted + 2], "copies held: item " .. MAGE_BOOK .. ": the toon has 2 now, had 3 (the bags and the bank were read)",
+            label .. "enough: one gone refreshes")
+        Equal(Status(hunter, MAGE_BOOK), "send", label .. "enough: and another copy is one to get again")
+        -- An item nothing counted: a second copy changes nothing.
+        counted = #reasons
+        hunterWorld.bags = { MAGE_BOOK, HUNTER_RUNE, HUNTER_RUNE }
+        hunter:Fire("BAG_UPDATE_DELAYED")
+        hunter:Tick(4, 1)
+        hunterWorld.bags = { MAGE_BOOK, HUNTER_RUNE }
+        hunter:Fire("BAG_UPDATE_DELAYED")
+        hunter:Tick(4, 1)
+        Equal(#reasons, counted + 1, label .. "enough: of an item nothing counted, only the first copy refreshes")
+        core.RefreshItems = plainRefresh
+        Equal(#hunter.errors, 0, label .. "no error with enough to send (" .. tostring(hunter.errors[1]) .. ")")
     end
 end
