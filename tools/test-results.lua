@@ -1049,10 +1049,24 @@ local SIGHTING_CASES = { "openable", "locked", "readable", "readableForQuest", "
 -- What made item data leave the client's cache (/cwtest cache). A mark is where an item was
 -- first found gone: seconds while idle, items loaded since in the stream; "-" is one still
 -- there.
+local function printItemCacheEvictions(db)
+    local evictions = db.itemCacheEvictions or {}
+    if #evictions == 0 then
+        return
+    end
+    print("  Item cache emptied on purpose (/cwtest cache evict; newest last):")
+    for _, eviction in ipairs(evictions) do
+        print(("    %s  [%s, %s]  %s of %s worn pieces without data after %s other items; %s once the addon had refreshed with no window open"):format(
+            when(eviction.at), tostring(eviction.toon), tostring(eviction.build), tostring(eviction.gone), tostring(eviction.worn),
+            tostring(eviction.loaded), tostring(eviction.goneAfterRefresh)))
+    end
+end
+
 local function printItemCache(db)
     local runs = db.itemCache or {}
     if #runs == 0 then
         print("  Item cache: never measured (/cwtest cache)")
+        printItemCacheEvictions(db)
         return
     end
     print("  Item cache (what makes item data leave it; newest last):")
@@ -1142,6 +1156,7 @@ local function printItemCache(db)
                 tostring(back.frames), tostring(back.seconds)))
         end
     end
+    printItemCacheEvictions(db)
 end
 
 local function printSightings(db)

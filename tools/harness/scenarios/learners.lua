@@ -497,6 +497,31 @@ return function(H, S)
         Equal(#reasons, 3, label .. "bought: which changes nothing about having one")
         Equal(Status(hunter, HIGH_HUNTER_BOOK), "collected", label .. "bought: still no gear on another copy")
         Equal(Held(hunter, HIGH_HUNTER_BOOK), "lowSkill", label .. "bought: the copy in its own mailbox keeps its gear")
+        -- Taken out of the mail into the bags, the mailbox's event first: the toon has one
+        -- all along, and nothing is judged again (a WoW Forever client judged everything
+        -- again for each recipe taken out of a mail).
+        hunterWorld.inbox = {}
+        hunter:Fire("MAIL_INBOX_UPDATE")
+        Equal(#reasons, 3, label .. "taken: the mailbox without it is not judged before the bags are read")
+        hunterWorld.bags = { HIGH_HUNTER_BOOK }
+        hunter:Fire("BAG_UPDATE_DELAYED")
+        hunter:Tick(4, 1)
+        Equal(#reasons, 3, label .. "taken: a copy that went from a mail into the bags refreshes nothing")
+        Equal(Ledger(hunter, HUNTER).bags[HIGH_HUNTER_BOOK], 1, label .. "taken: it is counted in the bags")
+        Equal(Ledger(hunter, HUNTER).mail[HIGH_HUNTER_BOOK], nil, label .. "taken: and no longer in the mailbox")
+        -- A mail that went with its copy (sent back, deleted): the bags' reading says so.
+        hunterWorld.bags, hunterWorld.inbox = {}, { { { HIGH_HUNTER_BOOK, 1 } } }
+        hunter:Fire("MAIL_INBOX_UPDATE")
+        hunter:Fire("BAG_UPDATE_DELAYED")
+        hunter:Tick(4, 1)
+        Equal(#reasons, 3, label .. "taken: back in a mail, the toon still has one")
+        hunterWorld.inbox = {}
+        hunter:Fire("MAIL_INBOX_UPDATE")
+        Equal(#reasons, 3, label .. "taken: a mail gone with its copy is not judged at the mailbox's event")
+        hunter:Tick(4, 1)
+        Equal(reasons[4], "copies held: item " .. HIGH_HUNTER_BOOK .. ": the toon has none now (the bags and the bank were read)",
+            label .. "taken: but once the bags were read and have none, and it says why")
+        Equal(#reasons, 4, label .. "taken: once")
         core.RefreshItems = plainRefresh
 
         -- A copy that lay in the bank before the ledger was there, of something nothing has

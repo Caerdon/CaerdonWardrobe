@@ -389,7 +389,11 @@ end
 
 -- /cwtest cache evict: other items are loaded until the worn pieces' data has left the cache,
 -- and it is left so. That is the state a login can leave behind, made on purpose: what the
--- addon does when a window is opened next is then seen, not waited for. Nothing is saved.
+-- addon does when a window is opened next is then seen, not waited for. The addon's verdicts
+-- are dropped at the end: they are kept by item link until a refresh, and a window drawn
+-- from them compares nothing, which is not what a login leaves behind. Saved are the counts
+-- alone: how many worn pieces were without data, and how many still were once the refresh
+-- had run with no window open.
 local function Evict()
     local worn = WornItems()
     local function Gone()
@@ -417,7 +421,15 @@ local function Evict()
         end
         loaded = loaded + #Load(batch, 0.5)
     end
-    T.Print("item cache: %d of %d worn pieces are without data after %d other items. Open the bags now.", Gone(), #worn, loaded)
+    local gone = Gone()
+    CaerdonWardrobe:RefreshItems()
+    T.Sleep(0.5)
+    local goneAfterRefresh = Gone()
+    T.db.itemCacheEvictions = T.db.itemCacheEvictions or {}
+    T.Push(T.db.itemCacheEvictions, { at = GetServerTime(), toon = T.GetToon().key, build = T.GetClient().build,
+        worn = #worn, gone = gone, goneAfterRefresh = goneAfterRefresh, loaded = loaded }, KEEP_RUNS)
+    T.Print("item cache: %d of %d worn pieces are without data after %d other items (%d after the addon's refresh). Open the bags now.",
+        gone, #worn, loaded, goneAfterRefresh)
 end
 
 function T.ItemCacheCommand(rest)

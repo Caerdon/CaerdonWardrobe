@@ -343,11 +343,22 @@ local function ReadMailbox()
             end
         end
     end
+    local before = record.mail or {}
     record.mail = counts
     record.mailSeen = time()
     record.mailPartial = total > shown or nil
     if not record.mailPartial then
         record.sent = {}
+    end
+    -- A copy taken out of a mail is on its way into the bags, and the mailbox's event can come
+    -- before the bags' reading has it. Judged here, the toon would have none for a moment and
+    -- everything would be judged again for that; so the bags are read first, and that reading
+    -- judges both.
+    for itemID, count in pairs(before) do
+        if (tonumber(counts[itemID]) or 0) < (tonumber(count) or 0) then
+            ReadBagsSoon()
+            return
+        end
     end
     CheckHeld("the mailbox was read")
 end
