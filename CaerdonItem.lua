@@ -2500,6 +2500,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
         if CaerdonWardrobeConfig.Icon.ShowQuestItems then
             hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue == true
             questStarter = questItemInfo ~= nil and questItemInfo.starts or nil
+            -- Not where the item's own tooltip has its class or race line unmet: the client
+            -- names the quest a copy starts whoever holds the copy, and this toon cannot use
+            -- the item to start it (another class's token in the warband bank, retail).
+            if questStarter and bindingResult and bindingResult.raceClassRestricted then
+                questStarter = nil
+            end
             -- By its class, unless the player's own options keep every quest left for it out
             -- (beyond the range of levels chosen, or trivial): in the bags as on an auction.
             -- One no quest is known for goes by the level the item itself asks for.

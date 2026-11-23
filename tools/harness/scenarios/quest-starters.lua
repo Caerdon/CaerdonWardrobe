@@ -46,7 +46,25 @@ return function(H, S)
     local WRIT, LETTER, MAP, CHART, NOTE, SEAL, DEED, BANNER, TWIN, FLYER, ORDERS, TOME, DIARY, SCRAP = 994001, 994002,
         994003, 994004, 994005, 994006, 994007, 994008, 994009, 994010, 994011, 994012, 994013, 994014
     local PAIR, RELIC, CHOICE, ELIXIR = 994015, 994016, 994017, 994018
+    local TOKEN, OWN_TOKEN = 994019, 994020
+    -- A raid's token as a retail client answered for Essence of the Iron Protector 120210 in a
+    -- warband bank (an export: class 15, subclass 0, quality 4, level 16, asks for level 40,
+    -- binds on pickup, 50 gold; the lines "Mythic" and "This Item Begins a Quest" of type 0
+    -- and "Classes: ..." of type 43, requirement type 0, red with usable false on a toon of
+    -- another class). The class line names other classes for the one and the toon's for the
+    -- other, as the Conqueror's token and the Protector's do.
+    local function Token(name, classes, red)
+        local classLine = { text = "Classes: " .. classes, type = 43, requirementType = 0 }
+        if red then
+            classLine.r, classLine.g, classLine.b = 1, 0.125, 0.125
+        end
+        return { name = name, quality = 4, level = 16, minLevel = 40, type = "Miscellaneous", subType = "Junk", stack = 1,
+            equipLoc = "INVTYPE_NON_EQUIP_IGNORE", price = 500000, classID = 15, subClassID = 0, bindType = 1,
+            tooltip = { { text = "Mythic", type = 0 }, BEGINS_LINE, classLine } }
+    end
     local ITEMS = {
+        [TOKEN] = Token("Essence of the Conqueror", "Paladin, Priest, Warlock", true),
+        [OWN_TOKEN] = Token("Essence of the Protector", "Warrior, Hunter, Shaman, Monk", false),
         -- A writ: no quest's item by its class. Its quest can be done again and takes it back.
         [WRIT] = { name = "Craftsman's Writ", quality = 3, level = 1, minLevel = 10, type = "Consumable", subType = "Other",
             stack = 1, equipLoc = "INVTYPE_NON_EQUIP_IGNORE", price = 1, classID = 0, subClassID = 8, bindType = 0,
@@ -95,7 +113,7 @@ return function(H, S)
                 { text = "Requires Level 10", type = 43, requirementType = 5 } } },
     }
     local BAG = { WRIT, LETTER, MAP, CHART, NOTE, SEAL, DEED, BANNER, TWIN, FLYER, ORDERS, TOME, DIARY, SCRAP, PAIR, RELIC,
-        CHOICE, ELIXIR }
+        CHOICE, ELIXIR, TOKEN, OWN_TOKEN }
     local SLOT = {}
     for slot, id in ipairs(BAG) do
         SLOT[id] = slot
@@ -136,13 +154,20 @@ return function(H, S)
         -- of WoW Forever's own, level 60, asks for level 1, no flag.
         [8321] = Started(ELIXIR, { name = "Craftsman's Writ: Elixir", requiredLevel = 1, questLevel = 60,
             requiredRaces = 8589934770, objectives = { [3] = { { ELIXIR } } } }),
+        -- The tokens' quests, each for the classes its token names (paladin, priest and
+        -- warlock; warrior, hunter, shaman and monk), to be done again. Three levels above the
+        -- toon, so within the player's range: beyond it the client's word does not stand either.
+        [8322] = Started(TOKEN, { name = "Essence of the Conqueror", requiredLevel = 36, questLevel = 38,
+            requiredClasses = 274, specialFlags = 1 }),
+        [8323] = Started(OWN_TOKEN, { name = "Essence of the Protector", requiredLevel = 36, questLevel = 38,
+            requiredClasses = 581, specialFlags = 1 }),
     }
     local ALL_QUESTS = { 8301, 8302, 8303, 8304, 8305, 8306, 8307, 8308, 8309, 8310, 8311, 8312, 8313, 8314, 8315, 8316,
-        8317, 8318, 8319, 8320, 8321 }
+        8317, 8318, 8319, 8320, 8321, 8322, 8323 }
     -- What the client says each copy in the bags starts. The seal's quest is in no quest data.
     local STARTS = { [WRIT] = 8301, [LETTER] = 8302, [MAP] = 8303, [CHART] = 8304, [NOTE] = 8305, [SEAL] = 8399,
         [DEED] = 8306, [BANNER] = 8308, [TWIN] = 8309, [FLYER] = 8311, [ORDERS] = 8312, [TOME] = 8313, [DIARY] = 8314,
-        [PAIR] = 8315, [RELIC] = 8318, [CHOICE] = 8319, [ELIXIR] = 8321 }
+        [PAIR] = 8315, [RELIC] = 8318, [CHOICE] = 8319, [ELIXIR] = 8321, [TOKEN] = 8322, [OWN_TOKEN] = 8323 }
     local onQuest = { [8312] = true, [8315] = true }
     local completed = { [8314] = true, [8317] = true }
     local owned = {}
@@ -454,6 +479,23 @@ return function(H, S)
         Check(payload:find("skipped, other race (behind the toon) (so says the quest data; the client names the quest for this copy, which can still start it)", 1, true) ~= nil,
             "elixir writ: the export's line says the quest data's word and the client's")
         Check(payload:find("Starts A Quest Not Taken Yet: quest 8321", 1, true) ~= nil, "elixir writ: and names the quest to start")
+
+        -- Not against the item itself: a token whose own class line the toon does not meet
+        -- (red, usable false). The client names its quest for the copy all the same, and the
+        -- quest module says the copy would start it; the item is no star, since this toon
+        -- cannot use it. As a retail client showed it: other classes' tokens in a warband
+        -- bank. The token of the toon's own classes is one to act on, below its level here.
+        local tokenInfo = Info(TOKEN, true)
+        Equal(tokenInfo.quests[1].reason, "other class", "token: the quest data has its quest as other classes'")
+        Check(tokenInfo.starts and tokenInfo.starts.questID == 8322, "token: the quest module still has the copy as one that starts it")
+        local tokenVerdict = InBag(TOKEN)
+        Check(not tokenVerdict:find("own", 1, true) and not tokenVerdict:find("lowSkill", 1, true)
+            and not tokenVerdict:find("quest", 1, true), "token: no star, no gear and no quest mark (" .. tokenVerdict .. ")")
+        Equal(InBag(OWN_TOKEN), "lowSkill+quest", "own token: the grey gear with the quest's mark, below the level it asks for")
+        local tokenPayload = env.CaerdonWardrobe:GetFeature("DebugFrame"):BuildClipboardPayload(
+            Loaded(env.CaerdonItem:CreateFromBagAndSlot(0, SLOT[TOKEN])))
+        Check(tokenPayload:find("Starts A Quest Not Taken Yet: quest 8322 by the quest module, but the item's own tooltip has its class or race line unmet",
+            1, true) ~= nil, "token: the export says why it has no star")
 
         -- Taken and done within one run of events: a change, though the quest data has it
         -- behind the toon before and after.

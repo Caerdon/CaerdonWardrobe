@@ -221,22 +221,26 @@ return function(H, S)
         local hyperlink = game.names["C_TooltipInfo.GetHyperlink"]
         -- The backpack, by the lines of each item: mail the toon cannot wear yet and a level
         -- it has not reached, a lockbox, and a charm it meets everything of.
-        local MAIL_ID, BOX_ID, MET_ID = 991201, 991202, 991203
+        local MAIL_ID, BOX_ID, MET_ID, DYE_ID = 991201, 991202, 991203, 991204
         local mailSlot = Slot({ rightRed = true })
         local mailLevel = Red(Level())
         local boxLine = Red({ text = "Locked", type = ERROR })
         local metLines = { Slot(), Level() }
+        -- An item that goes in no slot: its slot line holds the type alone, on the left, with
+        -- the one field (a Housing Dye, retail 12.1.5.70961).
+        local dyeLine = { text = "Housing Dye", type = SLOT, bare = true, isValidItemType = true }
         local lines = {
             [MAIL_ID] = { mailSlot, mailLevel },
             [BOX_ID] = { boxLine },
             [MET_ID] = metLines,
+            [DYE_ID] = { dyeLine },
         }
         for itemID, tooltip in pairs(lines) do
             game.items[itemID] = H.DeepCopy(game.items[FIRST_ID])
             game.items[itemID].name = "Bag item " .. itemID
             game.items[itemID].tooltip = tooltip
         end
-        local bag = { MAIL_ID, BOX_ID, MET_ID }
+        local bag = { MAIL_ID, BOX_ID, MET_ID, DYE_ID }
         game:Set("C_Container.GetContainerNumSlots", function(index) return index == 0 and #bag or 0 end)
         game:Set("C_Container.GetContainerItemID", function(index, slot) return index == 0 and bag[slot] or nil end)
         game:Set("C_Container.GetContainerItemLink", function(index, slot)
@@ -262,9 +266,12 @@ return function(H, S)
         Equal(result.status, "pass", flavor .. ", contract: it passes on the bags (" .. tostring(result.message) .. ")")
         local detail = result.detail or {}
         Equal(detail.red, "ffff2020", flavor .. ", contract: the client's red is kept")
-        Equal(detail.items, 3, flavor .. ", contract: three items")
+        Equal(detail.items, 4, flavor .. ", contract: four items")
         Equal(detail.requirementLines, 4, flavor .. ", contract: two requirement lines, in the slot's and the link's tooltip")
-        Equal(detail.slotLines, 4, flavor .. ", contract: and two slot lines")
+        Equal(detail.slotLines, 6, flavor .. ", contract: and three slot lines")
+        local typeOnly = (detail.typeOnly or {})[tostring(SLOT)] or {}
+        Equal(typeOnly.lines, 2, flavor .. ", contract: one of them holds a type alone, on both sides")
+        Equal((typeOnly.examples or {})[1], "Housing Dye", flavor .. ", contract: kept with its text")
         Equal(detail.unmetByField, 4, flavor .. ", contract: the mail's type and its level, on both sides")
         -- Which field said so, on what text: a client's first unmet line is named, not counted.
         local unmet = detail.unmet or {}
@@ -289,9 +296,9 @@ return function(H, S)
             flavor .. ", contract: whose examples are kept once each")
 
         -- Bags whose lines are all met answer for those only.
-        bag = { MET_ID, BOX_ID }
+        bag = { MET_ID, BOX_ID, DYE_ID }
         Equal(Run().status, "info", flavor .. ", contract: nothing unmet is no pass")
-        bag = { MAIL_ID, BOX_ID, MET_ID }
+        bag = { MAIL_ID, BOX_ID, MET_ID, DYE_ID }
 
         -- Faults, one at a time.
         local function Fault(label, plant, undo, expected)
@@ -310,6 +317,14 @@ return function(H, S)
             function() mailSlot.isValidItemType = nil end, "isValidItemType is true and the right column is red")
         Fault("a white slot the field calls invalid", function() metLines[1].isValidInvSlot = false end,
             function() metLines[1].isValidInvSlot = nil end, "isValidInvSlot is false and the left column is not red")
+        Fault("a type alone in red that the field calls valid", function() Red(dyeLine) end,
+            function() dyeLine.r, dyeLine.g, dyeLine.b = nil, nil, nil end, "isValidItemType is true and the left column is red")
+        Fault("a type alone in white that the field calls invalid", function() dyeLine.isValidItemType = false end,
+            function() dyeLine.isValidItemType = true end, "isValidItemType is false and the left column is not red")
+        Fault("a slot line with a right column and no slot field", function() metLines[1].bare, metLines[1].isValidItemType = true, true end,
+            function() metLines[1].bare, metLines[1].isValidItemType = nil, nil end, "isValidInvSlot on a line of type 21 is a nil")
+        Fault("a slot line with neither field", function() dyeLine.isValidItemType = nil end,
+            function() dyeLine.isValidItemType = true end, "isValidInvSlot on a line of type 21 is a nil")
         Fault("a requirement line without its field", function() mailLevel.bare = true end,
             function() mailLevel.bare = nil end, "usable on a line of type 43 is a nil")
         local usual = client.env.RED_FONT_COLOR

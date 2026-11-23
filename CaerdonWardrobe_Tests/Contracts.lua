@@ -955,6 +955,11 @@ T.Contract({
 -- addon takes its red from. Red on any other line type is collected with an example each:
 -- those are the lines colour is all there is for. Added to over the runs; a toon that meets
 -- everything it carries answers for the met lines only, and its result says so.
+--
+-- A slot line of an item that goes in no slot holds its type alone, in the left column, with
+-- `isValidItemType` and no `isValidInvSlot` ("Housing Dye", retail 12.1.5.70961). There the
+-- one field is asked against the one column, and the line is counted with its text
+-- (`typeOnly`). A slot line with a right column still has to carry both.
 
 local UNMET_EXAMPLES = 4
 
@@ -973,7 +978,7 @@ local function MergeUnmetLines(old, new)
         merged[key] = (old[key] or 0) + (new[key] or 0)
     end
     merged.red = new.red or old.red
-    for _, key in ipairs({ "redElsewhere", "fieldsElsewhere", "unmet" }) do
+    for _, key in ipairs({ "redElsewhere", "fieldsElsewhere", "unmet", "typeOnly" }) do
         merged[key] = merged[key] or {}
         for lineType, entry in pairs(new[key] or {}) do
             local target = merged[key][lineType]
@@ -995,7 +1000,7 @@ end
 
 T.Contract({
     id = "tooltip.unmetLines",
-    version = 1,
+    version = 2,
     title = "A line's fields say unmet exactly where its text is red",
     accumulate = true,
     merge = MergeUnmetLines,
@@ -1018,6 +1023,8 @@ T.Contract({
         -- The lines a field calls unmet, by the field: which of the three a client has shown
         -- at false, and on what text.
         local unmet = {}
+        -- Slot lines that hold a type alone, by the slot line's type, with their text.
+        local typeOnly = {}
         local function Collect(into, lineType, example)
             local key = tostring(lineType)
             local entry = into[key]
@@ -1060,8 +1067,14 @@ T.Contract({
                     Column(itemID, side, line, "usable", line.leftColor, "left")
                 elseif line.type == SLOT then
                     slotLines = slotLines + 1
-                    Column(itemID, side, line, "isValidInvSlot", line.leftColor, "left")
-                    Column(itemID, side, line, "isValidItemType", line.rightColor, "right")
+                    local noRight = line.rightText == nil or line.rightText == ""
+                    if noRight and line.isValidInvSlot == nil and line.isValidItemType ~= nil then
+                        Collect(typeOnly, line.type, tostring(line.leftText))
+                        Column(itemID, side, line, "isValidItemType", line.leftColor, "left")
+                    else
+                        Column(itemID, side, line, "isValidInvSlot", line.leftColor, "left")
+                        Column(itemID, side, line, "isValidItemType", line.rightColor, "right")
+                    end
                 else
                     if IsRed(line.leftColor) or IsRed(line.rightColor) then
                         Collect(redElsewhere, line.type, tostring(line.leftText))
@@ -1089,6 +1102,7 @@ T.Contract({
         c:Note("slotLines", slotLines)
         c:Note("unmetByField", unmetByField)
         c:Note("unmet", unmet)
+        c:Note("typeOnly", typeOnly)
         c:Note("redElsewhere", redElsewhere)
         c:Note("fieldsElsewhere", fieldsElsewhere)
         if unmetByField == 0 then

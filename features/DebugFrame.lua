@@ -3296,7 +3296,12 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         -- One to act on: it starts a quest the toon has neither done nor taken, and no quest
         -- left for it is anything else to it.
         local starter = questItemInfo ~= nil and questItemInfo.starts or nil
-        if starter then
+        if starter and type(bindingResult) == "table" and bindingResult.raceClassRestricted then
+            -- The item's own class or race line is unmet: no star (GetCaerdonStatus).
+            addKV(1, "Starts A Quest Not Taken Yet", string.format(
+                "quest %s by the quest module, but the item's own tooltip has its class or race line unmet: this toon cannot use it, so no star",
+                tostring(starter.questID)))
+        elseif starter then
             addKV(1, "Starts A Quest Not Taken Yet", string.format(
                 "quest %s%s (the star, with the quest icon as the small mark%s)", tostring(starter.questID),
                 starter.requiredLevel and starter.requiredLevel > 0 and
