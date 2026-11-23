@@ -277,6 +277,7 @@ local function StartSession(options)
     CaerdonEquipment = { InvalidateCaches = function() end, NoteCollectionChanged = function() end,
         GetEquipmentSetsOf = function() end }
     CaerdonTransformLooks = { MayBeConverted = function() end, GetRoute = function() end }
+    CaerdonSetBonuses = { NoteTooltip = function() end, GetChanges = function() end }
     -- The data of each kind of item that is not equipment: there to be found, and not asked here.
     CaerdonConsumableMixin, CaerdonRecipeMixin, CaerdonProfessionMixin = { GetConsumableInfo = function() end },
         { GetRecipeInfo = function() end }, { GetProfessionInfo = function() end }

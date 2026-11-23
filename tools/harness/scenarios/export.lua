@@ -753,8 +753,11 @@ return function(H, S)
             "    bonus the toon does not have, at 2 pieces: \"+10 Armor.\"",
             "  Worn Pieces Of Item Sets:",
             "    1900 \"Soldier's Kit\": 1 worn: slot 9 [Soldier's Bracers]",
-            "  Worn With The Same Equip Location (INVTYPE_WAIST): none" }, "\n"),
-            "sets: the set, its count, its pieces, both kinds of bonus and the worn pieces")
+            "  Worn With The Same Equip Location (INVTYPE_WAIST): none",
+            "  For The Tooltip's Line (switched on):",
+            "    Read Off Its Tooltip: \"Soldier's Kit\" (filed under set 1900), 1 worn; bonuses 1: had, pieces not remembered; 2: not had, 2 pieces",
+            "    Wearing It: \"Soldier's Kit\" would bring the 2-piece bonus" }, "\n"),
+            "sets: the set, its count, its pieces, both kinds of bonus, the worn pieces, and what the tooltip's line is made from")
         rawset(env.C_Item, "GetItemInfo", itemInfo)
         rawset(env, "GetInventoryItemLink", wornLink)
     end

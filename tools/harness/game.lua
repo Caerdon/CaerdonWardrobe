@@ -112,7 +112,8 @@ end
 -- season's gear. bonusLevels = { ["12831"] = 300 } is what an ID gives this one item, where
 -- that is not what it gives the others.
 -- items: id -> { name, quality, level, minLevel, type, subType, stack, equipLoc, icon, price,
---                classID, subClassID, bindType, expansion, tooltip = { { text, type, r, g, b } },
+--                classID, subClassID, bindType, expansion, setID (its item set),
+--                tooltip = { { text, type, r, g, b } },
 --                appearance = { appearanceID, sourceID, collected, valid, canCollect } }
 function H.StockGame(toon, items)
     local game = H.NewGame()
@@ -228,7 +229,7 @@ function H.StockGame(toon, items)
         end
         return item.name, Link(id), item.quality, item.level, item.minLevel, item.type, item.subType, item.stack,
             item.equipLoc or "", item.icon or 134400, item.price or 0, item.classID, item.subClassID,
-            item.bindType or 0, item.expansion or 0, nil, false
+            item.bindType or 0, item.expansion or 0, item.setID, false
     end)
     Set("C_Item.GetItemInfoInstant", function(reference)
         local id, item = ItemID(reference), Item(reference)

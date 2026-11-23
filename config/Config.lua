@@ -301,6 +301,9 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes == nil then
             CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = NS:GetDefaultConfig().Tooltip.KeepPawnUpgradeNotes
         end
+        if CaerdonWardrobeConfig.Tooltip.ShowSetBonusChanges == nil then
+            CaerdonWardrobeConfig.Tooltip.ShowSetBonusChanges = NS:GetDefaultConfig().Tooltip.ShowSetBonusChanges
+        end
         if not CaerdonWardrobeConfig.Auction then
             CaerdonWardrobeConfig.Auction = {}
         end
@@ -615,7 +618,9 @@ function NS:GetDefaultConfig()
             ShowLoadoutUpgrades = true,
             -- Pawn's own upgrade notes and "your best" marks beside those lines, as Pawn
             -- makes them. Off: they give way where the addon has a verdict of its own.
-            KeepPawnUpgradeNotes = false
+            KeepPawnUpgradeNotes = false,
+            -- The line under a piece that would bring or end a set bonus of what is worn.
+            ShowSetBonusChanges = true
         }
     }
 end

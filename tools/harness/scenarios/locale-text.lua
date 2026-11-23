@@ -277,6 +277,53 @@ return function(H, S)
         ITEMS[CHARM].tooltip = { { text = "Chance on hit: something 15%.", type = 0, r = 0, g = 1, b = 0 } }
         Equal(Item(CHARM):GetTooltipData().hasEquipEffect, false, where .. ": a line under another word is no \"Equip:\" line")
 
+        -- An item set's lines (CaerdonSetBonuses): the set's line with the pieces worn, a bonus
+        -- the toon has, and one it does not have with the pieces it begins at, as the format has
+        -- it and with each form of its escapes. The lines stand as the recorded tooltips have
+        -- them: the pieces under the set's line, a blank, the bonuses.
+        local setFormat, hasFormat, grayFormat = strings.ITEM_SET_NAME, strings.ITEM_SET_BONUS, strings.ITEM_SET_BONUS_GRAY
+        Check(type(setFormat) == "string" and type(hasFormat) == "string" and type(grayFormat) == "string",
+            where .. ": the client has ITEM_SET_NAME, ITEM_SET_BONUS and ITEM_SET_BONUS_GRAY")
+        if type(setFormat) == "string" and type(hasFormat) == "string" and type(grayFormat) == "string" then
+            local function SetLines(grayLine, legacy)
+                local lines = {
+                    { type = 0, leftText = "Test Helm" },
+                    { type = 0, leftText = strings.ITEM_MIN_SKILL:format(SKILL, 125) },
+                    { type = 1, leftText = " " },
+                    { type = 0, leftText = setFormat:format("Test Set (Heroic)", 3, 8) },
+                    { type = 0, leftText = "  Test Helm" },
+                    { type = 42, leftText = "  Test Belt (Heroic)" },
+                    { type = 1, leftText = " " },
+                }
+                if legacy then
+                    lines[#lines + 1] = { type = 0, leftText = strings.ITEM_SET_LEGACY_INACTIVE_BONUS }
+                end
+                lines[#lines + 1] = { type = 0, leftText = hasFormat:format("Does a thing: 5% (more).") }
+                lines[#lines + 1] = { type = 42, leftText = grayLine }
+                lines[#lines + 1] = { type = 1, leftText = " " }
+                lines[#lines + 1] = { type = 0, leftText = "Sell Price: 9" }
+                return { lines = lines }
+            end
+            for _, grayLine in ipairs(Renderings(grayFormat:format(4, "+10 Armor: (and more)."))) do
+                local reading = env.CaerdonSetBonuses:Read(SetLines(grayLine))
+                local told = where .. ": \"" .. grayLine .. "\" under \"" .. setFormat:format("Test Set (Heroic)", 3, 8) .. "\""
+                Equal(reading and reading.name, "Test Set (Heroic)", told .. ": the set's name")
+                Equal(reading and reading.worn, 3, told .. ": the pieces worn")
+                Equal(reading and reading.total, 8, told .. ": the pieces in all")
+                Equal(reading and #reading.bonuses, 2, told .. ": two bonuses")
+                Equal(reading and reading.bonuses[1] and reading.bonuses[1].active, true, told .. ": the first is one the toon has")
+                Equal(reading and reading.bonuses[1] and reading.bonuses[1].text, "Does a thing: 5% (more).", told .. ": with its text")
+                Equal(reading and reading.bonuses[2] and reading.bonuses[2].needs, 4, told .. ": the second begins at four pieces")
+                Equal(reading and reading.bonuses[2] and reading.bonuses[2].text, "+10 Armor: (and more).", told .. ": with its text")
+                Equal(reading and reading.legacy, nil, told .. ": no legacy set")
+            end
+            if type(strings.ITEM_SET_LEGACY_INACTIVE_BONUS) == "string" then
+                local legacy = env.CaerdonSetBonuses:Read(SetLines(grayFormat:format(4, "+10 Armor."), true))
+                Equal(legacy and legacy.legacy, true, where .. ": the client's line for a set whose bonuses no longer work is known")
+                Equal(legacy and #legacy.bonuses, 2, where .. ": and its bonuses are read past it")
+            end
+        end
+
         -- The builder itself, where the code that uses it is not reached by one call.
         local FormatPattern = namespace.FormatPattern
         if FormatPattern then

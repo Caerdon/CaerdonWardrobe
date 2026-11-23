@@ -33,6 +33,7 @@
 	<Script file="CaerdonLearners.lua" />
 	<Script file="CaerdonVendorGoods.lua" />
 	<Script file="CaerdonTransformLooks.lua" />
+	<Script file="CaerdonSetBonuses.lua" />
 	<Script file="CaerdonButtonGeometry.lua" />
 	<Script file="CaerdonIntegrations.lua" />
 	<Script file="CaerdonAPI.lua" />

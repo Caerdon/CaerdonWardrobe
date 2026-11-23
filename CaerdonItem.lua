@@ -1419,6 +1419,16 @@ function CaerdonItemMixin:GetVendorInfo()
     return CaerdonVendorGoods:GetItemInfo(itemID)
 end
 
+-- What wearing the piece would do to the bonuses of the item sets the toon wears pieces of (a
+-- tier set's and the like): a list, or nil where it would do nothing, with why as the second
+-- value. For a tooltip; no status reads it. See CaerdonSetBonuses:GetChanges for the entries.
+function CaerdonItemMixin:GetSetBonusChanges()
+    if self:IsItemEmpty() then
+        return nil
+    end
+    return CaerdonSetBonuses:GetChanges(self)
+end
+
 -- The skill and rank the item's tooltip asks for, to hold another toon's saved rank against
 -- (CaerdonRecipe:GetOtherToonRecipeInfo). nil when it names no skill with a rank, otherwise
 --   { skillName, rank = the "Requires Cooking (125)" line,
@@ -2406,6 +2416,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     local itemName, itemLinkInfo, itemRarity, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount,
     itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID,
     isCraftingReagent = C_Item.GetItemInfo(itemLink)
+
+    -- A piece of an item set: what its tooltip shows of the set's bonuses is kept for the
+    -- tooltip line about bonuses gained and lost (CaerdonSetBonuses). No part of the verdict.
+    if itemSetID and linkTooltip then
+        CaerdonSetBonuses:NoteTooltip(itemSetID, linkTooltip)
+    end
 
     local playerLevel = UnitLevel("player")
 

@@ -948,6 +948,44 @@ function TooltipMixin:AddLoadoutUpgrades(tooltip, item)
     end
 end
 
+-- What wearing the piece would do to the bonuses of the item sets the toon wears pieces of (a
+-- tier set's and the like; CaerdonSetBonuses): a line for each bonus it would bring or end
+-- (author decision: a warning in both directions, the upgrade's arrow is not held back for
+-- it). The set's name in the colour the client writes it in, then what happens: green for a
+-- bonus gained, the client's red for one lost, and "may lose" where the pieces a bonus begins
+-- at are not yet known. A piece that can go in two places and would not do the same in both
+-- says for each line which worn piece it is about.
+-- The lines stand with the upgrade lines (below), for a piece that is an upgrade and for one
+-- that is not: a piece that only completes a bonus is worth knowing of too. None for a piece
+-- that is being worn, none in a comparison tooltip. Tooltip.ShowSetBonusChanges turns them off.
+local SET_NAME_COLOUR = "ffd100"
+local SET_GAIN_COLOUR = "00ff00"
+local SET_LOSS_COLOUR = "ff2020"
+
+function TooltipMixin:AddSetBonusChanges(tooltip, item)
+    local tooltipConfig = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip
+    if tooltipConfig and tooltipConfig.ShowSetBonusChanges == false then
+        return
+    end
+    if item == nil or item:IsItemEmpty() or item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
+        return
+    end
+    for _, change in ipairs(item:GetSetBonusChanges() or {}) do
+        local text, colour
+        if change.kind == "gain" then
+            text, colour = format(L["gains the %d-piece set bonus"], change.pieces), SET_GAIN_COLOUR
+        elseif change.kind == "loss" then
+            text, colour = format(L["loses the %d-piece set bonus"], change.pieces), SET_LOSS_COLOUR
+        else
+            text, colour = L["may lose a set bonus"], SET_LOSS_COLOUR
+        end
+        local note = change.inPlaceOf and format(L["(in place of %s)"], change.inPlaceOf) or
+            change.emptySlot and L["(in the empty slot)"] or nil
+        tooltip:AddLine(format("|cff%s%s:|r  |cff%s%s|r%s", SET_NAME_COLOUR, tostring(change.set), colour, text,
+            note and format("  |cff%s%s|r", NOTE_COLOUR, note) or ""), 1, 1, 1, true)
+    end
+end
+
 -- Where the lines go, and what becomes of Pawn's (author decisions: at the bottom, as Pawn's
 -- are; and no line of Pawn's that contradicts ours).
 --
@@ -1240,6 +1278,7 @@ function TooltipMixin:OweUpgradeLines(tooltip, item)
         upgradeItems[tooltip] = item
     elseif clientTooltips[tooltip] then
         xpcall(function() Tooltip:AddLoadoutUpgrades(tooltip, item) end, geterrorhandler())
+        xpcall(function() Tooltip:AddSetBonusChanges(tooltip, item) end, geterrorhandler())
     end
 end
 
@@ -1371,6 +1410,11 @@ function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, 
                 end
             end
         end, geterrorhandler())
+    end
+    -- The set bonuses the piece would bring or end: under the upgrade lines, whether it has
+    -- any of those or not.
+    if item and not comparisonTooltips[tooltip] then
+        xpcall(function() Tooltip:AddSetBonusChanges(tooltip, item) end, geterrorhandler())
     end
 end
 

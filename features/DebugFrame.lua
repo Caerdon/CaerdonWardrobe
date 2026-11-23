@@ -2113,6 +2113,13 @@ local function ExplainSetBonuses(item)
     end
     add(0, "Worn With The Same Equip Location (%s): %s", tostring(equipLoc),
         #sameKind > 0 and table.concat(sameKind, "; ") or "none")
+
+    -- What the tooltip line about bonuses gained and lost is made from (CaerdonSetBonuses).
+    add(0, "For The Tooltip's Line (%s):", (CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip and
+        CaerdonWardrobeConfig.Tooltip.ShowSetBonusChanges == false) and "switched off" or "switched on")
+    for _, text in ipairs(CaerdonSetBonuses:Describe(item)) do
+        add(1, text)
+    end
     return lines
 end
 

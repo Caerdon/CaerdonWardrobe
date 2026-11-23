@@ -428,6 +428,10 @@ function CaerdonWardrobeConfigIcons:Register()
         "- at PvP levels, where you marked the set for PvP\n" ..
         "- by what both hands would hold: a one-hander together with the best one-hander in your bags against a two-hander, and a two-hander against both weapons it would replace, which Pawn does not compare",
         { indent = 2 })
+    -- A set's bonus (a tier set's and the like) is what an upgrade's arrow does not weigh: the
+    -- tooltip says what wearing the piece would do to one. A switch of its own: the lines are
+    -- there for a piece that is no upgrade too, and without Pawn.
+    self:AddCheckbox({ key = "showSetBonusChanges", text = "Say in its tooltip when wearing a piece would gain or lose a set bonus", tooltip = "Adds a line to the tooltip of gear that would complete a set bonus of what you are wearing, or break one by taking the place of a set piece. The upgrade arrow does not weigh set bonuses, so a piece can have the arrow and this warning.\n\n\"May lose\" is shown where the game has not yet said at how many pieces the bonus begins: its tooltips only give that number while you do not have the bonus. It is remembered the first time a piece of the set is seen with fewer pieces on.", configSection = "Tooltip", configValue = "ShowSetBonusChanges" })
     self:AddDropdown({ key = "sameLevelItems", text = "Same item level as equipped:", configSection = "Icon", configValue = "SameLevelBehavior" }, {
         { title = "No Icon", value = "none", tooltip = "Keep same-level pieces quiet (no neutral or sellable icons)." },
         { title = "Sellable", value = "sellable", tooltip = "Treat same-level pieces as sellable duplicates." },

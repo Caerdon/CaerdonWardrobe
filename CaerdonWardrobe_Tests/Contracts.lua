@@ -1831,6 +1831,195 @@ T.Contract({
     end,
 })
 
+-- What wearing a piece would do to a set's bonuses is read off tooltips alone
+-- (CaerdonSetBonuses.lua): the set's line with the pieces worn, a bonus the toon does not have
+-- with the pieces it begins at, a bonus it has without. Asked here of every piece worn and
+-- carried whose tooltip has such lines or whose item info names a set:
+--   * a piece whose item info names a set has set lines the addon reads, and the set's name on
+--     them is the client's own for that set;
+--   * the pieces worn by the line are the worn pieces whose item info names the same set;
+--   * a bonus line read and written back with the client's format string is the line (not
+--     asked where the string has a grammar escape, which is drawn as one of its forms);
+--   * a bonus the toon does not have is on a greyed-out line (DisabledLine) and one it has is
+--     not, and the first needs more pieces than are worn;
+--   * the pieces of the bonuses not had stand in ascending order, which the addon reasons by.
+-- Whether the item info names a set at all for a piece with set lines is counted and no
+-- failure: the addon files such a set under its name. Each set's lines as seen are kept, with
+-- the pieces worn at the time, and added to over the runs: a set seen with fewer worn shows the
+-- numbers that are gone while more are. A toon with no piece of a set answers nothing.
+
+local SET_STATES = 8
+
+local function MergeSetLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "pieces", "ofSets", "withSetID", "withoutSetID", "bonusesHad", "bonusesNotHad", "writtenBack" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.formats = new.formats or old.formats
+    merged.remembered = new.remembered or old.remembered
+    merged.sets = merged.sets or {}
+    for name, states in pairs(new.sets or {}) do
+        local target = merged.sets[name]
+        if not target then
+            merged.sets[name] = states
+        else
+            for _, state in ipairs(states) do
+                if #target < SET_STATES and not HasExample(target, state) then
+                    target[#target + 1] = state
+                end
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.setBonuses",
+    version = 1,
+    title = "An item set's tooltip lines are what the addon reads its bonuses from",
+    accumulate = true,
+    merge = MergeSetLines,
+    run = function(c)
+        local DISABLED = Enum.TooltipDataLineType.DisabledLine
+        -- A format with a grammar escape is not written back: the line has one of its forms.
+        local function Plain(format)
+            return type(format) == "string" and not format:find("|4", 1, true) and not format:find("|1", 1, true)
+        end
+
+        local links = {}
+        local wornSets, wornInfoComplete = {}, true
+        for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+            local link = GetInventoryItemLink("player", slot)
+            if link then
+                links[#links + 1] = { link = link, where = "worn in slot " .. slot }
+                local name, _, _, _, _, _, _, _, _, _, _, _, _, _, _, setID = C_Item.GetItemInfo(link)
+                if not name then
+                    wornInfoComplete = false
+                elseif setID then
+                    wornSets[setID] = (wornSets[setID] or 0) + 1
+                end
+            end
+        end
+        for _, where in ipairs(FilledBagSlots()) do
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                links[#links + 1] = { link = link, where = ("bag %d slot %d"):format(where.bag, where.slot) }
+            end
+        end
+
+        local counts = { ofSets = 0, withSetID = 0, withoutSetID = 0, bonusesHad = 0, bonusesNotHad = 0, writtenBack = 0 }
+        local sets, remembered = {}, {}
+        for index, entry in ipairs(links) do
+            local link = entry.link
+            local itemID = C_Item.GetItemInfoInstant(link) or 0
+            local setID = select(16, C_Item.GetItemInfo(link))
+            local data = C_TooltipInfo.GetHyperlink(link)
+            local loaded = type(data) == "table" and type(data.lines) == "table"
+            for _, line in ipairs(loaded and data.lines or {}) do
+                if not issecretvalue(line.leftText) and line.leftText == RETRIEVING_ITEM_INFO then
+                    loaded = false
+                end
+            end
+            local reading = loaded and CaerdonSetBonuses:Read(data) or nil
+            if loaded and setID then
+                c:Check(reading ~= nil, "item %d (%s): its item info names set %s and its tooltip has no set lines the addon reads",
+                    itemID, entry.where, tostring(setID))
+            end
+            if reading then
+                counts.ofSets = counts.ofSets + 1
+                if setID then
+                    counts.withSetID = counts.withSetID + 1
+                    local clientName = C_Item.GetItemSetInfo and C_Item.GetItemSetInfo(setID) or nil
+                    c:Check(clientName == nil or clientName == reading.name,
+                        "item %d (%s): the set's line names \"%s\" and the client calls set %s \"%s\"", itemID, entry.where,
+                        tostring(reading.name), tostring(setID), tostring(clientName))
+                    if wornInfoComplete then
+                        c:Check((wornSets[setID] or 0) == reading.worn,
+                            "item %d (%s): the set's line says %s worn and %s worn pieces are of set %s by their item info",
+                            itemID, entry.where, tostring(reading.worn), tostring(wornSets[setID] or 0), tostring(setID))
+                    end
+                else
+                    counts.withoutSetID = counts.withoutSetID + 1
+                end
+
+                -- Each bonus against the line it was read from.
+                local byText = {}
+                for _, line in ipairs(data.lines) do
+                    if not issecretvalue(line.leftText) and type(line.leftText) == "string" then
+                        byText[line.leftText:match("^%s*(.-)%s*$")] = line
+                    end
+                end
+                local state, lastNeeds = {}, 0
+                for position, bonus in ipairs(reading.bonuses) do
+                    if bonus.needs then
+                        counts.bonusesNotHad = counts.bonusesNotHad + 1
+                        state[position] = "(" .. bonus.needs .. ")"
+                        c:Check(bonus.needs > reading.worn, "item %d (%s): a bonus not had begins at %s pieces with %s worn", itemID,
+                            entry.where, tostring(bonus.needs), tostring(reading.worn))
+                        c:Check(bonus.needs >= lastNeeds, "item %d (%s): the bonuses not had are not in ascending order (%s after %s)",
+                            itemID, entry.where, tostring(bonus.needs), tostring(lastNeeds))
+                        lastNeeds = bonus.needs
+                        if Plain(ITEM_SET_BONUS_GRAY) then
+                            local written = ITEM_SET_BONUS_GRAY:format(bonus.needs, bonus.text)
+                            local line = byText[written]
+                            counts.writtenBack = counts.writtenBack + 1
+                            if c:Check(line ~= nil, "item %d (%s): no line is \"%s\", a bonus read and written back with ITEM_SET_BONUS_GRAY",
+                                    itemID, entry.where, written) then
+                                c:Check(line.type == DISABLED, "item %d (%s): the line of a bonus not had is of type %s, not greyed out",
+                                    itemID, entry.where, tostring(line.type))
+                            end
+                        end
+                    else
+                        counts.bonusesHad = counts.bonusesHad + 1
+                        state[position] = "had"
+                        if Plain(ITEM_SET_BONUS) then
+                            local written = ITEM_SET_BONUS:format(bonus.text)
+                            local line = byText[written]
+                            counts.writtenBack = counts.writtenBack + 1
+                            if c:Check(line ~= nil, "item %d (%s): no line is \"%s\", a bonus read and written back with ITEM_SET_BONUS",
+                                    itemID, entry.where, written) then
+                                c:Check(line.type ~= DISABLED, "item %d (%s): the line of a bonus the toon has is greyed out", itemID,
+                                    entry.where)
+                            end
+                        end
+                    end
+                end
+
+                local key = setID or reading.name
+                local label = ("%s (%s)"):format(tostring(reading.name), setID and ("set " .. setID) or "no set ID")
+                sets[label] = sets[label] or {}
+                local shown = ("%d of %d worn%s: %s"):format(reading.worn, reading.total, reading.legacy and ", legacy" or "",
+                    #state > 0 and table.concat(state, ", ") or "no bonus lines")
+                if #sets[label] < SET_STATES and not HasExample(sets[label], shown) then
+                    sets[label][#sets[label] + 1] = shown
+                end
+                local saved = type(CaerdonSetBonusData) == "table" and CaerdonSetBonusData[key] or nil
+                if type(saved) == "table" and type(saved.pieces) == "table" then
+                    local numbers = {}
+                    for position = 1, saved.bonuses or 0 do
+                        numbers[position] = tostring(saved.pieces[position] or "?")
+                    end
+                    remembered[label] = table.concat(numbers, ", ")
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+
+        c:Note("pieces", #links)
+        for key, count in pairs(counts) do
+            c:Note(key, count)
+        end
+        c:Note("formats", { ITEM_SET_NAME = ITEM_SET_NAME, ITEM_SET_BONUS = ITEM_SET_BONUS, ITEM_SET_BONUS_GRAY = ITEM_SET_BONUS_GRAY })
+        c:Note("sets", sets)
+        c:Note("remembered", remembered)
+        if counts.ofSets == 0 then
+            return "info", ("none of %d pieces worn and carried is of an item set"):format(#links)
+        end
+    end,
+})
+
 -- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
 -- of the client's answer has its row, and every field of the line is on it. An item in a bag
 -- has two tooltips, the slot's and the bare link's, which is the one the addon computes the

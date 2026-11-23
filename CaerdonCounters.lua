@@ -572,6 +572,8 @@ function Counters:Attach()
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetBagSlotInfo")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetUnneededRecipeStatus")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "GetLearnerStatus")
+    -- Not part of the verdict, but done inside it: a set piece's tooltip read for its bonuses.
+    Probe("CaerdonSetBonuses", CaerdonSetBonuses, "NoteTooltip")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "IsSellable")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "IsEquippableJunk")
     Probe("CaerdonItemMixin", CaerdonItemMixin, "IsCollectible")
@@ -604,6 +606,8 @@ function Counters:Attach()
     Probe("CaerdonAPI", CaerdonAPI, "OnTooltipItem")
     Probe("Tooltip", NS and NS.Tooltip, "OnTooltipSetItem")
     Probe("Tooltip", NS and NS.Tooltip, "OnRequirementLine")
+    -- For a tooltip's line about set bonuses: asked each time a piece's tooltip is filled.
+    Probe("CaerdonSetBonuses", CaerdonSetBonuses, "GetChanges")
     Probe("CaerdonAuctionValue", CaerdonAuctionValue, "OnBagsChanged")
     -- What a run of quest events costs where it refreshes nothing: the answered quests judged again.
     Probe("CaerdonQuestItems", CaerdonQuestItems, "CompareWithAnswers")

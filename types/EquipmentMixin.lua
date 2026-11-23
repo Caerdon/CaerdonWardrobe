@@ -4496,6 +4496,35 @@ function CaerdonEquipmentMixin:GetEquipmentSets()
     return CaerdonEquipment:GetEquipmentSetsOf(self.item)
 end
 
+-- The places a piece of this kind can be put on, each a list of the slots it would empty: one
+-- place for most, two for a ring or a trinket, and for a one-hander where the toon can hold
+-- two. A two-hander empties both hands, and so does a piece for the off hand while a two-hander
+-- is held. nil for what goes in no slot. For what a change of gear does to the worn pieces
+-- themselves (CaerdonSetBonuses), not for a comparison of values.
+--[[static]]
+function CaerdonEquipment:GetSlotChoices(inventoryTypeName)
+    local handKind = HAND_KINDS[inventoryTypeName]
+    if handKind == "two" then
+        return { BOTH_HANDS }
+    elseif handKind == "off" then
+        return { IsTwoHandedMainHandEquipped() and BOTH_HANDS or OFF_HAND }
+    elseif handKind == "either" and CanWieldTwoWeapons() then
+        return { MAIN_HAND, IsTwoHandedMainHandEquipped() and BOTH_HANDS or OFF_HAND }
+    end
+    local slots = GetInventorySlotsForType(inventoryTypeName)
+    if not slots then
+        return nil
+    end
+    local choices = {}
+    for _, slotID in ipairs(slots) do
+        -- Slot 0 is where the table above files what is not worn as gear (a bag, ammunition).
+        if slotID > 0 then
+            choices[#choices + 1] = { slotID }
+        end
+    end
+    return #choices > 0 and choices or nil
+end
+
 -- The loadout that is on: what is worn, as the addon judges it (loadouts.worn); else the
 -- loadout of the gear set being worn, another spec's, where the player asked for the arrows for
 -- other gear. nil where neither is there.
