@@ -5,19 +5,18 @@ function ItemConversionMixin:GetName()
 end
 
 function ItemConversionMixin:Init()
-	return { "ADDON_LOADED" }
+	self:WhenAddOnLoaded("Blizzard_ItemInteractionUI", self.OnItemInteractionLoaded)
+	return {}
 end
 
-function ItemConversionMixin:ADDON_LOADED(name)
-	if name == "Blizzard_ItemInteractionUI" then
-		local outputSlot = ItemInteractionFrame and ItemInteractionFrame.ItemConversionFrame
-			and ItemInteractionFrame.ItemConversionFrame.ItemConversionOutputSlot
-		if outputSlot and outputSlot.RefreshIcon then
-			local feature = self
-			hooksecurefunc(outputSlot, "RefreshIcon", function(slot)
-				feature:OnOutputSlotRefreshIcon(slot)
-			end)
-		end
+function ItemConversionMixin:OnItemInteractionLoaded()
+	local outputSlot = ItemInteractionFrame and ItemInteractionFrame.ItemConversionFrame
+		and ItemInteractionFrame.ItemConversionFrame.ItemConversionOutputSlot
+	if outputSlot and outputSlot.RefreshIcon then
+		local feature = self
+		hooksecurefunc(outputSlot, "RefreshIcon", function(slot)
+			feature:OnOutputSlotRefreshIcon(slot)
+		end)
 	end
 end
 

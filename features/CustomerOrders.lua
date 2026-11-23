@@ -7,16 +7,13 @@ end
 function CustomerOrdersMixin:Init(frame)
 	self.orderContinuableContainer = ContinuableContainer:Create()
 
-	return {
-        "ADDON_LOADED"
-	}
+	self:WhenAddOnLoaded("Blizzard_ProfessionsCustomerOrders", self.OnCustomerOrdersLoaded)
+	return {}
 end
 
-function CustomerOrdersMixin:ADDON_LOADED(name)
-    if name == "Blizzard_ProfessionsCustomerOrders" then
-        ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList, false)
-        hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "InitSchematic", function (...) self:OnSchematicFormInit(...) end)
-    end
+function CustomerOrdersMixin:OnCustomerOrdersLoaded()
+    ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList, false)
+    hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "InitSchematic", function (...) self:OnSchematicFormInit(...) end)
 end
 
 function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)

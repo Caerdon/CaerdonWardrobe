@@ -7,15 +7,13 @@ function TradeSkillMixin:GetName()
 end
 
 function TradeSkillMixin:Init()
-    return { "ADDON_LOADED", "TRADE_SKILL_SHOW" }
+    self:WhenAddOnLoaded("Blizzard_Professions", self.OnProfessionsLoaded)
+    return { "TRADE_SKILL_SHOW" }
 end
 
-function TradeSkillMixin:ADDON_LOADED(name)
-	if name == "Blizzard_Professions" then
-        ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
-        hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
-        -- hooksecurefunc(ProfessionsFrame, "Refresh", function (...) self:Refresh(...) end)
-	end
+function TradeSkillMixin:OnProfessionsLoaded()
+    ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
+    hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
 end
 
 function TradeSkillMixin:TRADE_SKILL_SHOW(name)

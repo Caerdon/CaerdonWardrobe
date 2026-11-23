@@ -20,6 +20,13 @@ function CaerdonWardrobeFeatureMixin:Init()
     error(format("Caerdon Wardrobe: Must provide Init implementation for %s", self:GetName()))
 end
 
+-- For a window whose addon the client loads on demand: `callback` (a method of the feature) runs
+-- once the addon is loaded, at once where it already is. Called from Init, in the place of an
+-- ADDON_LOADED handler that compares names.
+function CaerdonWardrobeFeatureMixin:WhenAddOnLoaded(addonName, callback)
+    CaerdonWardrobe:WhenAddOnLoaded(addonName, self, callback)
+end
+
 -- Hook points: where a feature attaches to another addon's code.
 --
 -- A feature that decorates another addon's frames declares the places it attaches to:

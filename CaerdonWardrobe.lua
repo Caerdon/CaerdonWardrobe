@@ -2925,6 +2925,16 @@ end
 function CaerdonWardrobeMixin:VARIABLES_LOADED()
 end
 
+-- A window's addon is loaded on demand, and another addon can have loaded it before this
+-- one's features begin: a feature that waits for its ADDON_LOADED alone then never hooks.
+-- `callback` runs at once where the addon is loaded and once when it is otherwise, as the
+-- feature's method, and contained like its other handlers.
+function CaerdonWardrobeMixin:WhenAddOnLoaded(addonName, feature, callback)
+    EventUtil.ContinueOnAddOnLoaded(addonName, function()
+        Contained(callback, feature, addonName)
+    end)
+end
+
 function CaerdonWardrobeMixin:ADDON_LOADED(name)
     if name == ADDON_NAME then
         local name, instance

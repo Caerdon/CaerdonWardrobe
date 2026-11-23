@@ -5,13 +5,12 @@ function BlackMarketMixin:GetName()
 end
 
 function BlackMarketMixin:Init()
-	return { "ADDON_LOADED", "BLACK_MARKET_ITEM_UPDATE" }
+	self:WhenAddOnLoaded("Blizzard_BlackMarketUI", self.OnBlackMarketLoaded)
+	return { "BLACK_MARKET_ITEM_UPDATE" }
 end
 
-function BlackMarketMixin:ADDON_LOADED(name)
-	if name == "Blizzard_BlackMarketUI" then
-		BlackMarketFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self);
-	end
+function BlackMarketMixin:OnBlackMarketLoaded()
+	BlackMarketFrame.ScrollBox:RegisterCallback("OnDataRangeChanged", self.OnScrollBoxRangeChanged, self);
 end
 
 function BlackMarketMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)

@@ -8,22 +8,21 @@ function EncounterJournalMixin:GetName()
 end
 
 function EncounterJournalMixin:Init()
-    return { "ADDON_LOADED", "PLAYER_LOOT_SPEC_UPDATED", "LOOT_JOURNAL_ITEM_UPDATE" }
+    self:WhenAddOnLoaded("Blizzard_EncounterJournal", self.OnEncounterJournalLoaded)
+    return { "PLAYER_LOOT_SPEC_UPDATED", "LOOT_JOURNAL_ITEM_UPDATE" }
 end
 
-function EncounterJournalMixin:ADDON_LOADED(name)
-    if name == "Blizzard_EncounterJournal" then
-        EncounterJournal.searchResults.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnSearchResultsScrollBoxRangeChanged, self);
-        EncounterJournal.encounter.info.LootContainer.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnLootContainerScrollBoxRangeChanged, self);
-        hooksecurefunc("EncounterJournal_UpdateSearchPreview",
-            function(...) self:OnEncounterJournalUpdateSearchPreview(...) end)
-        hooksecurefunc("EJSuggestFrame_UpdateRewards", function(...) self:OnEJSuggestFrame_UpdateRewards(...) end)
-        ScrollUtil.AddInitializedFrameCallback(EncounterJournal.LootJournalItems.ItemSetsFrame.ScrollBox,
-            function(...) self:OnItemSetsInitializedFrame(...) end, EncounterJournal.LootJournalItems.ItemSetsFrame,
-            false)
-    end
+function EncounterJournalMixin:OnEncounterJournalLoaded()
+    EncounterJournal.searchResults.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnSearchResultsScrollBoxRangeChanged, self);
+    EncounterJournal.encounter.info.LootContainer.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnLootContainerScrollBoxRangeChanged, self);
+    hooksecurefunc("EncounterJournal_UpdateSearchPreview",
+        function(...) self:OnEncounterJournalUpdateSearchPreview(...) end)
+    hooksecurefunc("EJSuggestFrame_UpdateRewards", function(...) self:OnEJSuggestFrame_UpdateRewards(...) end)
+    ScrollUtil.AddInitializedFrameCallback(EncounterJournal.LootJournalItems.ItemSetsFrame.ScrollBox,
+        function(...) self:OnItemSetsInitializedFrame(...) end, EncounterJournal.LootJournalItems.ItemSetsFrame,
+        false)
 end
 
 function EncounterJournalMixin:LOOT_JOURNAL_ITEM_UPDATE()

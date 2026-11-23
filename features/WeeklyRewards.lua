@@ -5,15 +5,14 @@ function WeeklyRewardsMixin_Feature:GetName()
 end
 
 function WeeklyRewardsMixin_Feature:Init()
-	return { "ADDON_LOADED" }
+	self:WhenAddOnLoaded("Blizzard_WeeklyRewards", self.OnWeeklyRewardsLoaded)
+	return {}
 end
 
-function WeeklyRewardsMixin_Feature:ADDON_LOADED(name)
-	if name == "Blizzard_WeeklyRewards" then
-		hooksecurefunc(WeeklyRewardsFrame, "Refresh", function()
-			self:UpdateActivities()
-		end)
-	end
+function WeeklyRewardsMixin_Feature:OnWeeklyRewardsLoaded()
+	hooksecurefunc(WeeklyRewardsFrame, "Refresh", function()
+		self:UpdateActivities()
+	end)
 end
 
 function WeeklyRewardsMixin_Feature:GetTooltipData(item, locationInfo)

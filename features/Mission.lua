@@ -5,16 +5,15 @@ function MissionMixin:GetName()
 end
 
 function MissionMixin:Init()
-    return { "ADDON_LOADED" }
+    self:WhenAddOnLoaded("Blizzard_GarrisonUI", self.OnGarrisonLoaded)
+    return {}
 end
 
-function MissionMixin:ADDON_LOADED(name)
-    if name == "Blizzard_GarrisonUI" then
-        CovenantMissionFrameMissions.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnCovenantMissionScrollBoxRangeChanged, self);
-        GarrisonLandingPageReportList.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnGarrisonLandingScrollBoxRangeChanged, self);
-    end
+function MissionMixin:OnGarrisonLoaded()
+    CovenantMissionFrameMissions.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnCovenantMissionScrollBoxRangeChanged, self);
+    GarrisonLandingPageReportList.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnGarrisonLandingScrollBoxRangeChanged, self);
 end
 
 function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)

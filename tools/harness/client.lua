@@ -299,6 +299,27 @@ local function InstallBasics(client, env)
         return client:NewFrame(frameType, name, parent, template)
     end
 
+    -- EventUtil.ContinueOnAddOnLoaded (Blizzard_SharedXML/EventUtil.lua), stood in for: at once
+    -- where the game says the addon is loaded (the second answer), else once at its
+    -- ADDON_LOADED. As there, the callback gets no argument when it runs at once.
+    env.EventUtil = {
+        ContinueOnAddOnLoaded = function(addOnName, callback)
+            local _, loaded = env.C_AddOns.IsAddOnLoaded(addOnName)
+            if loaded then
+                callback()
+                return
+            end
+            local frame = env.CreateFrame("Frame")
+            frame:RegisterEvent("ADDON_LOADED")
+            frame:SetScript("OnEvent", function(self, _, name)
+                if name == addOnName then
+                    self:UnregisterEvent("ADDON_LOADED")
+                    callback(name)
+                end
+            end)
+        end,
+    }
+
     local function NewTimer(seconds, fn, repeats)
         local timer = { at = client.clock + seconds, fn = fn, every = repeats and seconds or nil }
         function timer:Cancel() self.cancelled = true end

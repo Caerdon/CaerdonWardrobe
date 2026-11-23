@@ -5,13 +5,12 @@ function GuildBankMixin:GetName()
 end
 
 function GuildBankMixin:Init()
-	return { "ADDON_LOADED" }
+	self:WhenAddOnLoaded("Blizzard_GuildBankUI", self.OnGuildBankLoaded)
+	return {}
 end
 
-function GuildBankMixin:ADDON_LOADED(name)
-	if name == "Blizzard_GuildBankUI" then
-		hooksecurefunc(GuildBankFrame, "Update", function(...) self:OnGuildBankFrameUpdate(...) end)
-	end
+function GuildBankMixin:OnGuildBankLoaded()
+	hooksecurefunc(GuildBankFrame, "Update", function(...) self:OnGuildBankFrameUpdate(...) end)
 end
 
 function GuildBankMixin:GetTooltipData(item, locationInfo)
