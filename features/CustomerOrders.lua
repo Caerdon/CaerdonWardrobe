@@ -4,6 +4,10 @@ function CustomerOrdersMixin:GetName()
 	return "CustomerOrders"
 end
 
+-- An order's piece is marked by the loot spec chosen, and as not to be had where this toon
+-- cannot collect its source (FeatureMixin.lua, statusRules).
+CustomerOrdersMixin.statusRules = { otherSpec = true, noLoot = true }
+
 function CustomerOrdersMixin:Init(frame)
 	self.orderContinuableContainer = ContinuableContainer:Create()
 

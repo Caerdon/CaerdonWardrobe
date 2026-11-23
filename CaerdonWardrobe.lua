@@ -784,26 +784,141 @@ local function SetRingIcon(mogStatus, texture)
     return true
 end
 
+-- The icon of each status that has a plain one: SetItemButtonStatus draws from this. The
+-- statuses with more to them are drawn by its own code: an upgrade, a piece kept for a look
+-- ("transform"), "collected" (the equal-level icon, a gear set's), an owned housing item.
+--   shownBy           the window's display rule that has to allow the icon
+--                     (displayInfo[shownBy].shouldShow); with none it is always drawn
+--   otherwise         the status it is drawn as where the window does not show this one
+--   prominent         at the full size, where the others are a little smaller; it holds for the
+--                     button whether or not the window shows the icon
+--   motion            "bounce" or "spin": the icon moves (Icon.EnableAnimation)
+--   alpha
+--   ring              the texture of one of the store's ring icons (SetRingIcon)
+--   atlas, texture    the icon, an atlas where the client has it and the texture where not
+--   texCoord, color   of the icon
+--   background        { texCoord, texture, color } behind the icon
+--   backgroundAdjust  how much smaller than its background the icon is
+--   nudge             moves the background against the icon (SetStatusIconPosition)
+local PLUS_GREEN = { 0.4, 1, 0 }
+-- The ring an arrow stands on, and the square an arrow or the quest icon is cut from.
+local RING_COORDS = { (512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512 }
+local RING_TEXTURE = "Interface\\HUD\\UIUnitFrameBoss2x"
+local FULL_COORDS = { -1 / 32, 33 / 32, -1 / 32, 33 / 32 }
+local COMBINE_GREEN = { 80 / 256, 252 / 256, 80 / 256, 253 / 256 }
+
+local STATUS_ICONS = {
+    -- To learn. The Plus forms follow below.
+    own = { shownBy = "ownIcon", prominent = true, motion = "bounce", ring = "Interface\\Store\\category-icon-featured" },
+    other = { shownBy = "otherIcon", prominent = true, ring = "Interface\\Store\\category-icon-placeholder" },
+    otherSpec = { shownBy = "otherIcon", prominent = true, motion = "bounce", texture = "Interface\\COMMON\\icon-noloot" },
+    otherNoLoot = { shownBy = "otherIcon", backgroundAdjust = 0, nudge = -0.5,
+        background = { texCoord = RING_COORDS, texture = RING_TEXTURE },
+        texture = "Interface\\Buttons\\UI-GroupLoot-Pass-Up", color = { 1, 1, 0 } },
+    -- Something this toon can learn once it has the level or the skill: the star's stand-in
+    -- until then, so it is shown where the star is and has no switch of its own (author
+    -- decision).
+    lowSkill = { shownBy = "ownIcon", texCoord = { 6 / 64, 58 / 64, 6 / 64, 58 / 64 }, texture = "Interface\\WorldMap\\Gear_64Grey" },
+    -- TODO: Need to improve to pass data for icon determination.
+    needForProfession = { shownBy = "ownIcon", prominent = true, ring = "Interface\\Store\\category-icon-featured" },
+    -- Something for another toon of the player's: a recipe it can learn, an ingredient its
+    -- recipes take. Shown where the icon for another toon is. The envelope fills its square,
+    -- where a ring icon has a margin around the ring, so it is drawn at the smaller size the
+    -- auction icon has: at the full one it read as larger than the icons beside it.
+    send = { shownBy = "otherIcon", atlas = "ui-hud-minimap-mail-up", texture = "Interface\\MailFrame\\Mail-Icon" },
+
+    upgradeNonEquipment = { motion = "bounce", backgroundAdjust = 4,
+        background = { texCoord = RING_COORDS, texture = RING_TEXTURE, color = { 0, 1, 1 } },
+        texCoord = FULL_COORDS, texture = "Interface\\Buttons\\JumpUpArrow" },
+    quest = { shownBy = "questIcon", texCoord = FULL_COORDS, texture = "Interface\\MINIMAP\\MapQuestHub_Icon32" },
+    oldexpansion = { shownBy = "oldExpansionIcon", alpha = 0.9, ring = "Interface\\Store\\category-icon-wow" },
+    -- It is known and can be sold.
+    sellable = { shownBy = "sellableIcon", alpha = 0.9, ring = "Interface\\Store\\category-icon-bag" },
+    -- The auction house pays enough more than a vendor to list it instead. "auction" follows
+    -- below: it is a thing to sell where its own icon is off (anything but bags and bank).
+    auctionGoods = { shownBy = "auctionIcon", alpha = 0.9, atlas = "Auctioneer", texture = "Interface\\MoneyFrame\\UI-GoldIcon" },
+
+    -- A copy in a bag slot.
+    openable = { prominent = true, motion = "bounce", ring = "Interface\\Store\\category-icon-free" },
+    locked = { prominent = true, motion = "bounce", ring = "Interface\\Store\\category-icon-key" },
+    readable = { ring = "Interface\\Store\\category-icon-services" },
+    refundable = { motion = "bounce", alpha = 0.9, texture = "Interface\\COMMON\\mini-hourglass" },
+    -- TODO: Add separate config for combine icon
+    canCombine = { shownBy = "ownIcon", texCoord = { 91 / 1024, (91 + 30) / 1024, 987 / 1024, (987 + 30) / 1024 },
+        texture = "Interface\\Store\\ServicesAtlas" },
+    readyToCombine = { shownBy = "ownIcon", motion = "spin", backgroundAdjust = 4,
+        background = { texCoord = RING_COORDS, texture = RING_TEXTURE, color = COMBINE_GREEN },
+        texCoord = { 305 / 512, (305 + 116) / 512, 141 / 512, (141 + 116) / 512 },
+        texture = "Interface\\Animations\\PowerSwirlAnimation", color = COMBINE_GREEN },
+
+    waiting = { alpha = 0.5, ring = "Interface\\Common\\StreamCircle" },
+}
+
+-- A copy of an entry with some fields of its own.
+local function StatusIconLike(entry, fields)
+    local copy = {}
+    for key, value in pairs(entry) do
+        copy[key] = value
+    end
+    for key, value in pairs(fields) do
+        copy[key] = value
+    end
+    return copy
+end
+
+-- The Plus forms: the same icon in green.
+STATUS_ICONS.ownPlus = StatusIconLike(STATUS_ICONS.own, { color = PLUS_GREEN })
+STATUS_ICONS.otherPlus = StatusIconLike(STATUS_ICONS.other, { color = PLUS_GREEN })
+STATUS_ICONS.otherSpecPlus = StatusIconLike(STATUS_ICONS.otherSpec, { color = PLUS_GREEN })
+STATUS_ICONS.lowSkillPlus = StatusIconLike(STATUS_ICONS.lowSkill, { color = PLUS_GREEN })
+-- Its icon is yellow already, so the green is the background's.
+STATUS_ICONS.otherPlusNoLoot = StatusIconLike(STATUS_ICONS.otherNoLoot,
+    { background = StatusIconLike(STATUS_ICONS.otherNoLoot.background, { color = PLUS_GREEN }) })
+STATUS_ICONS.auction = StatusIconLike(STATUS_ICONS.auctionGoods, { otherwise = "sellable" })
+
+local function IsStatusIconShown(entry, displayInfo)
+    local rule = entry.shownBy
+    if not rule then
+        return true
+    end
+    local shown = displayInfo and displayInfo[rule]
+    return shown and shown.shouldShow
+end
+
+-- Puts an entry's icon on a texture. Returns whether it is a ring icon.
+local function SetStatusIcon(texture, entry)
+    local isRingIcon = false
+    if entry.ring then
+        isRingIcon = SetRingIcon(texture, entry.ring)
+    else
+        if entry.texCoord then
+            texture:SetTexCoord(unpack(entry.texCoord))
+        end
+        if entry.atlas and texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(entry.atlas) then
+            texture:SetAtlas(entry.atlas, false)
+        else
+            texture:SetTexture(entry.texture)
+        end
+    end
+    if entry.color then
+        texture:SetVertexColor(unpack(entry.color))
+    end
+    return isRingIcon
+end
+
 -- The small mark on an icon: the icon of the status the item also has, as that status draws
 -- it. On a quest's icon "readable" for a copy that can be read, "sellable" and "auction" for
 -- an item a quest that can be done again still takes and that has nothing else to it. On the
 -- star or the grey gear "quest", for an item that starts a quest.
+local SMALL_MARKS = { quest = STATUS_ICONS.quest, auction = STATUS_ICONS.auction, sellable = STATUS_ICONS.sellable }
+
 local function SetSmallMark(texture, mark)
-    if mark == "quest" then
-        texture:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-        texture:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
-    elseif mark == "auction" then
+    local entry = SMALL_MARKS[mark] or STATUS_ICONS.readable
+    if entry.atlas then
+        -- The texture has had another mark's cut before.
         texture:SetTexCoord(0, 1, 0, 1)
-        if texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("Auctioneer") then
-            texture:SetAtlas("Auctioneer", false)
-        else
-            texture:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
-        end
-    elseif mark == "sellable" then
-        SetRingIcon(texture, "Interface\\Store\\category-icon-bag")
-    else
-        SetRingIcon(texture, "Interface\\Store\\category-icon-services")
     end
+    SetStatusIcon(texture, entry)
 end
 
 local function ApplyUpgradeArrowColor(arrow, transmogInfo, allowMismatchedSpecUpgrades, defaultR, defaultG, defaultB)
@@ -853,8 +968,7 @@ end
 -- 1.60.1.70959): a helm 38 levels off had Pawn's yellow arrow on a ring a shade greener than
 -- an upgrade's, and read as one to take now.
 local function SetLaterMark(texture)
-    texture:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
-    texture:SetTexture("Interface\\WorldMap\\Gear_64Grey")
+    SetStatusIcon(texture, STATUS_ICONS.lowSkill)
 end
 
 -- The upgrade icon: an arrow on a ring, with the level gain when there is one to show (gain).
@@ -1124,7 +1238,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             caerdonButton.isWaitingIcon = true
         end
     else
-        if status == "readyToCombine" or status == "own" or status == "ownPlus" or status == "otherSpec" or status == "otherSpecPlus" or status == "refundable" or status == "openable" or status == "locked" or status == "upgradeNonEquipment" or status == "readyToCombine" then
+        local motion = STATUS_ICONS[status] and STATUS_ICONS[status].motion
+        if motion then
             showAnim = true
 
             if mogAnim and caerdonButton.isWaitingIcon then
@@ -1140,7 +1255,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             if not mogAnim then
                 mogAnim = mogStatus:CreateAnimationGroup()
 
-                if status == "readyToCombine" then
+                if motion == "spin" then
                     self:AddRotation(mogAnim, 1, 360, 0.75, "NONE")
                 else
                     self:AddRotation(mogAnim, 1, 110, 0.2, "OUT")
@@ -1296,124 +1411,50 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         end
     end
 
-    -- TODO: Add options to hide these statuses
-    if status == "refundable" then
-        alpha = 0.9
-        mogStatus:SetTexture("Interface\\COMMON\\mini-hourglass")
-    elseif status == "openable" then
-        isProminent = true
-        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-free")
-    elseif status == "readable" then
-        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-services")
-    elseif status == "lowSkill" or status == "lowSkillPlus" then
-        -- Something this toon can learn once it has the level or the skill: the star's stand-in
-        -- until then, so it is shown where the star is and has no switch of its own (author
-        -- decision).
-        if displayInfo and displayInfo.ownIcon.shouldShow then
-            mogStatus:SetTexCoord(6 / 64, 58 / 64, 6 / 64, 58 / 64)
-            mogStatus:SetTexture("Interface\\WorldMap\\Gear_64Grey")
-            if status == "lowSkillPlus" then
-                mogStatus:SetVertexColor(0.4, 1, 0)
+    -- The status's icon: a plain one from the table, and the four that have more to them.
+    local statusIcon = STATUS_ICONS[status]
+    if statusIcon and statusIcon.otherwise and not IsStatusIconShown(statusIcon, displayInfo) then
+        statusIcon = STATUS_ICONS[statusIcon.otherwise]
+    end
+    if statusIcon then
+        if statusIcon.prominent then
+            isProminent = true
+        end
+        if IsStatusIconShown(statusIcon, displayInfo) then
+            alpha = statusIcon.alpha or alpha
+            iconBackgroundAdjustment = statusIcon.backgroundAdjust or iconBackgroundAdjustment
+            -- Kept on the icon, not written into options: callers reuse one options table for a
+            -- whole window, and the nudge used to leak onto every button drawn after this one.
+            mogStatus.caerdonBackgroundNudge = statusIcon.nudge
+            local background = statusIcon.background
+            if background then
+                mogStatusBackground:SetTexCoord(unpack(background.texCoord))
+                mogStatusBackground:SetTexture(background.texture)
+                if background.color then
+                    mogStatusBackground:SetVertexColor(unpack(background.color))
+                end
             end
+            isRingIcon = SetStatusIcon(mogStatus, statusIcon)
         end
-        -- mogStatus:SetTexture("Interface\\QUESTFRAME\\SkillUp-BG")
-        -- mogStatus:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
-        -- mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-    elseif status == "upgradeNonEquipment" then
-        isProminent = false
-        iconBackgroundAdjustment = 4
-        mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-        mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-        mogStatusBackground:SetVertexColor(0, 1, 1)
-
-        mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-        mogStatus:SetTexture("Interface\\Buttons\\JumpUpArrow")
-    elseif status == "upgrade" then
-        isProminent = false
+    elseif status == "upgrade" or status == "upgradeLowSkill" then
         if gearSetIcon then
             isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
             upgradeOnSetIcon = status
         elseif shouldShowUpgradeIcon then
-            iconBackgroundAdjustment = 4
-            upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, false,
+            -- The arrow sits inside its ring; the mark of an upgrade to come has none.
+            local later = status == "upgradeLowSkill"
+            if not later then
+                iconBackgroundAdjustment = 4
+            end
+            upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, later,
                 transmogInfo, allowMismatchedSpecUpgrades, levelGain)
         elseif hasLookToGain then
             DrawLookMark()
         end
-    elseif status == "upgradeLowSkill" then
-        isProminent = false
-        if gearSetIcon then
-            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
-            upgradeOnSetIcon = status
-        elseif shouldShowUpgradeIcon then
-            upgradeDeltaShown = DrawUpgradeIcon(self, originalButton, caerdonButton, deltaAnchorFrame, true,
-                transmogInfo, allowMismatchedSpecUpgrades, levelGain)
-        elseif hasLookToGain then
-            DrawLookMark()
-        end
-    elseif status == "locked" then
-        isProminent = true
-        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-key")
-    elseif status == "oldexpansion" and displayInfo and displayInfo.oldExpansionIcon.shouldShow then
-        alpha = 0.9
-        isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-wow")
-    elseif status == "needForProfession" then
-        -- TODO: Need to improve to pass data for icon determination.
-        isProminent = true
-        if displayInfo and displayInfo.ownIcon.shouldShow then
-            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-featured")
-            -- mogStatus:SetTexture("Interface\\WorldMap\\worldquest-icon-enchanting")
-        end
-    elseif status == "canCombine" then
-        -- isProminent = true
-        if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
-            -- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-            -- mogStatus:SetTexture("Interface\\PaperDollInfoFrame\\Character-Plus")
-            -- mogStatus:SetTexture("Interface\\BUTTONS\\UI-PlusButton-Up")
-
-            -- options.statusProminentSize = 256
-
-            -- mogStatus:SetTexCoord((512-23)/512, (512-7)/512, (172-18)/512, (172-3)/512)
-            -- mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
-
-            mogStatus:SetTexCoord(91 / 1024, (91 + 30) / 1024, 987 / 1024, (987 + 30) / 1024)
-            mogStatus:SetTexture("Interface\\Store\\ServicesAtlas")
-
-            -- if status == "ownPlus" then
-            -- 	mogStatus:SetVertexColor(0.4, 1, 0)
-            -- end
-        end
-    elseif status == "readyToCombine" then
-        -- isProminent = true
-        if displayInfo and displayInfo.ownIcon.shouldShow then -- TODO: Add separate config for combine icon
-            -- alpha = 0.9
-
-            -- mogStatus:SetTexCoord((512-23)/512, (512-7)/512, 172/512, (172+15)/512)
-            -- mogStatus:SetTexture("Interface\\QUESTFRAME\\WorldQuest")
-
-            iconBackgroundAdjustment = 4
-
-            -- mogStatusBackground:SetTexCoord(455/512, (455+28)/512, 1/256, (1+28)/256)
-            -- mogStatusBackground:SetTexture("Interface\\Store\\Shop")
-
-            -- mogStatusBackground:SetTexCoord(180/512, (180+46)/512, 5/512, (5+46)/512)
-            mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-            mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-            -- mogStatusBackground:SetVertexColor(0, 1, 0)
-            mogStatusBackground:SetVertexColor(80 / 256, 252 / 256, 80 / 256, 253 / 256)
-
-            mogStatus:SetTexCoord(305 / 512, (305 + 116) / 512, 141 / 512, (141 + 116) / 512)
-            mogStatus:SetTexture("Interface\\Animations\\PowerSwirlAnimation")
-            -- mogStatus:SetVertexColor(0, 1, 0)
-            mogStatus:SetVertexColor(80 / 256, 252 / 256, 80 / 256, 253 / 256)
-
-            -- mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-            -- mogStatus:SetTexture("Interface\\HELPFRAME\\ReportLagIcon-AuctionHouse")
-
-            -- if status == "ownPlus" then
-            -- 	mogStatus:SetVertexColor(0.4, 1, 0)
-            -- end
-        end
+    elseif status == "transform" then
+        -- A piece to keep: raised on its upgrade track or converted at the Catalyst it has a
+        -- look that is not known.
+        DrawLookMark()
     elseif status == "housingOwned" then
         isProminent = true
         iconBackgroundAdjustment = 2
@@ -1433,65 +1474,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         if not housingIconSet then
             isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-featured")
         end
-    elseif status == "own" or status == "ownPlus" then
-        isProminent = true
-        if displayInfo and displayInfo.ownIcon.shouldShow then
-            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-featured")
-            if status == "ownPlus" then
-                mogStatus:SetVertexColor(0.4, 1, 0)
-            end
-        end
-    elseif status == "other" or status == "otherPlus" then
-        isProminent = true
-        if displayInfo and displayInfo.otherIcon.shouldShow then
-            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-placeholder")
-            if status == "otherPlus" then
-                mogStatus:SetVertexColor(0.4, 1, 0)
-            end
-        end
-    elseif status == "send" then
-        -- Something for another toon of the player's: a recipe it can learn, an ingredient its
-        -- recipes take. Shown where the icon for another toon is. The envelope fills its square,
-        -- where a ring icon has a margin around the ring, so it is drawn at the smaller size the
-        -- auction icon has: at the full one it read as larger than the icons beside it.
-        if displayInfo and displayInfo.otherIcon.shouldShow then
-            if mogStatus.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ui-hud-minimap-mail-up") then
-                mogStatus:SetAtlas("ui-hud-minimap-mail-up", false)
-            else
-                mogStatus:SetTexture("Interface\\MailFrame\\Mail-Icon")
-            end
-        end
-    elseif status == "transform" then
-        -- A piece to keep: raised on its upgrade track or converted at the Catalyst it has a
-        -- look that is not known.
-        DrawLookMark()
-    elseif status == "otherNoLoot" or status == "otherPlusNoLoot" then
-        if displayInfo and displayInfo.otherIcon.shouldShow then
-            iconBackgroundAdjustment = 0
-            -- Kept on the icon, not written into options: callers reuse one options table for a
-            -- whole window, and the nudge used to leak onto every button drawn after this one.
-            mogStatus.caerdonBackgroundNudge = -0.5
-            mogStatusBackground:SetTexCoord((512 - 46 - 31) / 512, (512 - 31) / 512, 5 / 512, (5 + 46) / 512)
-            mogStatusBackground:SetTexture("Interface\\HUD\\UIUnitFrameBoss2x")
-            mogStatus:SetVertexColor(1, 1, 0)
-
-            mogStatus:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-
-            if status == "otherPlusNoLoot" then
-                mogStatusBackground:SetVertexColor(0.4, 1, 0)
-            end
-        end
-    elseif status == "otherSpec" or status == "otherSpecPlus" then
-        isProminent = true
-        if displayInfo and displayInfo.otherIcon.shouldShow then
-            mogStatus:SetTexture("Interface\\COMMON\\icon-noloot")
-            if status == "otherSpecPlus" then
-                mogStatus:SetVertexColor(0.4, 1, 0)
-            end
-        end
-    elseif status == "quest" and displayInfo and displayInfo.questIcon.shouldShow then
-        mogStatus:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
-        mogStatus:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
     elseif status == "collected" then
         local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
         if shouldShowUpgradeIcon and transmogInfo and transmogInfo.upgradeMatchesSpec == false and
@@ -1521,26 +1503,6 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
             isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-clothes")
         end
-    elseif (status == "auction" or status == "auctionGoods") and displayInfo and displayInfo.auctionIcon and displayInfo.auctionIcon.shouldShow then
-        -- The auction house pays enough more than a vendor to list it instead.
-        alpha = 0.9
-        if mogStatus.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("Auctioneer") then
-            mogStatus:SetAtlas("Auctioneer", false)
-        else
-            mogStatus:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
-        end
-    elseif status == "sellable" or status == "auction" then
-        -- "auction" lands here where its own icon is off (anything but bags and bank).
-        if displayInfo and displayInfo.sellableIcon.shouldShow then -- it's known and can be sold
-            alpha = 0.9
-            isRingIcon = SetRingIcon(mogStatus, "Interface\\Store\\category-icon-bag")
-        end
-    elseif status == "waiting" then
-        alpha = 0.5
-        isRingIcon = SetRingIcon(mogStatus, "Interface\\Common\\StreamCircle")
-        -- elseif IsGearSetStatus(bindingStatus, item) and CaerdonWardrobeConfig.Binding.ShowGearSetsAsIcon then
-        -- 	mogStatus:SetTexCoord(16/64, 48/64, 16/64, 48/64)
-        -- 	mogStatus:SetTexture("Interface\\Store\\category-icon-clothes")
     end
 
     -- A button that is there for the upgrade alone (displayInfo.statusIcon.shouldShow == false:
@@ -2317,8 +2279,6 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         options = {}
     end
 
-    local caerdonType = item:GetCaerdonItemType()
-
     -- The transmog info comes with the status: it is the table the verdict was made from, kept
     -- with it, so a draw never computes it again.
     local isReady, transmogInfo, smallMark
@@ -2380,59 +2340,10 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         end
     end
 
-    if caerdonType == CaerdonItemType.Equipment then
-        if transmogInfo then
-            if transmogInfo.isTransmog then
-                -- TODO: Exceptions need to be broken out
-                -- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
-                local featureName = feature and feature:GetStatusRuleName()
-                -- An item a quest takes keeps the quest icon in these windows too, and one
-                -- that starts a quest its star.
-                if mogStatus ~= "quest" and smallMark ~= "quest" and
-                    (featureName == "EncounterJournal" or featureName == "Merchant" or featureName == "CustomerOrders") then
-                    if transmogInfo.needsItem and featureName ~= "Merchant" then
-                        if not transmogInfo.matchesLootSpec then
-                            if mogStatus == "own" or mogStatus == "lowSkill" then
-                                mogStatus = "otherSpecPlus"
-                            else
-                                if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-                                    mogStatus = "otherSpec"
-                                end
-                            end
-                        end
-                    elseif transmogInfo.otherNeedsItem then
-                        local playerCanCollectSource = transmogInfo.playerCanCollectSource
-                        local isBindOnPickup = bindingResult and bindingResult.isBindOnPickup
-                        local playerCollectRestricted = playerCanCollectSource == false
-                        local shouldShowNoLoot
-
-                        if featureName == "EncounterJournal" then
-                            -- Encounter Journal entries should flag as no-loot when the source is
-                            -- class/faction locked or when the drop itself is BoP (old behavior).
-                            shouldShowNoLoot = playerCollectRestricted or isBindOnPickup
-                        elseif featureName == "Merchant" then
-                            -- Merchant items should only show no-loot when this character truly can't
-                            -- collect the source (class/race/faction restriction). BoP cosmetics and
-                            -- cross-armor pieces remain completionist-learnable, so keep them visible.
-                            shouldShowNoLoot = playerCollectRestricted
-                        else
-                            -- Customer Orders (and any other features that land here) still benefit
-                            -- from the new player-can-collect signal so completionists can see when
-                            -- the recipe truly cannot be learned.
-                            shouldShowNoLoot = playerCollectRestricted
-                        end
-
-                        if shouldShowNoLoot then
-                            if not transmogInfo.isCompletionistItem then
-                                mogStatus = "otherNoLoot"
-                            else
-                                mogStatus = "otherPlusNoLoot"
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    -- A window that offers items shows some looks otherwise than the verdict has them (the
+    -- feature's statusRules). Per window, so it is done here and not kept with the verdict.
+    if feature then
+        mogStatus = feature:ApplyStatusRules(item, mogStatus, smallMark, transmogInfo, bindingResult)
     end
 
     -- The status logic's own upgrade verdict, for the badge on an icon that is not the arrow.
@@ -2565,7 +2476,20 @@ function CaerdonWardrobeMixin:AskWhenOnScreen(button, feature, context)
     return true
 end
 
+-- How often each button has been asked for or cleared. A window's item that is still loading
+-- (Decorate) is drawn only if nothing was said about its button in the meantime.
+local askSerials = setmetatable({}, { __mode = "k" })
+
+local function NextAskSerial(button)
+    local serial = (askSerials[button] or 0) + 1
+    askSerials[button] = serial
+    return serial
+end
+
 function CaerdonWardrobeMixin:ClearButton(button)
+    if button then
+        NextAskSerial(button)
+    end
     local caerdonButton = self:GetCaerdonButton(button)
     if caerdonButton then
         if caerdonButton.caerdonOwedTo then
@@ -2647,6 +2571,9 @@ function CaerdonWardrobeMixin:CancelPending(feature)
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
+    if button then
+        NextAskSerial(button)
+    end
     local caerdonButton, createdNew = self:SetupCaerdonButton(button, item, feature, locationInfo, options)
 
     -- Whatever was owed to the button (AskWhenOnScreen) is asked for now.
@@ -2714,6 +2641,40 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
 
         return
     end
+end
+
+-- One button of a window, from what the window has for it: an item link, an item ID, an item
+-- the window made itself (CaerdonItem), or nothing, which clears the button. Returns the item.
+--
+-- The item's data is waited for here, before the button is asked for (UpdateButton), and the
+-- wait belongs to the button as it was when the window asked: a row that was cleared or asked
+-- for again while its item loaded is not drawn by the answer that comes late. A window that
+-- waited itself and then asked drew a row's old item over what the row had come to show (a
+-- vendor's page turned while its items loaded).
+function CaerdonWardrobeMixin:Decorate(feature, button, source, locationInfo, options)
+    local item = source
+    if type(source) == "string" then
+        item = CaerdonItem:CreateFromItemLink(source)
+    elseif type(source) == "number" then
+        item = CaerdonItem:CreateFromItemID(source)
+    end
+    if not item then
+        self:ClearButton(button)
+        return nil
+    end
+
+    if item:IsItemDataCached() then
+        self:UpdateButton(button, item, feature, locationInfo, options)
+        return item
+    end
+
+    local serial = NextAskSerial(button)
+    item:ContinueOnItemLoad(function()
+        if askSerials[button] == serial then
+            Contained(self.UpdateButton, self, button, item, feature, locationInfo, options)
+        end
+    end)
+    return item
 end
 
 -- How long one frame's pass over the queue may take, in seconds. The queue used to draw twenty
@@ -2940,7 +2901,9 @@ function CaerdonWardrobeMixin:ADDON_LOADED(name)
         local name, instance
         for name, instance in pairs(availableFeatures) do
             registeredFeatures[name] = instance
+            local startedAt, startedKB = Counters:BeginStart()
             local finished, instanceEvents = Contained(instance.Init, instance, self)
+            Counters:EndStart(name, startedAt, startedKB)
             -- Read by the integration report: false for an Init that raised an error. Such a
             -- feature gets no events; the features after it start as usual.
             instance.initFinished = finished

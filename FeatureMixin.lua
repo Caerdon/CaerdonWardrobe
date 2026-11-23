@@ -7,11 +7,56 @@ function CaerdonWardrobeFeatureMixin:GetName()
     error("Caerdon Wardrobe: Must provide a feature name")
 end
 
--- Which feature's status rules ProcessItem applies (the Merchant / EncounterJournal / CustomerOrders
--- exceptions). A feature that draws another feature's content in its own frames, such as an addon's
--- replacement vendor window, returns that feature's name.
-function CaerdonWardrobeFeatureMixin:GetStatusRuleName()
-    return self:GetName()
+-- What a window that offers items does with a look to learn, once the verdict is made. A window
+-- that shows what the toon holds (bags, bank, mail) declares nothing. On the feature's mixin:
+--     SomeMixin.statusRules = {
+--         otherSpec = true,           -- a look this toon needs, on a piece the loot spec chosen
+--                                     -- does not bring, is marked as another spec's
+--         noLoot = true,              -- a look only another toon could learn is marked as not to
+--                                     -- be had where this toon cannot collect the source
+--         noLootBindOnPickup = true,  -- ... and where the piece binds when it is picked up
+--     }
+-- A feature that draws another feature's content in its own frames, such as an addon's
+-- replacement vendor window, answers with that feature's rules.
+function CaerdonWardrobeFeatureMixin:GetStatusRules()
+    return self.statusRules
+end
+
+-- The status as this window shows it: the verdict, with the window's rules applied. The verdict
+-- is kept by item link for every window, so this is done at each draw (ProcessItem) and the
+-- answer kept nowhere. An item a quest takes keeps the quest icon in these windows too, and one
+-- that starts a quest its star.
+function CaerdonWardrobeFeatureMixin:ApplyStatusRules(item, mogStatus, smallMark, transmogInfo, bindingResult)
+    local rules = self:GetStatusRules()
+    if not rules or not transmogInfo or not transmogInfo.isTransmog then
+        return mogStatus
+    end
+    if mogStatus == "quest" or smallMark == "quest" then
+        return mogStatus
+    end
+    if item:GetCaerdonItemType() ~= CaerdonItemType.Equipment then
+        return mogStatus
+    end
+
+    if rules.otherSpec and transmogInfo.needsItem then
+        if not transmogInfo.matchesLootSpec then
+            if mogStatus == "own" or mogStatus == "lowSkill" then
+                return "otherSpecPlus"
+            elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                return "otherSpec"
+            end
+        end
+    elseif rules.noLoot and transmogInfo.otherNeedsItem then
+        -- The source is another class's, race's or faction's. A piece that binds when picked up
+        -- cannot be handed on either; a vendor's and an order's stay learnable for the collection
+        -- (a cosmetic, a piece of another armor type).
+        local notToBeHad = transmogInfo.playerCanCollectSource == false or
+            (rules.noLootBindOnPickup and bindingResult and bindingResult.isBindOnPickup)
+        if notToBeHad then
+            return transmogInfo.isCompletionistItem and "otherPlusNoLoot" or "otherNoLoot"
+        end
+    end
+    return mogStatus
 end
 
 function CaerdonWardrobeFeatureMixin:Init()
@@ -25,6 +70,13 @@ end
 -- ADDON_LOADED handler that compares names.
 function CaerdonWardrobeFeatureMixin:WhenAddOnLoaded(addonName, callback)
     CaerdonWardrobe:WhenAddOnLoaded(addonName, self, callback)
+end
+
+-- One button of this feature's window, from an item link, an item ID or an item the feature
+-- made, or nothing to clear it (CaerdonWardrobe:Decorate, which waits for the item's data and
+-- leaves a row alone that has moved on by then). Returns the item.
+function CaerdonWardrobeFeatureMixin:Decorate(button, source, locationInfo, options)
+    return CaerdonWardrobe:Decorate(self, button, source, locationInfo, options)
 end
 
 -- Hook points: where a feature attaches to another addon's code.

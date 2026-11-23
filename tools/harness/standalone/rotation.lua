@@ -278,7 +278,6 @@ local function NewBagWindow(featureName, integration, flaws)
     window.holder.shown = false
     local feature = { integration = integration, initFinished = true }
     function feature:GetName() return featureName end
-    function feature:GetStatusRuleName() return featureName end
     function feature:Draw()
         for bag = 0, 5 do
             for slot = 1, SLOTS[bag] do
@@ -894,8 +893,7 @@ do
 
     -- The bank, the first time it is opened in a session.
     local function OpenBank()
-        session.core.features.Bank = { GetName = function() return "Bank" end,
-            GetStatusRuleName = function() return "Bank" end }
+        session.core.features.Bank = { GetName = function() return "Bank" end }
         C_Bank.FetchPurchasedBankTabIDs = function(bankType) return bankType == 0 and { 6 } or {} end
         FireEvent("BANKFRAME_OPENED")
         Run(3)

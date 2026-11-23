@@ -7,6 +7,10 @@ function EncounterJournalMixin:GetName()
     return "EncounterJournal"
 end
 
+-- A drop is marked by the loot spec chosen, and as not to be had where this toon cannot collect
+-- its source or the piece binds when picked up (FeatureMixin.lua, statusRules).
+EncounterJournalMixin.statusRules = { otherSpec = true, noLoot = true, noLootBindOnPickup = true }
+
 function EncounterJournalMixin:Init()
     self:WhenAddOnLoaded("Blizzard_EncounterJournal", self.OnEncounterJournalLoaded)
     return { "PLAYER_LOOT_SPEC_UPDATED", "LOOT_JOURNAL_ITEM_UPDATE" }

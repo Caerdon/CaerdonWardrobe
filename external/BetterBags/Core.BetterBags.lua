@@ -148,8 +148,10 @@ function BetterBagsVendorMixin:GetName()
     return "BetterBagsVendor"
 end
 
-function BetterBagsVendorMixin:GetStatusRuleName()
-    return "Merchant"
+-- The vendor's own rules, asked of its feature so the two cannot drift apart.
+function BetterBagsVendorMixin:GetStatusRules()
+    local merchant = CaerdonWardrobe:GetFeature("Merchant")
+    return merchant and merchant:GetStatusRules()
 end
 
 function BetterBagsVendorMixin:UpdateVendorButton(vendorButton)
@@ -300,10 +302,6 @@ local trackedGuildButtons = setmetatable({}, { __mode = "k" })
 
 function BetterBagsGuildBankMixin:GetName()
     return "BetterBagsGuildBank"
-end
-
-function BetterBagsGuildBankMixin:GetStatusRuleName()
-    return "GuildBank"
 end
 
 -- The guild bank tab and slot a button shows an item of, or nil for a free slot or a pooled button.

@@ -51,6 +51,14 @@ function AuctionMixin:AUCTION_HOUSE_SHOW()
 		end
 		hooksecurefunc(AuctionHouseFrame, "SelectBrowseResult", function(...) self:OnSelectBrowseResult(...) end)
 		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function(...) self:OnSetPostItem(...) end)
+		-- A sell slot that is emptied (the item taken out or dragged off, the auction posted)
+		-- never comes through SetPostItem: the client empties the slot's own display.
+		for _, sellFrame in ipairs({ AuctionHouseFrame.ItemSellFrame, AuctionHouseFrame.CommoditiesSellFrame }) do
+			local itemDisplay = sellFrame and sellFrame.ItemDisplay
+			if itemDisplay and type(itemDisplay.SetItemInternal) == "function" then
+				hooksecurefunc(itemDisplay, "SetItemInternal", function(...) self:OnSetSellItemDisplay(...) end)
+			end
+		end
 		hooksecurefunc(AuctionHouseFrame.AuctionsFrame.ItemDisplay, "SetItemInternal", function(...) self:OnSetAuctionItemDisplay(...) end)
 	end
 end
@@ -107,29 +115,20 @@ function AuctionMixin:OnAllAuctionsInitializedFrame(auctionFrame, frame, element
 		return
 	end
 
-	local item = CaerdonItem:CreateFromItemLink(browseResult.itemLink)
 	local itemKey = browseResult.itemKey
 
 	button.caerdonDebugItemLink = browseResult.itemLink
 
-	local function doUpdate()
-		CaerdonWardrobe:UpdateButton(button, item, self, {
-			locationKey = format("allAuctions%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix),
-			itemKey = itemKey
-		},
-		{
-			overrideStatusPosition = "LEFT",
-			statusProminentSize = 13,
-			statusOffsetX = 7,
-			statusOffsetY = 0
-		})
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	self:Decorate(button, browseResult.itemLink, {
+		locationKey = format("allAuctions%d-%d-%d", itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix),
+		itemKey = itemKey
+	},
+	{
+		overrideStatusPosition = "LEFT",
+		statusProminentSize = 13,
+		statusOffsetX = 7,
+		statusOffsetY = 0
+	})
 end
 
 -- The addon's own columns in the auction house's lists (author decision: first in the row).
@@ -962,27 +961,17 @@ function AuctionMixin:OnSetAuctionItemDisplay(frame, itemDisplayItem)
 		return;
 	end
 
-	local item = CaerdonItem:CreateFromItemLink(itemDisplay.itemLink)
-
 	itemButton.caerdonDebugItemLink = itemDisplay.itemLink
 
-	local function doUpdate()
-		CaerdonWardrobe:UpdateButton(itemButton, item, self, {
-			locationKey = "ItemAuctionItemDisplayButton",
-			itemKey = itemDisplay.itemKey
-		},
-		{
-			statusProminentSize = 24,
-			statusOffsetX = 5,
-			statusOffsetY = 5
-		})
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	self:Decorate(itemButton, itemDisplay.itemLink, {
+		locationKey = "ItemAuctionItemDisplayButton",
+		itemKey = itemDisplay.itemKey
+	},
+	{
+		statusProminentSize = 24,
+		statusOffsetX = 5,
+		statusOffsetY = 5
+	})
 end
 
 function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
@@ -1054,45 +1043,29 @@ function AuctionMixin:OnSetPostItem(frame, itemLocation)
 
 		itemSellButton.caerdonDebugItemLink = item:GetItemLink()
 
-		local function doUpdate()
-			CaerdonWardrobe:UpdateButton(itemSellButton, item, self, {
-				locationKey = "ItemSellFrameButton",
-				itemKey = AuctionHouseFrame.ItemSellFrame.listDisplayedItemKey
-			},
-			{
-				statusProminentSize = 24,
-				statusOffsetX = 5,
-				statusOffsetY = 5
-			})
-		end
-
-		if item:IsItemDataCached() then
-			doUpdate()
-		else
-			item:ContinueOnItemLoad(doUpdate)
-		end
+		self:Decorate(itemSellButton, item, {
+			locationKey = "ItemSellFrameButton",
+			itemKey = AuctionHouseFrame.ItemSellFrame.listDisplayedItemKey
+		},
+		{
+			statusProminentSize = 24,
+			statusOffsetX = 5,
+			statusOffsetY = 5
+		})
 	elseif displayMode == AuctionHouseFrameDisplayMode.CommoditiesSell then
 		itemSellButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(itemSellButton)
 
 		commoditiesSellButton.caerdonDebugItemLink = item:GetItemLink()
 
-		local function doUpdate()
-			CaerdonWardrobe:UpdateButton(commoditiesSellButton, item, self, {
-				locationKey = "ItemCommoditiesSellFrameButton"
-			},
-			{
-				statusProminentSize = 24,
-				statusOffsetX = 5,
-				statusOffsetY = 5
-			})
-		end
-
-		if item:IsItemDataCached() then
-			doUpdate()
-		else
-			item:ContinueOnItemLoad(doUpdate)
-		end
+		self:Decorate(commoditiesSellButton, item, {
+			locationKey = "ItemCommoditiesSellFrameButton"
+		},
+		{
+			statusProminentSize = 24,
+			statusOffsetX = 5,
+			statusOffsetY = 5
+		})
 	else
 		commoditiesSellButton.caerdonDebugItemLink = nil
 		CaerdonWardrobe:ClearButton(commoditiesSellButton)
@@ -1101,14 +1074,22 @@ function AuctionMixin:OnSetPostItem(frame, itemLocation)
 	end
 end
 
-function AuctionMixin:OnClearPostItem(frame)
-	local itemSellButton = AuctionHouseFrame.ItemSellFrame.ItemDisplay.ItemButton
-	local commoditiesSellButton = AuctionHouseFrame.CommoditiesSellFrame.ItemDisplay.ItemButton
+-- A sell slot's display was given an item or emptied. An item put in is OnSetPostItem's, which
+-- comes after it; an emptied slot loses its icon here.
+function AuctionMixin:OnSetSellItemDisplay(itemDisplay, item)
+	if item then
+		return
+	end
+	-- As the client's own function: a display that refuses the change keeps what it shows.
+	if itemDisplay.itemValidationFunc and not itemDisplay.itemValidationFunc(itemDisplay) then
+		return
+	end
 
-	commoditiesSellButton.caerdonDebugItemLink = nil
-	CaerdonWardrobe:ClearButton(commoditiesSellButton)
-	itemSellButton.caerdonDebugItemLink = nil
-	CaerdonWardrobe:ClearButton(itemSellButton)
+	local itemButton = itemDisplay.ItemButton
+	if itemButton then
+		itemButton.caerdonDebugItemLink = nil
+		CaerdonWardrobe:ClearButton(itemButton)
+	end
 end
 
 CaerdonWardrobe:RegisterFeature(AuctionMixin)

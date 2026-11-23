@@ -32,6 +32,7 @@ function T.ReadLedger()
     return {
         secondsSinceLoad = report.secondsSinceLoad,
         milestones = report.milestones,
+        starts = report.starts,
         itemLoads = report.itemLoads,
         refreshes = report.refreshes,
     }

@@ -93,6 +93,27 @@ function Counters:Milestone(name)
     end
 end
 
+------------------------------------------------------------------------------------------
+-- Ledger: what each feature's start cost
+------------------------------------------------------------------------------------------
+
+-- A feature's Init runs once, at the addon's ADDON_LOADED, whether its window is ever opened
+-- or not: its time and the memory it took are what the feature costs at every login. Taken
+-- around the call by the core: two readings of the clock and of the memory figure a feature.
+local starts = {}
+local startOrder = {}
+
+function Counters:BeginStart()
+    return now(), collectgarbage("count")
+end
+
+function Counters:EndStart(name, startedAt, startedKB)
+    local kb = collectgarbage("count") - startedKB
+    -- Less than nothing: the collector ran inside the call, and the sample says nothing.
+    starts[name] = { seconds = now() - startedAt, kb = kb >= 0 and kb or nil }
+    startOrder[#startOrder + 1] = name
+end
+
 -- Before the toon is in the world the client may not be able to answer for an item, and
 -- before the bags have reported once the bag windows have nothing to ask about.
 local function PhaseAt(seconds)
@@ -757,7 +778,8 @@ local function ReadCounter(counter)
 end
 
 -- Everything as plain data: numbers, strings, booleans and tables of them.
---   ledger:  milestones (list of { name, seconds }), itemLoads, refreshes
+--   ledger:  milestones (list of { name, seconds }), starts (each feature's Init: ms, KB),
+--            itemLoads, refreshes
 --   profile: on, attached, since, functions (list, in the order a draw reaches them),
 --            queueWait, drains
 -- Times of the profile are in milliseconds, memory in KB, everything of the ledger in seconds
@@ -769,6 +791,23 @@ function Counters:GetReport()
     for index, name in ipairs(milestoneOrder) do
         report.milestones[index] = { name = name, seconds = Round(milestones[name], 3) }
     end
+
+    -- The features' starts, the dearest first; ms and KB.
+    local startReport = { count = #startOrder, ms = 0, kb = 0, features = {} }
+    for index, name in ipairs(startOrder) do
+        local start = starts[name]
+        startReport.ms = startReport.ms + start.seconds * 1000
+        startReport.kb = startReport.kb + (start.kb or 0)
+        startReport.features[index] = { name = name, ms = Round(start.seconds * 1000, 3), kb = start.kb and Round(start.kb, 1) or nil }
+    end
+    table.sort(startReport.features, function(a, b)
+        if a.ms ~= b.ms then
+            return a.ms > b.ms
+        end
+        return a.name < b.name
+    end)
+    startReport.ms, startReport.kb = Round(startReport.ms, 3), Round(startReport.kb, 1)
+    report.starts = startReport
 
     local itemLoads = {
         asked = loads.asked,
@@ -928,6 +967,19 @@ function Counters:GetReportLines()
     end
     add(1, ("Seconds since the addon's first line: %s"):format(Figure(report.secondsSinceLoad)))
     add(1, "Milestones (s): " .. (#parts > 0 and table.concat(parts, ", ") or "none yet"))
+    -- What the features cost at login, whether their windows are ever opened: the dearest.
+    local startReport = report.starts
+    if startReport.count > 0 then
+        parts = {}
+        for index = 1, math.min(#startReport.features, 8) do
+            local start = startReport.features[index]
+            parts[#parts + 1] = ("%s %s ms%s"):format(start.name, Figure(start.ms, 2),
+                start.kb and (" " .. Figure(start.kb) .. " KB") or "")
+        end
+        add(1, ("Features started: %d in %s ms, %s KB"):format(startReport.count, Figure(startReport.ms, 2),
+            Figure(startReport.kb)))
+        add(2, "the dearest: " .. table.concat(parts, ", "))
+    end
 
     local refreshReport = report.refreshes
     parts = {}

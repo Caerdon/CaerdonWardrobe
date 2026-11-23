@@ -33,7 +33,7 @@ It draws a status icon, binding text and an item level gain on item buttons in a
 
 ## Code Map
 
-- `CaerdonWardrobe.lua`: the queue (`UpdateButton`, `DrainQueue`, `ProcessItem`), drawing (`SetItemButtonStatus`, `SetItemButtonBindType`, `SetStatusIconPosition`), `RefreshItems`, what each button was last asked to show (`AskAgain`).
+- `CaerdonWardrobe.lua`: the queue (`UpdateButton`, `DrainQueue`, `ProcessItem`), drawing (`SetItemButtonStatus` with its table of icons `STATUS_ICONS`, `SetItemButtonBindType`, `SetStatusIconPosition`), `RefreshItems`, what each button was last asked to show (`AskAgain`).
 - `CaerdonItem.lua`: `CaerdonItemMixin` with `GetCaerdonStatus`, the tooltip scan (`GetTooltipData`) and `GetBindingStatus`.
 - `types/*Mixin.lua`: per item type data (`GetTransmogInfo()`, `GetRecipeInfo()`, ...).
 - `FeatureMixin.lua`, `features/*.lua`: one feature per Blizzard window. `external/*`: one per third-party addon.
@@ -85,8 +85,9 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 - **Never write into `options`.** It belongs to the caller and is usually shared between buttons. Per-button state goes in `buttonState` or on the overlay's regions.
 - **A feature's `Refresh()` must re-run `UpdateButton`** for the buttons it decorated, and is never left empty: `RefreshItems` only wipes caches. A feature with none inherits the default, which asks again for every button the feature last asked for (`CaerdonWardrobe:AskAgain`; notes: Processing Pipeline). Write one only where a window has to be walked.
 - **A feature asks for a window's buttons only while the window is on screen** (`IsVisible`, not `IsShown`: a host addon parks Blizzard's window under a hidden parent and leaves it shown), and only where the window asks again when it comes on screen; where it does not and the cost is measured, the button is owed a draw for when it is (`AskWhenOnScreen`; notes: Processing Pipeline). The default `Refresh()` owes every button that is not on screen.
-- **Features call `ContinueOnItemLoad` before `UpdateButton`**, so `customDataLoaded` is true.
+- **A button's item has its data before `UpdateButton`**, so `customDataLoaded` is true. A window that has a link, an ID or an item of its own for a button hands it over with `self:Decorate(button, source, locationInfo, options)`, which waits (`ContinueOnItemLoad`) and does not draw a row that was asked for again or cleared while its item loaded. A feature that still waits itself guards its callback against that (notes: Processing Pipeline).
 - **A feature waits for a window's load-on-demand addon with `self:WhenAddOnLoaded(addon, method)`** in its `Init`, not with an `ADDON_LOADED` handler that compares names: another addon may have loaded it before the features begin (notes: Processing Pipeline).
+- **What one window does with a status is declared on its feature** (`statusRules`, applied at each draw by `ApplyStatusRules` in `FeatureMixin.lua`), never a check of the feature's name in the core (notes: Processing Pipeline).
 - **A draw path does not call `GetTransmogInfo()`.** It reads the table `GetCaerdonStatus` returns, which is the one the verdict was made from and is shared by every button of that cache entry (notes: Processing Pipeline).
 - **A change to the drawing code is compared with the code from before, call by call:** `scenarios/draw-path.lua` writes down every widget call of `SetItemButtonStatus` and `SetItemButtonBindType` (notes: Offline Harness, Scenarios).
 - **An item's table holds only its data.** Its methods come through a metatable, so do not copy an item or walk it with `pairs` for them (notes: Processing Pipeline).

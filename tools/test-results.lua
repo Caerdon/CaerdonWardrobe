@@ -535,6 +535,18 @@ local function printLedger(ledger, indent)
     end
     print(indent .. "from the addon's first line (s): " .. (#parts > 0 and table.concat(parts, ", ") or "no milestone")
         .. ("; read at %s"):format(figure(ledger.secondsSinceLoad)))
+    -- What each feature's Init cost at login (records from before it was taken have none).
+    local starts = ledger.starts
+    if type(starts) == "table" and type(starts.features) == "table" then
+        parts = {}
+        for index = 1, math.min(#starts.features, 8) do
+            local start = starts.features[index]
+            parts[#parts + 1] = ("%s %s ms%s"):format(tostring(start.name), figure(start.ms),
+                start.kb and (" " .. figure(start.kb) .. " KB") or "")
+        end
+        print(indent .. ("features started: %s in %s ms, %s KB; the dearest: %s"):format(figure(starts.count),
+            figure(starts.ms), figure(starts.kb), table.concat(parts, ", ")))
+    end
     local refreshes = ledger.refreshes
     if refreshes then
         parts = {}

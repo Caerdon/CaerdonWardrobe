@@ -995,6 +995,8 @@ do
     local login = T.db.logins[1]
     Check(login ~= nil and login.core ~= nil, "tests: the login record holds the core's ledger")
     Check(login and login.core.milestones[1].name == "addonLoaded", "tests: with its milestones")
+    Check(login and type(login.core.starts) == "table" and login.core.starts.count >= 1 and
+        login.core.starts.features[1].name ~= nil, "tests: and what the features' starts cost")
     Check(login and login.debugOn == true, "tests: the login record says Enable debug was on")
     local loginDraws
     for _, entry in ipairs(login and login.profile and login.profile.functions or {}) do
@@ -1255,6 +1257,54 @@ do
         Equal(drawn[6100], 1, "containment, draw: the queue draws the next request")
         Equal(#errors, 0, "containment, draw: with no error")
     end
+end
+
+------------------------------------------------------------------------------------------
+-- 7. What each feature's start cost
+------------------------------------------------------------------------------------------
+
+do
+    -- A feature's Init runs at every login, whether its window is opened or not. Its time and
+    -- memory are taken around the call, always, and are in the report with the dearest first.
+    local function Feature(name, ms, kb, raises)
+        local mixin = {}
+        function mixin:GetName() return name end
+        function mixin:Init()
+            Spend(ms, kb)
+            if raises then
+                error("the Init of " .. name .. " raised an error")
+            end
+            return {}
+        end
+        function mixin:Refresh() end
+        return mixin
+    end
+    StartSession({ debug = false, features = { Feature("Dear", 4, 120), Feature("Cheap", 0.5, 2),
+        Feature("Shrinks", 1, -30), Feature("Raises", 2, 8, true) } })
+    local report = CaerdonCounters:GetReport()
+    local starts = report.starts
+    Check(type(starts) == "table", "starts: the report has the features' starts")
+    if type(starts) == "table" then
+        Equal(starts.count, 5, "starts: every feature that was started is counted, the one that raised too")
+        Near(starts.ms, 7.5, "starts: their time together")
+        Near(starts.kb, 130, "starts: their memory together, without the one the collector ran in")
+        local names = {}
+        for _, start in ipairs(starts.features) do names[#names + 1] = start.name end
+        Equal(table.concat(names, ","), "Dear,Raises,Shrinks,Cheap,Bags", "starts: the dearest first")
+        Near(starts.features[1].ms, 4, "starts: a feature's time")
+        Near(starts.features[1].kb, 120, "starts: and its memory")
+        Check(starts.features[3].kb == nil, "starts: no memory figure where the collector ran inside the call")
+        Near(starts.features[2].ms, 2, "starts: an Init that raised has its time all the same")
+    end
+    Check(IsPlain(report), "starts: the report is plain data")
+    local found
+    for _, line in ipairs(CaerdonCounters:GetReportLines()) do
+        if line.text:find("Features started: 5 in 7.50 ms, 130.0 KB", 1, true) then
+            found = true
+        end
+    end
+    Check(found, "starts: the export has the line")
+    errors = {}
 end
 
 print(("%d checks, %d failed"):format(checks, failures))

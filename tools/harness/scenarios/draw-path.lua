@@ -1623,7 +1623,7 @@ return function(H, S)
         Recording(world)
         local core, client = world.core, world.client
         local feature = world.feature
-        function feature:GetStatusRuleName() return "EncounterJournal" end
+        feature.statusRules = { otherSpec = true, noLoot = true, noLootBindOnPickup = true }
         local function Drawn(status, smallMark)
             local button = client:NewFrame("Button")
             button:SetSize(37, 37)

@@ -63,6 +63,13 @@ CaerdonItem = {
 CaerdonWardrobeFeatureMixin = {
     Refresh = function() cancelled = cancelled + 1 end,
     NoteHookPoint = function() return true end,
+    -- As the core's (scenarios/decorate.lua has the real one), for an item whose data is here:
+    -- the item is made and its button asked for.
+    Decorate = function(self, button, source, locationInfo, options)
+        local item = type(source) == "string" and CaerdonItem:CreateFromItemLink(source) or source
+        CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
+        return item
+    end,
 }
 CaerdonWardrobeConfig = {
     Binding = { ShowStatus = { Merchant = true } },

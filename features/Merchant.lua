@@ -4,6 +4,10 @@ function MerchantMixin:GetName()
     return "Merchant"
 end
 
+-- A vendor's piece whose look only another toon could learn is marked as not to be had only
+-- where this toon cannot collect the source at all (FeatureMixin.lua, statusRules).
+MerchantMixin.statusRules = { noLoot = true }
+
 function MerchantMixin:Init()
     hooksecurefunc("MerchantFrame_UpdateMerchantInfo", function(...) self:OnMerchantUpdate(...) end)
     hooksecurefunc("MerchantFrame_UpdateBuybackInfo", function(...) self:OnBuybackUpdate(...) end)
@@ -402,7 +406,18 @@ function MerchantMixin:ProcessMerchantButtons()
         end
 
         if itemLink and button:IsShown() then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            -- Tag the button so the debug keybind picks up the merchant item
+            -- (recipe tooltips embed the created item which can mislead detection)
+            button.caerdonDebugItemLink = itemLink
+
+            -- Decorate waits for the item's data before the button is asked for. Without that
+            -- wait customDataLoaded stays false and items loop in ContinuableContainer without
+            -- reaching ProcessItem, which prevents recipe detection for old-world recipes that
+            -- lack RestrictedSkill tooltip lines.
+            local item = self:Decorate(button, itemLink, {
+                locationKey = format("merchantitem-%d", slot),
+                slot = slot
+            }, options)
 
             -- Store the item for filtering
             self.merchantItems[i] = {
@@ -410,30 +425,6 @@ function MerchantMixin:ProcessMerchantButtons()
                 item = item,
                 slot = i
             }
-
-            -- Tag the button so the debug keybind picks up the merchant item
-            -- (recipe tooltips embed the created item which can mislead detection)
-            button.caerdonDebugItemLink = itemLink
-
-            local locationInfo = {
-                locationKey = format("merchantitem-%d", slot),
-                slot = slot
-            }
-
-            -- Ensure item data is fully cached before entering the coroutine
-            -- pipeline. Without this, customDataLoaded stays false and items
-            -- loop in ContinuableContainer without reaching ProcessItem, which
-            -- prevents recipe detection for old-world recipes that lack
-            -- RestrictedSkill tooltip lines.
-            local function doUpdate()
-                CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
-            end
-
-            if item:IsItemDataCached() then
-                doUpdate()
-            else
-                item:ContinueOnItemLoad(doUpdate)
-            end
         else
             button.caerdonDebugItemLink = nil
             CaerdonWardrobe:ClearButton(button)
@@ -459,20 +450,11 @@ function MerchantMixin:ProcessMerchantButtons()
         local itemLink = GetBuybackItemLink(numBuybackItems)
         local slot = "buybackbutton"
         if itemLink then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
             MerchantBuyBackItemItemButton.caerdonDebugItemLink = itemLink
-            local buybackLocationInfo = {
+            self:Decorate(MerchantBuyBackItemItemButton, itemLink, {
                 locationKey = format("buybackbutton"),
                 slot = slot
-            }
-            local function doBuybackUpdate()
-                CaerdonWardrobe:UpdateButton(MerchantBuyBackItemItemButton, item, self, buybackLocationInfo, options)
-            end
-            if item:IsItemDataCached() then
-                doBuybackUpdate()
-            else
-                item:ContinueOnItemLoad(doBuybackUpdate)
-            end
+            }, options)
         else
             MerchantBuyBackItemItemButton.caerdonDebugItemLink = nil
             CaerdonWardrobe:ClearButton(MerchantBuyBackItemItemButton)
@@ -497,20 +479,11 @@ function MerchantMixin:OnBuybackUpdate()
 
             local itemLink = GetBuybackItemLink(index)
             if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
                 button.caerdonDebugItemLink = itemLink
-                local buybackItemLocationInfo = {
+                self:Decorate(button, itemLink, {
                     locationKey = format("buybackitem-%d", slot),
                     slot = slot
-                }
-                local function doBuybackItemUpdate()
-                    CaerdonWardrobe:UpdateButton(button, item, self, buybackItemLocationInfo, {})
-                end
-                if item:IsItemDataCached() then
-                    doBuybackItemUpdate()
-                else
-                    item:ContinueOnItemLoad(doBuybackItemUpdate)
-                end
+                }, {})
             else
                 button.caerdonDebugItemLink = nil
                 CaerdonWardrobe:ClearButton(button)

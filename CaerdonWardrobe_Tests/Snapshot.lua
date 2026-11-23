@@ -220,9 +220,6 @@ local function GetProxy(featureName)
         function proxy:GetName()
             return "Tests:" .. featureName
         end
-        function proxy:GetStatusRuleName()
-            return real:GetStatusRuleName()
-        end
         function proxy:IsSameItem()
             return true
         end
