@@ -11,7 +11,8 @@
 --   2. The declaration itself, with windows of the scenario's own: what is not named, each
 --      kind of value, a function beside it, the binding settings, a rule misnamed.
 --   3. Every shipped window that declares, against the answers its function gave (Reference
---      below, with the core's part as it was), over each setting alone and every draw.
+--      below, with the core's part as it was), over each setting alone and every draw. Six
+--      of them differ from their functions in one answer, on purpose: the quest icon.
 --   4. Through ProcessItem: the drawing is handed the declared rules.
 --
 -- Real code: the core, FeatureMixin.lua and the feature files, whose Init is not run (the
@@ -86,7 +87,12 @@ return function(H, S)
         return function(config) return config.Icon.ShowLearnableByOther[key] ~= false end
     end
     local function Quest(config) return config.Icon.ShowQuestItems end
-    local WORLD_QUESTS = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = true,
+    -- The world quest lists of four addons, Angrier World Quests and Sorted showed the quest
+    -- icon whatever its setting said (questIcon = true). They follow the setting now, as the
+    -- world map and the mission table always did.
+    local FOLLOW_THE_QUEST_SETTING = { "VenturePlan", "WorldQuestsList", "WorldQuestTracker", "ZygorGuidesViewer",
+        "AngrierWorldQuests", "Sorted" }
+    local WORLD_QUESTS = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = Quest,
         oldExpansionIcon = false, sellableIcon = false }
     local QUEST_LOG = { bindingStatus = true, ownIcon = true, otherIcon = ByOther("QuestLog"), questIcon = Quest,
         oldExpansionIcon = true, sellableIcon = false }
@@ -122,12 +128,12 @@ return function(H, S)
             oldExpansionIcon = false, sellableIcon = false },
         WorldMap = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = Quest,
             oldExpansionIcon = false, sellableIcon = false },
-        AngrierWorldQuests = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = true,
+        AngrierWorldQuests = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = Quest,
             oldExpansionIcon = true, sellableIcon = false },
         Baganator = {},
         Narcissus = { bindingStatus = false, ownIcon = true, otherIcon = true, oldExpansionIcon = true,
             sellableIcon = false },
-        Sorted = { bindingStatus = false, ownIcon = true, otherIcon = true, questIcon = true, oldExpansionIcon = true,
+        Sorted = { bindingStatus = false, ownIcon = true, otherIcon = true, questIcon = Quest, oldExpansionIcon = true,
             sellableIcon = true },
         VenturePlan = WORLD_QUESTS,
         WorldQuestsList = WORLD_QUESTS,
@@ -457,6 +463,36 @@ return function(H, S)
             Equal(windows, 24, label .. "every window of the list was compared")
             Check(compared > 20000, label .. "each setting alone was compared (" .. compared .. ")")
             Equal(differing, 0, label .. "the declared rules give what the functions gave (first: " .. tostring(first) .. ")")
+
+            -- The quest icon follows its setting in every window that shows it.
+            for _, name in ipairs(FOLLOW_THE_QUEST_SETTING) do
+                local feature = core:GetFeature(name)
+                if feature then
+                    for _, bags in ipairs({ false, true }) do
+                        inBags = bags
+                        Set(config, { "Icon", "ShowQuestItems" }, false)
+                        Equal(Shown(feature, {}).questIcon.shouldShow, false, label .. name .. ": no quest icon with quest items switched off")
+                        Set(config, { "Icon", "ShowQuestItems" }, true)
+                        Equal(Shown(feature, {}).questIcon.shouldShow, true, label .. name .. ": and the quest icon with them on")
+                    end
+                    inBags = false
+                    local rules = feature:GetDisplayRules()
+                    Equal(rules and rules.questIcon, nil, label .. name .. ": the declaration leaves the quest icon to the core")
+                end
+            end
+            -- Nothing shipped shows it whatever the setting says; three windows never show it.
+            local always, never = {}, {}
+            for name, feature in pairs(core:GetRegisteredFeatures()) do
+                local rules = feature:GetDisplayRules()
+                if rules and rules.questIcon == true then
+                    always[#always + 1] = name
+                elseif rules and rules.questIcon == false and name ~= "Offers" then
+                    never[#never + 1] = name
+                end
+            end
+            table.sort(never)
+            Equal(table.concat(always, " "), "", label .. "no window declares the quest icon as always on")
+            Equal(table.concat(never, " "), "CustomerOrders ItemConversion TradeSkill", label .. "the windows that never show the quest icon")
 
             -- A window that draws another's content has that window's declaration itself, and
             -- its answer for a draw.

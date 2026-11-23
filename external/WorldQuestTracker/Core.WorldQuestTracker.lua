@@ -33,7 +33,6 @@ WorldQuestTrackerMixin.displayRules = {
 	bindingStatus = true,
 	ownIcon = true,
 	otherIcon = true,
-	questIcon = true,
 	oldExpansionIcon = false,
 	sellableIcon = false,
 }

@@ -32,7 +32,6 @@ AngrierWorldQuestsMixin.displayRules = {
 	bindingStatus = true,
 	ownIcon = true,
 	otherIcon = true,
-	questIcon = true,
 	sellableIcon = false,
 }
 

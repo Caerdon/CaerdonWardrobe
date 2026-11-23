@@ -165,7 +165,6 @@ SortedMixin.displayRules = {
 	bindingStatus = false,
 	ownIcon = true,
 	otherIcon = true,
-	questIcon = true,
 	sellableIcon = true,
 }
 
