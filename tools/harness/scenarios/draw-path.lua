@@ -1031,6 +1031,17 @@ return function(H, S)
             config = function(config) config.Icon.ShowAuctionValue = true end },
         { name = "one to auction that a quest still takes, auction icon off", smallMark = "auction",
             hide = { "auctionIcon" } },
+        -- An item that starts a quest (smallMark "quest" on the star or the grey gear): the
+        -- quest icon rides on that icon as the small mark. Where the window draws no star it
+        -- is the quest icon alone, where it draws no quest icon the star alone, and an
+        -- upgrade's arrow comes first.
+        { name = "one that starts a quest", smallMark = "quest" },
+        { name = "one that starts a quest, learnable icons off", smallMark = "quest", hide = { "ownIcon" } },
+        { name = "one that starts a quest, quest icon off", smallMark = "quest", hide = { "questIcon" } },
+        { name = "one that starts a quest, and an upgrade", smallMark = "quest",
+            info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
+                hasMetRequirements = true } },
+        { name = "one that starts a quest, no window", smallMark = "quest", feature = false },
     }
 
     -- One button drawn with every status in turn, the way the queue draws it, with a frame
@@ -1459,6 +1470,59 @@ return function(H, S)
             Equal(auctionOff.quest.badgeTexture, BAG, "still taken, " .. label .. ": the bag")
         end
 
+        -- An item that starts a quest: the star, or the grey gear below the quest's level,
+        -- with the quest icon as the small mark.
+        local STAR, GEAR = "Interface\\Store\\category-icon-featured", "Interface\\WorldMap\\Gear_64Grey"
+        for label, set in pairs({ queue = results, direct = direct }) do
+            local starts = set["one that starts a quest"]
+            Equal(starts.own.texture, STAR, "starts, " .. label .. ": the star")
+            Equal(starts.own.smallMark, "quest", "starts, " .. label .. ": with the quest's mark on it")
+            Equal(starts.own.badgeTexture, QUEST, "starts, " .. label .. ": the quest icon's texture")
+            Check(NoTexture(starts.own.ringTexture), "starts, " .. label .. ": with no ring of its own")
+            Equal(starts.own.badge, false, "starts, " .. label .. ": which is no upgrade's badge")
+            Equal(starts.own.routeBadge, false, "starts, " .. label .. ": and no mark of a look")
+            Equal(starts.own.width, set["plain"].own.width, "starts, " .. label .. ": the star at its size")
+            Equal(starts.own.playing, set["plain"].own.playing, "starts, " .. label .. ": and moving as the star does")
+            Equal(starts.lowSkill.texture, GEAR, "starts, " .. label .. ": below the quest's level the grey gear")
+            Equal(starts.lowSkill.smallMark, "quest", "starts, " .. label .. ": with the quest's mark too")
+            Equal(starts.lowSkill.badgeTexture, QUEST, "starts, " .. label .. ": the quest icon's texture on the gear")
+            for _, status in ipairs(STATUSES) do
+                if status ~= "own" and status ~= "lowSkill" then
+                    Equal(starts[status].smallMark, nil, "starts, " .. label .. ": no other status carries the mark (" .. status .. ")")
+                end
+            end
+            Equal(starts.quest.texture, QUEST, "starts, " .. label .. ": the quest icon itself has no quest mark on it")
+            Equal(starts.quest.badgeTexture, nil, "starts, " .. label .. ": and no badge")
+            Equal(starts.ownPlus.badgeTexture, nil, "starts, " .. label .. ": the mark is gone with the next draw")
+            Equal(set["plain"].own.smallMark, nil, "starts, " .. label .. ": a star of anything else has none")
+            -- A window that draws no star: the quest icon alone, as that status is drawn.
+            local noStar = set["one that starts a quest, learnable icons off"]
+            Equal(noStar.own.texture, QUEST, "starts, " .. label .. ": where the window draws no star, the quest icon")
+            Equal(noStar.own.smallMark, nil, "starts, " .. label .. ": alone")
+            Equal(noStar.own.badgeTexture, nil, "starts, " .. label .. ": with nothing on it")
+            Equal(noStar.own.width, set["plain"].quest.width, "starts, " .. label .. ": at the quest icon's size")
+            Equal(noStar.own.playing, false, "starts, " .. label .. ": standing still as the quest icon does")
+            Equal(noStar.lowSkill.texture, QUEST, "starts, " .. label .. ": the same below the quest's level")
+            Equal(noStar.lowSkill.playing, false, "starts, " .. label .. ": standing still too")
+            -- A window that draws no quest icon: the star alone.
+            local noQuest = set["one that starts a quest, quest icon off"]
+            Equal(noQuest.own.texture, STAR, "starts, " .. label .. ": where the window draws no quest icon, the star")
+            Equal(noQuest.own.smallMark, nil, "starts, " .. label .. ": alone")
+            Equal(noQuest.own.badgeTexture, nil, "starts, " .. label .. ": with nothing on it")
+            Equal(noQuest.lowSkill.texture, GEAR, "starts, " .. label .. ": and the gear alone")
+            Equal(noQuest.lowSkill.smallMark, nil, "starts, " .. label .. ": with no mark")
+            -- An upgrade's arrow comes first.
+            local both = set["one that starts a quest, and an upgrade"]
+            Equal(both.own.texture, STAR, "starts, " .. label .. ": an upgrade among them keeps the star")
+            Equal(both.own.badge, true, "starts, " .. label .. ": with the arrow as the badge")
+            Equal(both.own.smallMark, nil, "starts, " .. label .. ": and not the quest's mark")
+            -- No window: nothing says the star is shown, so nothing is drawn, as for any star.
+            local alone = set["one that starts a quest, no window"]
+            Equal(alone.own.hasIcon, set["a copy that can be read, no window"].own.hasIcon,
+                "starts, " .. label .. ": with no window the star is as any star is")
+            Equal(alone.own.smallMark, nil, "starts, " .. label .. ": and has no mark")
+        end
+
         local searched = results["relative frame, small, searched"]
         Equal(searched.own.alpha, 0.3, "search: an icon on a slot the search has dimmed is dimmed")
         Equal(searched.own.width, 13, "search: at the window's own size")
@@ -1549,5 +1613,36 @@ return function(H, S)
         Draw(dimmed, "own", nil)
         Equal(timers, 2, "dim: the next frame's draws start a timer of their own")
         NoErrors(world, "rules")
+    end
+
+    do
+        -- The journal, the vendor and crafting orders turn a look to learn into another icon
+        -- after the verdict (ProcessItem). A quest's item is left alone there, and so is an
+        -- item that starts a quest: its star says another thing than a look.
+        local world = Start()
+        Recording(world)
+        local core, client = world.core, world.client
+        local feature = world.feature
+        function feature:GetStatusRuleName() return "EncounterJournal" end
+        local function Drawn(status, smallMark)
+            local button = client:NewFrame("Button")
+            button:SetSize(37, 37)
+            local item = DrawnItem()
+            -- A look this toon needs, of another loot spec.
+            local info = { isTransmog = true, needsItem = true, matchesLootSpec = false }
+            function item:GetCaerdonStatus() return true, status, nil, {}, info, smallMark end
+            core:SetupCaerdonButton(button, item, feature, nil, {})
+            core:ProcessItem(button, item, feature, nil, {})
+            client:Tick(3)
+            local overlay = core:GetCaerdonButton(button)
+            return overlay.mogStatus:GetAtlas() or overlay.mogStatus:GetTexture(), overlay.caerdonSmallMark
+        end
+        local STAR, NO_LOOT = "Interface\\Store\\category-icon-featured", "Interface\\COMMON\\icon-noloot"
+        Equal((Drawn("own")), NO_LOOT, "journal: a look for another loot spec has that spec's icon")
+        local texture, mark = Drawn("own", "quest")
+        Equal(texture, STAR, "journal: an item that starts a quest keeps its star")
+        Equal(mark, "quest", "journal: with the quest's mark")
+        Equal((Drawn("quest")), "Interface\\MINIMAP\\MapQuestHub_Icon32", "journal: and a quest's item its quest icon")
+        NoErrors(world, "journal")
     end
 end

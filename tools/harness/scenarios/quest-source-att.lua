@@ -29,7 +29,11 @@ return function(H, S)
     local CLOTH, FANG, BANNER, LATER, GONE, DAILY, NOTE, HIDDEN, EAR, PSALM, DONE, FAR, YOUNG, ELVEN, EITHER, SEAL =
         994001, 994002, 994003, 994004, 994005, 994006, 994007, 994008, 994009, 994010, 994011, 994012, 994013,
         994014, 994015, 994016
+    local SLIP, SUMMONS = 994017, 994018
     local ITEMS = {
+        -- Starts a quest that can be done again, and one of the other faction.
+        [SLIP] = QuestItem("Daily Slip"),
+        [SUMMONS] = QuestItem("Horde Summons"),
         -- No quest item by its class: only a quest that takes it gives it the quest icon.
         [CLOTH] = { name = "Bolt of Cloth", quality = 1, level = 20, minLevel = 0, type = "Miscellaneous",
             subType = "Other", stack = 20, equipLoc = "INVTYPE_NON_EQUIP_IGNORE", price = 100, classID = 15,
@@ -77,6 +81,8 @@ return function(H, S)
         [9114] = Quest(9114, { cost = { { "i", ELVEN, 1 } }, races = { 4, 10 } }),
         [9115] = Quest(9115, { cost = { { "i", EITHER, 1 } }, altQuests = { 9116 } }),
         [9116] = Quest(9116, {}),
+        [9117] = Quest(9117, { providers = { { "i", SLIP } }, isDaily = 1 }),
+        [9118] = Quest(9118, { providers = { { "i", SUMMONS } }, r = 1, isDaily = 1 }),
         [9199] = Quest(9199, {}),
         -- A chain of five; the last takes the seal. Its fourth step asks for one of two.
         [9131] = Quest(9131, {}),
@@ -262,6 +268,20 @@ return function(H, S)
         quest = Only(NOTE)
         Check(quest.questID == 9107 and quest.role == "starts quest" and quest.eligible == true,
             "starter: the note starts a quest still to come (" .. tostring(quest.role) .. ")")
+        -- Which makes it one to act on: the star in the quest icon's place.
+        info = Info(NOTE)
+        Check(info and info.starts and info.starts.questID == 9107, "starter: the note is one that starts a quest not taken yet")
+        Equal(Status(NOTE), "own", "starter: so it has the star")
+        -- A quest that can be done again is none still to come, and one an item starts.
+        quest, info = Only(SLIP)
+        Check(quest.reason == "repeatable" and quest.eligible == false and quest.startable == true,
+            "starter: a quest that can be done again is one its item can start (" .. tostring(quest.reason) .. ")")
+        Check(info and info.starts and info.starts.questID == 9117, "starter: so the slip is one to act on")
+        Equal(Status(SLIP), "own", "starter: with the star")
+        -- Not where something else keeps the quest from the toon as well.
+        quest, info = Only(SUMMONS)
+        Check(quest.startable == false and quest.over == true and info.starts == nil,
+            "starter: one of the other faction that can be done again is none to start (" .. tostring(quest.reason) .. ")")
 
         -- A quest in one of AllTheThings' hidden lists is not the quest as it is offered.
         Equal(Info(HIDDEN), nil, "hidden: a hidden trigger's quest is not named")

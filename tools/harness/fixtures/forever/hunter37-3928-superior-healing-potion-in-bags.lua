@@ -1,5 +1,5 @@
 return {
-    at = 1795388373,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|10"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|10|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["0|10"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=10}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["3928|true"] = { { 3, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=10}"] = { { 3928, n = 1 } } },
@@ -194,10 +195,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 3928,
     link = "|cnIQ1:|Hitem:3928::::::::37:1485:::::::::|h[Superior Healing Potion]|h|r",

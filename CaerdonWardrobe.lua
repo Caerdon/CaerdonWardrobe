@@ -784,11 +784,15 @@ local function SetRingIcon(mogStatus, texture)
     return true
 end
 
--- The small mark on a quest's icon: the icon of the status the item also has, as that status
--- draws it. "readable" for a copy that can be read; "sellable" and "auction" for an item a
--- quest that can be done again still takes and that has nothing else to it.
+-- The small mark on an icon: the icon of the status the item also has, as that status draws
+-- it. On a quest's icon "readable" for a copy that can be read, "sellable" and "auction" for
+-- an item a quest that can be done again still takes and that has nothing else to it. On the
+-- star or the grey gear "quest", for an item that starts a quest.
 local function SetSmallMark(texture, mark)
-    if mark == "auction" then
+    if mark == "quest" then
+        texture:SetTexCoord(-1 / 32, 33 / 32, -1 / 32, 33 / 32)
+        texture:SetTexture("Interface\\MINIMAP\\MapQuestHub_Icon32")
+    elseif mark == "auction" then
         texture:SetTexCoord(0, 1, 0, 1)
         if texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("Auctioneer") then
             texture:SetAtlas("Auctioneer", false)
@@ -961,9 +965,10 @@ end
 
 -- displayInfo: the feature's display rules when the caller already has them (ProcessItem asks
 -- once for both this and SetItemButtonBindType); asked for here otherwise.
--- smallMark: what a quest's item is beside that (the sixth value of GetCaerdonStatus):
--- "readable" on a copy that can be read, "sellable" or "auction" on one a quest that can be
--- done again still takes and that has nothing else to it.
+-- smallMark: what the item is beside its status (the sixth value of GetCaerdonStatus). On a
+-- quest's item: "readable" on a copy that can be read, "sellable" or "auction" on one a quest
+-- that can be done again still takes and that has nothing else to it. On the star or the grey
+-- gear ("own", "lowSkill"): "quest", for an item that starts a quest.
 function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature, locationInfo, options, status,
                                                   bindingStatus, transmogInfo, displayInfo, smallMark)
     local caerdonButton = self:GetCaerdonButton(originalButton)
@@ -1073,6 +1078,28 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     local upgradeDeltaShown = false
 
+    -- An item that starts a quest (smallMark "quest" on the star or the grey gear): the quest
+    -- icon rides on that icon as the small mark. Where the window shows no star the item is
+    -- drawn with the quest icon alone, and where it shows no quest icon with the star alone.
+    -- Before the animation is chosen, which goes by the status that is drawn.
+    local starterMark = false
+    if smallMark == "quest" then
+        if status == "own" or status == "lowSkill" then
+            if not displayInfo and feature then
+                displayInfo = feature:GetDisplayInfoInternal(originalButton, item, feature, locationInfo, options,
+                    status, bindingStatus)
+            end
+            if displayInfo and displayInfo.questIcon.shouldShow then
+                if displayInfo.ownIcon.shouldShow then
+                    starterMark = true
+                else
+                    status = "quest"
+                end
+            end
+        end
+        smallMark = nil
+    end
+
     local showAnim = false
     if status == "waiting" then
         showAnim = true
@@ -1156,7 +1183,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- other status's icon on it as the small badge, so it is seen to be both. Where the window
     -- draws no quest icon the item is drawn as the other thing it is. The small mark goes by
     -- the window's rules for that icon, as the icon itself does.
-    local markBadge = nil
+    local markBadge = starterMark and "quest" or nil
     if status == "quest" and smallMark then
         if displayInfo and displayInfo.questIcon.shouldShow then
             markBadge = smallMark
@@ -1560,7 +1587,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- The second place of a piece kept for a look uses the badge's textures and corner: its
     -- mark alone, without the ring, at the ring's size. An upgrade's arrow comes first; the two
     -- do not meet, since an upgrade is not marked for a look to gain. The small mark of a
-    -- quest's item is drawn the same way, and gives way to an upgrade's arrow too.
+    -- quest's item is drawn the same way, and gives way to an upgrade's arrow too; so is the
+    -- quest icon on the star of an item that starts a quest.
     local plainBadge = false
     if (routeBadge or markBadge) and not showBadge then
         local statusTexture = (mogStatus.GetAtlas and mogStatus:GetAtlas()) or mogStatus:GetTexture()
@@ -1584,7 +1612,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     mogStatus.caerdonBadgePlain = plainBadge or laterBadge
     caerdonButton.caerdonHasUpgradeBadge = showBadge and not plainBadge
     caerdonButton.caerdonHasRouteBadge = plainBadge and not markBadge
-    -- Which small mark is on the quest icon, if one is ("readable", "sellable", "auction").
+    -- Which small mark is on the icon, if one is: "readable", "sellable" or "auction" on the
+    -- quest icon, "quest" on the star or the grey gear.
     caerdonButton.caerdonSmallMark = plainBadge and markBadge or nil
     if plainBadge and markBadge then
         upgradeBadgeRing:SetTexture("")
@@ -2357,8 +2386,9 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
                 -- TODO: Exceptions need to be broken out
                 -- TODO: Instead maybe: mogStatus = feature:UpdateMogStatus(mogStatus)
                 local featureName = feature and feature:GetStatusRuleName()
-                -- An item a quest takes keeps the quest icon in these windows too.
-                if mogStatus ~= "quest" and
+                -- An item a quest takes keeps the quest icon in these windows too, and one
+                -- that starts a quest its star.
+                if mogStatus ~= "quest" and smallMark ~= "quest" and
                     (featureName == "EncounterJournal" or featureName == "Merchant" or featureName == "CustomerOrders") then
                     if transmogInfo.needsItem and featureName ~= "Merchant" then
                         if not transmogInfo.matchesLootSpec then

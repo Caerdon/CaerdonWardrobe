@@ -460,6 +460,7 @@ function CaerdonWardrobeConfigIcons:Register()
     self:AddLabel("Quests below your level count until they turn gray. A later quest of a chain you are on always counts, whatever its level.", { indent = 2 })
     self:AddCheckbox({ key = "showQuestItemsInAuction", text = "Show in the auction house", tooltip = "Also show the icon on auction house listings: an item one of your quests takes is one to buy.", configSection = "Icon", configValue = "ShowQuestItemsInAuction" },
         { indent = 1, dependsOn = showQuest })
+    self:AddLabel("An item that starts a quest you have not taken yet is one to use: it shows the \"Learnable by this toon\" star with this icon small on it, or the \"Learnable later\" gear while the quest is above your level. It has the quest icon once its quest is in your log.", { indent = 1 })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({

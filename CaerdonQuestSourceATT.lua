@@ -288,7 +288,8 @@ end
 -- can be. Second value: the quest is behind this toon for good. Third: it can be done again.
 -- Fourth and fifth: the level it asks for and the one it stops being offered at, where the
 -- data has them. Sixth: the player's own options keep it out. Seventh: what the client said
--- of it where it was asked, { level } or { state }. The reason is the first one found; "for
+-- of it where it was asked, { level } or { state }. Eighth: all that keeps it out is that it
+-- can be done again. The reason is the first one found; "for
 -- good" is asked of every rule that can say so (as in CaerdonQuestItems.lua, UpcomingBlocker).
 --
 -- player: { level, raceID, classID, faction, skillLines, levelWindow, includeTrivial }, the
@@ -306,9 +307,15 @@ function Source:Blocker(questID, player)
     -- What the client said of the quest where it was asked: { level } (nil where it names
     -- none), or { state, waiting } with why it had no word and whether one is on its way.
     local client
-    local function Block(reason, behind)
+    -- Whether nothing stands in the way but that the quest can be done again: an item that
+    -- starts such a quest still starts it (CaerdonQuestItems.lua, verdict.startable).
+    local onlyRepeats = true
+    local function Block(reason, behind, repeats)
         blocker = blocker or reason
         forGood = forGood or behind == true
+        if not repeats then
+            onlyRepeats = false
+        end
     end
 
     local ok, problem = pcall(function()
@@ -341,7 +348,7 @@ function Source:Blocker(questID, player)
 
         if IsRepeatingGroup(group) then
             repeating = true
-            Block("repeatable")
+            Block("repeatable", false, true)
         end
 
         local skillLine = Relative(group, "requireSkill")
@@ -444,7 +451,7 @@ function Source:Blocker(questID, player)
         return "error: " .. tostring(problem), false
     end
 
-    return blocker, forGood, repeating, minLevel, maxLevel, optedOut, client
+    return blocker, forGood, repeating, minLevel, maxLevel, optedOut, client, blocker ~= nil and onlyRepeats
 end
 
 -- Drops what is kept about quests. AllTheThings changes a quest's "u" as the session goes.

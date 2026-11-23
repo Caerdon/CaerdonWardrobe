@@ -1567,17 +1567,25 @@ T.Contract({
 
 -- The client says of an item in a bag slot whether it is a quest's item and which quest it
 -- starts (C_Container.GetContainerItemQuestInfo; Blizzard's bags draw their quest border and
--- bang from it). The addon makes no status from it: its quest icon comes from the quest log's
--- objectives and from QuestieDB. This collects what the client answers for the bags, beside
--- what the addon makes of the same item, so the two can be compared before a rule is written:
--- which items the client calls a quest's, which start a quest, and for which of those the
--- addon shows no quest icon or knows no such quest. Added to over the runs, by item.
+-- bang from it). The quest it names is one of the item's quests for the addon, and a copy
+-- that starts a quest the toon has neither done nor taken is drawn as one to act on: the star
+-- or the grey gear, with the quest icon as the small mark. This collects what the client
+-- answers for the bags beside what the addon makes of the same item: which items the client
+-- calls a quest's, which start a quest, and of those which are drawn as starters, which have
+-- the quest icon (the quest is in the log, or another quest takes the item), which neither
+-- (the quest is done, behind the toon or kept out by the options), and which have a quest
+-- only the client names. Added to over the runs, by item.
+
+local SLOT_QUEST_COUNTS = { "items", "questItems", "starters", "startersShownAsStarters", "startersWithQuestIcon",
+    "startersWithNeither", "startersTheQuestDataDoesNotName" }
 
 local function MergeSlotQuestInfo(old, new)
     local merged = old
-    for _, key in ipairs({ "items", "questItems", "starters", "startersWithoutQuestIcon", "startersTheAddonDoesNotName" }) do
+    for _, key in ipairs(SLOT_QUEST_COUNTS) do
         merged[key] = new[key]
     end
+    -- What version 1 counted, when no status was made of the client's answer.
+    merged.startersWithoutQuestIcon, merged.startersTheAddonDoesNotName = nil, nil
     merged.runs = (old.runs or 1) + 1
     merged.seen = merged.seen or {}
     for itemID, entry in pairs(new.seen or {}) do
@@ -1588,8 +1596,8 @@ end
 
 T.Contract({
     id = "quest.slotInfo",
-    version = 1,
-    title = "What the client says about quest items in the bags, beside the addon's quest icon",
+    version = 2,
+    title = "What the client says about quest items in the bags, beside the addon's icon for them",
     accumulate = true,
     merge = MergeSlotQuestInfo,
     run = function(c)
@@ -1600,7 +1608,7 @@ T.Contract({
         if #slots == 0 then
             return "skip", "needs items in the bags"
         end
-        local questItems, starters, withoutIcon, notNamed, seen = 0, 0, 0, 0, {}
+        local questItems, starters, asStarters, withIcon, withNeither, notNamed, seen = 0, 0, 0, 0, 0, 0, {}
         for index, where in ipairs(slots) do
             local info = C_Container.GetContainerItemQuestInfo(where.bag, where.slot)
             local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
@@ -1623,17 +1631,36 @@ T.Contract({
                         entry.classID = select(6, C_Item.GetItemInfoInstant(itemID))
                         local isReady, status = T.GetVerdict(item, nil, { bag = where.bag, slot = where.slot }, 8)
                         entry.status = isReady and (status or "") or "not ready"
-                        -- The quests the addon knows for the item, and whether the client's is one.
+                        -- The small mark beside the status ("quest" on a starter's star).
+                        if isReady then
+                            entry.mark = select(6, item:GetCaerdonStatus(nil, { bag = where.bag, slot = where.slot }))
+                        end
+                        -- The quests the addon knows for the copy, the client's among them,
+                        -- and what it made of the one the client names.
                         local questInfo = item:GetQuestItemInfo()
                         local roles = {}
                         for _, quest in ipairs(questInfo and questInfo.quests or {}) do
                             roles[#roles + 1] = ("%s: %s"):format(tostring(quest.questID), tostring(quest.role))
                             if quest.questID == info.questID then
-                                entry.addonNamesQuest = true
+                                entry.questReason = quest.reason
+                                entry.questStartable = quest.startable == true
+                                entry.questOver = quest.over == true
                             end
                         end
                         entry.addonQuests = table.concat(roles, "; ")
                         entry.addonHasQuestValue = questInfo ~= nil and questInfo.hasQuestValue == true
+                        entry.addonStarts = questInfo ~= nil and questInfo.starts ~= nil and questInfo.starts.questID or nil
+                        if info.questID ~= nil then
+                            entry.completed = C_QuestLog.IsQuestFlaggedCompleted(info.questID) == true
+                            -- Whether the quest data names that quest as one the item starts:
+                            -- asked without the client's word for the slot.
+                            local byData = CaerdonQuestItems:GetItemQuestInfo(itemID, entry.name)
+                            for _, quest in ipairs(byData and byData.quests or {}) do
+                                if quest.questID == info.questID and quest.starts then
+                                    entry.dataNamesQuest = true
+                                end
+                            end
+                        end
                     else
                         entry.status = "not loaded"
                     end
@@ -1642,11 +1669,22 @@ T.Contract({
                     end
                     if info.questID ~= nil then
                         starters = starters + 1
-                        if entry.status ~= "quest" then
-                            withoutIcon = withoutIcon + 1
+                        if entry.mark == "quest" and (entry.status == "own" or entry.status == "lowSkill") then
+                            asStarters = asStarters + 1
+                        elseif entry.status == "quest" then
+                            withIcon = withIcon + 1
+                        else
+                            withNeither = withNeither + 1
                         end
-                        if not entry.addonNamesQuest then
+                        if not entry.dataNamesQuest then
                             notNamed = notNamed + 1
+                        end
+                        -- What the rule rests on: a quest the addon calls one to start is
+                        -- neither in the log nor done by the client's own word.
+                        if entry.addonStarts == info.questID then
+                            c:Check(info.isActive == false and entry.completed ~= true,
+                                "item %d: the addon calls quest %d one to start, and the client says it is %s", itemID,
+                                info.questID, info.isActive and "in the log" or "done")
                         end
                     end
                     seen[tostring(itemID)] = entry
@@ -1659,11 +1697,13 @@ T.Contract({
         c:Note("items", #slots)
         c:Note("questItems", questItems)
         c:Note("starters", starters)
-        c:Note("startersWithoutQuestIcon", withoutIcon)
-        c:Note("startersTheAddonDoesNotName", notNamed)
+        c:Note("startersShownAsStarters", asStarters)
+        c:Note("startersWithQuestIcon", withIcon)
+        c:Note("startersWithNeither", withNeither)
+        c:Note("startersTheQuestDataDoesNotName", notNamed)
         c:Note("seen", seen)
-        return "info", ("%d of %d bag items are a quest's for the client, %d start a quest (%d of those without the addon's quest icon)")
-            :format(questItems, #slots, starters, withoutIcon)
+        return "info", ("%d of %d bag items are a quest's for the client, %d start a quest: %d drawn as one to start, %d with the quest icon, %d with neither; the quest data names the quest of %d")
+            :format(questItems, #slots, starters, asStarters, withIcon, withNeither, starters - notNamed)
     end,
 })
 

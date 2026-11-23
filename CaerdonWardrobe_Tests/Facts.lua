@@ -42,7 +42,8 @@ function Facts.Item(item)
     local questIconOn = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowQuestItems
     local questInfo = questIconOn and item:GetQuestItemInfo() or nil
     return {
-        questTakes = (questInfo and questInfo.hasQuestValue) and true or nil,
+        -- An item that starts a quest not taken yet has the star for that, whatever else it is.
+        questTakes = (questInfo and (questInfo.hasQuestValue or questInfo.starts)) and true or nil,
         levelMet = (minLevel or 0) <= UnitLevel("player"),
         itemID = itemID,
         name = name,

@@ -45,17 +45,27 @@ T.SightingCases = {
     },
     {
         id = "readable",
-        rule = "a readable item is readable, unless it has the quest icon",
+        rule = "a readable item is readable, unless it has the quest icon or starts a quest",
         slotState = true,
         expect = { status = "readable" },
-        fits = function(facts) return facts.isReadable and not facts.hasLoot and not facts.questIcon end,
+        fits = function(facts)
+            return facts.isReadable and not facts.hasLoot and not facts.questIcon and not facts.startsQuest
+        end,
     },
     {
         id = "readableForQuest",
         rule = "a readable item of a quest (a quest takes it, or a quest item whose quests are not all behind the toon) keeps the quest icon",
         slotState = true,
         expect = { status = "quest" },
-        fits = function(facts) return facts.isReadable and not facts.hasLoot and facts.questIcon end,
+        fits = function(facts)
+            return facts.isReadable and not facts.hasLoot and facts.questIcon and not facts.startsQuest
+        end,
+    },
+    {
+        id = "starter",
+        rule = "a copy that starts a quest the toon has neither done nor taken is one to act on: the star, or the grey gear below the quest's or the item's level, whether it can be read or not (the quest icon is its small mark)",
+        expect = { statusIn = { own = true, lowSkill = true } },
+        fits = function(facts) return facts.startsQuest and not facts.hasLoot and not facts.refundable end,
     },
     {
         id = "refundable",
@@ -112,6 +122,10 @@ function T.JudgeSighting(case, status, binding)
     end
     if expect.status and status ~= expect.status then
         return "mismatch", ("status is %s, expected %s"):format(tostring(status), expect.status)
+    end
+    if expect.statusIn and not expect.statusIn[status or ""] then
+        return "mismatch", ("status is %s, expected one of %s"):format(tostring(status),
+            table.concat(T.SortedKeys(expect.statusIn), ", "))
     end
     local hasText = binding ~= nil and binding ~= ""
     if expect.binding == "none" and hasText then
@@ -177,15 +191,24 @@ local function ReadSlot(bag, slot)
     -- A readable item with the quest icon keeps it: one a quest takes, and one of the Quest
     -- class until every quest known for it is behind the toon. No client API maps an item to
     -- a quest: this is the quest module's answer, an input as in Facts.Item, and asked only of
-    -- what can be read.
-    if facts.isReadable and info.itemID then
+    -- what can be read and of what the client says starts a quest. Which quest a copy starts
+    -- is the client's own word for the slot (Blizzard's bags draw their bang from it); whether
+    -- that quest is one to start still is the quest module's.
+    local slotQuest = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
+    local startsQuestID = type(slotQuest) == "table" and slotQuest.questID or nil
+    if startsQuestID then
+        facts.clientStartsQuest, facts.clientQuestActive = startsQuestID, Bool(slotQuest.isActive)
+    end
+    if (facts.isReadable or startsQuestID) and info.itemID then
         facts.questIcon = false
         if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon and CaerdonWardrobeConfig.Icon.ShowQuestItems then
-            local questInfo = CaerdonQuestItems:GetItemQuestInfo(info.itemID, (C_Item.GetItemInfo(info.hyperlink)))
+            local questInfo = CaerdonQuestItems:GetItemQuestInfo(info.itemID, (C_Item.GetItemInfo(info.hyperlink)),
+                startsQuestID)
             local ofQuestClass = select(6, C_Item.GetItemInfoInstant(info.itemID)) == Enum.ItemClass.Questitem
             facts.questIcon = (questInfo ~= nil and questInfo.hasQuestValue == true) or
                 (ofQuestClass and not (questInfo ~= nil and
                     ((questInfo.isOver == true and not questInfo.repeatableLeft) or questInfo.keptOutByOptions == true)))
+            facts.startsQuest = (questInfo ~= nil and questInfo.starts ~= nil) and true or nil
         end
     end
     -- The client's own answer to "is this copy in an equipment set".

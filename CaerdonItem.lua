@@ -82,9 +82,10 @@ end
 
 -- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state, and what
 -- else GetCaerdonStatus adds to the key). An entry is { isReady, mogStatus, bindingStatus,
--- bindingResult, transmogInfo, questMark }: the transmog info of a piece of equipment is kept
+-- bindingResult, transmogInfo, verdictMark }: the transmog info of a piece of equipment is kept
 -- with the verdict made from it, so drawing reads the same table and it is computed once per
--- entry; questMark is the small mark the verdict puts on a quest's icon.
+-- entry; verdictMark is the small mark the verdict puts on the icon ("sellable" or "auction"
+-- on a quest's icon, "quest" on the star or the grey gear of an item that starts a quest).
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
 
@@ -1335,13 +1336,15 @@ end
 
 -- Quests that take this item even though it is not a Quest-class item: the ones in the quest log
 -- and, when QuestieDB is loaded, the ones this toon has not accepted yet. nil when there are none.
--- See CaerdonQuestItems:GetItemQuestInfo for the fields.
+-- For a copy in a bag slot the quest the client says it starts is one of them, whatever the
+-- quest data knows. See CaerdonQuestItems:GetItemQuestInfo for the fields.
 function CaerdonItemMixin:GetQuestItemInfo()
     local itemID = self:GetItemID()
     if not itemID then
         return nil
     end
-    return CaerdonQuestItems:GetItemQuestInfo(itemID, self:GetItemName())
+    local slotQuestInfo = self:GetSlotQuestInfo()
+    return CaerdonQuestItems:GetItemQuestInfo(itemID, self:GetItemName(), slotQuestInfo and slotQuestInfo.questID or nil)
 end
 
 -- What the client says about this copy in its bag slot: whether it is a quest's item, the
@@ -1605,7 +1608,7 @@ function CaerdonItemMixin:GetIngredientStatus()
         return nil, info
     end
     local questInfo = self:GetQuestItemInfo()
-    if questInfo and (questInfo.isActive or questInfo.isUpcoming) then
+    if questInfo and (questInfo.isActive or questInfo.isUpcoming or questInfo.starts) then
         return nil, info
     end
     local itemID = self:GetItemID()
@@ -2145,8 +2148,9 @@ end
 -- than that it has text, and what can be read is what gets sold or deleted unread. That it can
 -- be read is the second value then ("readable"), which the drawing puts on the quest icon as
 -- its small mark. The readable icon is back once every quest known for the item is behind the
--- toon.
-function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
+-- toon. An item that starts a quest (verdictMark "quest": the star or the grey gear with the
+-- quest icon as its small mark) keeps that the same way, and its one small mark is the quest's.
+function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult, verdictMark)
     if not self:HasItemLocationBankOrBags() then
         return mogStatus
     end
@@ -2185,7 +2189,7 @@ function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult)
     elseif readable then
         if mogStatus == "quest" then
             copyMark = "readable"
-        else
+        elseif verdictMark ~= "quest" then
             mogStatus = "readable"
         end
     else
@@ -2298,6 +2302,13 @@ local function StatusCacheKey(item, itemLink)
     if IsLearnedByUse(select(6, C_Item.GetItemInfoInstant(itemLink))) and not item:IsOwnCopy() then
         key = key .. "|f"
     end
+    -- Which quest a copy starts is the client's word for the copy in its bag slot, and makes
+    -- it one to act on where no quest data names the quest. A copy the client names a quest
+    -- for does not share an entry with the bare link (the mail, an auction).
+    local slotQuestInfo = item:GetSlotQuestInfo()
+    if slotQuestInfo and slotQuestInfo.questID then
+        key = key .. "|q" .. tostring(slotQuestInfo.questID)
+    end
     -- A stackable item's auction verdict depends on how many are owned.
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
         local maxStack = select(8, C_Item.GetItemInfo(itemLink))
@@ -2349,9 +2360,11 @@ end
 -- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo, smallMark. transmogInfo
 -- is what GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it
 -- is shared by every copy the cache entry stands for, so read it and do not ask the item data
--- again. smallMark is what a quest's item is beside that, for the small mark on the quest icon:
--- "sellable" or "auction" from the verdict (a quest that can be done again still takes an item
--- with nothing else to it), or else "readable" for this copy in its bag slot (GetCopyStatus).
+-- again. smallMark is what the item is beside its status, for the small mark on its icon. On
+-- the quest icon: "sellable" or "auction" from the verdict (a quest that can be done again
+-- still takes an item with nothing else to it), or else "readable" for this copy in its bag
+-- slot (GetCopyStatus). On the star or the grey gear: "quest" for an item that starts a quest
+-- the toon has neither done nor taken.
 --
 -- feature and locationInfo are for a Pet Cage alone: its link is the same for every pet, so
 -- the tooltip of the place it lies in is asked of the feature (FeatureMixin:GetTooltipData).
@@ -2372,9 +2385,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
         local cached = statusCache[statusCacheKey]
         if cached then
             if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end
-            local copyStatus, copyMark = self:GetCopyStatus(cached[2], cached[4])
+            local copyStatus, copyMark = self:GetCopyStatus(cached[2], cached[4], cached[6])
             return cached[1], copyStatus, cached[3], cached[4], cached[5],
-                (copyStatus == "quest" and cached[6]) or copyMark
+                (copyStatus == cached[2] and cached[6]) or copyMark
         end
     end
 
@@ -2470,6 +2483,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     -- quest that is done): the quest icon stays, with what is left of the item as the small
     -- mark on it, since that quest can still take it.
     local questRepeats = false
+    -- The item starts a quest the toon has neither done nor taken, and that is all its quests
+    -- have left for it (the quest info's starts): one to act on, applied where quest value is.
+    local questStarter = nil
     if isQuestItem or CaerdonWardrobeConfig.Icon.ShowQuestItems then
         local questItemInfo = self:GetQuestItemInfo()
         -- The client was asked about one of its quests and nothing else says whether that
@@ -2483,6 +2499,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
             CaerdonWardrobeConfig.Icon.ShowQuestItems == true
         if CaerdonWardrobeConfig.Icon.ShowQuestItems then
             hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue == true
+            questStarter = questItemInfo ~= nil and questItemInfo.starts or nil
             -- By its class, unless the player's own options keep every quest left for it out
             -- (beyond the range of levels chosen, or trivial): in the bags as on an auction.
             -- One no quest is known for goes by the level the item itself asks for.
@@ -3051,7 +3068,18 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     -- learnable icon is read as "sell it, use it or send it". An upgrade keeps its arrow; one
     -- that was also a look to learn gets the arrow as a badge on the quest icon (the drawing
     -- reads bindingResult.upgradeStatus).
-    if hasQuestValue and (not mogStatus or mogStatus == "" or QUEST_REPLACES[mogStatus]) then
+    --
+    -- An item that starts a quest the toon has neither done nor taken is one to act on
+    -- instead (author decision): the star, or the grey gear while the quest or the item asks
+    -- for a level the toon has not, with the quest icon as the small mark on it. It replaces
+    -- what quest value replaces, and the quest icon the item's class gave it.
+    local starterMark = nil
+    if questStarter and (not mogStatus or mogStatus == "" or mogStatus == "quest" or QUEST_REPLACES[mogStatus]) then
+        local belowLevel = questStarter.belowLevel or
+            (type(itemMinLevel) == "number" and type(playerLevel) == "number" and itemMinLevel > playerLevel)
+        mogStatus = belowLevel and "lowSkill" or "own"
+        starterMark = "quest"
+    elseif hasQuestValue and (not mogStatus or mogStatus == "" or QUEST_REPLACES[mogStatus]) then
         mogStatus = "quest"
     end
 
@@ -3096,13 +3124,15 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
 
     -- Everything up to here follows from the link and the toon, and is kept per link. What
     -- belongs to this copy in its bag slot is added after the lookup (GetCopyStatus).
+    -- The verdict's small mark: a quest's icon has the one, a starter's star the other.
+    local verdictMark = questMark or starterMark
     if statusCacheKey then
-        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo, questMark}
+        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo, verdictMark}
     end
 
-    local copyStatus, copyMark = self:GetCopyStatus(mogStatus, bindingResult)
+    local copyStatus, copyMark = self:GetCopyStatus(mogStatus, bindingResult, verdictMark)
     return isReady, copyStatus, bindingStatus, bindingResult, statusTransmogInfo,
-        (copyStatus == "quest" and questMark) or copyMark
+        (copyStatus == mogStatus and verdictMark) or copyMark
 end
 
 function CaerdonItemMixin:GetItemData()

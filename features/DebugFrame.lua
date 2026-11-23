@@ -3293,6 +3293,18 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Has Quest Value", questItemInfo ~= nil and questItemInfo.hasQuestValue or false)
         addKV(1, "Active Quest", questItemInfo ~= nil and questItemInfo.isActive or false)
         addKV(1, "Upcoming Quest", questItemInfo ~= nil and questItemInfo.isUpcoming or false)
+        -- One to act on: it starts a quest the toon has neither done nor taken, and no quest
+        -- left for it is anything else to it.
+        local starter = questItemInfo ~= nil and questItemInfo.starts or nil
+        if starter then
+            addKV(1, "Starts A Quest Not Taken Yet", string.format(
+                "quest %s%s (the star, with the quest icon as the small mark%s)", tostring(starter.questID),
+                starter.requiredLevel and starter.requiredLevel > 0 and
+                    (", which asks for level " .. tostring(starter.requiredLevel)) or "",
+                starter.belowLevel and "; the grey gear until the toon is of that level" or ""))
+        else
+            addKV(1, "Starts A Quest Not Taken Yet", false)
+        end
         -- What takes the quest icon off a Quest-class item, and makes it one to get rid of
         -- where it has no use, is worn nowhere and has no equip effect.
         local behindText = "no quest is known for it"
@@ -3323,7 +3335,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                     item:IsSpentQuestItem(bindingResult))
             end
         end
-        -- The client's own word for the copy in its bag slot, which no status is made from.
+        -- The client's own word for the copy in its bag slot. The quest it names is one of the
+        -- item's quests below ("starts quest", by the client's word).
         local slotQuestInfo = item.GetSlotQuestInfo and item:GetSlotQuestInfo()
         if slotQuestInfo then
             local startsText = "starts no quest"
@@ -3438,15 +3451,21 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                         levelText = levelText .. " (the item's icon waits for the answer)"
                     end
                 end
-                addLine(2, string.format("- %d %s%s (%s): %s%s%s",
+                addLine(2, string.format("- %d %s%s (%s%s): %s%s%s%s",
                     quest.questID,
                     tostring(quest.name or "unknown"),
                     levelText,
                     tostring(quest.role),
+                    quest.startsByClient and ", by the client's word for its bag slot" or "",
                     quest.eligible and "" or "skipped, ",
                     tostring(quest.reason) .. (quest.source and (", judged from " .. quest.source) or ""),
                     quest.over and " (behind the toon)" or
-                        quest.setAside and " (not counted: the quest that handed the item over is behind the toon)" or ""))
+                        quest.setAside and " (not counted: the quest that handed the item over is behind the toon)" or "",
+                    -- Skipped as a quest still to come, and one the item starts all the same;
+                    -- behind the toon by the quest data, and named by the client for this copy.
+                    quest.canStart and not quest.eligible and
+                        (quest.over and " (so says the quest data; the client names the quest for this copy, which can still start it)" or
+                            " (the item can still start it)") or ""))
             end
         else
             addLine(1, "Quests: none")

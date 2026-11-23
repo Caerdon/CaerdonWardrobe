@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["2|1"] = {
@@ -22,6 +22,7 @@ return {
                 },
             },
         },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["2|1"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=2,9:slotIndex=1}"] = { { true, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=2,9:slotIndex=1}"] = { { 4634, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
@@ -223,10 +224,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 4634,
     link = "|cnIQ2:|Hitem:4634::::::::37:1485:::::::::|h[Iron Lockbox]|h|r",

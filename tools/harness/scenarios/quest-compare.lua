@@ -169,19 +169,21 @@ return function(H, S)
         end
     end
 
-    -- Every item asked for its status, as a redraw does. Returns which carry the quest icon.
+    -- Every item asked for its status, as a redraw does. Returns which carry the quest icon,
+    -- and which the star with the quest icon as its small mark (an item that starts a quest).
     local function Draw()
-        local quest = {}
+        local quest, starter = {}, {}
         for itemID, item in pairs(items) do
-            local ready, status
+            local ready, status, mark, _
             client:TickUntil(function()
-                ready, status = item:GetCaerdonStatus()
+                ready, status, _, _, _, mark = item:GetCaerdonStatus()
                 return ready
             end, 10)
             Check(ready, "draw: the status of " .. ITEMS[itemID].name .. " is ready")
             quest[itemID] = status == "quest"
+            starter[itemID] = status == "own" and mark == "quest"
         end
-        return quest
+        return quest, starter
     end
 
     -- An event, the half second the watch waits, and the refresh's own tenth.
@@ -190,8 +192,9 @@ return function(H, S)
         client:Tick(20)
     end
 
-    local shown = Draw()
-    Check(shown[EYE] and shown[BOLT] and shown[KEY] and shown[LETTER], "first: the four items a quest still to come takes have the quest icon")
+    local shown, starts = Draw()
+    Check(shown[EYE] and shown[BOLT] and shown[KEY], "first: the three items a quest still to come takes have the quest icon")
+    Check(starts[LETTER] and not shown[LETTER], "first: the letter that starts a quest has the star with the quest mark")
     Check(not shown[ORB] and not shown[TUSK] and not shown[PELT], "first: the three no quest names do not")
     Check(Answered() >= 5, "first: the quests asked about are held as answered (" .. tostring(Answered()) .. ")")
 
@@ -209,8 +212,8 @@ return function(H, S)
     client:Tick(20)
     Equal(Total(), total, "nothing: nor when it is turned in")
     Check(Watch().events == 3 and Watch().checks == 2, "nothing: two events of one run are one check")
-    shown = Draw()
-    Check(shown[EYE] and shown[BOLT] and shown[KEY] and shown[LETTER] and not shown[ORB], "nothing: the icons are as they were")
+    shown, starts = Draw()
+    Check(shown[EYE] and shown[BOLT] and shown[KEY] and starts[LETTER] and not shown[ORB], "nothing: the icons are as they were")
 
     -- A quest that takes an item.
     Accept(8001)

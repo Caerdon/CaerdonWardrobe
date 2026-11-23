@@ -169,6 +169,10 @@ local verdicts = {}
 -- The icons on screen were made from these, and a quest event is compared with them
 -- (CompareWithAnswers).
 local answered = {}
+-- questID -> true: the client named this quest as the one a copy in a bag slot starts, since
+-- the caches were last dropped (GetItemQuestInfo's third argument). Such a quest is one to
+-- start whatever the quest data says of who can take it (StateOf).
+local namedByClient = {}
 local playerContext
 local questieModules
 local questieReadyHooked = false
@@ -213,6 +217,7 @@ function CaerdonQuestItems:InvalidateCaches(changed)
     end
     wipe(verdicts)
     wipe(answered)
+    wipe(namedByClient)
     SecondSource:InvalidateCaches()
     QuestClient:InvalidateCaches()
     playerContext = nil
@@ -767,9 +772,16 @@ end
 -- is found earlier and is not for good.
 local function UpcomingBlocker(questID, verdict, Get)
     local blocker, forGood = nil, false
-    local function Block(reason, behind)
+    -- Whether nothing stands in the way but that the quest can be done again. That keeps it
+    -- from being one still to come (what it takes would be wanted for ever), and not from
+    -- being started by an item that starts it (verdict.startable).
+    local onlyRepeats = true
+    local function Block(reason, behind, repeats)
         blocker = blocker or reason
         forGood = forGood or behind == true
+        if not repeats then
+            onlyRepeats = false
+        end
     end
 
     local hiddenReason = CaerdonQuestItems:GetQuestieHiddenReason(questID)
@@ -802,7 +814,7 @@ local function UpcomingBlocker(questID, verdict, Get)
 
     if IsRepeating(questID, Get) then
         verdict.repeating = true
-        Block("repeatable")
+        Block("repeatable", false, true)
     end
 
     local requiredSkill = Get(questID, "requiredSkill")
@@ -911,8 +923,13 @@ local function UpcomingBlocker(questID, verdict, Get)
     verdict.questLevel = questLevel
 
     if blocker then
+        verdict.startable = onlyRepeats
         return blocker, false, forGood
     end
+
+    -- An item that starts it can: whether the toon has that item is asked of what its
+    -- objectives are worth below, and is no question for the item itself.
+    verdict.startable = true
 
     -- A quest only an item can start is not upcoming unless that item is already owned.
     local startedBy = Get(questID, "startedBy")
@@ -940,6 +957,14 @@ end
 -- Second value: the answer depends on what is in the bags and must not be kept.
 -- verdict.over: the quest is behind this toon, done or never to be taken. A quest that is
 -- done and can be done again is not, and without quest data nothing says which it is.
+-- verdict.startable: an item that starts the quest would start it: it is neither in the log
+-- nor done, and nothing keeps it from the toon but that it can be done again (which keeps a
+-- quest from being one still to come) or that the toon has no item that starts it. The
+-- player's range of levels and trivial quests left out hold here as they do for a quest still
+-- to come. This is the quest data's word, for a copy the toon does not hold; for the quest the
+-- client names for a copy in a bag slot the client's word stands (GetItemQuestInfo), which is
+-- also all there is for a quest no data is known for.
+-- verdict.done: the client flags the quest as completed.
 local function JudgeQuest(questID)
     local verdict = { questID = questID, eligible = false, isActive = false, over = false }
 
@@ -966,14 +991,17 @@ local function JudgeQuest(questID)
             verdict.reason = "in quest log"
         elseif C_QuestLog.IsQuestFlaggedCompleted(questID) then
             verdict.reason = "completed"
+            verdict.done = true
             verdict.repeating = (Get ~= nil and IsRepeating(questID, Get)) or
                 (second ~= nil and second:IsRepeating(questID))
             verdict.over = (Get ~= nil or second ~= nil) and not verdict.repeating
         elseif second then
-            local blocker, forGood, repeating, minLevel, _, optedOut, client = second:Blocker(questID, GetPlayerContext())
+            local blocker, forGood, repeating, minLevel, _, optedOut, client, onlyRepeats =
+                second:Blocker(questID, GetPlayerContext())
             verdict.eligible = blocker == nil
             verdict.reason = blocker or "upcoming"
             verdict.over = blocker ~= nil and forGood == true
+            verdict.startable = blocker == nil or onlyRepeats == true
             verdict.repeating = repeating == true
             verdict.requiredLevel = minLevel
             verdict.optedOut = optedOut == true
@@ -1030,9 +1058,24 @@ end
 -- compared on. "Behind it" is apart from "not wanted": a Quest-class item keeps its icon
 -- through the second and loses it with the first. And "kept out by the options" is apart from
 -- "not wanted": where that is all that is left for an item, its class gives it no quest icon.
+-- And "to be started" is apart from it too: an item that starts such a quest is one to act on
+-- (a quest that can be done again, one only an item starts), and stops being one when the
+-- quest is done, which may be within one run of events of its being taken.
+--
+-- A quest the client named for a copy in the bags is one to be started for as long as it is
+-- neither in the log nor done nor kept out by the options, whatever else the quest data says
+-- of it (GetItemQuestInfo, the client's word): were it "behind it" before and after, its
+-- being taken and done in one run of events would be no change.
 local function StateOf(verdict)
-    return verdict.isActive and "in the log" or verdict.eligible and "upcoming" or
-        verdict.over and "behind it" or verdict.optedOut and "kept out by the options" or "not wanted"
+    if verdict.isActive then
+        return "in the log"
+    elseif verdict.eligible then
+        return "upcoming"
+    elseif namedByClient[verdict.questID] and not verdict.done and not verdict.optedOut then
+        return "to be started"
+    end
+    return verdict.over and "behind it" or verdict.optedOut and "kept out by the options" or
+        verdict.startable and "to be started" or "not wanted"
 end
 
 -- The check after a run of quest events (accepted, removed, turned in): what differs from
@@ -1181,7 +1224,9 @@ end
 -- What the client itself says about the item in a bag slot, as Blizzard's bags read it for
 -- their quest border and bang: { isQuestItem, questID, isActive }, where questID is the quest
 -- the item starts and isActive whether that quest is in the log. nil where the client has no
--- answer. It is read for the export and the test addon; no status is made from it.
+-- answer. The quest it names is handed to GetItemQuestInfo with the item (the item's
+-- GetQuestItemInfo does), which is how a copy in the bags is known to start a quest where no
+-- quest data says so; isQuestItem is read for the export and the test addon alone.
 function CaerdonQuestItems:GetSlotQuestInfo(bag, slot)
     local ask = C_Container and C_Container.GetContainerItemQuestInfo
     if not ask or bag == nil or slot == nil then
@@ -1215,27 +1260,47 @@ end
 --   waitingFor     a quest ID: the client was asked about that quest and has not answered,
 --                  and nothing else says whether it is trivial, so what is above is not for
 --                  drawing yet (GetCaerdonStatus puts the item's verdict off for it)
+--   starts         the item is one to act on: it starts a quest the toon has neither done nor
+--                  taken and can take (startable; or, for the quest the client names for a
+--                  copy in a bag slot, one that is not kept out by the player's options,
+--                  whatever else the quest data says of it), and no quest that is not behind
+--                  the toon is anything else to it (one that takes it without being started
+--                  by it, one in the log). { questID, requiredLevel, belowLevel }: the quest, the
+--                  level it asks for where the data has one, and whether the toon is below
+--                  it. Of several the one the toon is of a level for comes first. Not under
+--                  the option for quests not picked up yet: that one is about what a quest
+--                  will ask for.
 --   quests         every candidate quest with its verdict, the rejected ones included:
 --                  { questID, name, role, isActive, eligible, over, repeating, setAside,
---                  reason, requiredLevel, questLevel, levelFromClient, clientState }; the
---                  last one says why the client had no word where it was wanted
-function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
+--                  reason, requiredLevel, questLevel, levelFromClient, clientState, starts,
+--                  startsByClient, startable, done, canStart }; clientState says why the
+--                  client had no word where it was wanted, canStart that this item or copy
+--                  would start the quest
+--
+-- startsQuestID: the quest the client says this copy starts, for a copy in a bag slot
+-- (GetSlotQuestInfo). It is a quest of the item's like one the quest data names, also where
+-- no quest data is loaded or the data does not tie the item to it.
+function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName, startsQuestID)
     EnsureQuestLog()
     EnsureProvider()
 
+    if type(startsQuestID) ~= "number" or startsQuestID <= 0 then
+        startsQuestID = nil
+    end
     local nameMatches = itemName and questLog.itemNames[itemName]
     local indexed, started = self:GetIndexedQuests(itemID)
-    if not nameMatches and not indexed and not started then
+    if not nameMatches and not indexed and not started and not startsQuestID then
         return nil
     end
 
     local info = { hasQuestValue = false, isActive = false, isUpcoming = false, isOver = true, quests = {} }
     local byQuest = {}
 
-    local function Add(questID, role)
+    local function Add(questID, role, starts)
         local entry = byQuest[questID]
         if entry then
             entry.role = entry.role .. ", " .. role
+            entry.starts = entry.starts or starts == true
             return
         end
 
@@ -1256,6 +1321,9 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
             levelFromClient = verdict.levelFromClient == true,
             clientState = verdict.clientState,
             pending = verdict.pending == true,
+            starts = starts == true,
+            startable = verdict.startable == true,
+            done = verdict.done == true,
         }
         byQuest[questID] = entry
         info.quests[#info.quests + 1] = entry
@@ -1277,8 +1345,16 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
     end
     if started then
         for questID in pairs(started) do
-            Add(questID, "starts quest")
+            Add(questID, "starts quest", true)
         end
+    end
+    -- The client's word for the copy in its bag slot, beside what the quest data names.
+    if startsQuestID then
+        namedByClient[startsQuestID] = true
+        if not (byQuest[startsQuestID] and byQuest[startsQuestID].starts) then
+            Add(startsQuestID, "starts quest", true)
+        end
+        byQuest[startsQuestID].startsByClient = true
     end
     if nameMatches then
         for _, questID in ipairs(nameMatches) do
@@ -1348,6 +1424,38 @@ function CaerdonQuestItems:GetItemQuestInfo(itemID, itemName)
     local showUpcoming = not CaerdonWardrobeConfig or not CaerdonWardrobeConfig.Icon or
         CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems ~= false
     info.hasQuestValue = info.isActive or (info.isUpcoming and showUpcoming)
+
+    -- An item that starts a quest the toon has neither done nor taken is one to act on, where
+    -- that is all its quests have left for it: every quest that is not behind the toon is one
+    -- the item starts and that is not in the log. Once the quest is in the log, or where
+    -- another quest takes the item, it is a quest's item as any other.
+    --
+    -- For the copy in a bag slot the client's word stands: the quest it names is one to start
+    -- unless it is in the log, done, or kept out by the player's own options, whatever the
+    -- quest data says of who can take it or of when it is offered. The data is not to be
+    -- relied on against the client there: QuestieDB has six of WoW Forever's 150 writs as one
+    -- faction's, each of which rewards both factions' reputation, and a toon of the other
+    -- faction had one of them in its log. For a copy anywhere else the quest data is all
+    -- there is.
+    local starter, onlyStarts = nil, true
+    local level = GetPlayerContext().level
+    for _, entry in ipairs(info.quests) do
+        local byClient = entry.startsByClient == true and not entry.done
+        if byClient or (not entry.over and not entry.setAside) then
+            if not entry.starts or entry.isActive then
+                onlyStarts = false
+            elseif entry.startable or (byClient and not entry.optedOut) then
+                entry.canStart = true
+                local below = type(entry.requiredLevel) == "number" and entry.requiredLevel > level
+                if starter == nil or (starter.belowLevel and not below) then
+                    starter = { questID = entry.questID, requiredLevel = entry.requiredLevel, belowLevel = below }
+                end
+            end
+        end
+    end
+    if starter and onlyStarts then
+        info.starts = starter
+    end
 
     return info
 end

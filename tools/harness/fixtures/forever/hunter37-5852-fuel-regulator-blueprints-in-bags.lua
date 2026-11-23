@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["1|6"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|6|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["1|6"] = { { { isActive = false, isQuestItem = true }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { true, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=6}"] = { { 5852, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
@@ -185,10 +186,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 5852,
     link = "|cnIQ1:|Hitem:5852::::::::37:1485:::::::::|h[Fuel Regulator Blueprints]|h|r",

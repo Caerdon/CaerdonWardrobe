@@ -1,5 +1,5 @@
 return {
-    at = 1795388373,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|16"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|16|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["0|16"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["3385|true"] = { { 5, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=16}"] = { { 3385, n = 1 } } },
@@ -213,10 +214,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 3385,
     link = "|cnIQ1:|Hitem:3385::::::::37:1485:::::::::|h[Lesser Mana Potion]|h|r",

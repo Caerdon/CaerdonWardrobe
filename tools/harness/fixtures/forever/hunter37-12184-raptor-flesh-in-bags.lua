@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["5|3"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["5|3|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["5|3"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=5,9:slotIndex=3}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["12184|true"] = { { 5, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=5,9:slotIndex=3}"] = { { 12184, n = 1 } } },
@@ -114,7 +115,7 @@ return {
                                 rank = 5,
                                 recipeID = 1250152,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                             [2] = {
@@ -128,7 +129,7 @@ return {
                                 rank = 5,
                                 recipeID = 1250150,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                             [3] = {
@@ -142,7 +143,7 @@ return {
                                 rank = 5,
                                 recipeID = 1250153,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                             [4] = {
@@ -156,7 +157,7 @@ return {
                                 rank = 5,
                                 recipeID = 15855,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                             [5] = {
@@ -170,7 +171,7 @@ return {
                                 rank = 5,
                                 recipeID = 1225762,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                             [6] = {
@@ -184,7 +185,7 @@ return {
                                 rank = 5,
                                 recipeID = 1250154,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                         },
@@ -354,10 +355,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 12184,
     link = "|cnIQ1:|Hitem:12184::::::::37:1485:::::::::|h[Raptor Flesh]|h|r",

@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["1|12"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|12|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["1|12"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=12}"] = { { true, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=12}"] = { { 211527, n = 1 } } },
         ["C_Item.GetItemInfo"] = {
@@ -199,10 +200,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 211527,
     link = "|cnIQ3:|Hitem:211527::::::::37:1485::11:::::::|h[Cozy Sleeping Bag]|h|r",

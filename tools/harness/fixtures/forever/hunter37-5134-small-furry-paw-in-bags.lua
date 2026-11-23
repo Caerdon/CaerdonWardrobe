@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["1|9"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["1|9|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["1|9"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=1,9:slotIndex=9}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["5134|true"] = { { 2, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=1,9:slotIndex=9}"] = { { 5134, n = 1 } } },
@@ -192,10 +193,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 5134,
     link = "|cnIQ1:|Hitem:5134::::::::37:1485:::::::::|h[Small Furry Paw]|h|r",

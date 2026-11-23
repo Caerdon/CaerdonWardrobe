@@ -1,5 +1,5 @@
 return {
-    at = 1795388373,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["0|9"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["0|9|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["0|9"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=0,9:slotIndex=9}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["264017|true"] = { { 0, n = 1 } }, ["3388|true"] = { { 1, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=0,9:slotIndex=9}"] = { { 3388, n = 1 } } },
@@ -230,10 +231,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 3388,
     link = "|cnIQ1:|Hitem:3388::::::::37:1485:::::::::|h[Lesser Troll's Blood Elixir]|h|r",

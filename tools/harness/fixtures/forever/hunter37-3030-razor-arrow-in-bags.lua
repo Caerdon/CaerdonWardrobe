@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396144,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["4|2"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["4|2|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["4|2"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=4,9:slotIndex=2}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["3030|true"] = { { 1743, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=4,9:slotIndex=2}"] = { { 3030, n = 1 } } },
@@ -125,7 +126,7 @@ return {
                                 rank = 68,
                                 recipeID = 12719,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 68,
                             },
                         },
@@ -216,10 +217,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 3030,
     link = "|cnIQ1:|Hitem:3030::::::::37:1485:::::::::|h[Razor Arrow]|h|r",

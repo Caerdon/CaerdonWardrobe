@@ -1,5 +1,5 @@
 return {
-    at = 1795388374,
+    at = 1795396145,
     calls = {
         ["C_Container.GetContainerItemInfo"] = {
             ["5|6"] = {
@@ -23,6 +23,7 @@ return {
             },
         },
         ["C_Container.GetContainerItemPurchaseInfo"] = { ["5|6|false"] = { { n = 0 } } },
+        ["C_Container.GetContainerItemQuestInfo"] = { ["5|6"] = { { { isActive = false, isQuestItem = false }, n = 1 } } },
         ["C_Item.DoesItemExist"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { true, n = 1 } } },
         ["C_Item.GetItemCount"] = { ["3685|true"] = { { 5, n = 1 } } },
         ["C_Item.GetItemID"] = { ["{5:bagID=5,9:slotIndex=6}"] = { { 3685, n = 1 } } },
@@ -114,7 +115,7 @@ return {
                                 rank = 5,
                                 recipeID = 3376,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                             [2] = {
@@ -128,7 +129,7 @@ return {
                                 rank = 5,
                                 recipeID = 1250156,
                                 skillUps = 1,
-                                toon = "Toon2",
+                                toon = "Toon3",
                                 toonRank = 5,
                             },
                         },
@@ -246,10 +247,15 @@ return {
         },
         Merchant = { Filter = { HideCollected = true, SuppressLegionRemixHelperWarning = false } },
         MessageSeen = 1,
-        Tooltip = { KeepPawnUpgradeNotes = false, ShowLoadoutUpgrades = true, ShowRecipeLearners = true },
+        Tooltip = {
+            KeepPawnUpgradeNotes = false,
+            ShowLoadoutUpgrades = true,
+            ShowRecipeLearners = true,
+            ShowSetBonusChanges = true,
+        },
         Version = 25,
     },
-    environment = "env-hunter37-20261122-225933",
+    environment = "env-hunter37-20261123-010904",
     format = 1,
     itemID = 3685,
     link = "|cnIQ1:|Hitem:3685::::::::37:1485:::::::::|h[Raptor Egg]|h|r",
