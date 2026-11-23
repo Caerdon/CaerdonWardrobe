@@ -14,20 +14,8 @@ function AuctionMixin:Init(frame)
 	return {
 		"AUCTION_HOUSE_SHOW",
 		"ITEM_KEY_ITEM_INFO_RECEIVED",
-		-- "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
-		-- "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
-		-- "OWNED_AUCTIONS_UPDATED"
 	}
 end
-
--- function AuctionMixin:AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
--- 	print("Results Updated")
--- 	-- DevTools_Dump(C_AuctionHouse.GetBrowseResults())
--- end
-
--- function AuctionMixin:AUCTION_HOUSE_BROWSE_RESULTS_ADDED()
--- 	print("Results Added")
--- end
 
 function AuctionMixin:AUCTION_HOUSE_SHOW()
 	if (self.shouldHookAuction) then
@@ -996,94 +984,6 @@ function AuctionMixin:OnSetAuctionItemDisplay(frame, itemDisplayItem)
 		item:ContinueOnItemLoad(doUpdate)
 	end
 end
-
--- function AuctionMixin:OWNED_AUCTIONS_UPDATED()
--- 	-- self:UpdateItemList(AuctionHouseFrame.AuctionsFrame.AllAuctionsList, 1)
--- end
-
--- function AuctionMixin:OnScrollBoxRangeChanged(sortPending)
--- 	self:UpdateItemList(AuctionHouseFrame.BrowseResultsFrame.ItemList, 2)
--- end
-
--- function AuctionMixin:UpdateItemList(itemList, buttonCellIndex)
--- 	if self.auctionTimer then
--- 		self.auctionTimer:Cancel()
--- 	end
-
--- 	-- TODO: Battle Pet scans are not clean, yet.
--- 	self.auctionContinuableContainer:Cancel()
-
--- 	self.auctionTimer = C_Timer.NewTimer(0.05, function() 
--- 		local index = itemList.ScrollBox:GetDataIndexBegin();
--- 		itemList.ScrollBox:ForEachFrame(function(button)
--- 			local browseResult = itemList.tableBuilder:GetDataProviderData(index)
--- 			if browseResult then
--- 				local item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
--- 				if not item:IsItemEmpty() then
--- 					self.auctionContinuableContainer:AddContinuable(item)
--- 				end
--- 			end
-
--- 			index = index + 1;
--- 		end);
-
--- 		self.auctionContinuableContainer:ContinueOnLoad(function()
--- 			-- local checkOffset = itemList:GetScrollOffset();
--- 			-- -- TODO: Not sure if this is actually doing anything - hasn't been triggered, yet.
--- 			-- if checkOffset ~= offset then 
--- 			-- 	return
--- 			-- end
-
--- 			-- for i, button in ipairs(buttons) do
--- 			local dataIndex = itemList.ScrollBox:GetDataIndexBegin();
--- 			local dataIndexEnd = itemList.ScrollBox:GetDataIndexEnd();
--- 			local frameCount = itemList.ScrollBox:GetFrameCount()
--- 			local offset = 0
--- 			if frameCount < dataIndexEnd then
--- 				offset = frameCount - dataIndexEnd
--- 			end
--- 			itemList.ScrollBox:ForEachFrame(function(button)
--- 				local slot = dataIndex + offset
--- 				local browseResult = itemList.tableBuilder:GetDataProviderData(dataIndex)
--- 				if browseResult then
--- 					local row = itemList.tableBuilder.rows[slot] -- TODO: This is matching on the wrong row... probably unsorted?  Searching through for now.
--- 					for i, checkRow in ipairs(itemList.tableBuilder.rows) do
--- 						if checkRow.rowData == browseResult then
--- 							row = checkRow
--- 						end
--- 					end
-
--- 					local cell = row.cells[buttonCellIndex]
-			
--- 					if button then
--- 						local item
--- 						local itemKeyInfo = C_AuctionHouse.GetItemKeyInfo(browseResult.itemKey)
-		
--- 						if itemKeyInfo and itemKeyInfo.battlePetLink then
--- 							item = CaerdonItem:CreateFromItemLink(itemKeyInfo.battlePetLink)
--- 						else
--- 							item = CaerdonItem:CreateFromItemID(browseResult.itemKey.itemID)
--- 						end
-
--- 						CaerdonWardrobe:UpdateButton(button, item, self, {
--- 							locationKey = format("%d", slot),
--- 							index = slot,
--- 							itemKey = browseResult.itemKey
--- 						},  
--- 						{
--- 							overrideStatusPosition = "LEFT",
--- 							statusProminentSize = 13,
--- 							statusOffsetX = -4,
--- 							statusOffsetY = 0,
--- 							relativeFrame=cell.Icon
--- 						})
--- 					end
--- 				end
--- 				dataIndex = dataIndex + 1;
--- 			end)
--- 		end)
--- 	end, 1)
--- end
 
 function AuctionMixin:OnSelectBrowseResult(frame, browseResult)
 	local itemKey = browseResult.itemKey

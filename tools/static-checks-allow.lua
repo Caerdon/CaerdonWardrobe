@@ -63,7 +63,6 @@ return {
         PawnShouldItemLinkHaveUpgradeArrowUnbudgeted = "Pawn",
         Questie = "Questie",
         QuestieLoader = "Questie",
-        Skillet = "Skillet",
         VWQL = "World Quests List",
         WQT_REWARDTYPE = "World Quest Tracker",
         WorldQuestList = "World Quests List",
