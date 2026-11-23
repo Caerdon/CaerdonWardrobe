@@ -669,6 +669,77 @@ return function(H, S)
         "gone: a set whose scale is gone has its spec's scale again")
     own.Icon.GearSetScales[31] = nil
 
+    -- A set nobody tied and no spec's, named as a spec of the class is: scored on the scale
+    -- Pawn has for that spec, by its name, and the spec has no row beside it. The names are
+    -- compared without their case and the blanks around them. In a client a renamed set and a
+    -- changed tie both come with a refresh, which empties what the equipment code kept; here
+    -- that is called by hand.
+    local keptTies, keptPvp = own.Icon.GearSetScales, own.Icon.PvpSets
+    own.Icon.GearSetScales, own.Icon.PvpSets = {}, nil
+    local function Reread()
+        equipment:InvalidateCaches()
+        world.page.OnRefresh()
+    end
+    world.setNames[41] = " feral "
+    Reread()
+    Equal(list.rows[1].text:GetText(), "By its name (Feral)", "by name: a set named as a spec is goes by that spec")
+    Equal(RowsShown(), 2, "by name: and the spec has no row beside its set")
+    Check(Tick(" feral "):IsEnabled() == true and Ticked(" feral ") == true, "by name: it has a set's own switch, on")
+    menu, titles, checked = Open(list.rows[1])
+    Equal(titles, "By its name (Feral) | Druid: Feral | Druid: Guardian (used by Bear) | My tanking",
+        "by name: the first entry says what the set goes by")
+    Equal(checked, "By its name (Feral)", "by name: and is the one marked")
+    Check(Says(menu[1].tooltipText, "named as the specialization Feral is") and
+        Says(menu[1].tooltipText, "Choose a scale below to score it on another."),
+        "by name: with why, and what to do about it: " .. tostring(menu[1].tooltipText))
+    Check(Says(equipment:GetGearSetScaleDescription(), "(41) scored on Druid: Feral by its name, which is Feral's"),
+        "by name: the export says so: " .. tostring(equipment:GetGearSetScaleDescription()))
+    menu, titles = Open(list.rows[2])
+    Equal(titles, "By its specialization (Guardian) | Druid: Feral (used by  feral ) | Druid: Guardian | My tanking",
+        "by name: the scale is that set's for the other sets")
+    -- The player's own tie comes first, and the spec is one without a set again.
+    own.Icon.GearSetScales[41] = OWN
+    Reread()
+    Equal(list.rows[1].text:GetText(), "My tanking", "by name: a scale the player chose comes first")
+    Equal(RowsShown(), 3, "by name: and the spec is listed by itself again")
+    own.Icon.GearSetScales[41] = nil
+    -- A name two sets have says nothing for either.
+    world.setIDs, world.setNames[51] = { 41, 31, 51 }, "Feral"
+    Reread()
+    Check(list.rows[1].text:GetText() == "Not tied" and list.rows[3].text:GetText() == "Not tied" and RowsShown() == 4,
+        "by name: two sets of one name are neither taken by it")
+    world.setIDs, world.setNames[51] = { 41, 31 }, nil
+    -- A scale another set of the same kind is tied to is that set's, whatever a set is named.
+    own.Icon.GearSetScales[31] = FERAL
+    Reread()
+    Equal(list.rows[1].text:GetText(), "Not tied", "by name: not on a scale another set is tied to")
+    own.Icon.GearSetScales[31] = nil
+    -- A set the client assigns to a spec is that spec's, whatever it is named; and a spec
+    -- with a set assigned takes no other by its name.
+    world.setNames[41], world.setNames[31] = "Arena", "Feral"
+    Reread()
+    Equal(list.rows[2].text:GetText(), "By its specialization (Guardian)", "by name: a set assigned to a spec goes by that")
+    Equal(RowsShown(), 3, "by name: and the spec it is named after is still one without a set")
+    world.setNames[41], world.setNames[31] = "Guardian", "Bear"
+    Reread()
+    Equal(list.rows[1].text:GetText(), "Not tied", "by name: a spec that has a set assigned takes no other by its name")
+    -- A client with talent trees: by the tree's name, on the scale Pawn has for the tree.
+    world.setNames[41], world.setNames[31] = "Arena", "Feral Combat"
+    api.GetTalentTrees = function()
+        return { { index = 1, name = "Balance" }, { index = 2, name = "Feral Combat" }, { index = 3, name = "Restoration" } }
+    end
+    Reread()
+    Equal(list.rows[2].text:GetText(), "By its name (Feral Combat)", "by name: on a client with trees, by the tree's name")
+    menu = Open(list.rows[2])
+    Check(Says(menu[1].tooltipText, "named as the talent tree Feral Combat is"), "by name: and says so: " .. tostring(menu[1].tooltipText))
+    Check(Says(equipment:GetGearSetScaleDescription(), "(31) scored on Druid: Feral by its name, which is Feral Combat's"),
+        "by name: the tree's scale is the one Pawn has for it: " .. tostring(equipment:GetGearSetScaleDescription()))
+    Check(Tick("Feral Combat"):IsEnabled() == true, "by name: with a switch of its own there too")
+    api.GetTalentTrees = hadTrees
+    world.setNames[31] = "Bear"
+    own.Icon.GearSetScales, own.Icon.PvpSets = keptTies, keptPvp
+    Reread()
+
     -- A client with talent trees has no spec for a set to go by, and none to list.
     api.GetTalentTrees = function() return { { index = 1 }, { index = 2 }, { index = 3 } } end
     world.page.OnRefresh()

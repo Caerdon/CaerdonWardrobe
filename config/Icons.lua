@@ -107,6 +107,13 @@ local TIED_TOOLTIP = "While you wear this gear set, upgrades are scored on this 
 
 -- What a set nobody tied goes by: the dropdown's first entry, and its tooltip.
 local function UntiedChoice(set, byTree)
+    if set.byName then
+        return "By its name (" .. set.byName .. ")",
+            "This gear set is named as " .. (byTree and "the talent tree " or "the specialization ") .. set.byName ..
+            " is and no scale was chosen for it, so it is scored on the scale Pawn has for " .. set.byName ..
+            (byTree and "." or ". Assigning a gear set to that specialization in the character window comes first.") ..
+            "\n\nChoose a scale below to score it on another."
+    end
     if set.specName then
         return "By its specialization (" .. set.specName .. ")",
             "This gear set is assigned to " .. set.specName .. " in the character window, so it is scored on the scale Pawn has for " ..
@@ -175,8 +182,11 @@ function CaerdonWardrobeConfigIcons:AddLoadoutList(dependsOn)
             local rows = {}
             for _, set in ipairs(sets) do
                 local row = { icon = set.icon, text = set.name, set = set, byTree = byTree }
-                if set.tied then
+                if set.tied and not set.byName then
                     row.value, row.title = set.tied, set.tiedLabel
+                elseif set.byName then
+                    -- Scored by its name: the first entry is the one chosen, and says so.
+                    row.title = UntiedChoice(set, byTree)
                 elseif set.lost then
                     -- Tied to a scale that is gone from Pawn: in effect not tied, and no entry
                     -- of the list is the one chosen.

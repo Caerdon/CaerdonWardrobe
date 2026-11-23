@@ -2758,6 +2758,17 @@ return function(H, S)
             Equal(table.concat(shown.lines, " | "), "pawn: " .. GUARDIAN, "tied: a scale Pawn no longer has ties nothing")
             Check(tostring(equipment:GetGearSetScaleDescription()):find("tied to \"a scale that is gone\", which Pawn no longer has", 1, true) ~= nil,
                 "tied: and the export says so")
+            -- Tied to nothing and named as a spec of the class is: scored on the scale Pawn
+            -- has for that spec, as if the player had tied it there.
+            Tie(nil)
+            world.setNames[41] = "feral"
+            step = Shown({ GUARDIAN }, { GUARDIAN })
+            Equal(shown.lines[#shown.lines], Line("8ec3e6", 134400, "feral", "+100% upgrade", true),
+                "by name: the set worn, named as a spec is, is scored on that spec's scale")
+            Equal(info.pawnIdentifiedUpgrade, true, "by name: and the arrow is the worn gear's own, by that scale")
+            Check(tostring(equipment:GetGearSetScaleDescription()):find("\"feral\" (41) scored on Druid: Feral by its name, which is Feral's", 1, true) ~= nil,
+                "by name: the export says what the set goes by: " .. tostring(equipment:GetGearSetScaleDescription()))
+            world.setNames[41] = "Arena"
 
             -- Not the set worn (Bear is on in full): a loadout of its own, measured against
             -- the set's own piece, the jerkin in the bags. On Guardian's scale the piece is no
@@ -2777,6 +2788,17 @@ return function(H, S)
             Tie(nil)
             info = Info(world, { GUARDIAN }, {})
             Equal(info.isUpgrade, nil, "tied: no such upgrade where the set is not tied")
+            -- Named as the spec is and tied to nothing: the same loadout, by its name.
+            world.setNames[41] = "Feral"
+            info = Info(world, { GUARDIAN }, {})
+            Check(info.isUpgrade == true and info.pawnOffTreeUpgrade == true,
+                "by name: a set not worn, named as a spec is, is a loadout of its own on that spec's scale")
+            local namedList = equipment:GetLoadoutUpgradeList(piece)
+            Check(namedList ~= nil and #namedList == 1 and namedList[1].name == "Feral" and namedList[1].percent == 400,
+                "by name: and the tooltip's list names the set, with the gain over its piece")
+            world.setNames[41] = "Arena"
+            info = Info(world, { GUARDIAN }, {})
+            Equal(info.isUpgrade, nil, "by name: under another name it is not")
             -- Pawn shows the tied scale and calls the piece an upgrade over the worn gear, and
             -- the set's own piece is the better one (40): the set decides, as a spec's does.
             world.scaleValues[FERAL][940003] = 40
