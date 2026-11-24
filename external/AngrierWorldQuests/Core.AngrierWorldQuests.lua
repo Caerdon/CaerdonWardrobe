@@ -27,12 +27,15 @@ function AngrierWorldQuestsMixin:IsSameItem(button, item, locationInfo)
 	return isSame
 end
 
--- What this window shows of an item (FeatureMixin.lua, displayRules).
+-- What this window shows of an item (FeatureMixin.lua, displayRules). No level gain: the
+-- reward's icon is the size of a line of text, and the number covered it whole. The arrow
+-- still says the piece is an upgrade, and the list has the piece's item level beside the icon.
 AngrierWorldQuestsMixin.displayRules = {
 	bindingStatus = true,
 	ownIcon = true,
 	otherIcon = true,
 	sellableIcon = false,
+	levelGain = false,
 }
 
 function AngrierWorldQuestsMixin:OnQuestLog_Update()

@@ -566,12 +566,14 @@ end
 
 -- The lines by themselves, with Pawn's own lines left as they are: one is left out where
 -- Pawn's line for the scale says the same percentage (saidByPawn).
-function TooltipMixin:AddLoadoutUpgrades(tooltip, item)
+-- withoutPawns: the tooltip has no lines of Pawn's (one Pawn does not fill), so a line Pawn
+-- would have said the same of is the addon's to say.
+function TooltipMixin:AddLoadoutUpgrades(tooltip, item, withoutPawns)
     if not WantsLoadoutLines(item) then
         return
     end
     for _, upgrade in ipairs(CaerdonEquipment:GetLoadoutUpgradeList(item) or {}) do
-        if not upgrade.saidByPawn then
+        if withoutPawns or not upgrade.saidByPawn then
             AddUpgradeLine(tooltip, upgrade)
         end
     end
@@ -899,16 +901,106 @@ function TooltipMixin:CatchUpComparisons()
     end
 end
 
+-- Every tooltip frame the addon was shown an item in, by its name, and what became of the
+-- upgrade lines there (the export's [Item Tooltips Seen]). The lines go on with Pawn's own
+-- where Pawn is loaded, so a tooltip Pawn never fills has none, and without Pawn only the
+-- client's two item tooltips get them: this says which of those a window's tooltip is.
+local tooltipsSeen, tooltipsSeenOrder = {}, {}
+
+local function NameOf(frame)
+    if type(frame) ~= "table" then
+        return "none"
+    end
+    local name = frame.GetName and frame:GetName()
+    if not name and frame.GetDebugName then
+        name = frame:GetDebugName()
+    end
+    return name or "unnamed"
+end
+
+local function SeenOf(tooltip)
+    local name = NameOf(tooltip)
+    local seen = tooltipsSeen[name]
+    if not seen then
+        seen = { name = name, items = 0, leftToPawn = 0, pawnCame = 0, pawnHadItem = 0, linesAdded = 0, addedAlone = 0,
+            noPlace = 0, embeddedAlone = 0 }
+        tooltipsSeen[name] = seen
+        tooltipsSeenOrder[#tooltipsSeenOrder + 1] = name
+    end
+    return seen
+end
+
+-- The comparison tooltips of a tooltip are the ones it names (shoppingTooltips: the client's
+-- comparison manager fills those and makes the tooltip their owner). The client's own pairs
+-- are noted at load; a tooltip of another addon's names a pair of its own (World Quest Tab's
+-- WQT_ShoppingTooltip1 and 2), known here from the first item that tooltip is shown, which is
+-- before the client builds the pair for it.
+local function NoteNamedComparisonTooltips(tooltip)
+    local named = tooltip.shoppingTooltips
+    if type(named) ~= "table" then
+        return
+    end
+    for _, beside in ipairs(named) do
+        if type(beside) == "table" and beside ~= tooltip and not comparisonTooltips[beside] and not clientTooltips[beside] then
+            Tooltip:NoteComparisonTooltips(beside)
+        end
+    end
+end
+
 function TooltipMixin:OweUpgradeLines(tooltip, item)
+    if not comparisonTooltips[tooltip] then
+        NoteNamedComparisonTooltips(tooltip)
+    end
+    local seen = SeenOf(tooltip)
+    seen.items = seen.items + 1
+    seen.lastLink = item and item.GetItemLink and item:GetItemLink() or nil
+    seen.lastOwner = NameOf(tooltip.GetOwner and tooltip:GetOwner() or nil)
+    seen.kind = comparisonTooltips[tooltip] and "a comparison tooltip" or clientTooltips[tooltip] and "one of the client's two item tooltips" or
+        "another tooltip"
     if comparisonTooltips[tooltip] then
         pendingBuilds[tooltip] = (pendingBuilds[tooltip] or 0) + 1
     end
-    if pawnAddsValues then
+    -- An item's tooltip set into another tooltip (a quest's reward: the frame that holds it
+    -- names it as its Tooltip). Pawn fills the tooltips it knows, and such a one of another
+    -- addon's own tooltip is none of them (World Quest Tab's: 241 items shown, Pawn never
+    -- came; retail 12.1.5, Pawn 2.14.8). Once one has been shown an item with Pawn not
+    -- coming, the lines go on here, while the client still fills it, so its size has them.
+    local holder = tooltip.GetParent and tooltip:GetParent() or nil
+    local embedded = type(holder) == "table" and holder.Tooltip == tooltip
+    local pawnLeavesIt = embedded and seen.items > 1 and seen.pawnCame == 0
+    if pawnAddsValues and not pawnLeavesIt then
         upgradeItems[tooltip] = item
-    elseif clientTooltips[tooltip] then
-        xpcall(function() Tooltip:AddLoadoutUpgrades(tooltip, item) end, geterrorhandler())
+        seen.leftToPawn = seen.leftToPawn + 1
+    elseif clientTooltips[tooltip] or embedded then
+        if pawnAddsValues then
+            seen.embeddedAlone = seen.embeddedAlone + 1
+        else
+            seen.addedAlone = seen.addedAlone + 1
+        end
+        xpcall(function() Tooltip:AddLoadoutUpgrades(tooltip, item, pawnAddsValues ~= nil) end, geterrorhandler())
         xpcall(function() Tooltip:AddSetBonusChanges(tooltip, item) end, geterrorhandler())
+    else
+        seen.noPlace = seen.noPlace + 1
     end
+end
+
+-- For the Debug Frame export: one line per tooltip frame, in the order they were first seen.
+function TooltipMixin:GetTooltipsSeenReport()
+    local lines = {}
+    for _, name in ipairs(tooltipsSeenOrder) do
+        local seen = tooltipsSeen[name]
+        local fate
+        if pawnAddsValues then
+            fate = ("left to go on with Pawn's lines %d times; Pawn filled it %d times, %d of them with an item of ours waiting, and %d upgrade lines went on; the lines were asked for without Pawn %d times (a tooltip set into another that Pawn leaves alone)")
+                :format(seen.leftToPawn, seen.pawnCame, seen.pawnHadItem, seen.linesAdded, seen.embeddedAlone)
+        else
+            fate = ("no Pawn: the lines were asked for %d times, and %d times it was no tooltip they are put on")
+                :format(seen.addedAlone, seen.noPlace)
+        end
+        lines[#lines + 1] = ("%s (%s): an item %d times, the last %s, owned by %s; %s"):format(seen.name,
+            tostring(seen.kind), seen.items, tostring(seen.lastLink), tostring(seen.lastOwner), fate)
+    end
+    return lines
 end
 
 -- upgradeInfo without the scales named: a table of its own, and the one given where it names
@@ -945,6 +1037,11 @@ end
 function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, secondBestFor, ...)
     local item = upgradeItems[tooltip]
     upgradeItems[tooltip] = nil
+    local seen = SeenOf(tooltip)
+    seen.pawnCame = seen.pawnCame + 1
+    if item then
+        seen.pawnHadItem = seen.pawnHadItem + 1
+    end
     local upgrades, setScales, judgedScales, offHandScale, notWeighed, wornScales, losses
     local keepsNotes = KeepsPawnNotes()
     if item then
@@ -1017,6 +1114,7 @@ function TooltipMixin:PawnAddsValues(tooltip, itemValues, upgradeInfo, bestFor, 
     -- None of these in a comparison tooltip: what it gets comes after the client's own lines
     -- (CatchUpComparisons).
     if upgrades and not comparisonTooltips[tooltip] then
+        seen.linesAdded = seen.linesAdded + #upgrades
         xpcall(function()
             for _, upgrade in ipairs(upgrades) do
                 AddUpgradeLine(tooltip, upgrade)

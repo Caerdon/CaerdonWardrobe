@@ -81,6 +81,7 @@ The result is cached by item link (plus `|B` when soulbound, `|c` for a crafted 
 - **No text is read off a tooltip frame.** A status comes from `C_TooltipInfo`; a line that should not be on a tooltip is kept off before the client adds it (`TooltipDataProcessor.AddLinePreCall`, as for an ensemble's "Already known"; notes: Ensembles), never found by its text and blanked.
 - **A line the client writes from a format string is read back with `NS.FormatPattern`,** never with a pattern made by hand from that string or from its English text: the strings hold positional arguments, full-width punctuation and grammar escapes in other languages. A change to text that is read runs `scenarios/locale-text.lua`, which has every locale of both clients (notes: Text Read Off a Tooltip Line).
 - **New item signals** go through the item's data mixin or a signal module with a `CaerdonItemMixin` entry point, never ad-hoc API calls in feature files.
+- **An integration is removed only when its addon is confirmed gone from both clients.** That the other addon is not installed here, or that the integration's code looks unfinished, is no reason: check the other addon's own releases for retail and for Forever first (its TOC's `## Interface` lines). An unfinished one is finished or left as it is.
 - **An integration declares its hook points and notes each one** (`Mixin.integration`, `self:NoteHookPoint(label, owner, key)` on the line before it attaches). That is how a user's export says the other addon changed (notes: Integration Report).
 - **Never write into `options`.** It belongs to the caller and is usually shared between buttons. Per-button state goes in `buttonState` or on the overlay's regions.
 - **A feature's `Refresh()` must re-run `UpdateButton`** for the buttons it decorated, and is never left empty: `RefreshItems` only wipes caches. A feature with none inherits the default, which asks again for every button the feature last asked for (`CaerdonWardrobe:AskAgain`; notes: Processing Pipeline). Write one only where a window has to be walked.
@@ -147,6 +148,8 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Stale icons, refresh events | Refresh |
 | Baganator, BetterBags | Bag Addon Integrations |
 | An integration that stopped drawing, hook points | Integration Report |
+| Skillet's recipe list | Skillet |
+| World Quest Tab's list and pins | World Quest Tab |
 | Quest rewards in the Dialogue UI addon | Dialogue UI |
 | Icon size, clipping, measuring a window | Icon Size and Placement |
 | Settings pages, layout settings | Settings |

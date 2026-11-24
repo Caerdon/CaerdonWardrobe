@@ -131,15 +131,23 @@ return function(H, S)
             oldExpansionIcon = false, sellableIcon = false },
         WorldMap = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = Quest,
             oldExpansionIcon = false, sellableIcon = false },
+        -- No level gain on its reward icon, which is the size of a line of text.
         AngrierWorldQuests = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = Quest,
-            oldExpansionIcon = true, sellableIcon = false },
+            oldExpansionIcon = true, sellableIcon = false, levelGain = false },
         Baganator = {},
         Narcissus = { bindingStatus = false, ownIcon = true, otherIcon = true, oldExpansionIcon = true,
             sellableIcon = false },
+        -- Skillet's recipe list: a profession window, with the answers of the game's own but
+        -- for the texts at a row's right edge, where Skillet has its counts.
+        Skillet = { bindingStatus = false, ownIcon = true, otherIcon = ByOther("TradeSkill"), questIcon = false,
+            oldExpansionIcon = false, sellableIcon = false },
         Sorted = { bindingStatus = false, ownIcon = true, otherIcon = true, questIcon = Quest, oldExpansionIcon = true,
             sellableIcon = true },
         VenturePlan = WORLD_QUESTS,
         WorldQuestsList = WORLD_QUESTS,
+        -- World Quest Tab: a world quest list, with no level gain over its own amount.
+        WorldQuestTab = { bindingStatus = true, ownIcon = true, otherIcon = true, questIcon = Quest,
+            oldExpansionIcon = false, sellableIcon = false, levelGain = false },
         WorldQuestTracker = WORLD_QUESTS,
         ZygorGuidesViewer = WORLD_QUESTS,
         -- Two that draw another window's content and passed its function on.
@@ -574,7 +582,7 @@ return function(H, S)
                 end
                 Set(config, path, value)
             end
-            Equal(windows, 29, label .. "every window of the list was compared")
+            Equal(windows, 31, label .. "every window of the list was compared")
             Check(compared > 100000, label .. "each setting alone was compared (" .. compared .. ")")
             Equal(differing, 0, label .. "the declared rules give what the functions gave (first: " .. tostring(first) .. ")")
 
@@ -607,7 +615,7 @@ return function(H, S)
             end
             table.sort(never)
             Equal(table.concat(always, " "), "", label .. "no window declares the quest icon as always on")
-            Equal(table.concat(never, " "), "CustomerOrders ItemConversion TradeSkill", label .. "the windows that never show the quest icon")
+            Equal(table.concat(never, " "), "CustomerOrders ItemConversion Skillet TradeSkill", label .. "the windows that never show the quest icon")
 
             -- A window that draws another's content has that window's declaration itself, and
             -- its answer for a draw.

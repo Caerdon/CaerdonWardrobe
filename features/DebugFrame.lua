@@ -2937,6 +2937,20 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Every tooltip frame the addon was shown an item in this session, and what became of
+    -- the upgrade lines there (features/Tooltip.lua).
+    if NS.Tooltip and NS.Tooltip.GetTooltipsSeenReport then
+        addLine(0, "")
+        addLine(0, "[Item Tooltips Seen]")
+        local seenLines = NS.Tooltip:GetTooltipsSeenReport()
+        for _, line in ipairs(seenLines) do
+            addLine(1, line)
+        end
+        if #seenLines == 0 then
+            addLine(1, "none this session")
+        end
+    end
+
     -- Each comparison tooltip the client puts beside an item's, as it stands, and what the
     -- addon last made of it (features/Tooltip.lua).
     if identifiedType == CaerdonItemType.Equipment and NS.Tooltip and NS.Tooltip.GetComparisonReport then

@@ -1321,6 +1321,37 @@ return function(H, S)
     step = PawnStep(shown, nil)
     Equal(step.given, nil, "pawn's note: nothing is made of nothing")
     Equal(#shown.lines, 1, "placing: the addon's line needs no line of Pawn's")
+    -- An item's tooltip set into another tooltip, which Pawn does not fill (a quest's reward
+    -- in another addon's own tooltip): the first item is left for Pawn as anywhere, and once
+    -- Pawn has not come the addon adds its lines itself, Pawn's percentage or not.
+    do
+        local holder = {}
+        local reward = { lines = {} }
+        holder.Tooltip = reward
+        function reward:AddLine(line) self.lines[#self.lines + 1] = line end
+        function reward:GetParent() return holder end
+        function reward:GetName() return "SomeAddonTooltipTooltip" end
+        tooltipFeature:OweUpgradeLines(reward, piece)
+        Equal(#reward.lines, 0, "set in: the first item is left for Pawn")
+        tooltipFeature:OweUpgradeLines(reward, piece)
+        Equal(reward.lines[1], Line("8ec3e6", 134400, "Cat", "+50% upgrade"), "set in: Pawn did not come, so the addon's line goes on by itself")
+        Equal(#reward.lines, 1, "set in: once")
+        local said
+        for _, line in ipairs(tooltipFeature:GetTooltipsSeenReport()) do
+            if line:find("SomeAddonTooltipTooltip", 1, true) then
+                said = line
+            end
+        end
+        Check(said ~= nil and said:find("an item 2 times", 1, true) ~= nil and said:find("without Pawn 1 times", 1, true) ~= nil,
+            "set in: the export says so (" .. tostring(said) .. ")")
+        -- A tooltip that is set into nothing is left for Pawn however often Pawn stays away.
+        local plain = { lines = {} }
+        function plain:AddLine(line) self.lines[#self.lines + 1] = line end
+        function plain:GetName() return "SomeOtherTooltip" end
+        tooltipFeature:OweUpgradeLines(plain, piece)
+        tooltipFeature:OweUpgradeLines(plain, piece)
+        Equal(#plain.lines, 0, "set in: a tooltip of its own is left for Pawn")
+    end
     -- A comparison tooltip (the worn piece beside the item looked at) gets no line of the
     -- addon's; Pawn's note for the scale whose set decides is left out there all the same.
     do
@@ -4728,6 +4759,31 @@ return function(H, S)
             "replacing: and why nothing was added: " .. all)
         Check(all:find("0.1 s after its lines were first added: shown, 3 lines; 3 when the addon last added to it (1 its own)", 1, true) ~= nil,
             "replacing: and how a tooltip stood a moment after its lines were added: " .. all)
+        -- A tooltip of another addon's own names its own pair of comparison tooltips
+        -- (shoppingTooltips), which the list at load does not have: one of them is known
+        -- from the first item that tooltip is shown, and has its line the first time the
+        -- client builds it. A tooltip no tooltip names stays as the client built it.
+        local theirs, theirBeside, stranger = Tip(), Tip(), Tip()
+        theirs.shownLink = looked:GetItemLink()
+        feature:OweUpgradeLines(theirs, looked)
+        world.BuildComparison(theirs, stranger, ring2)
+        -- (To the addon it is an item's tooltip like any other, so the worn ring's own lines
+        -- may be in it from the building: what is looked at is what a frame adds.)
+        local built = #stranger.lines
+        stranger:Update()
+        beside1:Update()
+        Equal(#stranger.lines, built, "named pair: a tooltip that no tooltip names as its comparison gets no comparison line")
+        Equal(stranger.lines[built], "+5 Stamina", "named pair: and ends with the client's own lines")
+        theirs.shoppingTooltips = { theirBeside, theirs, "no tooltip" }
+        feature:OweUpgradeLines(theirs, looked)
+        world.BuildComparison(theirs, theirBeside, ring2)
+        Equal(#theirBeside.lines, 2, "named pair: nothing is added while the client builds")
+        theirBeside:Update()
+        Equal(table.concat(theirBeside.lines, " | ", 3), Line("8ec3e6", nil, "Guardian", "+25% upgrade", true),
+            "named pair: the comparison tooltip a tooltip names has its line, from its own frame")
+        Equal(#feature:GetComparisonReport(), 6, "named pair: it is one more comparison tooltip in the export, and the tooltip that names itself is none")
+        feature:OweUpgradeLines(theirs, looked)
+        Equal(#(theirBeside.scripts.OnUpdate or {}), 1, "named pair: and is watched once, however often the tooltip is shown an item")
 
         icon.ShowOtherSpecUpgrades = false
         world.worn[11], world.worn[12], world.inBag[2] = nil, nil, nil

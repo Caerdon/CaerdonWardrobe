@@ -1176,6 +1176,9 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local bindingAnchor = (options and options.overrideBindingPosition) or CaerdonWardrobeConfig.Binding.Position
     caerdonButton.bindingTextMovedFor = nil
     caerdonButton.caerdonFixedLayout = (options and options.fixedLayout) and true or false
+    -- A window that fits the number by hand too (options.levelGainAnchor = { point, x, y }):
+    -- a row of text has no corner for it, and its bottom right is the window's own text.
+    caerdonButton.caerdonLevelGainAnchor = options and options.levelGainAnchor or nil
     caerdonButton.caerdonSample = (options and options.sample) and true or false
     local deltaAnchorFrame = (options and options.relativeFrame) or originalButton
 
@@ -1828,6 +1831,14 @@ function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
     local anchorFrame = caerdonButton.upgradeDeltaAnchor or originalButton
     if not anchorFrame then
         anchorFrame = originalButton
+    end
+    local fitted = caerdonButton.caerdonLevelGainAnchor
+    if fitted then
+        local _, fittedScale = GetLevelGainLayout(caerdonButton)
+        deltaText:ClearAllPoints()
+        deltaText:SetScale(fittedScale)
+        deltaText:SetPoint(fitted.point, anchorFrame, fitted.point, (fitted.x or 0) / fittedScale, (fitted.y or 0) / fittedScale)
+        return
     end
     -- The same space from every edge it touches; none along an axis it is centered on.
     local point, scale, nudgeX, nudgeY = GetLevelGainLayout(caerdonButton)
