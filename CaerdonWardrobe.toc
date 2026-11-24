@@ -16,7 +16,7 @@
 ## Category-zhTW: 戰隊收藏
 ## Notes: Shows BOE / BOA, openable, and unlearned pets, toys, mounts and wardrobe indicator on bank / bag / auction / merchant / guild bank / loot frame / loot roll / encounter journal slots
 ## Author: Caerdon
-## Version: v5.0.1
+## Version: v6.0.0
 ## SavedVariables: CaerdonWardrobeConfig, CaerdonProfessionData, CaerdonRecipeData, CaerdonAuctionData, CaerdonRefreshData, CaerdonLevelBonusData, CaerdonLearnerData, CaerdonLedgerData, CaerdonSetBonusData
 ## SavedVariablesPerCharacter: CaerdonWardrobeCharacterConfig
 ## OptionalDeps: AdiBags, AllTheThings, AngrierWorldQuests, ArkInventory, Auctionator, Baganator, Bagnon, Bagnonium, BaudBag, BetterBags, cargBags_Nivaya, DialogueUI, ElvUI, Inventorian, KkthnxUI, LegionRemixHelper, LiteBag, Narcissus, NDui, Pawn, Skillet, Sorted, TradeSkillMaster, VenturePlan, WorldQuestsList, WorldQuestTab, WorldQuestTracker, ZygorGuidesViewer
