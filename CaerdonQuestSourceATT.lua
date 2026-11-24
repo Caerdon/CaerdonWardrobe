@@ -34,6 +34,15 @@ NS.QuestSourceATT = Source
 -- questID -> quest table, or false for a quest AllTheThings does not have.
 local questGroups = {}
 
+-- itemID -> the quests among what AllTheThings lists under the item, each { quest, takes,
+-- starts }. Kept until AllTheThings says again that it is ready, and not dropped with the
+-- rest at a refresh: what is listed under an item is its data as it was built, and an item
+-- that pays for thousands of things (Mark of Honor: about 9,900 in the retail data) is walked
+-- once for it and not at every refresh. Whether a quest is hidden is asked at each call.
+local itemQuests = {}
+local itemQuestsOf   -- the app they were read from
+local NO_QUESTS = {}
+
 local UNOBTAINABLE_NEVER_IMPLEMENTED = 1
 local UNOBTAINABLE_REMOVED = 2
 local FACTION_BY_R = { [1] = "Horde", [2] = "Alliance" }
@@ -67,6 +76,7 @@ local function Listen(app)
         pcall(app.AddEventHandler, "OnReady", function()
             Source.readySeen = true
             wipe(questGroups)
+            wipe(itemQuests)
             if Source.OnReady then
                 Source.OnReady()
             end
@@ -151,6 +161,45 @@ local function QuestGroup(app, questID)
     return found or nil
 end
 
+-- The quests among everything AllTheThings lists under an item, with what each has to do
+-- with it: walked once, and kept (itemQuests).
+local function QuestsListedFor(app, itemID)
+    if itemQuestsOf ~= app then
+        wipe(itemQuests)
+        itemQuestsOf = app
+    end
+    local listed = itemQuests[itemID]
+    if listed then
+        return listed
+    end
+    listed = NO_QUESTS
+    for _, field in ipairs({ "itemIDAsCost", "qItemID" }) do
+        local groups = app.GetRawField(field, itemID)
+        if type(groups) == "table" then
+            for _, group in ipairs(groups) do
+                local quest, viaObjective = group, false
+                if type(group) == "table" and not IsQuestGroup(group) and group.key == "objectiveID" then
+                    quest, viaObjective = rawget(group, "parent"), true
+                end
+                if IsQuestGroup(quest) then
+                    local takes = viaObjective or PairsHave(rawget(quest, "cost"), "i", itemID) or
+                        ListHas(rawget(quest, "qis"), itemID)
+                    local starts = not viaObjective and (PairsHave(rawget(quest, "providers"), "i", itemID) or
+                        ListHas(rawget(quest, "qss"), itemID))
+                    if takes or starts then
+                        if listed == NO_QUESTS then
+                            listed = {}
+                        end
+                        listed[#listed + 1] = { quest = quest, takes = takes, starts = starts }
+                    end
+                end
+            end
+        end
+    end
+    itemQuests[itemID] = listed
+    return listed
+end
+
 -- The quests AllTheThings names for an item: those that take it (questID -> "objective") and
 -- those it starts (questID -> true). nil for either when there are none, and for both while
 -- AllTheThings is not there or not ready.
@@ -162,27 +211,16 @@ function Source:GetItemQuests(itemID)
 
     local takes, starts
     local ok, problem = pcall(function()
-        for _, field in ipairs({ "itemIDAsCost", "qItemID" }) do
-            local groups = app.GetRawField(field, itemID)
-            if type(groups) == "table" then
-                for _, group in ipairs(groups) do
-                    local quest, viaObjective = group, false
-                    if type(group) == "table" and not IsQuestGroup(group) and group.key == "objectiveID" then
-                        quest, viaObjective = rawget(group, "parent"), true
-                    end
-                    if IsQuestGroup(quest) and not IsHidden(app, quest) then
-                        local questID = rawget(quest, "questID")
-                        if viaObjective or PairsHave(rawget(quest, "cost"), "i", itemID) or
-                            ListHas(rawget(quest, "qis"), itemID) then
-                            takes = takes or {}
-                            takes[questID] = "objective"
-                        end
-                        if not viaObjective and (PairsHave(rawget(quest, "providers"), "i", itemID) or
-                                ListHas(rawget(quest, "qss"), itemID)) then
-                            starts = starts or {}
-                            starts[questID] = true
-                        end
-                    end
+        for _, listed in ipairs(QuestsListedFor(app, itemID)) do
+            if not IsHidden(app, listed.quest) then
+                local questID = rawget(listed.quest, "questID")
+                if listed.takes then
+                    takes = takes or {}
+                    takes[questID] = "objective"
+                end
+                if listed.starts then
+                    starts = starts or {}
+                    starts[questID] = true
                 end
             end
         end
@@ -455,6 +493,7 @@ function Source:Blocker(questID, player)
 end
 
 -- Drops what is kept about quests. AllTheThings changes a quest's "u" as the session goes.
+-- What it lists under an item stays (itemQuests).
 function Source:InvalidateCaches()
     wipe(questGroups)
     Source.asked, Source.named = 0, 0

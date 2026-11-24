@@ -128,10 +128,12 @@ return function(H, S)
     -- A world: the game, AllTheThings in it, and the addon. questie: the quests QuestieDB has.
     local function World(flavor, questie)
         local world = { ready = true, handlers = {}, completed = {}, onQuest = {}, trivial = {}, haveData = {},
-            caches = Caches() }
+            caches = Caches(), walks = {} }
         local game = H.StockGame(TOON, ITEMS)
         local app = {}
         function app.GetRawField(field, id)
+            local walk = field .. ":" .. tostring(id)
+            world.walks[walk] = (world.walks[walk] or 0) + 1
             local cache = world.ready and world.caches[field]
             return cache and cache[id] or nil
         end
@@ -257,6 +259,29 @@ return function(H, S)
             end
         end
         Equal(Status(CLOTH), "quest", "cost: the cloth has the quest icon")
+
+        -- What is listed under an item is read once and kept over a refresh: an item that
+        -- pays for thousands of things is not walked at each one. Whether a quest found
+        -- there is hidden is still asked each time, and the ready call has the list read anew.
+        local walk = "itemIDAsCost:" .. CLOTH
+        local walked = world.walks[walk]
+        Check((walked or 0) >= 1, "kept: the cloth's list was read")
+        world.env.CaerdonWardrobe:RefreshItems()
+        Equal(#Info(CLOTH).quests, 2, "kept: after a refresh the cloth's quests are both named")
+        Equal(world.walks[walk], walked, "kept: and its list was not read again for that")
+        QUESTS[9101].parent = hiddenHeader
+        world.env.CaerdonWardrobe:RefreshItems()
+        Equal(#Info(CLOTH).quests, 1, "kept: a quest that is in a hidden list by now is not named")
+        QUESTS[9101].parent = nil
+        world.env.CaerdonWardrobe:RefreshItems()
+        Equal(#Info(CLOTH).quests, 2, "kept: and is again when it is out of it")
+        Equal(world.walks[walk], walked, "kept: still by the list as it was read")
+        for _, entry in ipairs(world.handlers) do
+            entry.handler()
+        end
+        world.client:Tick(10)
+        Equal(#Info(CLOTH).quests, 2, "kept: after AllTheThings' ready call the quests are named as before")
+        Equal(world.walks[walk], walked + 1, "kept: from the list read anew")
 
         -- An item a quest has collected, and one named by a quest's objective.
         quest = Only(FANG)

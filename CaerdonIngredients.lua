@@ -40,6 +40,10 @@ local DIFFICULTY_NAMES = {
 --   rankNow } ... } }, recorded = { [profession name now] = entry }, notRecorded = { names },
 --   dropped = { names } }
 local index
+-- A refresh came since the index was last used: it is held against what it was made from
+-- before it is used again (GetIndex), and built anew only where that changed.
+local indexUnchecked = false
+local indexBuilds, indexKept = 0, 0
 -- The other toons of the realm: { [itemID] = { { toon, professionName, recipeID, recipe,
 --   quantity, toonRank, rank } ... } }. Built once a session: another toon's saved data does
 -- not change while this one is played.
@@ -86,13 +90,32 @@ local function AddUse(byItem, itemID, use)
     uses[#uses + 1] = use
 end
 
+-- The toon's professions, their skill lines and their ranks as one text: with the recordings,
+-- all the index is made from.
+local function ProfessionSignature(names, skillLines, ranks)
+    local parts = {}
+    for name in pairs(names) do
+        parts[#parts + 1] = name .. "=" .. tostring(ranks[name])
+    end
+    for skillLine, name in pairs(skillLines) do
+        parts[#parts + 1] = tostring(skillLine) .. ">" .. name
+    end
+    table.sort(parts)
+    return table.concat(parts, ";")
+end
+
+local function RecordedRecipes()
+    return CaerdonRecipe and CaerdonRecipe.GetRecordedRecipes and CaerdonRecipe:GetRecordedRecipes() or nil
+end
+
 local function BuildIndex()
     local names, skillLines, ranks = ReadProfessions()
     local built = { byItem = {}, recorded = {}, notRecorded = {}, dropped = {} }
 
     -- A profession the toon dropped keeps its saved recording, so it only counts while the toon
     -- still has that profession.
-    local recorded = CaerdonRecipe and CaerdonRecipe.GetRecordedRecipes and CaerdonRecipe:GetRecordedRecipes()
+    local recorded = RecordedRecipes()
+    built.signature, built.source = ProfessionSignature(names, skillLines, ranks), recorded
     if type(recorded) == "table" then
         for professionName, entry in pairs(recorded) do
             if type(entry) == "table" and type(entry.recipes) == "table" then
@@ -134,9 +157,22 @@ local function BuildIndex()
     return built
 end
 
+-- The index is kept over a refresh where nothing it is made from has changed: the toon's
+-- professions and ranks are read again, which is a handful of calls, where building it walks
+-- every recorded recipe (four professions with some 700 recipes: 4.5 ms of each full refresh,
+-- retail 12.1.5). A recording drops it by itself (OnRecipesRecorded).
 local function GetIndex()
+    if index and indexUnchecked then
+        if index.source ~= RecordedRecipes() or index.signature ~= ProfessionSignature(ReadProfessions()) then
+            index = nil
+        else
+            indexKept = indexKept + 1
+        end
+    end
+    indexUnchecked = false
     if not index then
         index = BuildIndex()
+        indexBuilds = indexBuilds + 1
     end
     return index
 end
@@ -348,13 +384,15 @@ end
 -- changed: what the refresh is about (CaerdonWardrobe:RefreshItems), nil for anything. The
 -- index follows from the recordings and from the toon's professions and their ranks. A
 -- recording drops it by itself (OnRecipesRecorded), and neither a change of clothes nor
--- something learned changes a profession or a rank, so a refresh about one of those keeps it.
+-- something learned changes a profession or a rank, so a refresh about one of those keeps it
+-- unasked. After any other it is held against the professions and ranks as they are when it
+-- is next used (GetIndex), and kept where they are what it was made from.
 -- The other toons' index is kept for the session whatever the refresh.
 function CaerdonIngredients:InvalidateCaches(changed)
     if changed == "worn" or changed == "collection" then
         return
     end
-    index = nil
+    indexUnchecked = index ~= nil
 end
 
 -- itemID -> "use" | "gray" | "undecided", for every item this toon's recorded recipes take.
@@ -379,11 +417,11 @@ end
 -- types/RecipeMixin.lua wrote a recording, or marked a recorded recipe as learned. A verdict
 -- is kept per item link, so the items are judged again when what a recording says about one
 -- of them is no longer what the last one said: in practice a profession's first recording.
--- With no index there is nothing to compare: none was asked for since the last refresh, so
--- no verdict on screen was made from one.
+-- With no index there is nothing to compare, and neither with one no item was asked of since
+-- the last refresh: no verdict on screen was made from it.
 function CaerdonIngredients:OnRecipesRecorded()
-    local before = index
-    index = nil
+    local before = not indexUnchecked and index or nil
+    index, indexUnchecked = nil, false
     if not before then
         return
     end
@@ -414,7 +452,8 @@ end
 -- time, which is why the recordings exist).
 function CaerdonIngredients:GetDebugState(itemID)
     local built = GetIndex()
-    local state = { recorded = {}, notRecorded = built.notRecorded, dropped = built.dropped, clientNow = {} }
+    local state = { recorded = {}, notRecorded = built.notRecorded, dropped = built.dropped, clientNow = {},
+        indexBuilds = indexBuilds, indexKept = indexKept }
 
     local stats = CaerdonRecipe and CaerdonRecipe.GetRecordingStats and CaerdonRecipe:GetRecordingStats() or {}
     for professionName, entry in pairs(built.recorded) do

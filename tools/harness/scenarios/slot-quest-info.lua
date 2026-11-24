@@ -20,7 +20,7 @@ return function(H, S)
     local TOON = { name = "Zzyxa", realm = "Farrealm", class = "Hunter", classFile = "HUNTER", race = "Dwarf",
         faction = "Alliance", level = 33 }
 
-    local LETTER, ORDERS, EAR, PEBBLE = 992001, 992002, 992003, 992004
+    local LETTER, ORDERS, EAR, PEBBLE, TOKEN = 992001, 992002, 992003, 992004, 992005
     local ITEMS = {
         -- Starts a quest that is not in the log. Nothing else says it is a quest's.
         [LETTER] = { name = "Torn Letter", quality = 1, level = 1, minLevel = 0, type = "Miscellaneous", subType = "Junk",
@@ -35,8 +35,16 @@ return function(H, S)
         [PEBBLE] = { name = "Pebble", quality = 0, level = 1, minLevel = 0, type = "Miscellaneous", subType = "Junk",
             stack = 20, price = 1, classID = 15, subClassID = 0 },
     }
+    -- Another class's token: the client names the quest it starts whoever holds the copy, and
+    -- its own class line is red for this toon (type 43, requirement type 0, as the clients'
+    -- recordings have it). Only in the bag for the bag states.
+    ITEMS[TOKEN] = { name = "Essence of a Stranger", quality = 4, level = 16, minLevel = 0, type = "Miscellaneous",
+        subType = "Junk", stack = 1, price = 500000, classID = 15, subClassID = 0,
+        tooltip = { { text = "This Item Begins a Quest", type = 0 },
+            { text = "Classes: Warrior", type = 43, requirementType = 0, r = 1, g = 0.125, b = 0.125 } } }
     local BAG = { LETTER, ORDERS, EAR, PEBBLE }
     local ANSWERS = {
+        [TOKEN] = { isQuestItem = false, questID = 8103, isActive = false },
         [LETTER] = { isQuestItem = false, questID = 8101, isActive = false },
         [ORDERS] = { isQuestItem = true, questID = 8102, isActive = true },
         [EAR] = { isQuestItem = true, isActive = false },
@@ -261,6 +269,9 @@ return function(H, S)
         -- of its own, checked against the star or the grey gear. Whether the bank is open is
         -- asked of a file that is not loaded here.
         T.IsOpen = T.IsOpen or function() return false end
+        BAG = { LETTER, ORDERS, EAR, PEBBLE, TOKEN }
+        -- A record of the starter case as it was before its rule took the class line in.
+        T.db.sightings.starter = { ["item:1"] = { result = "mismatch", status = "", at = 1 } }
         T.ScanSightings()
         client:Tick(5)
         Check(client:TickUntil(function() return not T.IsBusy() end, 240), "bag states: the scan ends")
@@ -269,7 +280,16 @@ return function(H, S)
         for _, entry in pairs(records) do
             count, record = count + 1, entry
         end
-        Equal(count, 1, "bag states: one copy is a starter, the letter")
+        Equal(count, 1, "bag states: one copy is a starter, the letter; the token is none, and the record of the rule from before is gone")
+        local tokenCount, tokenRecord = 0, nil
+        for _, entry in pairs(T.db.sightings.starterNotForThisToon or {}) do
+            tokenCount, tokenRecord = tokenCount + 1, entry
+        end
+        Equal(tokenCount, 1, "bag states: another class's token is a case of its own")
+        Equal(tokenRecord and tokenRecord.result, "pass", "bag states: and the addon agrees (" .. tostring(tokenRecord and tokenRecord.message) .. ")")
+        Check(tokenRecord ~= nil and tokenRecord.status ~= "own" and tokenRecord.status ~= "lowSkill",
+            "bag states: with no star and no grey gear (" .. tostring(tokenRecord and tokenRecord.status) .. ")")
+        Equal(tokenRecord and tokenRecord.facts and tokenRecord.facts.classLineUnmet, true, "bag states: kept with its class line unmet")
         Equal(record and record.result, "pass", "bag states: and the addon agrees (" .. tostring(record and record.message) .. ")")
         Equal(record and record.status, "own", "bag states: with the star")
         Equal(record and record.facts and record.facts.clientStartsQuest, 8101, "bag states: kept with the quest the client names")
@@ -285,6 +305,16 @@ return function(H, S)
         local verdict, why = T.JudgeSighting(starterCase, "quest")
         Equal(verdict, "mismatch", "bag states: the quest icon is not")
         Equal(why, "status is quest, expected one of lowSkill, own", "bag states: and the record says what was expected")
+        local tokenCase
+        for _, case in ipairs(T.SightingCases) do
+            if case.id == "starterNotForThisToon" then
+                tokenCase = case
+            end
+        end
+        verdict, why = T.JudgeSighting(tokenCase, "own")
+        Equal(verdict, "mismatch", "bag states: a star on another class's token is a fault")
+        Equal(why, "status is own, expected none of lowSkill, own", "bag states: and the record says so")
+        Equal((T.JudgeSighting(tokenCase, "")), "pass", "bag states: no icon on it passes")
         Equal(#client.errors, 0, "bag states: no error reached the error handler")
         Equal(#client.errors, 0, "contract: no error reached the error handler")
     end

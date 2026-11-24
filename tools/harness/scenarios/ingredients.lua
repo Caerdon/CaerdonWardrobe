@@ -424,11 +424,28 @@ return function(H, S)
         Check(Has(section, "  Has A Use: not known (the client gave no difficulty for 1 of its recipes)"), Label("export: undecided"))
         Check(Has(world.Section(WOLF), "  Has A Use: true"), Label("export: a use"))
 
+        -- The list of what the recipes take is kept over a refresh that changed no profession,
+        -- rank or recording, and not asked about at all after one about what is worn.
+        local Ingredients = world.env.CaerdonIngredients
+        local made = Ingredients:GetDebugState(WOLF)
+        world.env.CaerdonWardrobe:RefreshItems("test")
+        Check(world.Info(WOLF).hasUse == true, Label("kept: the wolf meat is a use after a refresh as before"))
+        local kept = Ingredients:GetDebugState(WOLF)
+        Equal(kept.indexBuilds, made.indexBuilds, Label("kept: the list was not made again for a refresh that changed nothing"))
+        Equal(kept.indexKept, made.indexKept + 1, Label("kept: it was held against the professions and ranks once"))
+        world.env.CaerdonWardrobe:RefreshItems("test", nil, "worn")
+        local worn = Ingredients:GetDebugState(WOLF)
+        Equal(worn.indexBuilds, kept.indexBuilds, Label("kept: nor for a refresh about what is worn"))
+        Equal(worn.indexKept, kept.indexKept, Label("kept: which does not ask either"))
+        Check(Has(world.Section(WOLF), ("  The List Of What The Recipes Take: made %d times this session; kept over %d refreshes that changed no profession, rank or recording")
+            :format(worn.indexBuilds, worn.indexKept)), Label("kept: the export says both"))
+
         -- The rank rises to the recipe's gray rank. The window stays closed: the refresh the
         -- skills watch asks for at a point gained is enough.
         world.rank = 164
         world.env.CaerdonWardrobe:RefreshItems("test")
         Check(world.Info(WOLF).hasUse == true, Label("a point below the gray rank: still a use"))
+        Equal(Ingredients:GetDebugState(WOLF).indexBuilds, worn.indexBuilds + 1, Label("a rank that moved has the list made again"))
         world.rank = 165
         world.env.CaerdonWardrobe:RefreshItems("test")
         info = world.Info(WOLF)

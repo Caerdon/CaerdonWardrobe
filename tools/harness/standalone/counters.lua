@@ -337,7 +337,7 @@ local function StartSession(options)
             memory = memory - 500
         end
     end
-    function CaerdonItemMixin:GetBindingStatus() Spend(0.5, 1) end
+    function CaerdonItemMixin:GetBindingStatus() Spend(0.5 + (self.slowBinding or 0), 1) end
     function CaerdonItemMixin:GetCopyStatus(status)
         Spend(0.25)
         if self.raisesInCopy then
@@ -816,6 +816,26 @@ do
     Equal(Function(report, "UpdateButton").calls, 90, "profile: 90 requests")
     Equal(Function(report, "ClearButton").calls, 45, "profile: the same item is not cleared again")
     Equal(report.profile.drains.count, 2, "profile: a second drain")
+
+    -- A function's worst call names its item: one of three whose binding takes longer.
+    CaerdonCounters:Reset()
+    Session.buttons = {}
+    AskFor({ NewItem(2101), NewItem(2102, { slowBinding = 6 }), NewItem(2103) })
+    Tick(30)
+    report = CaerdonCounters:GetReport()
+    Equal(Function(report, "GetBindingStatus").calls, 3, "worst call: three items' bindings")
+    Equal(Function(report, "GetBindingStatus").worstItem, 2102, "worst call: its item is named")
+    Near(Function(report, "GetBindingStatus").worstMs, 6.5, "worst call: with its time")
+    Equal(Function(report, "ProcessItem").worstItem, nil, "worst call: no item for a function that is not an item's own")
+    local named = false
+    for _, line in ipairs(CaerdonCounters:GetReportLines()) do
+        if line.text:find("GetBindingStatus: 3 calls", 1, true) and line.text:find("worst 6.50 (item 2102)", 1, true) then
+            named = true
+        end
+    end
+    Check(named, "worst call: the export's line names the item")
+    CaerdonCounters:Reset()
+    Equal(Function(CaerdonCounters:GetReport(), "GetBindingStatus").worstItem, nil, "worst call: a reset forgets the item")
 
     -- Tooltip not ready once, then drawn by the retry timer; an item with no link.
     CaerdonCounters:Reset()

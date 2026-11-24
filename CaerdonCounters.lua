@@ -394,6 +394,7 @@ end
 
 local function ZeroCounter(counter)
     counter.calls, counter.seconds, counter.own, counter.worst = 0, 0, 0, 0
+    counter.worstItem = nil
     counter.kb, counter.ownKB, counter.collected = 0, 0, 0
 end
 
@@ -403,6 +404,18 @@ end
 -- before each of its passes.
 local depth = 0
 local calleeSeconds, calleeKB, outcomes = {}, {}, {}
+-- What a wrapped call was made on (its first argument), kept only until the call returns: a
+-- function's worst call names its item, which is what says why one call in a refresh took
+-- many times the others.
+local subjects = {}
+
+local function ItemOf(subject)
+    if type(subject) ~= "table" or type(subject.GetItemID) ~= "function" then
+        return nil
+    end
+    local ok, itemID = pcall(subject.GetItemID, subject)
+    return ok and type(itemID) == "number" and itemID or nil
+end
 
 local function Leave(counter, startedAt, startedKB, ...)
     local seconds = now() - startedAt
@@ -414,6 +427,8 @@ local function Leave(counter, startedAt, startedKB, ...)
         return ...
     end
     depth = level - 1
+    local subject = subjects[level]
+    subjects[level] = nil
 
     local outcome = outcomes[level]
     if outcome then
@@ -426,6 +441,7 @@ local function Leave(counter, startedAt, startedKB, ...)
     counter.own = counter.own + (seconds - calleeSeconds[level])
     if seconds > counter.worst then
         counter.worst = seconds
+        counter.worstItem = ItemOf(subject)
     end
     if kb < 0 then
         -- The collector ran inside the call: this sample says nothing about what it allocated.
@@ -466,6 +482,7 @@ end
 function Counters:Unwound()
     depth = 0
     wipe(outcomes)
+    wipe(subjects)
 end
 
 local function Wrap(owner, key, counter)
@@ -475,6 +492,7 @@ local function Wrap(owner, key, counter)
             return original(...)
         end
         local startedAt, startedKB = Enter()
+        subjects[depth] = (...)
         return Leave(counter, startedAt, startedKB, original(...))
     end
 end
@@ -771,6 +789,7 @@ local function ReadCounter(counter)
         ms = Round(counter.seconds * 1000),
         ownMs = Round(counter.own * 1000),
         worstMs = Round(counter.worst * 1000),
+        worstItem = counter.worstItem,
         kb = Round(counter.kb, 1),
         ownKB = Round(counter.ownKB, 1),
         collected = counter.collected,
@@ -1079,9 +1098,10 @@ function Counters:GetReportLines()
     add(2, "per function: calls, ms in all (own: without the listed functions it calls), ms per call, worst call, KB allocated (own)")
     for _, entry in ipairs(profile.functions) do
         if entry.calls > 0 then
-            add(2, ("%s: %d calls, %s ms (own %s), %s each, worst %s, %s KB (own %s)%s"):format(entry.label,
+            add(2, ("%s: %d calls, %s ms (own %s), %s each, worst %s%s, %s KB (own %s)%s"):format(entry.label,
                 entry.calls, Figure(entry.ms), Figure(entry.ownMs), Figure(entry.ms / entry.calls, 3),
-                Figure(entry.worstMs, 2), Figure(entry.kb, 0), Figure(entry.ownKB, 0),
+                Figure(entry.worstMs, 2), entry.worstItem and (" (item %d)"):format(entry.worstItem) or "",
+                Figure(entry.kb, 0), Figure(entry.ownKB, 0),
                 entry.collected > 0 and (", collector ran in %d"):format(entry.collected) or ""))
         end
     end

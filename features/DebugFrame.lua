@@ -3474,7 +3474,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                     quest.eligible and "" or "skipped, ",
                     tostring(quest.reason) .. (quest.source and (", judged from " .. quest.source) or ""),
                     quest.over and " (behind the toon)" or
-                        quest.setAside and " (not counted: the quest that handed the item over is behind the toon)" or "",
+                        quest.setAside and " (not counted: the quest that handed the item over is behind the toon)" or
+                        -- The reason is the first one found; this one is what takes the
+                        -- quest icon off, whatever the first was.
+                        quest.optedOut and " (the player's options keep it out: beyond the range of levels, or trivial)" or "",
                     -- Skipped as a quest still to come, and one the item starts all the same;
                     -- behind the toon by the quest data, and named by the client for this copy.
                     quest.canStart and not quest.eligible and
@@ -3659,6 +3662,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         else
             addLine(1, "Recorded Professions: none")
         end
+        addKV(1, "The List Of What The Recipes Take", string.format(
+            "made %d times this session; kept over %d refreshes that changed no profession, rank or recording",
+            ingredientState.indexBuilds or 0, ingredientState.indexKept or 0))
         if #ingredientState.notRecorded > 0 then
             addKV(1, "Not Recorded (open the profession once)", table.concat(ingredientState.notRecorded, ", "))
         end

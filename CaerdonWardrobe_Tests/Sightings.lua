@@ -25,6 +25,8 @@ local BUSY_DELAY = 5          -- seconds before trying again while something els
 --   status   the addon's status for the slot
 --   binding  "none": no binding text; "some": a binding text
 -- A case without expect is only recorded: something the notes still have a question about.
+-- version: raised when a case's rule changes what it takes in or expects. A record made under
+-- another version of its case is dropped (DropOutdated): it was judged by a rule that is gone.
 -- slotState marks the states of one copy in one slot, which two copies of an item can differ in.
 local LONG_COOLDOWN_SECONDS = 24 * 60 * 60
 
@@ -63,9 +65,20 @@ T.SightingCases = {
     },
     {
         id = "starter",
+        version = 2,
         rule = "a copy that starts a quest the toon has neither done nor taken is one to act on: the star, or the grey gear below the quest's or the item's level, whether it can be read or not (the quest icon is its small mark)",
         expect = { statusIn = { own = true, lowSkill = true } },
-        fits = function(facts) return facts.startsQuest and not facts.hasLoot and not facts.refundable end,
+        fits = function(facts)
+            return facts.startsQuest and not facts.classLineUnmet and not facts.hasLoot and not facts.refundable
+        end,
+    },
+    {
+        id = "starterNotForThisToon",
+        rule = "a copy that starts a quest, on an item whose own class or race line the toon does not meet, is not one to act on: no star and no grey gear (the client names the quest a copy starts whoever holds it: another class's token in the warband bank)",
+        expect = { statusNotIn = { own = true, lowSkill = true } },
+        fits = function(facts)
+            return facts.startsQuest and facts.classLineUnmet and not facts.hasLoot and not facts.refundable
+        end,
     },
     {
         id = "refundable",
@@ -127,6 +140,10 @@ function T.JudgeSighting(case, status, binding)
         return "mismatch", ("status is %s, expected one of %s"):format(tostring(status),
             table.concat(T.SortedKeys(expect.statusIn), ", "))
     end
+    if expect.statusNotIn and expect.statusNotIn[status or ""] then
+        return "mismatch", ("status is %s, expected none of %s"):format(tostring(status),
+            table.concat(T.SortedKeys(expect.statusNotIn), ", "))
+    end
     local hasText = binding ~= nil and binding ~= ""
     if expect.binding == "none" and hasText then
         return "mismatch", ("binding text is %s, expected none"):format(tostring(binding))
@@ -165,6 +182,12 @@ local function ReadTooltip(data)
         end
         if line.type == Enum.TooltipDataLineType.ItemBinding then
             found.bindingLine = T.Plain(line, 2)
+        end
+        -- "Classes: ..." or "Races: ..." that the toon does not meet (the text is red then).
+        if line.type == Enum.TooltipDataLineType.UsageRequirement and
+            line.requirementType == Enum.TooltipDataUsageRequirementType.RaceClass and
+            not issecretvalue(line.usable) and line.usable == false then
+            found.classLineUnmet = true
         end
     end
     return found
@@ -210,6 +233,11 @@ local function ReadSlot(bag, slot)
                     ((questInfo.isOver == true and not questInfo.repeatableLeft) or questInfo.keptOutByOptions == true)))
             facts.startsQuest = (questInfo ~= nil and questInfo.starts ~= nil) and true or nil
         end
+    end
+    -- The client names the quest a copy starts whoever holds the copy. Whether this toon can
+    -- use the item at all is its tooltip's own class or race line.
+    if startsQuestID then
+        facts.classLineUnmet = ReadTooltip(C_TooltipInfo.GetBagItem(bag, slot)).classLineUnmet
     end
     -- The client's own answer to "is this copy in an equipment set".
     if C_Container.GetContainerItemEquipmentSetInfo then
@@ -326,6 +354,7 @@ local function Check(candidate)
 
     local toon = T.GetToon()
     local record = {
+        caseVersion = case.version,
         at = GetServerTime(),
         toon = toon.key,
         sig = toon.signature,
@@ -473,7 +502,25 @@ Schedule = function(delay)
 end
 
 -- Called once the login record is written (Commands.lua), and by /cwtest sightings.
+-- Records made under another version of their case go: a mismatch among them is the old
+-- rule's and would stand for ever, since its item may no longer be a case of that kind.
+local function DropOutdated()
+    local dropped = 0
+    for _, case in ipairs(T.SightingCases) do
+        for key, record in pairs(T.db.sightings[case.id] or {}) do
+            if (record.caseVersion or 1) ~= (case.version or 1) then
+                T.db.sightings[case.id][key] = nil
+                dropped = dropped + 1
+            end
+        end
+    end
+    return dropped
+end
+
 function T.ScanSightings()
+    if not ready then
+        DropOutdated()
+    end
     ready = true
     Schedule(0)
 end

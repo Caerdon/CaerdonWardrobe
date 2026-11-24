@@ -499,9 +499,10 @@ local function printProfile(profile, indent, perRun)
         :format(unit, unit, unit))
     for _, entry in ipairs(profile.functions or {}) do
         if (entry.calls or 0) > 0 then
-            print(indent .. ("  %-36s %7s  %9s (own %9s)  %7s each  worst %7s  %9s KB (own %9s)%s"):format(tostring(entry.label),
+            print(indent .. ("  %-36s %7s  %9s (own %9s)  %7s each  worst %7s  %9s KB (own %9s)%s%s"):format(tostring(entry.label),
                 figure(entry.calls / divide), figure(entry.ms / divide), figure(entry.ownMs / divide),
                 figure(entry.ms / entry.calls), figure(entry.worstMs), figure(entry.kb / divide), figure(entry.ownKB / divide),
+                entry.worstItem and ("  worst on item " .. tostring(entry.worstItem)) or "",
                 (entry.collected or 0) > 0 and ("  collector ran in " .. tostring(entry.collected)) or ""))
         end
     end
