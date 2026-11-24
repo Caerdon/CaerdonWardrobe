@@ -6,8 +6,7 @@ CaerdonMountMixin = {}
 		error("Usage: CaerdonMount:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonMountMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonMountMixin, caerdonItem)
     return itemType
 end
 
@@ -16,16 +15,22 @@ function CaerdonMountMixin:GetMountInfo()
     if mountID then
         local name, spellID, icon, isActive, isUsable, sourceType, isFavorite, isFactionSpecific, faction, shouldHideOnChar, isCollected, mountID = C_MountJournal.GetMountInfoByID(mountID)
         return {
+            mountID = mountID,
+            spellID = spellID,
             name = name,
+            isCollected = isCollected,
             isUsable = isUsable,
             isFactionSpecific = isFactionSpecific,
             factionID = faction,
+            shouldHideOnChar = shouldHideOnChar,
             needsItem = not isCollected
         }
     else
+        local isEquipmentApplied = C_MountJournal.IsMountEquipmentApplied()
         return {
             isEquipment = true, -- assuming for now - can look up via itemlocation if needed
-            needsItem = not C_MountJournal.IsMountEquipmentApplied()
+            isEquipmentApplied = isEquipmentApplied,
+            needsItem = not isEquipmentApplied
         }
     end
 end

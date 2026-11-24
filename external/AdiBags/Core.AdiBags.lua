@@ -8,13 +8,21 @@ function AdiBagsMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to AdiBags (the integration report; see FeatureMixin.lua).
+AdiBagsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "AdiBags:NewModule", "module:RegisterMessage AdiBags_UpdateButton" },
+}
+
 function AdiBagsMixin:Init()
 	local AdiBags = LibStub('AceAddon-3.0'):GetAddon('AdiBags')
+	self:NoteHookPoint("AdiBags:NewModule", AdiBags, "NewModule")
 	self.mod = AdiBags:NewModule("CaerdonWardrobeAdiBagsUpdate", "ABEvent-1.0")
 	self.mod.uiName = L["Caerdon Wardrobe"]
 	self.mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
 
 	self.mod.OnEnable = function(mod)
+		self:NoteHookPoint("module:RegisterMessage AdiBags_UpdateButton", mod, "RegisterMessage")
 		mod:RegisterMessage('AdiBags_UpdateButton', 'UpdateButton')
 	end
 
@@ -31,11 +39,7 @@ function AdiBagsMixin:Init()
 end
 
 function AdiBagsMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
-		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function AdiBagsMixin:Refresh()

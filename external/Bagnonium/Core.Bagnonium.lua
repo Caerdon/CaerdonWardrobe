@@ -5,7 +5,14 @@ function BagnoniumMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Bagnonium (the integration report; see FeatureMixin.lua).
+BagnoniumMixin.integration = {
+	addon = addonName,
+	hookPoints = { "Bagnonium.Item.Update" },
+}
+
 function BagnoniumMixin:Init()
+	self:NoteHookPoint("Bagnonium.Item.Update", Bagnonium.Item, "Update")
 	hooksecurefunc(Bagnonium.Item, "Update", function(...) self:OnUpdateSlot(...) end)
 end
 
@@ -16,8 +23,6 @@ function BagnoniumMixin:GetTooltipData(item, locationInfo)
 		end
 	elseif not item:HasItemLocationBankOrBags() then
 		return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
-	elseif locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
 		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
@@ -27,44 +32,27 @@ function BagnoniumMixin:Refresh()
 	Bagnonium.Frames:Update()
 end
 
-function BagnoniumMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	if locationInfo.isOffline then
-		local showBindingStatus = CaerdonWardrobeConfig.Binding.ShowStatus.BankAndBags
-		local showOwnIcon = CaerdonWardrobeConfig.Icon.ShowLearnable.BankAndBags
-		local showOtherIcon = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.BankAndBags
-		local showSellableIcon = CaerdonWardrobeConfig.Icon.ShowSellable.BankAndBags
+-- What this window shows of an item (FeatureMixin.lua, displayRules), by the place: a view
+-- kept of bags that are not open goes by the settings for the bags, a guild bank by the guild
+-- bank's, and the toon's own bags are as the core has them.
+local OFFLINE_RULES = {
+	bindingStatus = "BankAndBags",
+	ownIcon = "BankAndBags",
+	otherIcon = "BankAndBags",
+	sellableIcon = "BankAndBags",
+}
+local GUILD_BANK_RULES = {
+	bindingStatus = "GuildBank",
+	ownIcon = "GuildBank",
+	otherIcon = "GuildBank",
+	sellableIcon = "GuildBank",
+}
 
-		return {
-			bindingStatus = {
-				shouldShow = showBindingStatus
-			},
-			ownIcon = {
-				shouldShow = showOwnIcon
-			},
-			otherIcon = {
-				shouldShow = showOtherIcon
-			},
-			sellableIcon = {
-				shouldShow = showSellableIcon
-			}
-		}
+function BagnoniumMixin:GetDisplayRules(button, item, feature, locationInfo)
+	if locationInfo.isOffline then
+		return OFFLINE_RULES
 	elseif not item:HasItemLocationBankOrBags() then
-		return {
-			bindingStatus = {
-				shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.GuildBank
-			},
-			ownIcon = {
-				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.GuildBank
-			},
-			otherIcon = {
-				shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GuildBank
-			},
-			sellableIcon = {
-				shouldShow = CaerdonWardrobeConfig.Icon.ShowSellable.GuildBank
-			}
-		}
-	else
-		return {}
+		return GUILD_BANK_RULES
 	end
 end
 

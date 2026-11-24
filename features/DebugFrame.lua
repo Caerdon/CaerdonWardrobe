@@ -451,9 +451,7 @@ local function GetEncounterJournalLinkForSource(sourceInfo)
         sourceID = sourceInfo.sourceID
     }
 
-    if not Enum.TransmogSourceType then
-        diag.note = "EnumMissing"
-    elseif sourceInfo.sourceType ~= Enum.TransmogSourceType.BossDrop then
+    if sourceInfo.sourceType ~= Enum.TransmogSource.JournalEncounter then
         diag.note = "NonBossDrop"
     end
 
@@ -861,7 +859,7 @@ function DebugFrameMixin:Init()
     -- Set up drag and drop
     self.itemButton:SetScript("OnDragStart", function(button)
         if self.currentItem then
-            PickupItem(self.currentItem)
+            C_Item.PickupItem(self.currentItem)
         end
     end)
 
@@ -1068,6 +1066,17 @@ function DebugFrameMixin:Init()
                         if not slot and owner.slot then slot = owner.slot end
                     end
 
+                    -- The guess above fits a bag button only. Any other button with an ID
+                    -- passes it too: a vendor row's ID is its merchant index and its parent's
+                    -- ID is 0, which named a backpack slot. Keep the slot only when it holds
+                    -- the item the tooltip shows, else take the tooltip's link.
+                    if bag ~= nil and slot ~= nil and
+                        C_Container.GetContainerItemID(bag, slot) ~= C_Item.GetItemInfoInstant(link) then
+                        bag, slot = nil, nil
+                    end
+
+                    -- Not opened by the keystroke: what that found last is not this item's.
+                    self.openedFrom = nil
                     if bag ~= nil and slot ~= nil then
                         self:SetCurrentItemFromBagAndSlot(bag, slot)
                     else
@@ -1146,13 +1155,39 @@ function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
     end
 end
 
-function DebugFrameMixin:SetCurrentItem(itemLink)
+-- What the window under the pointer asked the addon to judge for this item, where the button
+-- the tooltip belongs to is one the addon decorates: { link, extraData, drawn }. A window can
+-- pass more than a link (an auction row its item level, since the link the client gives for a
+-- row is the plain item's): the export is then of the piece as the window gave it, the one
+-- the icon was made for, and not of the link alone.
+local function AskedUnderPointer(itemLink)
+    local tooltip = GameTooltip
+    if not (tooltip and tooltip.IsShown and tooltip:IsShown() and tooltip.GetOwner and CaerdonWardrobe.GetAskedOf) then
+        return nil
+    end
+    local asked, drawn = CaerdonWardrobe:GetAskedOf(tooltip:GetOwner())
+    if not asked or type(asked.GetItemID) ~= "function" or
+        asked:GetItemID() ~= C_Item.GetItemInfoInstant(itemLink) then
+        return nil
+    end
+    return { link = asked.extraData and asked:GetItemLink() or nil, extraData = asked.extraData, drawn = drawn }
+end
+
+-- kept: what AskedUnderPointer said when the item was first taken, for a refresh of it (the
+-- pointer is somewhere else by then).
+function DebugFrameMixin:SetCurrentItem(itemLink, kept)
     if itemLink then
         self.currentItem = itemLink
         self.currentItemLocation = nil
+        local ask = kept
+        if not ask then
+            local ok, found = pcall(AskedUnderPointer, itemLink)
+            ask = ok and found or nil
+        end
+        self.currentAsk = ask
 
         -- Create a fresh item object each time
-        local item = CaerdonItem:CreateFromItemLink(itemLink)
+        local item = CaerdonItem:CreateFromItemLink(ask and ask.link or itemLink, ask and ask.extraData or nil)
         if item then
             self:ProcessCurrentItem(item)
         end
@@ -1162,6 +1197,11 @@ end
 function DebugFrameMixin:SetCurrentItemFromBagAndSlot(bag, slot)
     if bag == nil or slot == nil then return end
     local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
+    -- A slot with nothing in it is no item to show: the frame keeps what it had.
+    if item and item:IsItemEmpty() then
+        print(("Caerdon Wardrobe Debug: bag %s slot %s holds no item."):format(tostring(bag), tostring(slot)))
+        return
+    end
     if item then
         -- Prefer showing the hyperlink if available; otherwise show a placeholder until load completes
         self.currentItem = item:GetItemLink() or ("Bag " .. tostring(bag) .. ", Slot " .. tostring(slot))
@@ -1619,13 +1659,14 @@ function DebugFrameMixin:DisplayItemInfo(item)
     if identifiedType ~= CaerdonItemType.BattlePet and
         identifiedType ~= CaerdonItemType.Quest and
         identifiedType ~= CaerdonItemType.Currency then
+        -- In parentheses: an empty slot's item answers with no value at all, which tostring refuses.
         self:AddDebugEntry("Item Type", item:GetItemType())
         self:AddDebugEntry("Item SubType", item:GetItemSubType())
-        self:AddDebugEntry("Item Type ID", tostring(item:GetItemTypeID()))
-        self:AddDebugEntry("Item SubType ID", tostring(item:GetItemSubTypeID()))
+        self:AddDebugEntry("Item Type ID", tostring((item:GetItemTypeID())))
+        self:AddDebugEntry("Item SubType ID", tostring((item:GetItemSubTypeID())))
         self:AddDebugEntry("Binding", item:GetBinding())
-        self:AddDebugEntry("Expansion ID", tostring(item:GetExpansionID()))
-        self:AddDebugEntry("Is Crafting Reagent", tostring(item:GetIsCraftingReagent()))
+        self:AddDebugEntry("Expansion ID", tostring((item:GetExpansionID())))
+        self:AddDebugEntry("Is Crafting Reagent", tostring((item:GetIsCraftingReagent())))
     end
 
     -- Add specialized info based on item type
@@ -1675,14 +1716,44 @@ function DebugFrameMixin:CopyCurrentItemDetails()
     end
 
     if item:IsItemEmpty() then
-        performCopy()
+        -- Nothing to describe: the frame holds a slot with no item in it.
+        print("Caerdon Wardrobe Debug: there is no item to copy (" .. tostring(self.openedFrom or "an empty slot") .. ").")
         return
     end
 
-    self.copyCancelFunc = item:ContinueWithCancelOnItemLoad(function()
-        performCopy()
-        self.copyCancelFunc = nil
-    end)
+    -- An item given by its bag or equipment slot counts as loaded for the item's own wait
+    -- whether or not the client has its data (CaerdonItemMixin:IsItemCached), and the wait
+    -- reports once at the start, before the sources' items have come. An export built while the
+    -- client has nothing for the item is one line, "Retrieving item information". So the copy
+    -- asks for the data itself and waits for it, a few seconds at most, and the export says so.
+    local location = item:HasItemLocation() and item:GetItemLocation() or nil
+    local function DataMissing()
+        return location ~= nil and C_Item.DoesItemExist(location) and not C_Item.IsItemDataCached(location)
+    end
+    local tries = 0
+    local cancelled = false
+    local function Continue()
+        if cancelled then
+            return
+        end
+        if DataMissing() and tries < 15 then
+            tries = tries + 1
+            C_Timer.After(0.2, Continue)
+            return
+        end
+        self.copyWaitNote = tries > 0 and
+            (DataMissing() and "the client had no data for the item after 3 s; exported without"
+                or ("the client had no data for the item at first; it came within %.1f s"):format(tries * 0.2)) or nil
+        self.copyCancelFunc = item:ContinueWithCancelOnItemLoad(function()
+            performCopy()
+            self.copyCancelFunc = nil
+        end)
+    end
+    if DataMissing() then
+        C_Item.RequestLoadItemData(location)
+        self.copyCancelFunc = function() cancelled = true end
+    end
+    Continue()
 end
 
 -- "/cdebug geometry": the [Button Geometry] section on its own, for when that is all that is being
@@ -1714,6 +1785,342 @@ function DebugFrameMixin:ShowGeometryExport()
         self.frame:Show()
     end
     self:ShowCopyOutput(table.concat(lines, "\n"))
+end
+
+------------------------------------------------------------------------------------------
+-- The export's tooltip sections
+------------------------------------------------------------------------------------------
+
+-- Nothing documents what a tooltip line carries besides its texts, so the export prints every
+-- field of every line: that is how a field is found, and seen in both clients, before the
+-- item code relies on it.
+
+-- What a line's own row of the export already shows.
+local TOOLTIP_LINE_ROW_FIELDS = { type = true, leftText = true, rightText = true, leftColor = true, rightColor = true }
+local TOOLTIP_DATA_ROW_FIELDS = { lines = true }
+
+-- Fields whose number is an enum value: the export names it.
+local tooltipValueNames
+local function GetTooltipValueName(scope, field, value)
+    if not tooltipValueNames then
+        tooltipValueNames = { line = {}, data = {} }
+        local enums = {
+            line = {
+                type = Enum.TooltipDataLineType,
+                bonding = Enum.TooltipDataItemBinding,
+                requirementType = Enum.TooltipDataUsageRequirementType,
+            },
+            data = { type = Enum.TooltipDataType },
+        }
+        for enumScope, fields in pairs(enums) do
+            for enumField, enum in pairs(fields) do
+                local names = {}
+                for name, number in pairs(enum) do
+                    names[number] = name
+                end
+                tooltipValueNames[enumScope][enumField] = names
+            end
+        end
+    end
+    local names = tooltipValueNames[scope][field]
+    return names and names[value] or nil
+end
+
+local function SortedTooltipKeys(source, skip)
+    local keys = {}
+    for key, value in pairs(source) do
+        if not (skip and skip[key]) and type(value) ~= "function" then
+            keys[#keys + 1] = key
+        end
+    end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    return keys
+end
+
+local function FormatTooltipValue(value, depth)
+    if type(value) ~= "table" then
+        return tostring(value)
+    end
+    if depth <= 0 then
+        return "{...}"
+    end
+    local parts = {}
+    for _, key in ipairs(SortedTooltipKeys(value)) do
+        parts[#parts + 1] = tostring(key) .. "=" .. FormatTooltipValue(value[key], depth - 1)
+    end
+    return "{" .. table.concat(parts, ", ") .. "}"
+end
+
+-- "key=value, key=value (EnumName)" for every field of source that skip does not name.
+local function FormatTooltipFields(source, skip, scope)
+    local parts = {}
+    for _, key in ipairs(SortedTooltipKeys(source, skip)) do
+        local value = source[key]
+        local text = tostring(key) .. "=" .. FormatTooltipValue(value, 2)
+        local name = GetTooltipValueName(scope, key, value)
+        if name then
+            text = text .. " (" .. name .. ")"
+        end
+        parts[#parts + 1] = text
+    end
+    return table.concat(parts, ", ")
+end
+
+-- The lines of one tooltip as rows of the export: each line's type, colors and texts, and
+-- below it every other field the line carries.
+local function BuildTooltipLineRows(data)
+    local rows = {}
+    for index, line in ipairs(data.lines or {}) do
+        local lineType = line.type
+        local typeName = GetTooltipValueName("line", "type", lineType)
+        local prefix = format("[%d] type=%s", index, tostring(lineType))
+        if typeName then
+            prefix = prefix .. " (" .. typeName .. ")"
+        end
+        local leftText = line.leftText and tostring(line.leftText) or ""
+        local rightText = line.rightText and tostring(line.rightText) or ""
+        -- Both colors, so a red (unmet requirement) line can be told in the export: the armor
+        -- and weapon proficiency red sits in the right column of the EquipSlot line.
+        if line.leftColor and line.leftColor.GenerateHexColor then
+            prefix = prefix .. " color=" .. line.leftColor:GenerateHexColor()
+        end
+        if rightText ~= "" and line.rightColor and line.rightColor.GenerateHexColor then
+            prefix = prefix .. " rcolor=" .. line.rightColor:GenerateHexColor()
+        end
+        if rightText ~= "" then
+            rows[#rows + 1] = { indent = 1, text = format("%s  L: %s  |  R: %s", prefix, leftText, rightText) }
+        else
+            rows[#rows + 1] = { indent = 1, text = format("%s  L: %s", prefix, leftText) }
+        end
+        local fields = FormatTooltipFields(line, TOOLTIP_LINE_ROW_FIELDS, "line")
+        if fields ~= "" then
+            rows[#rows + 1] = { indent = 3, text = fields }
+        end
+    end
+    return rows
+end
+
+local function TooltipLineRowsMatch(rows, otherRows)
+    if #rows ~= #otherRows then
+        return false
+    end
+    for index, row in ipairs(rows) do
+        if row.text ~= otherRows[index].text then
+            return false
+        end
+    end
+    return true
+end
+
+-- The tooltip sections of the export as rows ({ indent, text }; an empty text is a blank row).
+-- An item in a bag or equipment slot has two tooltips: the slot's, which knows that copy
+-- (bound, locked, durability), and the bare link's, which is the one the status is computed
+-- from. The link's lines are printed only where they differ from the slot's.
+--
+-- itemKey: a row the auction house names by item key ({ itemID, itemLevel, itemSuffix }). Its
+-- tooltip is filled by the key and is the piece's, which the link the client gives for the
+-- key is not always (another level, a suffix the link lacks): the key's lines are printed
+-- beside the link's, with the link the key's tooltip names.
+function DebugFrameMixin:GetTooltipReportRows(itemLink, itemLocation, itemKey)
+    local rows = {}
+    if not C_TooltipInfo then
+        return rows
+    end
+
+    local function addSection(title, asked, data, sameAsRows)
+        rows[#rows + 1] = { indent = 0, text = "" }
+        rows[#rows + 1] = { indent = 0, text = title }
+        rows[#rows + 1] = { indent = 1, text = "Asked: " .. asked }
+        if type(data) ~= "table" then
+            rows[#rows + 1] = { indent = 1, text = "Answer: " .. tostring(data) }
+            return nil
+        end
+        rows[#rows + 1] = { indent = 1, text = "Data: " .. FormatTooltipFields(data, TOOLTIP_DATA_ROW_FIELDS, "data") }
+        local lineRows = BuildTooltipLineRows(data)
+        if sameAsRows and TooltipLineRowsMatch(lineRows, sameAsRows) then
+            rows[#rows + 1] = { indent = 1, text = format("Lines: %d, each the same as the slot's", #(data.lines or {})) }
+        else
+            for _, row in ipairs(lineRows) do
+                rows[#rows + 1] = row
+            end
+        end
+        return lineRows
+    end
+
+    local slotData, slotAsked
+    if itemLocation and itemLocation:HasAnyLocation() then
+        if itemLocation:IsBagAndSlot() then
+            local bag, slot = itemLocation:GetBagAndSlot()
+            slotData = C_TooltipInfo.GetBagItem(bag, slot)
+            slotAsked = format("C_TooltipInfo.GetBagItem(%s, %s)", tostring(bag), tostring(slot))
+        elseif itemLocation:IsEquipmentSlot() then
+            local equipmentSlot = itemLocation:GetEquipmentSlot()
+            slotData = C_TooltipInfo.GetInventoryItem("player", equipmentSlot)
+            slotAsked = format("C_TooltipInfo.GetInventoryItem(\"player\", %s)", tostring(equipmentSlot))
+        end
+    end
+
+    local slotRows
+    if slotAsked then
+        slotRows = addSection("[Tooltip Lines (Raw)]", slotAsked, slotData)
+    end
+    if itemLink then
+        addSection(slotAsked and "[Tooltip Lines (Link)]" or "[Tooltip Lines (Raw)]",
+            "C_TooltipInfo.GetHyperlink(link), which the status is computed from", C_TooltipInfo.GetHyperlink(itemLink),
+            slotRows)
+    end
+    if type(itemKey) == "table" and C_TooltipInfo.GetItemKey then
+        local requiredLevel
+        if C_AuctionHouse and C_AuctionHouse.GetItemKeyRequiredLevel then
+            local ok, answer = pcall(C_AuctionHouse.GetItemKeyRequiredLevel, itemKey)
+            requiredLevel = ok and answer or nil
+        end
+        local ok, data = pcall(C_TooltipInfo.GetItemKey, itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)
+        addSection("[Tooltip Lines (Item Key)]", format("C_TooltipInfo.GetItemKey(%s, %s, %s, %s), what the auction house shows for the row",
+            tostring(itemKey.itemID), tostring(itemKey.itemLevel), tostring(itemKey.itemSuffix), tostring(requiredLevel)),
+            ok and data or ("an error: " .. tostring(data)))
+        local keyLink = ok and type(data) == "table" and data.hyperlink
+        rows[#rows + 1] = { indent = 1, text = "Its Link: " .. tostring(type(keyLink) == "string" and
+            (keyLink:match("|H(.-)|h") or keyLink) or "none") }
+    end
+    return rows
+end
+
+-- A client format string ("%s (%d/%d)") as a matcher that finds its values in a tooltip line.
+local function TextPattern(formatString)
+    return NS.FormatPattern.Compile(formatString)
+end
+
+local function ItemSetOf(link)
+    local setID = link and select(16, C_Item.GetItemInfo(link)) or nil
+    if not setID then
+        return nil
+    end
+    return setID, C_Item.GetItemSetInfo and C_Item.GetItemSetInfo(setID) or nil
+end
+
+-- The export's "[Set Bonuses]": what the client says about the item set of a piece (a tier set
+-- and the like, not a saved equipment set), which of the worn pieces belong to item sets, and
+-- what the piece's tooltip says about the set's bonuses. Readings only: no verdict is made from
+-- any of it. The tooltip names the piece count of a bonus the toon does not have and not of one
+-- it has, which is what a rule about losing a bonus would have to get around.
+local function ExplainSetBonuses(item)
+    local lines = {}
+    local function add(indent, text, ...)
+        lines[#lines + 1] = string.rep("  ", indent) .. (select("#", ...) > 0 and text:format(...) or text)
+    end
+    local link = item:GetItemLink()
+    if not link then
+        return lines
+    end
+
+    local setID, setName = ItemSetOf(link)
+    add(0, "Item Set: %s", setID and ("%d \"%s\""):format(setID, tostring(setName)) or "none (the item info names no set)")
+
+    local specIndex = CaerdonAPI:GetPlayerSpecializationIndex()
+    local specID = specIndex and CaerdonAPI:GetSpecializationInfo(specIndex) or nil
+    if not C_Item.GetSetBonusesForSpecializationByItemID then
+        add(0, "Bonus Spells For The Played Spec: the client has no such function")
+    elseif not specID then
+        add(0, "Bonus Spells For The Played Spec: not asked (no specialization)")
+    else
+        local spells = C_Item.GetSetBonusesForSpecializationByItemID(specID, item:GetItemID())
+        local texts = {}
+        for index, spellID in ipairs(spells or {}) do
+            texts[index] = ("%s \"%s\""):format(tostring(spellID),
+                tostring(C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or "?"))
+        end
+        add(0, "Bonus Spells For The Played Spec (spec %s): %s", tostring(specID),
+            #texts > 0 and table.concat(texts, "; ") or (spells and "none" or "no answer"))
+    end
+
+    -- The tooltip: the set's line with its count, its pieces, its bonuses.
+    local namePattern = TextPattern(ITEM_SET_NAME)
+    local needsPattern = TextPattern(ITEM_SET_BONUS_GRAY)
+    local hasPattern = TextPattern(ITEM_SET_BONUS)
+    local disabledLine = Enum.TooltipDataLineType and Enum.TooltipDataLineType.DisabledLine
+    local data = C_TooltipInfo and C_TooltipInfo.GetHyperlink(link) or nil
+    local inPieces = false
+    local found = false
+    add(0, "Tooltip (the link's):")
+    for _, line in ipairs(data and data.lines or {}) do
+        local text = line.leftText and tostring(line.leftText) or ""
+        local color = line.leftColor and line.leftColor.GenerateHexColor and line.leftColor:GenerateHexColor() or "?"
+        local name, worn, total
+        if namePattern then
+            name, worn, total = namePattern:Match(text)
+        end
+        local needs, needsText
+        if needsPattern then
+            needs, needsText = needsPattern:Match(text)
+        end
+        local hasText = not needs and hasPattern and hasPattern:Match(text) or nil
+        if name and tonumber(worn) and tonumber(total) then
+            found, inPieces = true, true
+            add(1, "set line: \"%s\", %s of %s worn", name, worn, total)
+        elseif needs then
+            found, inPieces = true, false
+            add(1, "bonus the toon does not have, at %s pieces: \"%s\"", needs, tostring(needsText):sub(1, 90))
+        elseif hasText then
+            found, inPieces = true, false
+            add(1, "bonus the toon has (no piece count in the line): \"%s\"", tostring(hasText):sub(1, 90))
+        elseif inPieces and text:match("%S") then
+            add(1, "piece: \"%s\", %s (type %s, color %s)", (text:gsub("^%s+", "")),
+                line.type == disabledLine and "not worn" or "worn", tostring(line.type), color)
+        else
+            inPieces = false
+        end
+    end
+    if not found then
+        add(1, data and "no line about an item set" or "no tooltip")
+    end
+
+    -- The worn pieces, by the item set each belongs to, and what is worn where this piece goes.
+    local equipLoc = select(9, C_Item.GetItemInfo(link))
+    local bySet, order, sameKind, unknown = {}, {}, {}, {}
+    for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+        local wornLink = GetInventoryItemLink("player", slot)
+        if wornLink then
+            local wornSetID, wornSetName = ItemSetOf(wornLink)
+            local wornName, _, _, _, _, _, _, _, wornEquipLoc = C_Item.GetItemInfo(wornLink)
+            local label = ("slot %d [%s]"):format(slot, tostring(wornName))
+            if not wornName then
+                -- The client can be without the item info of a worn piece; its set is then
+                -- not known here, and the list below is short of it.
+                unknown[#unknown + 1] = tostring(slot)
+                C_Item.RequestLoadItemDataByID(wornLink)
+            end
+            if wornSetID then
+                if not bySet[wornSetID] then
+                    bySet[wornSetID] = { name = wornSetName, pieces = {} }
+                    order[#order + 1] = wornSetID
+                end
+                table.insert(bySet[wornSetID].pieces, label)
+            end
+            if equipLoc and equipLoc ~= "" and wornEquipLoc == equipLoc then
+                sameKind[#sameKind + 1] = ("%s, item set %s"):format(label,
+                    wornSetID and ("%d \"%s\""):format(wornSetID, tostring(wornSetName)) or "none")
+            end
+        end
+    end
+    if #unknown > 0 then
+        add(0, "Worn Pieces The Client Has No Item Info For (asked for; copy again): slots %s", table.concat(unknown, ", "))
+    end
+    add(0, "Worn Pieces Of Item Sets:%s", #order == 0 and " none" or "")
+    for _, wornSetID in ipairs(order) do
+        local entry = bySet[wornSetID]
+        add(1, "%d \"%s\": %d worn: %s", wornSetID, tostring(entry.name), #entry.pieces, table.concat(entry.pieces, "; "))
+    end
+    add(0, "Worn With The Same Equip Location (%s): %s", tostring(equipLoc),
+        #sameKind > 0 and table.concat(sameKind, "; ") or "none")
+
+    -- What the tooltip line about bonuses gained and lost is made from (CaerdonSetBonuses).
+    add(0, "For The Tooltip's Line (%s):", (CaerdonWardrobeConfig and CaerdonWardrobeConfig.Tooltip and
+        CaerdonWardrobeConfig.Tooltip.ShowSetBonusChanges == false) and "switched off" or "switched on")
+    for _, text in ipairs(CaerdonSetBonuses:Describe(item)) do
+        add(1, text)
+    end
+    return lines
 end
 
 function DebugFrameMixin:BuildClipboardPayload(item)
@@ -2002,13 +2409,59 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     local genderID = UnitSex("player")
     local genderText = genderID == 2 and "Male" or genderID == 3 and "Female" or "Unknown"
     addKV(1, "Gender", genderText .. " (" .. tostring(genderID or "nil") .. ")")
+    -- What the toon's saved data is filed under, and what its first use took over.
+    do
+        local key, from = CaerdonAPI:GetRealmKey()
+        addKV(1, "Saved Under", string.format("%s (%s)", key and ("\"" .. tostring(key) .. "\"") or "nothing yet", tostring(from)))
+        local taken = CaerdonAPI:GetRealmTakeOver()
+        if taken then
+            if taken.problem then
+                addKV(1, "Saved Data Taken Over", "failed: " .. tostring(taken.problem))
+            else
+                addKV(1, "Saved Data Taken Over", string.format("%s; this toon's record under the empty key: %s",
+                    taken.from and string.format("%d toons from the realm's old key \"%s\"", taken.toons, tostring(taken.from)) or
+                        string.format("none from an old realm key (%d hold a toon of this name)", taken.candidates),
+                    taken.fromEmpty and "taken" or "none"))
+            end
+        end
+    end
 
     addLine(0, "")
     addLine(0, "[Item]")
+    if self.copyWaitNote then
+        addKV(1, "Waited For Its Data", self.copyWaitNote)
+    end
     local itemLink = item:GetItemLink() or self.currentItem
     addKV(1, "Link", itemLink or "Unavailable")
     local itemString = itemLink and itemLink:match("|H(.-)|h")
     addKV(1, "Item String", itemString or "Unavailable")
+    -- What the window passed beside the link, and what is on its button: the verdict below is
+    -- of the piece as the window gave it.
+    do
+        local ask = self.currentAsk
+        local extraData = item.extraData
+        if extraData then
+            local parts = {}
+            if extraData.overrideItemLevel then
+                parts[#parts + 1] = format("item level %s (the link's own: %s)", tostring(extraData.overrideItemLevel),
+                    tostring(itemLink and C_Item.GetDetailedItemLevelInfo(itemLink) or "?"))
+            end
+            if extraData.keySuffix then
+                parts[#parts + 1] = format("suffix %s, named \"%s\" (the link's name: \"%s\")", tostring(extraData.keySuffix),
+                    tostring(extraData.keyName), tostring(item:GetItemName()))
+            end
+            if extraData.appearanceSourceID then
+                parts[#parts + 1] = "appearance source " .. tostring(extraData.appearanceSourceID)
+            end
+            addKV(1, "Passed By The Window", #parts > 0 and table.concat(parts, ", ") or "nothing the export names")
+        end
+        if ask and ask.drawn then
+            addKV(1, "Its Button", ask.drawn)
+        end
+    end
+    if self.openedFrom then
+        addKV(1, "Opened From", self.openedFrom)
+    end
     addKV(1, "Item ID", item:GetItemID())
     addKV(1, "Item GUID", item:GetItemGUID())
 
@@ -2040,6 +2493,17 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     addKV(1, "Sell Price", sellPrice)
     addKV(1, "Inventory Type Name", item:GetInventoryTypeName() or "None")
     addKV(1, "Min Level (API)", item:GetMinLevel())
+    -- The stats the client has for the link, by their keys: a link whose stats are still to be
+    -- rolled (a plain item the auction house names a row by) has placeholders among them.
+    do
+        local stats = itemLink and C_Item.GetItemStats and C_Item.GetItemStats(itemLink)
+        local parts = {}
+        for key, value in pairs(type(stats) == "table" and stats or {}) do
+            parts[#parts + 1] = format("%s %s", tostring(key), tostring(value))
+        end
+        table.sort(parts)
+        addKV(1, "Link Stats (API)", #parts > 0 and table.concat(parts, ", ") or "none")
+    end
     addKV(1, "Binding", item:GetBinding())
 
     local itemLocation = item:GetItemLocation()
@@ -2054,52 +2518,17 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
-    -- Raw tooltip line dump for troubleshooting and feature development
-    local tooltipData
-    if itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsBagAndSlot() then
-        local bag, slot = itemLocation:GetBagAndSlot()
-        tooltipData = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
-    elseif itemLocation and itemLocation:HasAnyLocation() and itemLocation:IsEquipmentSlot() then
-        tooltipData = C_TooltipInfo and C_TooltipInfo.GetInventoryItem("player", itemLocation:GetEquipmentSlot())
-    elseif itemLink then
-        tooltipData = C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
-    end
-
-    if tooltipData and tooltipData.lines then
-        addLine(0, "")
-        addLine(0, "[Tooltip Lines (Raw)]")
-        for i, line in ipairs(tooltipData.lines) do
-            local lineType = line.type or "?"
-            local leftText = line.leftText or ""
-            local rightText = line.rightText or ""
-            local prefix = format("  [%d] type=%s", i, tostring(lineType))
-            -- Include both text colors so red (unmet requirement) lines are identifiable in the export;
-            -- armor/weapon proficiency red sits in the RIGHT column of the EquipSlot line.
-            if line.leftColor and line.leftColor.GenerateHexColor then
-                prefix = prefix .. " color=" .. line.leftColor:GenerateHexColor()
-            end
-            if rightText ~= "" and line.rightColor and line.rightColor.GenerateHexColor then
-                prefix = prefix .. " rcolor=" .. line.rightColor:GenerateHexColor()
-            end
-            -- UsageRequirement lines: which requirement (Enum.TooltipDataUsageRequirementType; 2 = Skill,
-            -- 5 = Level, 14 = NotAlreadyKnown) the client says this is.
-            if line.requirementType ~= nil then
-                prefix = prefix .. " req=" .. tostring(line.requirementType)
-            end
-            if rightText ~= "" then
-                addLine(0, format("%s  L: %s  |  R: %s", prefix, leftText, rightText))
-            else
-                addLine(0, format("%s  L: %s", prefix, leftText))
-            end
-            -- Dump all numeric/boolean fields on lines near item level for discovery
-            if lineType == 31 or lineType == 32 or leftText:find("[Ii]tem [Ll]evel") or leftText:find("PvP") then
-                for k, v in pairs(line) do
-                    if k ~= "type" and k ~= "leftText" and k ~= "rightText" and k ~= "leftColor" and k ~= "rightColor" then
-                        addKV(2, "field: " .. tostring(k), v)
-                    end
-                end
-            end
+    -- Every tooltip line with every field it carries, for troubleshooting and feature development.
+    local rowKey = nil
+    do
+        -- A level beside the link is passed for a piece named by item key, and by nothing else.
+        local extraData = item.extraData
+        if extraData and extraData.overrideItemLevel and item:GetItemID() then
+            rowKey = { itemID = item:GetItemID(), itemLevel = extraData.overrideItemLevel, itemSuffix = extraData.keySuffix or 0 }
         end
+    end
+    for _, row in ipairs(self:GetTooltipReportRows(itemLink, itemLocation, rowKey)) do
+        addLine(row.indent, row.text)
     end
 
     -- Which transmog collection events arrived this session and whether a refresh followed.
@@ -2112,6 +2541,11 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Refresh Generation", CaerdonWardrobe:GetRefreshGeneration())
         addKV(1, "Last Refresh",
             lastRefreshTime and string.format("%.1fs ago", now - lastRefreshTime) or "none this session")
+        -- The skills an item's tooltip asked a rank of: a weapon skill or Defense among them
+        -- refreshes with every point from then on (CaerdonRefresh.lua).
+        local skillsAsked = NS.Refresh:GetSkillRequirementsNoted()
+        addKV(1, "Skill Ranks A Tooltip Asked For",
+            #skillsAsked > 0 and table.concat(skillsAsked, ", ") or "none this session")
         if eventLog and #eventLog > 0 then
             addLine(1, "Events (oldest first):")
             for _, entry in ipairs(eventLog) do
@@ -2137,6 +2571,38 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- Whether each bag addon or other integration found the functions it hooks in that addon's
+    -- current version. Session-wide, not about this item: an integration that stopped drawing
+    -- after the other addon updated shows here as "missing".
+    if CaerdonIntegrations and CaerdonIntegrations.GetReportLines then
+        addLine(0, "")
+        addLine(0, "[Integrations]")
+        local ok, integrationLines = pcall(CaerdonIntegrations.GetReportLines, CaerdonIntegrations)
+        if ok then
+            for _, integrationLine in ipairs(integrationLines) do
+                addLine(integrationLine.indent, integrationLine.text)
+            end
+        else
+            addKV(1, "Report failed", tostring(integrationLines))
+        end
+    end
+
+    -- What the addon has cost this session: login milestones, what the client was asked to
+    -- load, what caused each full refresh and, when its profile has run, the time and memory
+    -- of the functions a draw goes through. Session-wide, not about this item.
+    if CaerdonCounters and CaerdonCounters.GetReportLines then
+        addLine(0, "")
+        addLine(0, "[Counters]")
+        local ok, counterLines = pcall(CaerdonCounters.GetReportLines, CaerdonCounters)
+        if ok then
+            for _, counterLine in ipairs(counterLines) do
+                addLine(counterLine.indent, counterLine.text)
+            end
+        else
+            addKV(1, "Report failed", tostring(counterLines))
+        end
+    end
+
     addLine(0, "")
     addLine(0, "[Caerdon]")
     local identifiedType = item:GetCaerdonItemType()
@@ -2146,13 +2612,33 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         locationKey = "debugframe-copy-" .. tostring(item:GetItemID() or "unknown"),
         isDebugFrame = true
     }
-    local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(self, locationInfo)
+    local isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo, smallMark = item:GetCaerdonStatus(self,
+        locationInfo)
     addKV(1, "Status Ready", isReady)
     addKV(1, "Mog Status", mogStatus)
+    -- What a quest's item is beside that, drawn as the small mark on the quest icon: a copy
+    -- that can be read, or one to get rid of that a quest which can be done again still takes.
+    if smallMark then
+        addKV(1, "Small Mark On The Icon", smallMark)
+    end
     addKV(1, "Binding Status", bindingStatus)
     if bindingResult then
         -- unusableItem / skillTooLow come from the red-text tooltip scan and drive canEquipForPlayer
         addTable(1, "Binding Result", bindingResult)
+    end
+    -- What the client says the item's use is aimed at: a use that needs an enemy does not keep
+    -- a learned piece from "sellable" (CaerdonItemMixin:HasHostileUse).
+    local useSpellName, useSpellID = C_Item.GetItemSpell(item:GetItemID())
+    if useSpellID then
+        addLine(1, "Use Spell:")
+        addKV(2, "Name", useSpellName)
+        addKV(2, "Spell ID", useSpellID)
+        addKV(2, "C_Item.IsHarmfulItem", C_Item.IsHarmfulItem(item:GetItemID()))
+        addKV(2, "C_Item.IsHelpfulItem", C_Item.IsHelpfulItem(item:GetItemID()))
+        addKV(2, "Hostile Use", item:HasHostileUse())
+        addKV(2, "Teleport Use", item:HasTeleportUse())
+    else
+        addKV(1, "Use Spell", "none")
     end
 
     local forDebugUse = item:GetForDebugUse()
@@ -2330,6 +2816,10 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     if transmogInfo then
         addLine(0, "")
         addLine(0, "[Transmog (Caerdon Processed)]")
+        if transmogInfo.comparedGearMissing then
+            -- Asked afresh for the export, and put off: every line below is empty for that reason.
+            addLine(1, "not ready: the data of the gear it is compared with is not in the client's cache just now (asked for; copy again)")
+        end
         addKV(1, "needsItem", transmogInfo.needsItem)
         addKV(1, "otherNeedsItem", transmogInfo.otherNeedsItem)
         addKV(1, "isCompletionistItem", transmogInfo.isCompletionistItem)
@@ -2337,6 +2827,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "hasMetRequirements", transmogInfo.hasMetRequirements)
         addKV(1, "canEquip", transmogInfo.canEquip)
         addKV(1, "canEquipForPlayer", transmogInfo.canEquipForPlayer)
+        addKV(1, "typeRefused", transmogInfo.typeRefused and
+            "true (a piece with no look, of a type the client's tooltip marks as not the toon's)" or "false")
         addKV(1, "playerCanCollectSource", transmogInfo.playerCanCollectSource)
         addKV(1, "isTransmog", transmogInfo.isTransmog)
         addKV(1, "isUpgrade", transmogInfo.isUpgrade)
@@ -2352,9 +2844,33 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "pawnOffTreeUpgrade", transmogInfo.pawnOffTreeUpgrade)
         addKV(1, "pawnUpgradeScales", transmogInfo.pawnUpgradeScales)
         addKV(1, "pawnComparison", transmogInfo.pawnComparison)
+        addKV(1, "wornVerdict", CaerdonEquipment.GetWornVerdictDescription and
+            CaerdonEquipment:GetWornVerdictDescription(item) or "not asked (no Pawn)")
         addKV(1, "pawnScaleFilter", CaerdonEquipment.GetPawnScaleFilterDescription and
             CaerdonEquipment:GetPawnScaleFilterDescription() or "none (every visible Pawn scale counts)")
+        addKV(1, "pawnScalesShown", CaerdonEquipment.GetShownPawnScalesDescription and
+            CaerdonEquipment:GetShownPawnScalesDescription() or "not asked (no Pawn)")
+        addKV(1, "offHandScale", CaerdonEquipment.GetOffHandScaleDescription and
+            CaerdonEquipment:GetOffHandScaleDescription() or "not asked (no Pawn)")
+        addKV(1, "otherSpecsWanted", CaerdonEquipment.GetOtherSpecChoiceDescription and
+            CaerdonEquipment:GetOtherSpecChoiceDescription() or "no choice (no specs on this client)")
+        addKV(1, "loadoutsCompared", CaerdonEquipment.GetLoadoutDescription and
+            CaerdonEquipment:GetLoadoutDescription() or "none (only the worn gear)")
+        addKV(1, "gearSetWorn", CaerdonEquipment.GetActiveSetDescription and
+            CaerdonEquipment:GetActiveSetDescription() or "not read")
+        addKV(1, "gearSetScales", CaerdonEquipment.GetGearSetScaleDescription and
+            CaerdonEquipment:GetGearSetScaleDescription() or "none (no gear sets, or no Pawn)")
         addKV(1, "upgradeMatchesSpec", transmogInfo.upgradeMatchesSpec)
+        do
+            local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon or {}
+            addKV(1, "upgradeSettings", format("arrow %s; a higher item level counts %s; and against Pawn's scores %s; also for gear not worn %s; on gear set pieces %s; level gain %s",
+                icon.ShowUpgradeIcon ~= false and "on" or "off",
+                icon.ShowItemLevelUpgrades ~= false and "on" or "off",
+                icon.ItemLevelOverPawn == true and "on" or "off",
+                icon.ShowOtherSpecUpgrades == true and "on" or "off",
+                icon.ShowUpgradeOnGearSets ~= false and "on" or "off",
+                icon.ShowUpgradeLevelDelta and "on" or "off"))
+        end
         addKV(1, "uniqueCategoryKey", transmogInfo.uniqueCategoryKey)
         addKV(1, "sourceID", transmogInfo.sourceID)
         addKV(1, "appearanceID", transmogInfo.appearanceID)
@@ -2364,6 +2880,101 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "proficiencySourceNotCollectable", transmogInfo.proficiencySourceNotCollectable)
         addKV(1, "proficiencySourceNotCollectableKnownLook", transmogInfo.proficiencySourceNotCollectableKnownLook)
         addKV(1, "noCollectionCategory", transmogInfo.noCollectionCategory)
+    end
+
+    -- What the piece would look like raised on its upgrade track or converted at the Catalyst,
+    -- with every answer of the client's behind it. Asked afresh for this copy, whatever the
+    -- verdict above was made from.
+    if identifiedType == CaerdonItemType.Equipment and CaerdonTransformLooks then
+        local upgradeDisabled = bindingResult and bindingResult.upgradeLevelDisabled or false
+        local lookLines, lookInfo = CaerdonTransformLooks:Explain(item, transmogInfo and transmogInfo.sourceID or nil,
+            upgradeDisabled)
+        addLine(0, "")
+        addLine(0, "[Looks After a Change]")
+        addKV(1, "marked (the setting)", CaerdonWardrobeConfig.Icon.ShowLooksAfterChange ~= false)
+        addKV(1, "cache entry of its own", CaerdonTransformLooks:MayBeConverted(item, item:GetItemLink()))
+        -- A gear set's piece is not marked, whatever the lines below find for it.
+        local lookSets = itemData and itemData.GetEquipmentSets and itemData:GetEquipmentSets()
+        addKV(1, "in a gear set (not marked while it is)", lookSets and table.concat(lookSets, ", ") or false)
+        -- What a link converts to is worked out once and kept for the session.
+        if CaerdonTransformLooks.GetKeptAnswers then
+            local keptLinks, keptUsed = CaerdonTransformLooks:GetKeptAnswers()
+            addKV(1, "the Catalyst's piece kept this session", string.format("for %d links, used %d times in the place of asking again",
+                keptLinks or 0, keptUsed or 0))
+        end
+        -- What the client answered when the verdict above was made, which may be a while ago
+        -- and other than what it answers now.
+        local verdictWhy = statusTransmogInfo and statusTransmogInfo.transformLookWhy
+        if verdictWhy then
+            addLine(1, ("when the verdict above was made (%.1f s ago):"):format(GetTime() - (statusTransmogInfo.transformLookAt or GetTime())))
+            for _, lookLine in ipairs(verdictWhy) do
+                addLine(2, lookLine)
+            end
+            if #verdictWhy == 0 then
+                addLine(2, "nothing was noted")
+            end
+            addLine(1, "asked afresh now:")
+        else
+            addLine(1, "when the verdict above was made: nothing was asked about a look (or the verdict is not ready)")
+        end
+        for _, lookLine in ipairs(lookLines) do
+            addLine(1, lookLine)
+        end
+        -- Where the piece is taken, which is what the icon says.
+        local lookRoute, lookSecondRoute = CaerdonTransformLooks:GetRoute(lookInfo,
+            CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo and transmogInfo.canEquip)
+        addKV(1, "taken to (the icon)", lookRoute or "nowhere")
+        addKV(1, "and to (the small mark on it)", lookSecondRoute or "nowhere else")
+    end
+
+    -- A piece's PVP floor beside its level, whether the floor counts now, and the piece at its
+    -- floor as a set marked for PVP scores it.
+    if identifiedType == CaerdonItemType.Equipment and CaerdonEquipment.ExplainPvpLevel then
+        addLine(0, "")
+        addLine(0, "[PVP Item Level]")
+        for _, pvpLine in ipairs(CaerdonEquipment:ExplainPvpLevel(item)) do
+            addLine(1, pvpLine)
+        end
+    end
+
+    -- Every tooltip frame the addon was shown an item in this session, and what became of
+    -- the upgrade lines there (features/Tooltip.lua).
+    if NS.Tooltip and NS.Tooltip.GetTooltipsSeenReport then
+        addLine(0, "")
+        addLine(0, "[Item Tooltips Seen]")
+        local seenLines = NS.Tooltip:GetTooltipsSeenReport()
+        for _, line in ipairs(seenLines) do
+            addLine(1, line)
+        end
+        if #seenLines == 0 then
+            addLine(1, "none this session")
+        end
+    end
+
+    -- Each comparison tooltip the client puts beside an item's, as it stands, and what the
+    -- addon last made of it (features/Tooltip.lua).
+    if identifiedType == CaerdonItemType.Equipment and NS.Tooltip and NS.Tooltip.GetComparisonReport then
+        addLine(0, "")
+        addLine(0, "[Comparison Tooltips]")
+        for _, entry in ipairs(NS.Tooltip:GetComparisonReport()) do
+            addLine(1, entry.state)
+            if entry.last then
+                addLine(2, entry.last)
+            end
+            if entry.sample then
+                addLine(2, entry.sample)
+            end
+        end
+    end
+
+    -- Item sets (tier bonuses): what there is to tell whether putting a piece on would cost or
+    -- gain a bonus. Nothing is judged by it yet.
+    if identifiedType == CaerdonItemType.Equipment then
+        addLine(0, "")
+        addLine(0, "[Set Bonuses]")
+        for _, setLine in ipairs(ExplainSetBonuses(item)) do
+            addLine(1, setLine)
+        end
     end
 
     if transmogDebugData and transmogDebugData.processed and transmogDebugData.processed.debugExtras then
@@ -2378,8 +2989,9 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addLine(0, "")
             addLine(0, "[Housing]")
             addKV(1, "Entry Type", housingInfo.entryType)
-            addKV(1, "Entry Subtype", housingInfo.entrySubtype)
             addKV(1, "Record ID", housingInfo.recordID)
+            addKV(1, "Record ID From Item", housingInfo.recordFromItem)
+            addKV(1, "Found By Item ID As Record", housingInfo.usedRecordFallback)
             addKV(1, "Subclass ID", housingInfo.subClassID)
             addKV(1, "Owned Stored", housingInfo.ownedStored)
             addKV(1, "Remaining Redeemable", housingInfo.entryInfo and housingInfo.entryInfo.remainingRedeemable)
@@ -2396,12 +3008,161 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- The journal's own answers, which decide the verdict: a mount is learnable while the
+    -- journal calls it uncollected, a pet while none of its species is collected.
+    if identifiedType == CaerdonItemType.Mount then
+        local mountInfo = itemData and itemData.GetMountInfo and itemData:GetMountInfo()
+        if mountInfo then
+            addLine(0, "")
+            addLine(0, "[Mount]")
+            addKV(1, "Mount ID", mountInfo.mountID)
+            addKV(1, "Spell ID", mountInfo.spellID)
+            addKV(1, "Name", mountInfo.name)
+            addKV(1, "Is Collected", mountInfo.isCollected)
+            addKV(1, "Is Usable", mountInfo.isUsable)
+            addKV(1, "Is Faction Specific", mountInfo.isFactionSpecific)
+            addKV(1, "Faction ID", mountInfo.factionID)
+            addKV(1, "Hidden On Character", mountInfo.shouldHideOnChar)
+            addKV(1, "Is Equipment", mountInfo.isEquipment)
+            addKV(1, "Equipment Applied", mountInfo.isEquipmentApplied)
+            addKV(1, "Needs Item", mountInfo.needsItem)
+        end
+    elseif identifiedType == CaerdonItemType.CompanionPet or identifiedType == CaerdonItemType.BattlePet then
+        local petInfo
+        if identifiedType == CaerdonItemType.CompanionPet then
+            petInfo = itemData and itemData.GetCompanionPetInfo and itemData:GetCompanionPetInfo()
+        else
+            petInfo = itemData and itemData.GetBattlePetInfo and itemData:GetBattlePetInfo()
+        end
+        addLine(0, "")
+        addLine(0, "[Pet]")
+        if petInfo then
+            addKV(1, "Species ID", petInfo.speciesID)
+            addKV(1, "Name", petInfo.name)
+            addKV(1, "Num Collected", petInfo.numCollected)
+            addKV(1, "Limit", petInfo.limit)
+            addKV(1, "Is Unique", petInfo.isUnique)
+            addKV(1, "Is Tradeable", petInfo.isTradeable)
+            addKV(1, "Is Obtainable", petInfo.isObtainable)
+            addKV(1, "Can Battle", petInfo.canBattle)
+            addKV(1, "Needs Item", petInfo.needsItem)
+        else
+            addLine(1, "The pet journal has no pet for this item.")
+        end
+    end
+
+    -- What the item teaches by its tooltip, for one that is no profession's recipe (a class's
+    -- spell book, a rune): the rule's inputs and its answer (LearnableByTeachingLine).
+    local teaching = item.GetTeachingInfo and item:GetTeachingInfo() or nil
+    if teaching then
+        addLine(0, "")
+        addLine(0, "[Teaches]")
+        addKV(1, "Taught Spell ID", teaching.spellID or "none on the line")
+        addKV(1, "Taught Spell Name", teaching.spellID and C_Spell.GetSpellName(teaching.spellID) or nil)
+        addKV(1, "Asks For A Skill", teaching.asksForSkill)
+        addKV(1, "Its Class Line Is Unmet", teaching.classUnmet)
+        addKV(1, "Its Level Line Is Unmet", teaching.levelUnmet)
+        addKV(1, "Tooltip Says Already Known", teaching.saysKnown)
+        addKV(1, "Client Calls The Spell Known", teaching.spellKnown)
+        if teaching.asksForSkill then
+            addKV(1, "Learnable By This Rule", "not judged: it asks for a skill, so it is a profession's")
+        else
+            addKV(1, "Learnable By This Rule", teaching.status or "no")
+            -- What this toon's other toons are told, what each of them said, and the mail
+            -- icon that comes of it (CaerdonLearners, CaerdonItemMixin:GetLearnerStatus).
+            addKV(1, "This Toon's Answer", teaching.answer)
+            local cannotHandOver = (item:IsSoulbound() and "it is soulbound") or
+                (item:GetBinding() == CaerdonItemBind.BindOnPickup and "it binds on pickup") or nil
+            addKV(1, "Can Be Handed Over", cannotHandOver and ("no: " .. cannotHandOver) or "yes")
+            local learners = item.GetLearnerInfo and item:GetLearnerInfo(teaching.answer) or nil
+            if learners then
+                -- Each toon's answer, and where the ledger last saw a copy with it.
+                for _, entry in ipairs(learners.toons) do
+                    local where = entry.bags == nil and "the ledger has no record of it" or
+                        string.format("%d in its bags, %d in its bank, %d in its mailbox, %d sent to it", entry.bags, entry.bank or 0, entry.mail or 0, entry.sent or 0)
+                    addKV(2, entry.toon, string.format("%s (%s)", entry.answer, where))
+                end
+                if #learners.unanswered > 0 then
+                    addKV(1, "Not Answered Yet (not played since the item was first seen)", table.concat(learners.unanswered, ", "))
+                end
+            elseif not cannotHandOver then
+                addKV(1, "Other Toons", "none of this realm has a record")
+            end
+            local sendStatus = item.GetLearnerStatus and item:GetLearnerStatus(teaching.answer, bindingResult) or nil
+            addKV(1, "Mail Icon By This Rule", sendStatus and "yes" or
+                (teaching.status and "no: this toon can learn it itself") or
+                (CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == false and "no: switched off") or
+                (cannotHandOver and "no: it cannot be handed over") or
+                (bindingResult and bindingResult.spareCopies and string.format(
+                    "no: this toon has %d to send already, for the %d that could learn it",
+                    bindingResult.spareCopies.spare, bindingResult.spareCopies.wanting)) or
+                (learners and #learners.covered > 0 and "no: every toon that could learn it has a copy or one on its way") or
+                "no: no other toon said it can learn it")
+            local learnerState = CaerdonLearners and CaerdonLearners.GetDebugState and CaerdonLearners:GetDebugState() or nil
+            if learnerState then
+                addKV(1, "Asked This Session", string.format("%d items asked for, %d answered, %d not there, %d teach nothing, %d waiting",
+                    learnerState.asked, learnerState.answered, learnerState.notThere, learnerState.noAnswer, learnerState.waiting))
+                for _, line in ipairs(learnerState.toons) do
+                    addLine(2, line)
+                end
+            end
+        end
+    end
+
+    -- The ledger (CaerdonLedger): whether it counts this item, what it holds of it for this
+    -- toon, what it did this session, and what the client counts of the item where. For every
+    -- item: whether a count with the bank in it can be had with the bank closed is what the
+    -- last line says, of whatever lies in the bank.
+    local ledgerState = CaerdonLedger and CaerdonLedger.GetDebugState and CaerdonLedger:GetDebugState() or nil
+    if ledgerState and item:GetItemID() then
+        local countedID = item:GetItemID()
+        addLine(0, "")
+        addLine(0, "[Ledger]")
+        addKV(1, "Counts This Item", CaerdonLedger:IsTracked(countedID) and "yes" or
+            "no (no recipe, and no toon of the realm has answered for it)")
+        local own = CaerdonLedger:GetHeld(UnitName("player"), countedID)
+        addKV(1, "Of It With This Toon", own and string.format("%d in its bags, %d in its bank, %d in its mailbox, %d on its way (sent to it or bought)",
+            own.bags, own.bank, own.mail, own.sent) or "no record")
+        -- What a second copy's star goes by: asked of the client now, and of the record.
+        local copies = CaerdonLedger:GetOwnCopies(countedID)
+        addKV(1, "Copies This Toon Has Now", string.format("%d (%d in its bags, %d in its bank, %d in its mailbox, %d on its way)",
+            copies.total, copies.bags, copies.bank, copies.mail, copies.coming))
+        addKV(1, "This Is A Copy It Holds", item.IsOwnCopy and item:IsOwnCopy() or false)
+        addKV(1, "Star Held Back For A Copy It Has", (bindingResult and bindingResult.ownCopies) and "yes" or "no")
+        addKV(1, "This Toon's Ledger", string.format(
+            "%d kinds asked about, %d in the bags, %d in the bank, %d in the mailbox (%s%s), %d on their way; this session: bags read %d times, mailbox %d (%d copies taken out of a mail were seen in the bags, %.2f s after at the latest; %d never were), %d mails noted with %d kinds, %d bought, %d refreshes",
+            ledgerState.askedItems, ledgerState.bagItems, ledgerState.bankItems, ledgerState.mailItems,
+            ledgerState.mailSeen and ("read " .. date("%Y-%m-%d %H:%M", ledgerState.mailSeen)) or "never read",
+            ledgerState.mailPartial and ", a part of it shown" or "", ledgerState.sentItems,
+            ledgerState.bagReads, ledgerState.mailReads, ledgerState.landed or 0, ledgerState.landingSlowest or 0,
+            ledgerState.landingLost or 0, ledgerState.sends, ledgerState.noted,
+            ledgerState.bought, ledgerState.refreshes))
+        addKV(1, "Bank Window", BankFrame and BankFrame:IsShown() and "open" or "closed")
+        addKV(1, "Client's Count Of It", string.format("%s in the bags, %s with the bank, %s with the reagent bank too, %s with the account's bank too",
+            tostring(C_Item.GetItemCount(countedID)), tostring(C_Item.GetItemCount(countedID, true)),
+            tostring(C_Item.GetItemCount(countedID, true, false, true)),
+            tostring(C_Item.GetItemCount(countedID, true, false, true, true))))
+    end
+
     if identifiedType == CaerdonItemType.Recipe then
         addLine(0, "")
         addLine(0, "[Recipe]")
+        -- The item's use spell is the client's "Learning"; what it teaches is on its tooltip's
+        -- teaching line, and that spell is the recipe's ID in the profession's list.
         local recipeSpellName, recipeSpellID = C_Item.GetItemSpell(item:GetItemLink())
-        addKV(1, "Recipe Spell ID", recipeSpellID)
-        addKV(1, "Recipe Spell Name", recipeSpellName)
+        addKV(1, "Use Spell ID", recipeSpellID)
+        addKV(1, "Use Spell Name", recipeSpellName)
+        local taughtSpellID = item.GetTaughtSpellID and item:GetTaughtSpellID() or nil
+        addKV(1, "Taught Spell ID", taughtSpellID or "none (no teaching line on its tooltip)")
+        if CaerdonRecipe and CaerdonRecipe.FindRecipeID then
+            local foundID, foundBy = CaerdonRecipe:FindRecipeID(item)
+            addKV(1, "Recipe ID", foundID or "none (no list has shown its spell or its name)")
+            if foundBy == "spell" then
+                addKV(1, "Recipe Found By", "the spell its tooltip says it teaches")
+            elseif foundBy == "name" then
+                addKV(1, "Recipe Found By", taughtSpellID and "its name (no list has shown the taught spell)" or "its name")
+            end
+        end
 
         -- What Caerdon believes about the toon's rank in the recipe's profession (cached skill lines,
         -- then the live profession slots). Compare against the "Requires <skill> (<rank>)" tooltip line.
@@ -2413,8 +3174,8 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Cached Skill Rank", knownRank)
         end
 
-        if recipeSpellID then
-            local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeSpellID)
+        if taughtSpellID then
+            local tradeSkillRecipeInfo = C_TradeSkillUI.GetRecipeInfo(taughtSpellID)
             if tradeSkillRecipeInfo then
                 addKV(1, "TradeSkill Learned", tradeSkillRecipeInfo.learned)
                 addKV(1, "TradeSkill Recipe ID", tradeSkillRecipeInfo.recipeID)
@@ -2453,13 +3214,64 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 addKV(1, "In This Toon's Saved List", otherToons.knownByPlayer)
                 addLine(1, "Other Toons With " .. tostring(otherToons.professionName) .. ":")
                 for _, toon in ipairs(otherToons.toons) do
-                    addLine(2, string.format("%s (rank %s): %s", tostring(toon.name), tostring(toon.rank),
-                        toon.knowsRecipe and "knows it" or
-                        (toon.recipesRecorded and "can learn it (not in its recorded recipe list)" or
-                            "unknown (its recipes for this profession were never recorded)")))
+                    local reading
+                    if toon.knowsRecipe then
+                        reading = "knows it"
+                    elseif not toon.recipesRecorded then
+                        reading = "unknown (its recipes for this profession were never recorded)"
+                    elseif toon.hasCap then
+                        reading = string.format("has learned it (its recorded cap %s is at the cap the item gives, %s)",
+                            tostring(toon.cap), tostring(otherToons.capTaught))
+                    elseif toon.inRecordedList == false and toon.hasCap == nil then
+                        reading = string.format("not known (its recorded list has no recipe of this name: the item teaches " ..
+                            "no recipe of that list; its recorded cap %s, the cap the item gives %s)",
+                            tostring(toon.cap), tostring(otherToons.capTaught))
+                    else
+                        if toon.hasCap == false then
+                            reading = string.format("lacks it (its recorded cap %s is below the cap the item gives, %s)",
+                                tostring(toon.cap), tostring(otherToons.capTaught))
+                        elseif toon.inRecordedList then
+                            reading = "lacks it (in its recorded list, not learned)"
+                        else
+                            reading = "lacks it (not among the recipes it knows; its whole list is not recorded, " ..
+                                "open the profession on that toon)"
+                        end
+                        local asked = otherToons.requirement
+                        if not asked then
+                            reading = reading .. ": can learn it (the item asks for no rank)"
+                        elseif not toon.skillRank then
+                            reading = reading .. string.format(": can learn it (no rank saved for %s, so none is held against %d)",
+                                tostring(asked.skillName), asked.rank)
+                        elseif toon.skillRank < asked.rank then
+                            reading = reading .. string.format(": rank too low (%s %d, the item asks for %d)",
+                                tostring(asked.skillName), toon.skillRank, asked.rank)
+                        else
+                            reading = reading .. string.format(": can learn it (%s %d, the item asks for %d)",
+                                tostring(asked.skillName), toon.skillRank, asked.rank)
+                        end
+                    end
+                    addLine(2, string.format("%s (rank %s): %s", tostring(toon.name), tostring(toon.rank), reading))
                 end
                 addKV(1, "Toons That Can Learn It", #otherToons.missing)
+                addKV(1, "Toons Whose Rank Is Too Low", #otherToons.tooLow)
                 addKV(1, "Toons Not Recorded", #otherToons.unknown)
+                addKV(1, "Toons Whose List Has No Such Recipe", #otherToons.notInList)
+                -- What the ledger last saw of the item with each toon that lacks the recipe: one
+                -- that has a copy is no reason for the mail icon (CaerdonLedger).
+                for _, lacking in ipairs({ otherToons.missing, otherToons.tooLow }) do
+                    for _, toon in ipairs(lacking) do
+                        local held = CaerdonLedger and CaerdonLedger:GetHeld(toon.name, item:GetItemID()) or nil
+                        addKV(2, "Ledger, " .. tostring(toon.name), held and string.format("%d in its bags, %d in its bank, %d in its mailbox, %d sent to it%s",
+                            held.bags, held.bank, held.mail, held.sent, held.covered and ": it has a copy" or "") or
+                            "no record of this toon (not played since the ledger was there)")
+                    end
+                end
+                if otherToons.requirement then
+                    addKV(1, "Item Asks For", string.format("%s %d", tostring(otherToons.requirement.skillName),
+                        otherToons.requirement.rank))
+                    addKV(1, "Number In Its Use Line", otherToons.requirement.useNumber or "none, or more than one")
+                    addKV(1, "Cap The Item Gives", otherToons.capTaught or "none (no number above the rank it asks for)")
+                end
             else
                 addKV(1, "Other Toons With Profession", "none")
             end
@@ -2467,6 +3279,11 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             addKV(1, "Show Recipes For Other Toons", CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons ~= false)
             addKV(1, "Show Recipe Learners In Tooltip",
                 not (CaerdonWardrobeConfig.Tooltip and CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == false))
+            if bindingResult and bindingResult.spareCopies then
+                addKV(1, "Mail Icon Held Back", string.format(
+                    "this toon has %d to send already, for the %d other toons that could learn it and have none",
+                    bindingResult.spareCopies.spare, bindingResult.spareCopies.wanting))
+            end
         end
     end
 
@@ -2499,9 +3316,72 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         addKV(1, "Has Quest Value", questItemInfo ~= nil and questItemInfo.hasQuestValue or false)
         addKV(1, "Active Quest", questItemInfo ~= nil and questItemInfo.isActive or false)
         addKV(1, "Upcoming Quest", questItemInfo ~= nil and questItemInfo.isUpcoming or false)
+        -- One to act on: it starts a quest the toon has neither done nor taken, and no quest
+        -- left for it is anything else to it.
+        local starter = questItemInfo ~= nil and questItemInfo.starts or nil
+        if starter and type(bindingResult) == "table" and bindingResult.raceClassRestricted then
+            -- The item's own class or race line is unmet: no star (GetCaerdonStatus).
+            addKV(1, "Starts A Quest Not Taken Yet", string.format(
+                "quest %s by the quest module, but the item's own tooltip has its class or race line unmet: this toon cannot use it, so no star",
+                tostring(starter.questID)))
+        elseif starter then
+            addKV(1, "Starts A Quest Not Taken Yet", string.format(
+                "quest %s%s (the star, with the quest icon as the small mark%s)", tostring(starter.questID),
+                starter.requiredLevel and starter.requiredLevel > 0 and
+                    (", which asks for level " .. tostring(starter.requiredLevel)) or "",
+                starter.belowLevel and "; the grey gear until the toon is of that level" or ""))
+        else
+            addKV(1, "Starts A Quest Not Taken Yet", false)
+        end
+        -- What takes the quest icon off a Quest-class item, and makes it one to get rid of
+        -- where it has no use, is worn nowhere and has no equip effect.
+        local behindText = "no quest is known for it"
+        if questItemInfo ~= nil then
+            behindText = questItemInfo.isOver and "true" or
+                "false (one of them is in the log, still to come, can be done again, or is only out of reach for now)"
+        end
+        addKV(1, "Every Known Quest Behind The Toon", behindText)
+        -- A quest's item no quest is known for goes by the level it asks for itself.
+        if questItemInfo == nil and item.IsQuestItemBeyondRange and
+            select(6, C_Item.GetItemInfoInstant(item:GetItemID())) == Enum.ItemClass.Questitem then
+            local beyond, itemMinLevel = item:IsQuestItemBeyondRange()
+            addKV(1, "Its Own Required Level Is Beyond The Range", string.format("%s (it asks for level %s)",
+                tostring(beyond), tostring(itemMinLevel)))
+        end
+        if questItemInfo ~= nil and questItemInfo.keptOutByOptions then
+            addKV(1, "Every Quest Left Is Outside The Range Or Trivial",
+                "true (the player's options keep them out, so its class gives no quest icon)")
+        end
+        if questItemInfo ~= nil and questItemInfo.repeatableLeft then
+            addKV(1, "A Quest That Can Be Done Again Still Takes It",
+                "true (the quest icon stays, with what is left of the item as the small mark)")
+        end
+        if item.IsSpentQuestItem then
+            local _, _, _, _, _, exportClassID = C_Item.GetItemInfoInstant(item:GetItemID())
+            if exportClassID == Enum.ItemClass.Questitem then
+                addKV(1, "Nothing Else To It (no use, not worn, no equip effect)",
+                    item:IsSpentQuestItem(bindingResult))
+            end
+        end
+        -- The client's own word for the copy in its bag slot. The quest it names is one of the
+        -- item's quests below ("starts quest", by the client's word).
+        local slotQuestInfo = item.GetSlotQuestInfo and item:GetSlotQuestInfo()
+        if slotQuestInfo then
+            local startsText = "starts no quest"
+            if slotQuestInfo.questID then
+                local title = C_QuestLog.GetTitleForQuestID(slotQuestInfo.questID)
+                startsText = string.format("starts quest %s%s, which is %s", tostring(slotQuestInfo.questID),
+                    title and (" (" .. tostring(title) .. ")") or "", slotQuestInfo.isActive and "in the log" or "not in the log")
+            end
+            addKV(1, "The Client, For Its Bag Slot", string.format("%s, %s",
+                slotQuestInfo.isQuestItem and "a quest item" or "no quest item", startsText))
+        else
+            addKV(1, "The Client, For Its Bag Slot", "not asked (the item lies in no bag slot)")
+        end
         addKV(1, "Show Quest Items", CaerdonWardrobeConfig.Icon.ShowQuestItems)
         addKV(1, "Show Upcoming Quest Items", CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems)
         addKV(1, "Upcoming Level Window", questState.upcomingLevelWindow)
+        addKV(1, "Include Trivial Quests", questState.includeTrivial)
         addKV(1, "Trivial Range", questState.trivialRange)
         addKV(1, "Profession Skill Lines", questState.professions or "not recognised (check skipped)")
 
@@ -2515,6 +3395,11 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         if logState.error then
             addKV(1, "Quest Log Error", logState.error)
         end
+        -- An objective's text names its item only while the client has the item's data.
+        addKV(1, "Quest Log Names", string.format("%d of the last scan's objectives had no text and kept the name they had; %d scans kept one%s; %d rechecks by the clock, %d rescans for a missing name counted",
+            logState.keptNames or 0, logState.scansThatKept or 0,
+            logState.lastKept and string.format(", the last %.1fs ago", now - logState.lastKept) or "",
+            logState.rechecks or 0, logState.rescanAttempts or 0))
 
         local providerState = questState.provider
         local providerText = "QuestieDB " .. tostring(providerState.state)
@@ -2532,22 +3417,86 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
         addKV(1, "Questie Policy", questState.questie.loaded and
             ("loaded, ready=" .. tostring(questState.questie.isReady)) or "not loaded")
+        -- The second source of quest data (CaerdonQuestSourceATT.lua).
+        local second = questState.second
+        if second then
+            local secondText = tostring(second.state)
+            if second.version then
+                secondText = secondText .. ", version " .. tostring(second.version)
+            end
+            if second.state ~= "missing" then
+                secondText = secondText .. string.format(
+                    "; its ready call %s; since the last refresh asked about %d items and named %d quests for them",
+                    second.readySeen and "was heard" or (second.listening and "is listened for" or "is not listened for"),
+                    second.asked or 0, second.named or 0)
+            end
+            addKV(1, "AllTheThings", secondText)
+            if second.missingFunctions then
+                addKV(1, "AllTheThings Functions Not Found", second.missingFunctions)
+            end
+            if second.error then
+                addKV(1, "AllTheThings Error", second.error)
+            end
+        end
+        addKV(1, "Quests Answered Since The Last Refresh", questState.answeredCount)
+        -- The client's own word on a quest's level and on trivial (CaerdonQuestClient.lua):
+        -- what it was asked to load and what came of it, this session.
+        local clientState = questState.client
+        if clientState then
+            if not clientState.supported then
+                addKV(1, "The Client's Quest Data", "not asked (this client lacks a function for it)")
+            else
+                addKV(1, "The Client's Quest Data", string.format(
+                    "since the last refresh %d quests judged with its word, %d with what it said earlier, %d without; this session asked for %d (%d waiting their turn, %d not answered yet): %d came%s, %d refused, %d not answered, %d answered late, %d were there by their turn",
+                    clientState.withData or 0, clientState.fromMemory or 0, clientState.without or 0,
+                    clientState.asked or 0, clientState.queued or 0, clientState.inFlight or 0,
+                    clientState.came or 0,
+                    clientState.averageWait and string.format(" (after %.2fs on average, %.2fs at the longest)",
+                        clientState.averageWait, clientState.longestWait or 0) or "",
+                    clientState.refused or 0, clientState.silent or 0, clientState.late or 0, clientState.already or 0))
+                -- What it costs with no window being drawn: the asking, and the judging again.
+                addKV(1, "The Client's Quest Data Cost", string.format(
+                    "putting the requests took %.2fms in all over %d frames, %.2fms at the most in one; judging %d quests again when their answers came took %.2fms in all, %.2fms at the most for one run",
+                    clientState.pumpMs or 0, clientState.pumps or 0, clientState.longestPumpMs or 0,
+                    questState.clientJudged or 0, questState.clientCompareMs or 0, questState.clientLongestCompareMs or 0))
+                addKV(1, "The Client's Answers Compared", string.format(
+                    "%d runs of answers, %d of them changed an icon and refreshed%s",
+                    questState.clientChecks or 0, questState.clientChanges or 0,
+                    questState.clientLastChange and (" (the last: " .. tostring(questState.clientLastChange) .. ")") or ""))
+            end
+        end
 
         if questItemInfo and #questItemInfo.quests > 0 then
             addLine(1, "Quests:")
             for _, quest in ipairs(questItemInfo.quests) do
                 local levelText = ""
-                if quest.questLevel or quest.requiredLevel then
-                    levelText = string.format(" [level %s, requires %s]",
-                        tostring(quest.questLevel or "?"), tostring(quest.requiredLevel or "?"))
+                if quest.questLevel or quest.requiredLevel or quest.clientState then
+                    levelText = string.format(" [level %s%s, requires %s%s]",
+                        tostring(quest.questLevel or "?"), quest.levelFromClient and " by the client" or "",
+                        tostring(quest.requiredLevel or "?"),
+                        quest.clientState and ("; " .. tostring(quest.clientState)) or "")
+                    if quest.pending then
+                        levelText = levelText .. " (the item's icon waits for the answer)"
+                    end
                 end
-                addLine(2, string.format("- %d %s%s (%s): %s%s",
+                addLine(2, string.format("- %d %s%s (%s%s): %s%s%s%s",
                     quest.questID,
                     tostring(quest.name or "unknown"),
                     levelText,
                     tostring(quest.role),
+                    quest.startsByClient and ", by the client's word for its bag slot" or "",
                     quest.eligible and "" or "skipped, ",
-                    tostring(quest.reason)))
+                    tostring(quest.reason) .. (quest.source and (", judged from " .. quest.source) or ""),
+                    quest.over and " (behind the toon)" or
+                        quest.setAside and " (not counted: the quest that handed the item over is behind the toon)" or
+                        -- The reason is the first one found; this one is what takes the
+                        -- quest icon off, whatever the first was.
+                        quest.optedOut and " (the player's options keep it out: beyond the range of levels, or trivial)" or "",
+                    -- Skipped as a quest still to come, and one the item starts all the same;
+                    -- behind the toon by the quest data, and named by the client for this copy.
+                    quest.canStart and not quest.eligible and
+                        (quest.over and " (so says the quest data; the client names the quest for this copy, which can still start it)" or
+                            " (the item can still start it)") or ""))
             end
         else
             addLine(1, "Quests: none")
@@ -2557,10 +3506,23 @@ function DebugFrameMixin:BuildClipboardPayload(item)
     -- Food and drink: how the item was read and whether a better one is carried.
     if CaerdonFoodDrink and item.GetFoodDrinkInfo then
         local foodDrinkInfo = item:GetFoodDrinkInfo()
+        local foodState = CaerdonFoodDrink.GetDebugState and CaerdonFoodDrink:GetDebugState(item:GetItemID())
+        if not foodDrinkInfo and foodState and foodState.isFoodDrink then
+            -- Food or drink by its class, and no restore line was found on its tooltip.
+            addLine(0, "")
+            addLine(0, "[Food and Drink]")
+            addKV(1, "Kind", "not read (no tooltip line has a number and one of the words below)")
+            addKV(1, "Health Words", foodState.healthWords)
+            addKV(1, "Mana Words", foodState.manaWords)
+        end
         if foodDrinkInfo then
             addLine(0, "")
             addLine(0, "[Food and Drink]")
             addKV(1, "Show Outdated Food", CaerdonWardrobeConfig.Icon.ShowOutdatedFood)
+            if foodState then
+                addKV(1, "Health Words", foodState.healthWords)
+                addKV(1, "Mana Words", foodState.manaWords)
+            end
             addKV(1, "Kind", foodDrinkInfo.kind)
             addKV(1, "Buff Food", foodDrinkInfo.isBuff)
             addKV(1, "Restore Amount", foodDrinkInfo.amount)
@@ -2573,6 +3535,49 @@ function DebugFrameMixin:BuildClipboardPayload(item)
                 addKV(1, "Better Item Carried", string.format("%s (item %d, requires %d, restores %d)",
                     tostring(foodDrinkInfo.betterItem.name), foodDrinkInfo.betterItem.itemID,
                     foodDrinkInfo.betterItem.requiredLevel, foodDrinkInfo.betterItem.amount))
+            end
+        end
+    end
+
+    -- Pet food: what the client says a hunter's pet eats, for every item (raw meat is a trade
+    -- good). Nothing is judged from it yet.
+    if CaerdonFoodDrink and CaerdonFoodDrink.GetPetFoodDebugState then
+        local petFood = CaerdonFoodDrink:GetPetFoodDebugState(item:GetItemID(), item:GetItemLink())
+        if petFood then
+            addLine(0, "")
+            addLine(0, "[Pet Food]")
+            if petFood.hasPet then
+                addKV(1, "Pet", string.format("%s, level %s", tostring(petFood.petName), tostring(petFood.petLevel)))
+            else
+                addKV(1, "Pet", "none out (the answers below are the client's without one)")
+            end
+            addKV(1, "Diet", #petFood.diet > 0 and table.concat(petFood.diet, ", ") or "none")
+            if petFood.happiness ~= nil then
+                addKV(1, "Happiness", string.format("%s (damage %s%%, loyalty rate %s)", tostring(petFood.happiness),
+                    tostring(petFood.damagePercentage), tostring(petFood.loyaltyRate)))
+            else
+                addKV(1, "Happiness", "no answer")
+            end
+            addKV(1, "C_PetInfo.CanPetEatItem", petFood.canEat)
+            addKV(1, "Item Level", petFood.itemLevel)
+            if petFood.petLevel and petFood.itemLevel then
+                addKV(1, "Item Levels Below The Pet", petFood.petLevel - petFood.itemLevel)
+            end
+            addKV(1, "Remembered Answer", petFood.remembered == nil and "none" or petFood.remembered)
+            if petFood.judged then
+                addKV(1, "Rule", string.format("the best %d pieces in one or two kinds, a piece counting for the square of its item level",
+                    petFood.pieces))
+                addKV(1, "Kept For The Pet", petFood.kept)
+                if #petFood.carried > 0 then
+                    addLine(1, "Carried That The Pet Eats:")
+                    for _, line in ipairs(petFood.carried) do
+                        addLine(2, "- " .. line)
+                    end
+                else
+                    addLine(1, "Carried That The Pet Eats: nothing")
+                end
+            else
+                addKV(1, "Rule", "no pet has answered this session; the level gap decides")
             end
         end
     end
@@ -2605,6 +3610,97 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             local ok, slots = pcall(C_TradeSkillUI.GetProfessionSlots, Enum.Profession.Mining)
             addKV(1, "GetProfessionSlots (Mining)", ok and type(slots) == "table" and
                 (#slots .. " slots") or tostring(slots))
+        end
+    end
+
+    -- Ingredients: the recorded recipes that take the item, this toon's and other toons', and
+    -- what the rule makes of them. Printed for every item, since "no recipe takes it" is only
+    -- worth as much as the list of professions that were recorded.
+    if CaerdonIngredients and item.GetIngredientInfo then
+        local ingredientInfo = item:GetIngredientInfo()
+        local ingredientState = CaerdonIngredients:GetDebugState(item:GetItemID())
+
+        addLine(0, "")
+        addLine(0, "[Ingredients]")
+        addKV(1, "Rule", "a use while a recipe that takes it gives skill (the toon's rank is below the rank the recipe is gray from), learned or not")
+        addKV(1, "Show Ingredients For Other Toons", string.format("%s (%s)",
+            tostring(CaerdonWardrobeConfig.Icon.ShowIngredientsForOtherToons),
+            tostring(CaerdonWardrobeConfig.Icon.IngredientsForOtherToons)))
+        addKV(1, "Show Outgrown Ingredients", CaerdonWardrobeConfig.Icon.ShowOutgrownIngredients)
+        addKV(1, "Auction Icon On Trade Goods", CaerdonWardrobeConfig.Icon.AuctionTradeGoods)
+        if item.GetIngredientStatus then
+            -- As the status logic asks it. It only stands where nothing before it gave the
+            -- item a status, and a quest's item gets none (see [Quest Value]).
+            addKV(1, "Status From This Rule", (item:GetIngredientStatus()) or "none")
+            addKV(1, "Kept From The Auction Icon", item:IsIngredientKeptFromAuction())
+        end
+        -- Who sells it, which keeps the mail icon off what any toon buys for itself.
+        if CaerdonVendorGoods and item.GetVendorInfo then
+            local vendorInfo = item:GetVendorInfo()
+            if vendorInfo then
+                addKV(1, "Vendors That Sell It", string.format("%d (%s)", vendorInfo.vendorCount, vendorInfo.source))
+                addKV(1, "Common Vendor Good", string.format("%s (from %d vendors on; never one to send)",
+                    tostring(vendorInfo.isCommon), vendorInfo.commonFrom))
+            else
+                addKV(1, "Vendors That Sell It", string.format("not known (%s)",
+                    tostring(CaerdonVendorGoods:GetDebugState(item:GetItemID()).unknownReason)))
+            end
+        end
+        if not ingredientInfo or #ingredientInfo.recipes == 0 then
+            addKV(1, "Has A Use", "no recorded recipe takes it")
+        elseif ingredientInfo.hasUse then
+            addKV(1, "Has A Use", true)
+        elseif ingredientInfo.undecided > 0 then
+            addKV(1, "Has A Use", string.format("not known (the client gave no difficulty for %d of its recipes)",
+                ingredientInfo.undecided))
+        else
+            addKV(1, "Has A Use", "false (every recipe that takes it is gray)")
+        end
+        if ingredientInfo and #ingredientInfo.recipes > 0 then
+            addLine(1, "Recipes That Take It:")
+            for _, recipe in ipairs(ingredientInfo.recipes) do
+                addLine(2, string.format("- %s: %s (recipe %d) x%d: %s", tostring(recipe.professionName),
+                    tostring(recipe.name), recipe.recipeID, recipe.quantity or 0, tostring(recipe.reading)))
+                addLine(3, string.format("recorded: difficulty %s, canSkillUp %s, numSkillUps %s, maxTrivialLevel %s, sourceType %s, said at rank %s; read %s",
+                    tostring(recipe.difficulty), tostring(recipe.canSkillUp), tostring(recipe.skillUps),
+                    tostring(recipe.maxTrivialLevel), tostring(recipe.sourceType), tostring(recipe.recordedRank),
+                    recipe.rankNow and ("by the rank now, " .. tostring(recipe.rankNow)) or "by the recorded colour"))
+                addLine(3, "client now: " .. tostring(ingredientState.clientNow[recipe.recipeID]))
+            end
+        end
+        if #ingredientState.recorded > 0 then
+            addLine(1, "Recorded Professions:")
+            for _, line in ipairs(ingredientState.recorded) do
+                addLine(2, "- " .. line)
+            end
+        else
+            addLine(1, "Recorded Professions: none")
+        end
+        addKV(1, "The List Of What The Recipes Take", string.format(
+            "made %d times this session; kept over %d refreshes that changed no profession, rank or recording",
+            ingredientState.indexBuilds or 0, ingredientState.indexKept or 0))
+        if #ingredientState.notRecorded > 0 then
+            addKV(1, "Not Recorded (open the profession once)", table.concat(ingredientState.notRecorded, ", "))
+        end
+        if #ingredientState.dropped > 0 then
+            addKV(1, "Recorded But No Longer A Profession", table.concat(ingredientState.dropped, ", "))
+        end
+        if ingredientInfo and #ingredientInfo.others > 0 then
+            local function Names(toons)
+                local names = {}
+                for _, toon in ipairs(toons) do
+                    names[#names + 1] = string.format("%s (%s %s)", toon.name, toon.professionName, tostring(toon.rank))
+                end
+                return #names > 0 and table.concat(names, ", ") or "none"
+            end
+            addKV(1, "Gives Skill To", Names(ingredientInfo.skillFor))
+            addKV(1, "Used By", Names(ingredientInfo.usedBy))
+            addLine(1, "Other Toons' Recipes That Take It:")
+            for _, other in ipairs(ingredientInfo.others) do
+                addLine(2, string.format("- %s, %s (rank %s): %s (recipe %d) x%d: %s", tostring(other.toon),
+                    tostring(other.professionName), tostring(other.toonRank), tostring(other.name), other.recipeID,
+                    other.quantity or 0, tostring(other.reading)))
+            end
         end
     end
 
@@ -2995,7 +4091,11 @@ end
 
 function DebugFrameMixin:ShowCopyOutput(payload)
     local frame = self:EnsureCopyOutputFrame()
-    frame.editBox:SetText(payload or "")
+    -- An inline texture or atlas in the text (the crafting quality mark in an enchant's tooltip
+    -- line) is drawn in the box and makes its line taller than the others; from there on the
+    -- selection highlight does not lie on the text. It is shown as the text it is instead.
+    payload = (payload or ""):gsub("||", "\1"):gsub("|([TtAa])", "||%1"):gsub("\1", "||")
+    frame.editBox:SetText(payload)
     frame:Show()
     frame.editBox:HighlightText()
     frame.editBox:SetFocus()
@@ -3957,9 +5057,9 @@ function DebugFrameMixin:AcquireAppearanceItemFrame(frameTable, container, prefi
         end)
         frame.itemButton:SetScript("OnDragStart", function(button)
             if button.itemLink then
-                PickupItem(button.itemLink)
+                C_Item.PickupItem(button.itemLink)
             elseif button.itemID then
-                PickupItem(button.itemID)
+                C_Item.PickupItem(button.itemID)
             end
         end)
 
@@ -4085,13 +5185,7 @@ function DebugFrameMixin:AcquireAppearanceItemFrame(frameTable, container, prefi
                 return
             end
 
-            local foci = GetMouseFoci and GetMouseFoci() or {}
-            if #foci == 0 then
-                local focus = GetMouseFocus()
-                if focus then
-                    table.insert(foci, focus)
-                end
-            end
+            local foci = GetMouseFoci() or {}
 
             for _, focus in ipairs(foci) do
                 if focus == selfFrame.itemButton or focus == selfFrame.itemNameButton or focus == selfFrame.expandButton then
@@ -4940,7 +6034,6 @@ function DebugFrameMixin:AddHousingInfo(item)
     if not info then return end
 
     self:AddDebugEntry("Entry Type", tostring(info.entryType))
-    self:AddDebugEntry("Entry Subtype", tostring(info.entrySubtype))
     self:AddDebugEntry("Record ID", tostring(info.recordID))
     self:AddDebugEntry("Subclass ID", tostring(info.subClassID))
     self:AddDebugEntry("Owned Stored", tostring(info.ownedStored))
@@ -5502,7 +6595,7 @@ function DebugFrameMixin:CreateEnsembleItemFrame(index, itemInfo)
         frame.itemButton:SetScript("OnDragStart", function(self)
             if self.itemLink then
                 -- Put the item on the cursor using the same method as the main debug frame
-                PickupItem(self.itemLink)
+                C_Item.PickupItem(self.itemLink)
             end
         end)
 
@@ -6083,19 +7176,15 @@ function DebugFrameMixin:RefreshCurrentItem()
     if self.currentItem then
         -- Re-create the item to ensure we get fresh data
         local itemLink = self.currentItem
+        local ask = self.currentAsk
 
         -- Clear everything to force a complete refresh
         self.currentItem = nil
         self:ClearDebugDisplay()
 
         -- Set the item again to trigger a full reload
-        self:SetCurrentItem(itemLink)
+        self:SetCurrentItem(itemLink, ask)
     end
-end
-
-function DebugFrameMixin:GetTooltipData(item, locationInfo)
-    -- Not needed for debug frame
-    return {}
 end
 
 function DebugFrameMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)

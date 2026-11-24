@@ -39,7 +39,20 @@ CaerdonItemBind = {
     WarboundUntilEquip = "Warbound until Equip"
 }
 
--- Static lookup table for binding text in tooltip parsing (constant, avoids per-call recreation)
+-- A tooltip's binding line that says the item is, or will be, bound to the account. The line
+-- carries what it says as a number (`bonding`, Enum.TooltipDataItemBinding), which is read
+-- first; the four texts are for a line that has no such field.
+local ACCOUNT_BONDING = {}
+do
+    local bondings = Enum.TooltipDataItemBinding
+    if bondings then
+        for _, name in ipairs({ "Account", "BnetAccount", "BindToAccount", "BindToBnetAccount" }) do
+            if bondings[name] ~= nil then
+                ACCOUNT_BONDING[bondings[name]] = true
+            end
+        end
+    end
+end
 local bindTextTable = {
     [ITEM_ACCOUNTBOUND]        = L["BoA"],
     [ITEM_BNETACCOUNTBOUND]    = L["BoA"],
@@ -47,11 +60,218 @@ local bindTextTable = {
     [ITEM_BIND_TO_BNETACCOUNT] = L["BoA"]
 }
 
--- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state)
+-- What a tooltip line says the toon does not meet right now. A requirement line says it as
+-- a field (`usable`), the slot line as two (`isValidInvSlot` for the slot on the left,
+-- `isValidItemType` for the armor or weapon type on the right); those are read first. Every
+-- other line has its colour alone, as has a line of those two types that lacks its field:
+-- red is the client's RED_FONT_COLOR.
+local RED_HEX = (RED_FONT_COLOR and RED_FONT_COLOR.GenerateHexColor and RED_FONT_COLOR:GenerateHexColor()) or "ffff2020"
+local function IsUnmet(field, hex)
+    if field ~= nil then
+        return field == false
+    end
+    return hex == RED_HEX
+end
+-- The client's word that it is met: the field, or a colour that is not red.
+local function IsMet(field, hex)
+    if field ~= nil then
+        return field == true
+    end
+    return hex ~= nil and hex ~= RED_HEX
+end
+
+-- Module-level cache for GetCaerdonStatus results, keyed by itemLink (+ bound state, and what
+-- else GetCaerdonStatus adds to the key). An entry is { isReady, mogStatus, bindingStatus,
+-- bindingResult, transmogInfo, verdictMark }: the transmog info of a piece of equipment is kept
+-- with the verdict made from it, so drawing reads the same table and it is computed once per
+-- entry; verdictMark is the small mark the verdict puts on the icon ("sellable" or "auction"
+-- on a quest's icon, "quest" on the star or the grey gear of an item that starts a quest).
 -- Invalidated by CaerdonItem:InvalidateStatusCache() on transmog/equipment events
 local statusCache = {}
+
+-- The statuses that give way to the quest icon in GetCaerdonStatus, beside an empty one.
+local QUEST_REPLACES = {
+    collected = true, sellable = true, send = true, oldexpansion = true,
+    own = true, ownPlus = true, other = true, otherPlus = true, otherNoLoot = true,
+    lowSkill = true, lowSkillPlus = true, transform = true,
+}
+local copySpellCache = {} -- item link -> combine facts of its use spell, see GetCopySpellFacts
+local copySpellLoads = {} -- spell ID -> "asked" or "answered": its data was asked for this session
+-- spell ID -> true: a kept verdict rests on whether the toon knows this spell (a class book, a
+-- rune; LearnableByTeachingLine). Learning one of them is a reason to judge again.
+local taughtSpellsJudged = {}
 function CaerdonItem:InvalidateStatusCache()
     wipe(statusCache)
+    wipe(copySpellCache)
+    wipe(taughtSpellsJudged)
+end
+
+-- Whether a kept verdict rests on the toon not knowing this spell yet.
+function CaerdonItem:IsTaughtSpellJudged(spellID)
+    return spellID ~= nil and taughtSpellsJudged[spellID] == true
+end
+
+-- Whether the copy of an item in a bag slot is locked (a lockbox that has not been opened).
+-- The lock belongs to the copy, so it is read from the slot's own tooltip: the tooltip of the
+-- bare link cannot know whether this box has been unlocked. The text is compared on every
+-- line, because which line type carries it is not the same in every client build.
+-- Returns nil when the slot's tooltip cannot be read yet.
+local function IsBagSlotLocked(bag, slot)
+    local data = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
+    if not data or not data.lines then
+        return nil
+    end
+    for _, line in ipairs(data.lines) do
+        local text = line.leftText and tostring(line.leftText) or nil
+        if text == RETRIEVING_ITEM_INFO then
+            return nil
+        elseif text == LOCKED then
+            return true
+        end
+    end
+    return false
+end
+
+-- The skill's name and the rank of a requirement line, "Requires Cooking (125)": the line
+-- read back through the client's own ITEM_MIN_SKILL (NS.FormatPattern). Made at the first
+-- skill requirement line, since the locale's strings are there by then. nil for a line that
+-- is not of that format.
+local skillRequirementMatcher
+local function ReadSkillRequirement(lineText)
+    if skillRequirementMatcher == nil then
+        skillRequirementMatcher = NS.FormatPattern.Compile(ITEM_MIN_SKILL, { anywhere = true }) or false
+    end
+    if not skillRequirementMatcher then
+        return nil
+    end
+    return skillRequirementMatcher:Match(lineText)
+end
+
+-- An "Equip:" line that is a plain stat, not an effect. WoW Forever writes what classic gear
+-- gives beyond the primary stats (spell power, attack power, crit, mana per 5 sec) as green
+-- "Equip:" lines. It builds them from its own TOOLTIP_ITEM_STAT_* strings and hands them out
+-- as type None, while an effect that is a spell (a quiver's attack speed) comes as
+-- ItemSpellTriggerOnEquip with a spell ID. A stat is weighed like any other stat (item level,
+-- Pawn) and is no reason to keep a piece; an effect is.
+--   * Skill bonuses (TOOLTIP_ITEM_STAT_SKILL_*, "Increased Fishing +3") are left out on
+--     purpose: they stay an effect.
+--   * A line is only a stat when it matches one of these strings in full, so a family the
+--     list lacks, and every "Equip:" line of a client without the strings (retail), stays an
+--     effect.
+--   * The names are built here, which the static check cannot see: the recorder gets them
+--     from CaerdonItem:GetEquipStatStringNames().
+local EQUIP_STAT_PREFIX = "TOOLTIP_ITEM_STAT_"
+local EQUIP_STAT_FAMILIES = {
+    "ATTACK_POWER", "RANGED_ATTACK_POWER", "WEAPON_DAMAGE", "ARMOR_PENETRATION",
+    "CRIT_PERCENT", "HIT_PERCENT", "HASTE_PCT", "EXPERTISE_PCT",
+    "DEFENSE", "DODGE_PCT", "PARRY_PCT", "BLOCK_CHANCE", "BLOCK_VALUE",
+    "HEALTH_REGEN", "MANA_REGEN",
+    "SPELL_POWER", "SPELL_DAMAGE", "SPELL_HEALING", "SPELL_PENETRATION",
+    "ARCANE_DAMAGE", "FIRE_DAMAGE", "FROST_DAMAGE", "HOLY_DAMAGE", "NATURE_DAMAGE", "SHADOW_DAMAGE",
+    "ARCANE_PENETRATION", "FIRE_PENETRATION", "FROST_PENETRATION", "NATURE_PENETRATION", "SHADOW_PENETRATION",
+}
+-- Attack power and spell damage against one kind of creature: AP_VS_BEAST, SD_VS_UNDEAD.
+local EQUIP_STAT_CREATURES = { "BEAST", "DEMON", "DRAGONKIN", "ELEMENTAL", "GIANT", "HUMANOID", "MECHANICAL", "UNDEAD" }
+-- Healing and damage in one line, each with its own direction.
+local EQUIP_STAT_OTHERS = {
+    "SPELL_HEALING_INCREASE_DAMAGE_INCREASE", "SPELL_HEALING_INCREASE_DAMAGE_DECREASE",
+    "SPELL_HEALING_DECREASE_DAMAGE_INCREASE", "SPELL_HEALING_DECREASE_DAMAGE_DECREASE",
+}
+
+local equipStatStringNames
+function CaerdonItem:GetEquipStatStringNames()
+    if not equipStatStringNames then
+        local names = {}
+        local function AddFamily(family)
+            names[#names + 1] = EQUIP_STAT_PREFIX .. family .. "_INCREASE"
+            names[#names + 1] = EQUIP_STAT_PREFIX .. family .. "_DECREASE"
+        end
+        for _, family in ipairs(EQUIP_STAT_FAMILIES) do
+            AddFamily(family)
+        end
+        for _, creature in ipairs(EQUIP_STAT_CREATURES) do
+            AddFamily("AP_VS_" .. creature)
+            AddFamily("SD_VS_" .. creature)
+        end
+        for _, name in ipairs(EQUIP_STAT_OTHERS) do
+            names[#names + 1] = EQUIP_STAT_PREFIX .. name
+        end
+        equipStatStringNames = names
+    end
+    return equipStatStringNames
+end
+
+-- "Equip: Improves your chance to hit by %1$.1f%%." is matched as the whole line. A number
+-- is matched loosely (digits and separators), since how a locale writes one is not known.
+local EQUIP_STAT_OPTIONS = { capture = false, every = "[%d%.,]+" }
+
+local equipStatPatterns
+local equipStatLines = {} -- line text -> whether it is a stat line; a tooltip's lines repeat
+local function IsEquipStatLine(lineText)
+    local isStat = equipStatLines[lineText]
+    if isStat == nil then
+        if not equipStatPatterns then
+            equipStatPatterns = {}
+            for _, name in ipairs(CaerdonItem:GetEquipStatStringNames()) do
+                local matcher = NS.FormatPattern.Compile(_G[name], EQUIP_STAT_OPTIONS)
+                if matcher then
+                    equipStatPatterns[#equipStatPatterns + 1] = matcher.pattern
+                end
+            end
+        end
+        isStat = false
+        for index = 1, #equipStatPatterns do
+            if strfind(lineText, equipStatPatterns[index]) then
+                isStat = true
+                break
+            end
+        end
+        equipStatLines[lineText] = isStat
+    end
+    return isStat
+end
+
+-- Whether an untyped line is an "Equip:" line: it starts with the client's word for one
+-- (ITEM_SPELL_TRIGGER_ONEQUIP), or with what one of its stat strings starts with. The two are
+-- not the same in every language: the French Forever client has "Equipé :" for the word and
+-- writes its stats "Équiper : ..." and "Équipé : ...", the Brazilian one has "Equipado:" and
+-- "Equipar: ...". A plain compare, no pattern.
+local FULL_WIDTH_COLON = "\239\188\154"
+local equipWords
+local function IsEquipLine(lineText)
+    if not equipWords then
+        equipWords = {}
+        local seen = {}
+        local function Add(word)
+            if type(word) == "string" and word ~= "" and not seen[word] then
+                seen[word] = true
+                equipWords[#equipWords + 1] = word
+            end
+        end
+        Add(ITEM_SPELL_TRIGGER_ONEQUIP)
+        for _, name in ipairs(CaerdonItem:GetEquipStatStringNames()) do
+            local format = _G[name]
+            if type(format) == "string" then
+                local _, colonEnd = format:find(":", 1, true)
+                local _, wideEnd = format:find(FULL_WIDTH_COLON, 1, true)
+                if wideEnd and (not colonEnd or wideEnd < colonEnd) then
+                    colonEnd = wideEnd
+                end
+                local word = colonEnd and format:sub(1, colonEnd)
+                -- What stands before the colon is a word only where no argument is in it.
+                if word and not word:find("%", 1, true) then
+                    Add(word)
+                end
+            end
+        end
+    end
+    for index = 1, #equipWords do
+        local word = equipWords[index]
+        if lineText:sub(1, #word) == word then
+            return true
+        end
+    end
+    return false
 end
 
 -- Reusable table for GetTooltipData output to avoid per-call allocation.
@@ -62,10 +282,10 @@ local function ResetTooltipData(embeddedLink)
     t.canLearn = false
     t.canCombine = false
     t.hasEquipEffect = false
+    t.hasEquipEffectBeyondStats = false
     t.isRelearn = false
     t.bindingStatus = nil
     t.isRetrieving = false
-    t.isSoulbound = false
     t.isKnownSpell = false
     t.isLocked = false
     t.isOpenable = false
@@ -75,6 +295,12 @@ local function ResetTooltipData(embeddedLink)
     t.requiredTradeSkillTooLow = false
     t.raceClassRestricted = false
     t.skillRequirementMet = false
+    t.hasSkillRequirement = false
+    t.upgradeLevelDisabled = false
+    t.teachesSpell = nil
+    t.ownClassUnmet = false
+    t.ownLevelUnmet = false
+    t.ownSkillLine = false
     t.embeddedLink = embeddedLink
     return t
 end
@@ -87,13 +313,17 @@ local function EnsureProfessionsFrameLoaded()
     end
 end
 
+-- An item finds its methods through its metatable: CaerdonItemMixin first, then Blizzard's
+-- ItemMixin. Every window makes a new item per button and request, and copying both mixins
+-- into each one (CreateFromMixins) was 76 fields a time. The lookup is live: a method added to
+-- or replaced on CaerdonItemMixin later (the signal modules' entry points, the counters'
+-- wrappers) is there for every item, made before or after. An item's own table holds only
+-- its data.
+setmetatable(CaerdonItemMixin, { __index = ItemMixin })
+local itemMetatable = { __index = CaerdonItemMixin }
+
 local function CreateItem()
-    local item = CreateFromMixins(
-        ItemMixin,
-        CaerdonItemMixin
-    )
-    item.customDataLoaded = false
-    return item
+    return setmetatable({ customDataLoaded = false }, itemMetatable)
 end
 
 --[[static]]
@@ -213,7 +443,7 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
         error("Usage: ContinueOnLoad(callbackFunction)", 2);
     end
 
-    function ProcessTheItem()
+    local function ProcessTheItem()
         -- TODO: Update things and delay callback if needed for tooltip data
         -- Make sure any dependent data is loaded
         local itemData = self:GetItemData()
@@ -230,7 +460,7 @@ function CaerdonItemMixin:ContinueOnItemLoad(callbackFunction)
         end
     end
 
-    function FailTheItem()
+    local function FailTheItem()
         self.customDataLoaded = false
         -- TODO: Should I provide an errorCallback in this case?
         if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then print("ITEM LOAD FAILED: " .. self:GetItemID()) end
@@ -484,6 +714,17 @@ local function MatchesTeleportKeyword(text)
     return false
 end
 
+-- The item's use has to be aimed at an enemy: the client's own answer, the one it takes to
+-- colour an action button out of range. Such a use is a combat effect (Torch of Holy Flame
+-- 7344, "Decrease the armor of target by 50"), while what is fun or special about an item is
+-- mostly cast on oneself, on a friend or on nothing at all.
+function CaerdonItemMixin:HasHostileUse() -- requires item data to be loaded
+    if self:IsItemEmpty() or not self:GetHasUse() then
+        return false
+    end
+    return C_Item.IsHarmfulItem(self:GetItemID()) == true
+end
+
 function CaerdonItemMixin:HasTeleportUse()
     if self.cachedTeleportUse ~= nil then
         return self.cachedTeleportUse
@@ -576,6 +817,8 @@ function CaerdonItemMixin:GetBinding() -- requires item data to be loaded
             binding = CaerdonItemBind.BindOnUse
         elseif bindType == 4 then -- Quest
             binding = CaerdonItemBind.QuestItem
+        elseif bindType == 7 then -- Enum.ItemBind.ToWoWAccount
+            binding = CaerdonItemBind.BindOnAccount
         elseif bindType == 8 then -- BoA, apparently
             -- TODO: This was working... and then seemingly not... keep an eye out.
             binding = CaerdonItemBind.BindOnAccount
@@ -628,7 +871,7 @@ function CaerdonItemMixin:GetIsCraftingReagent() -- requires item data to be loa
     end
 end
 
-function IsUnhandledType(typeID, subTypeID)
+local function IsUnhandledType(typeID, subTypeID)
     return typeID == Enum.ItemClass.Container or
         typeID == Enum.ItemClass.Gem or
         typeID == Enum.ItemClass.Reagent or
@@ -747,6 +990,19 @@ function CaerdonItemMixin:GetCaerdonItemType()
     return self.caerdonItemType
 end
 
+-- The item a caged battle pet is while it is not a battle pet link (in the mail, in a guild
+-- bank): one item for every pet, so its link says nothing about the pet and its tooltip has to
+-- come from the place it lies in. Known by its ID, which is the same in every language (it
+-- was known by its English name); the name is asked only of an item that has no ID.
+local PET_CAGE_ITEM_ID = 82800
+local function IsPetCage(item)
+    local itemID = item:GetItemID()
+    if itemID then
+        return itemID == PET_CAGE_ITEM_ID
+    end
+    return item:GetItemName() == L["Pet Cage"]
+end
+
 function CaerdonItemMixin:GetTooltipData(data)
     if not data then
         data = C_TooltipInfo and C_TooltipInfo.GetHyperlink(self:GetItemLink()) or nil
@@ -754,7 +1010,6 @@ function CaerdonItemMixin:GetTooltipData(data)
 
     if not data then return ResetTooltipData(nil) end
 
-    -- bindTextTable is now module-level (constant)
     -- tooltipData is recycled to avoid per-call allocation
     local tooltipData = ResetTooltipData(data.hyperlink)
 
@@ -776,20 +1031,53 @@ function CaerdonItemMixin:GetTooltipData(data)
         ["Studying"] -- A bunch of these so working off name for now: itemSpellID == 450824 or itemSpellID == 462909 --Spell: "Studying"
     local isRecipe = self:GetCaerdonItemType() == CaerdonItemType.Recipe
     local isMiscellaneousStudy = self:GetCaerdonItemType() == CaerdonItemType.Miscellaneous and isStudyItem
-    local lines = data.lines or {}
-
-    for lineIndex, line in ipairs(data.lines) do
+    for lineIndex, line in ipairs(data.lines or {}) do
         local lineText = line.leftText and tostring(line.leftText) or nil
 
-        -- Red text (RED_FONT_COLOR, "ffff2020") on any line marks a requirement this toon does not
-        -- meet right now: level (UsageRequirement), armor/weapon proficiency (the RIGHT column of the
-        -- EquipSlot line, e.g. "Wrist | Mail" on a hunter below 40 on WoW Forever), class, skill,
-        -- reputation, "Already known". Those lines are not type None, so scan every line and both
-        -- columns here rather than inside the type-filtered branch below.
+        -- The client has no tooltip for the item yet. Asked of every line, before anything is read
+        -- from one: the line's type is not the same in every build (an ErrorLine in retail 12.1.5,
+        -- which the text checks below never see), and it is red, which would read as a requirement
+        -- the toon does not meet.
+        if lineText == RETRIEVING_ITEM_INFO then
+            tooltipData.isRetrieving = true
+            break
+        end
+
+        -- A recipe's rank that the toon cannot learn before the one below it. Asked of every
+        -- line for the same reason: an ErrorLine in retail 12.1.5, which the text checks below
+        -- never see, so the recipe had the star.
+        if lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
+            tooltipData.supercedingSpellNotKnown = true
+        end
+
+        -- What the item itself teaches ("Use: Teaches you ...", with the spell). A tooltip
+        -- holds the lines of an item it makes before its own, so what stood above this line
+        -- was the made item's and what follows is the item's own: its class, its level, the
+        -- skill it asks for. With several such lines the last is the item's.
+        if line.type == Enum.TooltipDataLineType.ItemSpellTriggerLearn and line.type ~= nil then
+            local taught = line.spellID
+            tooltipData.teachesSpell = (not issecretvalue(taught) and type(taught) == "number") and taught or true
+            tooltipData.ownClassUnmet, tooltipData.ownLevelUnmet, tooltipData.ownSkillLine = false, false, false
+        end
+
+        -- A line that says the toon does not meet something right now: level, class, skill,
+        -- reputation, "Already known" (UsageRequirement, by its field), the slot or the armor /
+        -- weapon proficiency (the EquipSlot line, by its fields: "Wrist | Mail" on a hunter below
+        -- 40 on WoW Forever is the right column), and red text on any other line, which has no
+        -- field ("Locked", a tool's line). Asked of every line and both columns here, not inside
+        -- the type-filtered branch below, which most of those lines never reach.
         -- TODO: Provide option to show stars on BoE recipes that aren't for current toon
         local leftHex = line.leftColor and line.leftColor.GenerateHexColor and line.leftColor:GenerateHexColor()
         local rightHex = line.rightColor and line.rightColor.GenerateHexColor and line.rightColor:GenerateHexColor()
-        if leftHex == "ffff2020" or rightHex == "ffff2020" then
+        local leftUnmet, rightUnmet
+        if line.type == Enum.TooltipDataLineType.UsageRequirement then
+            leftUnmet, rightUnmet = IsUnmet(line.usable, leftHex), rightHex == RED_HEX
+        elseif line.type == Enum.TooltipDataLineType.EquipSlot then
+            leftUnmet, rightUnmet = IsUnmet(line.isValidInvSlot, leftHex), IsUnmet(line.isValidItemType, rightHex)
+        else
+            leftUnmet, rightUnmet = leftHex == RED_HEX, rightHex == RED_HEX
+        end
+        if leftUnmet or rightUnmet then
             tooltipData.foundRedRequirements = true
         end
         -- Since 12.0 the "Use:" / "Equip:" / "Use: Teaches you" lines carry their own
@@ -804,12 +1092,19 @@ function CaerdonItemMixin:GetTooltipData(data)
             line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnEquip then
             if line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnEquip then
                 tooltipData.hasEquipEffect = true
+                tooltipData.hasEquipEffectBeyondStats = true
             end
 
             if lineText then
-                -- Text fallback for clients that don't type the equip line
-                if strmatch(lineText, ITEM_SPELL_TRIGGER_ONEQUIP) then -- it has an equip effect
+                -- An "Equip:" line the client does not type: a plain stat on WoW Forever (see
+                -- IsEquipStatLine), a skill bonus, retail's PVP floor. Only an untyped line is
+                -- read by its text, and only where it starts with the client's word for it
+                -- (IsEquipLine).
+                if line.type == Enum.TooltipDataLineType.None and IsEquipLine(lineText) then
                     tooltipData.hasEquipEffect = true
+                    if not IsEquipStatLine(lineText) then
+                        tooltipData.hasEquipEffectBeyondStats = true
+                    end
                 end
 
                 -- NOTE: I had removed the check for isRecipe for some reason... but then things like Reaves would get flagged as canLearn.
@@ -833,7 +1128,9 @@ function CaerdonItemMixin:GetTooltipData(data)
                             -- local isUsable = C_Spell.IsSpellUsable(spellID)
                             -- print(tostring(spellName) .. tostring(spellID) .. self:GetItemLink())
                             local recipeInfo = C_TradeSkillUI.GetRecipeInfo(spellID)
-                            if recipeInfo.learned then
+                            if not recipeInfo then
+                                -- The client knows no recipe for this spell: nothing to add here.
+                            elseif recipeInfo.learned then
                                 tooltipData.canLearn = false
                                 -- print(self:GetItemLink() .. " already learned")
                             else
@@ -873,8 +1170,13 @@ function CaerdonItemMixin:GetTooltipData(data)
                 -- end
 
                 if not tooltipData.bindingStatus then
-                    -- Check binding status - TODO: Is there a non-scan way?
-                    tooltipData.bindingStatus = bindTextTable[lineText]
+                    if line.bonding ~= nil then
+                        if ACCOUNT_BONDING[line.bonding] then
+                            tooltipData.bindingStatus = L["BoA"]
+                        end
+                    else
+                        tooltipData.bindingStatus = bindTextTable[lineText]
+                    end
                 end
 
                 if strmatch(lineText, L["Use: .* ([%d,]+) reputation"]) then
@@ -888,19 +1190,12 @@ function CaerdonItemMixin:GetTooltipData(data)
                     -- TODO: Review - removed because I think this is handled by recipe management
                     -- elseif strmatch(lineText, L["Use: Study to increase your"]) then
                     -- 	tooltipData.canLearn = true
-                elseif lineText == RETRIEVING_ITEM_INFO then
-                    tooltipData.isRetrieving = true
-                    break
-                elseif lineText == ITEM_SOULBOUND then
-                    tooltipData.isSoulbound = true
                 elseif lineText == ITEM_SPELL_KNOWN then
                     tooltipData.isKnownSpell = true
                 elseif lineText == LOCKED then
                     tooltipData.isLocked = true
                 elseif lineText == ITEM_OPENABLE then
                     tooltipData.isOpenable = true
-                elseif lineText == TOOLTIP_SUPERCEDING_SPELL_NOT_KNOWN then
-                    tooltipData.supercedingSpellNotKnown = true
                 end
             end
         elseif line.type == Enum.TooltipDataLineType.Blank then
@@ -925,46 +1220,56 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.UsageRequirement then
             -- UsageRequirement (type 43) consolidates the old Restricted* line types.
             -- line.requirementType maps to Enum.TooltipDataUsageRequirementType.
-            -- line.usable is false when the requirement text is red (not met).
+            -- line.usable is false when the requirement is not met (the text is red then).
             local reqType = line.requirementType
             if reqType == Enum.TooltipDataUsageRequirementType.NotAlreadyKnown then
                 tooltipData.canLearn = false
                 tooltipData.isKnownSpell = true
             elseif reqType == Enum.TooltipDataUsageRequirementType.RaceClass then
-                -- "Classes: Mage" / "Races: ..." in red: unlike a level or skill shortfall this
+                -- "Classes: Mage" / "Races: ..." not met: unlike a level or skill shortfall this
                 -- never changes for the toon, so the item is permanently unusable here.
-                if leftHex == "ffff2020" then
+                if leftUnmet then
                     tooltipData.raceClassRestricted = true
+                    if tooltipData.teachesSpell then
+                        tooltipData.ownClassUnmet = true
+                    end
+                end
+            elseif reqType == Enum.TooltipDataUsageRequirementType.Level then
+                if leftUnmet and tooltipData.teachesSpell then
+                    tooltipData.ownLevelUnmet = true
                 end
             elseif reqType == Enum.TooltipDataUsageRequirementType.Skill then
-                -- "Requires Engineering (50)" not in red: the client's own verdict that this
-                -- toon has the skill at that rank.
-                if leftHex and leftHex ~= "ffff2020" then
+                tooltipData.hasSkillRequirement = true
+                if tooltipData.teachesSpell then
+                    tooltipData.ownSkillLine = true
+                end
+                -- "Requires Engineering (50)" met: the client's own verdict that this toon has
+                -- the skill at that rank.
+                local skillMet = IsMet(line.usable, leftHex)
+                if skillMet then
                     tooltipData.skillRequirementMet = true
                 end
+                local requiredSkill, requiredRank
+                if lineText then
+                    requiredSkill, requiredRank = ReadSkillRequirement(lineText)
+                end
+                if requiredSkill then
+                    -- An item asks for a rank of this skill, so its rank is one to watch
+                    -- (CaerdonRefresh.lua: a weapon skill is otherwise read as there or not).
+                    NS.Refresh:NoteSkillRequirement(requiredSkill)
+                end
                 if isRecipe or isMiscellaneousStudy then
-                    -- Remove 1$ and 2$ from ITEM_MIN_SKILL for German at least (probably all): Benötigt %1$s (%2$d)
-                    local skillCheck = string.gsub(ITEM_MIN_SKILL, "1%$", "")
-                    skillCheck = string.gsub(skillCheck, "2%$", "")
-                    skillCheck = string.gsub(skillCheck, "%%s", "%(.+%)")
-                    if GetLocale() == "zhCN" then
-                        skillCheck = string.gsub(skillCheck, "（%%d）", "（%(%%d+%)）")
-                    else
-                        skillCheck = string.gsub(skillCheck, "%(%%d%)", "%%%(%(%%d+%)%%%)")
-                    end
-
-                    if strmatch(lineText, skillCheck) then
-                        local _, _, requiredSkill, requiredRank = string.find(lineText, skillCheck)
+                    if requiredSkill then
                         local hasSkillLine, meetsMinRank, rank, maxRank = CaerdonRecipe:GetPlayerSkillInfo(self,
                             requiredSkill, requiredRank)
                         -- print(self:GetItemLink() .. "hasSkillLine: " .. tostring(hasSkillLine) .. ", meetsMinRank: " .. tostring(meetsMinRank))
 
-                        -- The client only colors this line red while the requirement is unmet, so a
-                        -- non-red line is its own verdict that the toon has the skill at the required
-                        -- rank. Trust it over the cached profession data, which is only refreshed
-                        -- while trade skill data is ready and can lag behind skill-ups. A red line
-                        -- still goes through the cache to tell "rank too low" from "no profession".
-                        if leftHex and leftHex ~= "ffff2020" then
+                        -- A line the client calls met is its own verdict that the toon has the skill
+                        -- at the required rank. Trust it over the cached profession data, which is
+                        -- only refreshed while trade skill data is ready and can lag behind
+                        -- skill-ups. An unmet line still goes through the cache to tell "rank too
+                        -- low" from "no profession".
+                        if skillMet then
                             hasSkillLine = true
                             meetsMinRank = true
                         end
@@ -979,6 +1284,10 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.ItemName then
         elseif line.type == Enum.TooltipDataLineType.ItemLevel then
         elseif line.type == Enum.TooltipDataLineType.ItemUpgradeLevel then
+            -- Greyed out: a track the game no longer raises (a past season's piece).
+            if leftHex == "ff808080" or (lineText and lineText:find("|c[fF][fF]808080")) then
+                tooltipData.upgradeLevelDisabled = true
+            end
         elseif line.type == Enum.TooltipDataLineType.FlavorText then
         elseif line.type == Enum.TooltipDataLineType.ErrorLine then
         elseif line.type == Enum.TooltipDataLineType.DisabledLine then
@@ -1032,13 +1341,26 @@ end
 
 -- Quests that take this item even though it is not a Quest-class item: the ones in the quest log
 -- and, when QuestieDB is loaded, the ones this toon has not accepted yet. nil when there are none.
--- See CaerdonQuestItems:GetItemQuestInfo for the fields.
+-- For a copy in a bag slot the quest the client says it starts is one of them, whatever the
+-- quest data knows. See CaerdonQuestItems:GetItemQuestInfo for the fields.
 function CaerdonItemMixin:GetQuestItemInfo()
     local itemID = self:GetItemID()
     if not itemID then
         return nil
     end
-    return CaerdonQuestItems:GetItemQuestInfo(itemID, self:GetItemName())
+    local slotQuestInfo = self:GetSlotQuestInfo()
+    return CaerdonQuestItems:GetItemQuestInfo(itemID, self:GetItemName(), slotQuestInfo and slotQuestInfo.questID or nil)
+end
+
+-- What the client says about this copy in its bag slot: whether it is a quest's item, the
+-- quest it starts and whether that quest is in the log. nil for an item that lies in no bag
+-- slot. See CaerdonQuestItems:GetSlotQuestInfo.
+function CaerdonItemMixin:GetSlotQuestInfo()
+    local itemLocation = self:GetItemLocation()
+    if not (itemLocation and itemLocation:IsBagAndSlot()) then
+        return nil
+    end
+    return CaerdonQuestItems:GetSlotQuestInfo(itemLocation:GetBagAndSlot())
 end
 
 -- Food and drink: what kind it is and whether a better one is carried. nil for anything else.
@@ -1070,6 +1392,273 @@ function CaerdonItemMixin:GetBagSlotInfo()
         return nil
     end
     return CaerdonBagSlots:GetItemInfo(itemID, self:GetItemLink())
+end
+
+-- An ingredient of a recipe, as recorded when the profession windows were open: this toon's
+-- recipes that take it and whether one still gives skill, and the other toons whose recipes
+-- do. nil when no recorded recipe takes it. See CaerdonIngredients:GetItemInfo for the fields.
+function CaerdonItemMixin:GetIngredientInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonIngredients:GetItemInfo(itemID)
+end
+
+-- A look the piece would gain by being raised on its upgrade track or converted at the
+-- Catalyst: nil when there is none. sourceID: the piece's own source, where the caller has
+-- it. upgradeDisabled: its tooltip's upgrade line is greyed out. See
+-- CaerdonTransformLooks:GetItemInfo for the fields.
+-- trace: a list the answers behind it are written to, a line each (for the export).
+function CaerdonItemMixin:GetTransformLookInfo(sourceID, upgradeDisabled, trace)
+    if self:IsItemEmpty() then
+        return nil
+    end
+    return CaerdonTransformLooks:GetItemInfo(self, sourceID, upgradeDisabled, trace)
+end
+
+-- Whether vendors sell the item, as far as anything says: nil when nothing does (QuestieDB is
+-- not loaded). See CaerdonVendorGoods:GetItemInfo for the fields.
+function CaerdonItemMixin:GetVendorInfo()
+    local itemID = self:GetItemID()
+    if not itemID then
+        return nil
+    end
+    return CaerdonVendorGoods:GetItemInfo(itemID)
+end
+
+-- What wearing the piece would do to the bonuses of the item sets the toon wears pieces of (a
+-- tier set's and the like): a list, or nil where it would do nothing, with why as the second
+-- value. For a tooltip; no status reads it. See CaerdonSetBonuses:GetChanges for the entries.
+function CaerdonItemMixin:GetSetBonusChanges()
+    if self:IsItemEmpty() then
+        return nil
+    end
+    return CaerdonSetBonuses:GetChanges(self)
+end
+
+-- The skill and rank the item's tooltip asks for, to hold another toon's saved rank against
+-- (CaerdonRecipe:GetOtherToonRecipeInfo). nil when it names no skill with a rank, otherwise
+--   { skillName, rank = the "Requires Cooking (125)" line,
+--     useNumber = the number in its "Use:" line, where that line has exactly one }
+-- A book that raises a profession's cap says the new cap in its use line and nowhere else
+-- ("... allowing a maximum of 225 cooking skill", Expert Cookbook 16072). What the number
+-- means is the caller's to say; a line with a colour or plural escape has more than one run
+-- of digits and gives none.
+function CaerdonItemMixin:GetSkillRequirement()
+    local itemLink = self:GetItemLink()
+    local data = itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
+    if type(data) ~= "table" or type(data.lines) ~= "table" then
+        return nil
+    end
+    local lineTypes, requirementTypes = Enum.TooltipDataLineType, Enum.TooltipDataUsageRequirementType
+    local skillName, rank, useNumber
+    for _, line in ipairs(data.lines) do
+        local lineText = line.leftText and tostring(line.leftText) or nil
+        if not lineText then
+            -- Nothing to read.
+        elseif line.type == lineTypes.UsageRequirement then
+            if not rank and requirementTypes and line.requirementType == requirementTypes.Skill then
+                local name, number = ReadSkillRequirement(lineText)
+                if name and tonumber(number) then
+                    skillName, rank = name, tonumber(number)
+                end
+            end
+        elseif lineTypes.ItemSpellTriggerOnUse and line.type == lineTypes.ItemSpellTriggerOnUse and not useNumber then
+            local count, found = 0, nil
+            for number in lineText:gmatch("%d+") do
+                count, found = count + 1, number
+            end
+            if count == 1 then
+                useNumber = tonumber(found)
+            end
+        end
+    end
+    if not rank then
+        return nil
+    end
+    return { skillName = skillName, rank = rank, useNumber = useNumber }
+end
+
+-- Whether this toon can learn what an item teaches, for an item that is no profession's
+-- recipe: a class's spell book ("Tome of Enchanted Flare", "Classes: Hunter"), a rune. By the
+-- tooltip's own lines, as the client judges them: "own" where the item has a teaching line of
+-- its own, the tooltip does not say "Already known" and no class line of the item's own is
+-- unmet; "lowSkill" where its own level line is unmet. nil where there is nothing for this
+-- toon to learn, and for an item that asks for a skill: that is a profession's and has its
+-- own rules. The client is asked about the spell as well (C_SpellBook.IsSpellKnown), which
+-- agreed with "Already known" on every recipe item of a WoW Forever client; a learned book
+-- or rune has not been seen there, so either word is taken.
+--
+-- Second, for every item the rule judges (nil for one it does not): this toon's answer as its
+-- other toons are told it (CaerdonLearners): "own", "lowSkill", "known", or "never" where a
+-- class line of the item's own is unmet.
+local function LearnableByTeachingLine(tooltipData)
+    local spellID = tooltipData and tooltipData.teachesSpell
+    if not spellID or tooltipData.ownSkillLine then
+        return nil, nil
+    end
+    local known = tooltipData.isKnownSpell
+    if type(spellID) == "number" then
+        taughtSpellsJudged[spellID] = true
+        known = known or C_SpellBook.IsSpellKnown(spellID) == true
+    end
+    if known then
+        return nil, "known"
+    elseif tooltipData.ownClassUnmet then
+        return nil, "never"
+    elseif tooltipData.ownLevelUnmet then
+        return "lowSkill", "lowSkill"
+    end
+    return "own", "own"
+end
+
+-- What the item's own teaching line and the lines below it say, and what the rule above
+-- makes of them, for the export and for the toon's answer to its other toons
+-- (CaerdonLearners): nil for an item whose tooltip teaches nothing, and nil with true where
+-- the client has no tooltip for the item yet.
+--   { spellID, classUnmet, levelUnmet, asksForSkill, saysKnown, spellKnown, status,
+--     answer = the rule's second value }
+function CaerdonItemMixin:GetTeachingInfo()
+    local tooltipData = self:GetItemLink() and self:GetTooltipData() or nil
+    if tooltipData and tooltipData.isRetrieving then
+        return nil, true
+    end
+    local spellID = tooltipData and tooltipData.teachesSpell
+    if not spellID then
+        return nil
+    end
+    local info = {
+        spellID = type(spellID) == "number" and spellID or nil,
+        classUnmet = tooltipData.ownClassUnmet,
+        levelUnmet = tooltipData.ownLevelUnmet,
+        asksForSkill = tooltipData.ownSkillLine,
+        saysKnown = tooltipData.isKnownSpell,
+    }
+    if info.spellID then
+        info.spellKnown = C_SpellBook.IsSpellKnown(info.spellID) == true
+    end
+    info.status, info.answer = LearnableByTeachingLine(tooltipData)
+    return info
+end
+
+-- The spell a recipe item teaches: the spellID of its tooltip's "Use: Teaches you how to ..."
+-- line (ItemSpellTriggerLearn), which is the recipe's ID in the profession's list. nil where
+-- the tooltip has no such line (a book that raises a profession's cap has a plain use line)
+-- or is not there yet. It follows from the item, so a spell that was found is kept by item ID.
+--
+-- The last such line, not the first: a recipe's tooltip holds the lines of the item it makes
+-- before its own use line, and the made item may teach something itself (Schematic: Lil'
+-- Smoky 11827 has the pet's "teaches you to summon" 15049 and then the recipe 15633).
+local taughtSpellByItem = {}
+function CaerdonItemMixin:GetTaughtSpellID()
+    local itemID = self:GetItemID()
+    local kept = itemID and taughtSpellByItem[itemID]
+    if kept then
+        return kept
+    end
+    local learnLine = Enum.TooltipDataLineType.ItemSpellTriggerLearn
+    local itemLink = self:GetItemLink()
+    local data = learnLine and itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink)
+    if type(data) ~= "table" or type(data.lines) ~= "table" then
+        return nil
+    end
+    local taught
+    for _, line in ipairs(data.lines) do
+        if line.type == learnLine then
+            local spellID = line.spellID
+            if not issecretvalue(spellID) and type(spellID) == "number" then
+                taught = spellID
+            end
+        end
+    end
+    if taught and itemID then
+        taughtSpellByItem[itemID] = taught
+    end
+    return taught
+end
+
+-- What to do with an ingredient this toon has no use for. Returns the status that replaces an
+-- empty one, or nil, and the ingredient info where it was read:
+--   "send":     another toon of the realm has a recipe that takes it (which recipes count is
+--               the setting Icon.IngredientsForOtherToons: one that still gives it skill, or
+--               any it knows), and the item can be handed over. Not what vendors everywhere
+--               sell (thread, spices, a vial): the other toon buys that where it stands.
+--   "sellable": this toon's own recipes take it, every one of them is gray, and a vendor pays.
+-- Only for an item that is a material and nothing else: a trade good, or what the client
+-- itself calls a crafting reagent. A recipe can take anything, and an item of another class
+-- has a use of its own that no recipe says anything about: a hunter's arrows are what an
+-- engineer's Explosive Arrow is made of (Razor Arrow 3030, class Projectile).
+-- Neither for an ingredient this toon still gets skill from, one a recipe of its own could
+-- not be read for, a profession tool, or food kept for a hunter's pet. And neither for one a
+-- quest takes, one in the log or one still to come: a quest comes before another toon. The
+-- quest module is asked itself, since "has quest value" in GetCaerdonStatus follows the quest
+-- icon's settings and this must hold with that icon switched off too.
+function CaerdonItemMixin:GetIngredientStatus()
+    local iconConfig = CaerdonWardrobeConfig.Icon
+    local showSend = iconConfig.ShowIngredientsForOtherToons == true
+    local showOutgrown = iconConfig.ShowOutgrownIngredients == true
+    if not (showSend or showOutgrown) then
+        return nil, nil
+    end
+    local info = self:GetIngredientInfo()
+    if not info then
+        return nil, nil
+    end
+    if info.hasUse or info.undecided > 0 then
+        return nil, info
+    end
+    local _, _, _, _, _, itemClassID = C_Item.GetItemInfoInstant(self:GetItemID())
+    if itemClassID ~= Enum.ItemClass.Tradegoods and not self:GetIsCraftingReagent() then
+        return nil, info
+    end
+    local questInfo = self:GetQuestItemInfo()
+    if questInfo and (questInfo.isActive or questInfo.isUpcoming or questInfo.starts) then
+        return nil, info
+    end
+    local itemID = self:GetItemID()
+    if self:GetProfessionToolInfo() ~= nil or CaerdonFoodDrink:IsKeptForPet(itemID) then
+        return nil, info
+    end
+
+    if showSend and not self:IsSoulbound() and self:GetBinding() ~= CaerdonItemBind.BindOnPickup then
+        local toons = iconConfig.IngredientsForOtherToons == "any" and info.usedBy or info.skillFor
+        if #toons > 0 then
+            -- Asked last: it is the one question here that goes to another addon's data.
+            local vendorInfo = self:GetVendorInfo()
+            if not (vendorInfo and vendorInfo.isCommon) then
+                return "send", info
+            end
+        end
+    end
+    if showOutgrown and info.isOutgrown then
+        local itemLink = self:GetItemLink()
+        local sellPrice = itemLink and select(11, C_Item.GetItemInfo(itemLink))
+        if sellPrice and sellPrice > 0 then
+            return "sellable", info
+        end
+    end
+    return nil, info
+end
+
+-- Whether the auction icon stays off a trade good because the toon keeps it as an ingredient
+-- (the setting Icon.AuctionTradeGoods):
+--   "all":         never: any trade good that pays is marked.
+--   "skill":       one a recipe of this toon's still gives skill for.
+--   "professions": one any recorded recipe of this toon's takes.
+--   "none":        every one: no trade good is marked for its price alone.
+function CaerdonItemMixin:IsIngredientKeptFromAuction()
+    local setting = CaerdonWardrobeConfig.Icon.AuctionTradeGoods
+    if setting == "none" then
+        return true
+    elseif setting ~= "skill" and setting ~= "professions" then
+        return false
+    end
+    local info = self:GetIngredientInfo()
+    if not info or #info.recipes == 0 then
+        return false
+    end
+    return setting == "professions" or info.hasUse or info.undecided > 0
 end
 
 -- Miscellaneous / Junk items that go in an equipment slot but do nothing there: no stats shown
@@ -1104,6 +1693,27 @@ function CaerdonItemMixin:IsEquippableJunk(bindingResult)
     return self:IsSellable()
 end
 
+-- A Quest-class item with nothing left to it once its quests are behind the toon (the caller
+-- says they are): it has no use, goes in no equipment slot and has no equip effect. Anything
+-- that can be used or worn may be kept for the fun of it and is left unmarked. Most such
+-- items have no vendor price and can only be destroyed; the icon is the same, since what it
+-- says is that nothing is left to do with the item. A copy that can be read shows that in its
+-- bag slot instead (GetCopyStatus).
+function CaerdonItemMixin:IsSpentQuestItem(bindingResult)
+    local itemLink = self:GetItemLink()
+    if not itemLink then
+        return false
+    end
+    local equipLoc = select(9, C_Item.GetItemInfo(itemLink))
+    if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE" then
+        return false
+    end
+    if self:GetHasUse() or (bindingResult and bindingResult.hasEquipEffect) then
+        return false
+    end
+    return self:IsSellable()
+end
+
 -- Consumables whose tooltip carries a red race / class requirement ("Classes: Mage" on a hunter).
 -- A level or skill shortfall can be fixed; this cannot, so the item is only worth selling. Kept
 -- to Consumables: class-restricted equipment has its own appearance logic, and recipes have
@@ -1131,6 +1741,11 @@ end
 -- they know the recipe (see CaerdonRecipe:GetOtherToonRecipeInfo for the fields). nil for
 -- anything that is not a recipe, for a recipe that cannot be handed over (soulbound or bind on
 -- pickup), and when no other toon has the profession. The icon and the tooltip both use this.
+--
+-- Each toon that lacks the recipe (missing, tooLow) also has what the ledger last saw of the
+-- item with it: held (CaerdonLedger:GetHeld, nil for a toon the ledger has no record of) and
+-- covered (it has a copy in its bags or its mailbox, or one was sent to it). Asked on every
+-- call, since a mail sent changes it.
 function CaerdonItemMixin:GetRecipeOtherToonInfo()
     if self:GetCaerdonItemType() ~= CaerdonItemType.Recipe then
         return nil
@@ -1142,18 +1757,115 @@ function CaerdonItemMixin:GetRecipeOtherToonInfo()
     if not (itemData and itemData.GetOtherToonRecipeInfo) then
         return nil
     end
-    return itemData:GetOtherToonRecipeInfo()
+    local info = itemData:GetOtherToonRecipeInfo()
+    if info then
+        local itemID = self:GetItemID()
+        for _, toons in ipairs({ info.missing, info.tooLow }) do
+            for _, toon in ipairs(toons) do
+                -- Asked of that toon's client when it is next played: a copy in its bank.
+                CaerdonLedger:NoteWanted(toon.name, itemID)
+                toon.held = CaerdonLedger:GetHeld(toon.name, itemID)
+                toon.covered = toon.held ~= nil and toon.held.covered == true
+            end
+        end
+    end
+    return info
+end
+
+-- How many of the toons lack a copy as far as the ledger knows.
+local function CountWithoutCopy(toons)
+    local count = 0
+    for _, toon in ipairs(toons) do
+        if not toon.covered then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+-- A copy this toon does not hold (an auction, a vendor's, loot not taken) of something its
+-- other toons could learn is no longer one to get for them once it has a copy for each toon
+-- that wants one, beside the one it keeps to learn itself (author decision, 2026-11-23: as
+-- the star leaves a second copy of what it learns itself). The copies it holds keep the mail
+-- icon: they are the ones to send.
+-- wanting: how many other toons could learn it and have no copy.
+-- True where it has enough; bindingResult.spareCopies then says what it has
+-- ({ bags, bank, mail, coming, total, spare, wanting }), for the tooltip.
+function CaerdonItemMixin:HasEnoughToSend(wanting, bindingResult)
+    if wanting <= 0 or self:IsOwnCopy() then
+        return false
+    end
+    local itemID = self:GetItemID()
+    -- How many it has decides here, so a changed count judges again (CaerdonLedger).
+    CaerdonLedger:NoteCountJudged(itemID)
+    local kept = bindingResult and bindingResult.ownCopies or nil
+    local copies = kept or CaerdonLedger:GetOwnCopies(itemID)
+    local spare = copies.total - (kept and 1 or 0)
+    if spare < wanting then
+        return false
+    end
+    if bindingResult then
+        bindingResult.spareCopies = { bags = copies.bags, bank = copies.bank, mail = copies.mail,
+            coming = copies.coming, total = copies.total, spare = spare, wanting = wanting }
+    end
+    return true
+end
+
+-- The player's other toons on this realm and what each said of an item that teaches and asks
+-- for no skill (a class's spell book, a rune; see CaerdonLearners:GetItemInfo for the fields).
+-- nil for an item the teaching rule does not judge, for one that cannot be handed over
+-- (soulbound or bind on pickup), and when no other toon has a record. The icon, the tooltip
+-- and the export use this.
+-- answer: this toon's own, where the caller has it (GetCaerdonStatus); else the tooltip is read.
+function CaerdonItemMixin:GetLearnerInfo(answer)
+    if answer == nil then
+        local teaching = self:GetItemLink() and self:GetTeachingInfo() or nil
+        answer = teaching and teaching.answer or nil
+    end
+    if not answer then
+        return nil
+    end
+    if self:IsSoulbound() or self:GetBinding() == CaerdonItemBind.BindOnPickup then
+        return nil
+    end
+    return CaerdonLearners:GetItemInfo(self:GetItemID(), answer)
+end
+
+-- An item that teaches, asks for no skill and that this toon has no use for (another class's,
+-- or learned): "send" where it can be handed over and another toon of the realm said it can
+-- learn it, now or once it has the level, and has no copy that the ledger knows of
+-- (CaerdonLedger: in its bags, in its mailbox, or sent to it). nil to leave the status.
+-- Second: the learner info where it was read.
+-- A copy the toon does not hold is left alone once it has one for each of those toons
+-- (HasEnoughToSend; bindingResult is the verdict's, where the caller has it).
+-- The switch is the one of the recipes for other toons (Icon.ShowRecipesForOtherToons): one
+-- switch for all that another toon could learn (author decision, 2026-11-22).
+function CaerdonItemMixin:GetLearnerStatus(answer, bindingResult)
+    if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == false then
+        return nil, nil
+    end
+    local info = self:GetLearnerInfo(answer)
+    if info and (#info.now > 0 or #info.later > 0) then
+        if self:HasEnoughToSend(#info.now + #info.later, bindingResult) then
+            return nil, info
+        end
+        return "send", info
+    end
+    return nil, info
 end
 
 -- A recipe item this toon has no use for: it already knows the recipe (Pattern: Woolen Reagent
 -- Bag 253668 on a tailor who knows it) or cannot learn it. Returns the status that replaces
 -- "collected", or nil to leave it:
---   "other":     it can still be handed over and another toon on the realm has the profession
---                without the recipe in its recorded list (CaerdonRecipe:GetOtherToonRecipeInfo),
---                and no toon knows the recipe yet.
---   "otherPlus": the same, but this toon or another one already knows it. Known somewhere,
---                learnable elsewhere, which is what otherPlus means for appearances too.
---   "sellable":  this toon knows it and nobody else wants it; needs a vendor price.
+--   "send":      it can still be handed over and another toon on the realm has the
+--                profession and the recipe in its recorded list as one not learned
+--                (CaerdonRecipe:GetOtherToonRecipeInfo), at the rank the item asks for or
+--                below it, and has no copy that the ledger knows of (CaerdonLedger): mail
+--                it. The same status an ingredient another toon can use gets. Not on a
+--                copy the toon does not hold once it has one for each of those toons
+--                (HasEnoughToSend): that copy is left as it is, and not called sellable.
+--   "sellable":  this toon knows it and nobody else wants it, or every toon that does has
+--                a copy; needs a vendor price.
 -- For "sellable" only the client's own tooltip verdict counts as known; the name-based recipe
 -- lookup cannot tell recipe ranks that share a name apart, which is fine for hiding a star or
 -- picking the icon colour but not for saying "sell this". Account-bound recipes are never
@@ -1167,16 +1879,20 @@ function CaerdonItemMixin:GetUnneededRecipeStatus(bindingResult)
     if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons ~= false then
         local otherToons = self:GetRecipeOtherToonInfo()
         if otherToons then
-            if #otherToons.missing > 0 then
-                local knownBySomeone = alreadyKnown or otherToons.knownByPlayer
-                for _, toon in ipairs(otherToons.toons) do
-                    knownBySomeone = knownBySomeone or toon.knowsRecipe
+            -- A toon below the rank counts as well: the ledger keeps a second copy from
+            -- being sent while it waits for the first.
+            local wanting = CountWithoutCopy(otherToons.missing) + CountWithoutCopy(otherToons.tooLow)
+            if wanting > 0 then
+                if self:HasEnoughToSend(wanting, bindingResult) then
+                    return nil
                 end
-                return knownBySomeone and "otherPlus" or "other"
+                return "send"
             end
-            if alreadyKnown and #otherToons.unknown > 0 then
-                -- A toon with the profession whose recipes were never recorded: it may need
-                -- this one, so do not call it sellable, but there is nothing to claim either.
+            if alreadyKnown and (#otherToons.unknown > 0 or #otherToons.notInList > 0) then
+                -- A toon with the profession whose recipes were never recorded, or whose
+                -- recorded list has no such recipe and nothing else says whether it has what
+                -- the item teaches: it may need this one, so do not call it sellable, but
+                -- there is nothing to claim either.
                 return nil
             end
         end
@@ -1384,7 +2100,10 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
     return {
         bindingStatus = bindingStatus,
         needsItem = needsItem,
+        -- Any "Equip:" line, and whether one of them is more than a plain stat (spell power and
+        -- the like on WoW Forever, see IsEquipStatLine). Only the second keeps a piece.
         hasEquipEffect = hasEquipEffect,
+        hasEquipEffectBeyondStats = (tooltipData and tooltipData.hasEquipEffectBeyondStats) or false,
         isBindOnPickup = isBindOnPickup,
         unusableItem = unusableItem,
         isLocked = isLocked,
@@ -1393,49 +2112,352 @@ function CaerdonItemMixin:GetBindingStatus(tooltipData)
         raceClassRestricted = raceClassRestricted,
         -- The tooltip has a skill requirement line ("Requires Engineering (50)") that is met.
         skillRequirementMet = (tooltipData and tooltipData.skillRequirementMet) or false,
+        -- The tooltip has a skill requirement line at all, met or not.
+        hasSkillRequirement = (tooltipData and tooltipData.hasSkillRequirement) or false,
+        -- The tooltip's upgrade line is greyed out: the piece can no longer be raised.
+        upgradeLevelDisabled = (tooltipData and tooltipData.upgradeLevelDisabled) or false,
         -- The tooltip carries the client's "Already known" line.
         alreadyKnown = (tooltipData and tooltipData.isKnownSpell) or false
     }
 end
 
-function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need to remove feature/locationInfo but keeping it for now in case refactor to GetHyperlink causes any issues - also need to remove the GetTooltipData calls
+-- A use spell whose text the client has not loaded reads as an empty description, which is the
+-- answer for a spell with nothing to combine. Kept, that answer left the item without its icon
+-- until something else refreshed (retail client: after a login the combine icon was missing on
+-- whichever bank items' spells had not been loaded, and there after a reload). So such an
+-- answer is not kept: the spell's data is asked for, once a session, and the items are drawn
+-- again when it is here. True while the answer is still on its way.
+local function IsCopySpellLoading(spellID)
+    if C_Spell.IsSpellDataCached(spellID) then
+        return false
+    end
+    local state = copySpellLoads[spellID]
+    if state == nil then
+        copySpellLoads[spellID] = "asked"
+        CaerdonSpellEventListener:AddCallback(spellID, function()
+            copySpellLoads[spellID] = "answered"
+            -- Only for a text that came: many use spells have none (a recipe's).
+            if (C_Spell.GetSpellDescription(spellID) or "") ~= "" then
+                CaerdonWardrobe:RefreshItems("spell text")
+            end
+        end, function()
+            -- The client has no data for it: the empty description is the answer after all.
+            copySpellLoads[spellID] = "answered"
+        end)
+        -- The client may have answered from inside the call.
+        state = copySpellLoads[spellID]
+    end
+    return state == "asked"
+end
+
+-- What an item's use spell says about combining, which follows from the link: false for an item
+-- with no such spell. Kept until the status cache is wiped (copySpellCache, at the top).
+local function GetCopySpellFacts(itemLink)
+    local facts = copySpellCache[itemLink]
+    if facts == nil then
+        facts = false
+        local spellName, spellID = C_Item.GetItemSpell(itemLink)
+        if spellID then
+            if spellID == 433080 or spellID == 439058 then -- Breaking Down / Attuning Stone Wing (if in bags)
+                -- TODO: Better to figure out a way to identify spells that create currency if possible
+                facts = { spellID = spellID, makesCurrency = true }
+            else
+                local spellDescription = C_Spell.GetSpellDescription(spellID) or ""
+                if spellDescription == "" and IsCopySpellLoading(spellID) then
+                    return false
+                end
+                -- local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
+                local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
+                local isArrangeDescription = string.find(spellDescription, L["^Arrange %d+"]) ~= nil
+                if isCombineDescription or isArrangeDescription then
+                    facts = {
+                        spellID = spellID,
+                        combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0)),
+                    }
+                end
+            end
+        end
+        copySpellCache[itemLink] = facts
+    end
+    return facts
+end
+
+-- The part of the status that belongs to one copy of an item in its bag slot: something to
+-- open, locked, readable, refundable, or a stack that can be combined. GetCaerdonStatus keeps
+-- its verdict per link, and none of this follows from the link, so it is added here, after the
+-- cache lookup, on every call. Otherwise a verdict first asked for outside the bags (the mail,
+-- a loot window, a vendor) would stand for the copy in the bags, and two copies in different
+-- states would share one.
+--
+-- The quest icon stays on a copy that can be read: that the item belongs to a quest says more
+-- than that it has text, and what can be read is what gets sold or deleted unread. That it can
+-- be read is the second value then ("readable"), which the drawing puts on the quest icon as
+-- its small mark. The readable icon is back once every quest known for the item is behind the
+-- toon. An item that starts a quest (verdictMark "quest": the star or the grey gear with the
+-- quest icon as its small mark) keeps that the same way, and its one small mark is the quest's.
+function CaerdonItemMixin:GetCopyStatus(mogStatus, bindingResult, verdictMark)
+    if not self:HasItemLocationBankOrBags() then
+        return mogStatus
+    end
+
+    local copyMark = nil
+
+    local itemLocation = self:GetItemLocation()
+
+    local bag, slot = itemLocation:GetBagAndSlot()
+
+    local containerID = bag
+    local containerSlot = slot
+
+    local itemCount, locked, quality, readable, lootable
+    local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
+    if containerItemInfo then
+        itemCount = containerItemInfo.stackCount
+        locked = containerItemInfo.isLocked
+        quality = containerItemInfo.quality
+        readable = containerItemInfo.isReadable
+        lootable = containerItemInfo.hasLoot
+    end
+
+    if lootable then
+        -- A cooldown on the container is not looked at: the client draws its own spiral on the
+        -- button. (A test for one stood here since 2018 and could never be true.)
+        local isLocked = IsBagSlotLocked(containerID, containerSlot)
+        if isLocked == nil then
+            isLocked = bindingResult.isLocked
+        end
+        if isLocked then
+            mogStatus = "locked"
+        else
+            mogStatus = "openable"
+        end
+    elseif readable then
+        if mogStatus == "quest" then
+            copyMark = "readable"
+        elseif verdictMark ~= "quest" then
+            mogStatus = "readable"
+        end
+    else
+        local isEquipped = false
+        local money, itemCount, refundSec, currencyCount, hasEnchants
+        if C_Container and C_Container.GetContainerItemPurchaseInfo then
+            local info = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
+            money = info and info.money
+            itemCount = info and info.itemCount
+            refundSec = info and info.refundSeconds
+            currencyCount = info and info.currencyCount
+            hasEnchants = info and info.hasEnchants
+        else
+            money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot,
+                isEquipped)
+        end
+        if refundSec then
+            mogStatus = "refundable"
+        end
+    end
+
+    -- TODO: C_Item.GetItemLearnTransmogSet
+
+    local spellFacts = GetCopySpellFacts(self:GetItemLink())
+    if spellFacts then
+        if spellFacts.makesCurrency then
+            mogStatus = "own"
+        else
+            local CheckUsable = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
+            local currentStackCount = C_Item.GetStackCount(itemLocation)
+            local combineCount = spellFacts.combineCount
+            if combineCount > 1 then
+                mogStatus = "canCombine"
+                if combineCount <= currentStackCount then
+                    mogStatus = "readyToCombine"
+                end
+            elseif CheckUsable(spellFacts.spellID) then
+                mogStatus = "readyToCombine"
+            else
+                mogStatus = "canCombine"
+            end
+        end
+    end
+
+    if copyMark and mogStatus ~= "quest" then
+        copyMark = nil
+    end
+    return mogStatus, copyMark
+end
+
+-- A quest's item no quest is known for, whose own required level is beyond the range of levels
+-- the player chose for quests still to come: the level is all that says how far off its quest
+-- is (the two halves of a book that starts a quest at 50, on an auction). Second value: the
+-- level it asks for.
+function CaerdonItemMixin:IsQuestItemBeyondRange()
+    local link = self:GetItemLink()
+    local minLevel = link and select(5, C_Item.GetItemInfo(link))
+    if type(minLevel) ~= "number" or minLevel <= 0 then
+        return false, minLevel
+    end
+    return minLevel > (UnitLevel("player") or 0) + CaerdonQuestItems:GetUpcomingLevelWindow(), minLevel
+end
+
+-- Whether this is a copy the toon holds: one that lies in a slot of its own (bags, bank,
+-- worn), or one a window says is the toon's (extraData.ownCopy: its mailbox).
+function CaerdonItemMixin:IsOwnCopy()
+    return self:IsItemInPlayersControl() == true or (self.extraData ~= nil and self.extraData.ownCopy == true)
+end
+
+-- The classes of what is learned by using it up: a recipe, a class's spell book (class
+-- Recipe), a rune (class Consumable).
+local function IsLearnedByUse(classID)
+    return classID == Enum.ItemClass.Recipe or classID == Enum.ItemClass.Consumable
+end
+
+-- The key of an item's entry in the status cache: its link, and whatever else about this copy
+-- changes the verdict or the transmog info kept with it. Copies with one key are served one
+-- entry, whichever of them was judged first.
+local function StatusCacheKey(item, itemLink)
+    local key = item:IsSoulbound() and (itemLink .. "|B") or itemLink
+    -- Whether a piece can be recrafted is asked of the copy (its GUID), and that keeps it from
+    -- being called junk. A bare link has no copy to ask, so a crafted piece that lies somewhere
+    -- does not share an entry with its link (the mail, a buyback row, a chat link). A crafted
+    -- piece's link ends in its maker's GUID.
+    if itemLink:find(":Player-", 1, true) and item:IsItemInPlayersControl() then
+        key = key .. "|c"
+    end
+    -- Whether the Catalyst takes a piece is asked of the copy as well, and it decides whether
+    -- the piece is a look to learn. Only a season's armor in a slot the Catalyst takes.
+    if CaerdonTransformLooks:MayBeConverted(item, itemLink) then
+        key = key .. "|x"
+    end
+    -- Which equipment sets hold a piece is asked of the copy too, and it decides the binding
+    -- text and whether the piece is judged a spare. So of two copies with one link, the one a
+    -- set names has an entry of its own, and so has each of two sets' copies.
+    -- Only of something that can be worn: nothing else is in a set, and the asking is not
+    -- free (the sets are walked once for every frame in which anything asks). It was asked of
+    -- every item, a bank's 213 for its 60 pieces of equipment. Both clients answer
+    -- "INVTYPE_NON_EQUIP_IGNORE" for what cannot be worn, and not an empty text (seen in the
+    -- recordings of both; a first try that went by the empty text asked of everything still).
+    local equipLocation = item:GetEquipLocation()
+    local equipmentSets = equipLocation ~= nil and equipLocation ~= "INVTYPE_NON_EQUIP_IGNORE" and
+        CaerdonEquipment:GetEquipmentSetsOf(item) or nil
+    if equipmentSets then
+        key = key .. "|e" .. table.concat(equipmentSets, "\1")
+    end
+    -- A copy the toon does not hold of something it learns by using it has no star while it
+    -- has a copy already (GetCaerdonStatus), and the copy it holds keeps its own. So the two
+    -- do not share an entry.
+    if IsLearnedByUse(select(6, C_Item.GetItemInfoInstant(itemLink))) and not item:IsOwnCopy() then
+        key = key .. "|f"
+    end
+    -- Which quest a copy starts is the client's word for the copy in its bag slot, and makes
+    -- it one to act on where no quest data names the quest. A copy the client names a quest
+    -- for does not share an entry with the bare link (the mail, an auction).
+    local slotQuestInfo = item:GetSlotQuestInfo()
+    if slotQuestInfo and slotQuestInfo.questID then
+        key = key .. "|q" .. tostring(slotQuestInfo.questID)
+    end
+    -- A stackable item's auction verdict depends on how many are owned.
+    if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
+        local maxStack = select(8, C_Item.GetItemInfo(itemLink))
+        if maxStack and maxStack > 1 then
+            key = key .. "|n" .. CaerdonAuctionValue:GetOwnedQuantity(item:GetItemID())
+        end
+    end
+    -- What a window knows about this copy beyond its link and passes in (an auction row's
+    -- item level and suffix, the source a set or dressing room entry stands for) decides the transmog
+    -- info, so two rows that share a link do not share an entry.
+    local extraData = item.extraData
+    if extraData then
+        if extraData.appearanceSourceID then
+            key = key .. "|s" .. tostring(extraData.appearanceSourceID)
+        end
+        if extraData.overrideItemLevel then
+            key = key .. "|l" .. tostring(extraData.overrideItemLevel)
+        end
+        if extraData.keySuffix then
+            key = key .. "|k" .. tostring(extraData.keySuffix)
+        end
+    end
+    return key
+end
+
+-- nil for an item with no link and for a Pet Cage, which is judged anew every time. For the
+-- test addon, whose contract compares the copies that share an entry.
+function CaerdonItemMixin:GetStatusCacheKey()
+    local itemLink = self:GetItemLink()
+    if not itemLink or IsPetCage(self) then
+        return nil
+    end
+    return StatusCacheKey(self, itemLink)
+end
+
+-- The link's tooltip, asked of the client. A method of its own so that the counters can say
+-- what the asking costs apart from the rest of a verdict (CaerdonCounters:Attach): it was
+-- counted with GetTooltipData before the status took it over, and with nothing after.
+function CaerdonItemMixin:GetLinkTooltip(itemLink)
+    return C_TooltipInfo and C_TooltipInfo.GetHyperlink(itemLink) or nil
+end
+
+-- Where it is not ready, the second value says what it waits for in words (for the counters),
+-- and the third names it for the queue, which asks this button again when that has come and
+-- not when anything has (CaerdonWardrobe:RetryWaitingFor): a tooltip's instance as a number,
+-- "item:<ID>" for a set piece's data, "conversion:<GUID>" for the client's word on a copy,
+-- "gear" for the pieces it is compared with, "quest:<ID>" for the client's word on a quest.
+-- nil where nothing says when (the timer asks).
+-- Returns isReady, mogStatus, bindingStatus, bindingResult, transmogInfo, smallMark. transmogInfo
+-- is what GetTransmogInfo() said when the verdict was made (equipment only, otherwise nil); it
+-- is shared by every copy the cache entry stands for, so read it and do not ask the item data
+-- again. smallMark is what the item is beside its status, for the small mark on its icon. On
+-- the quest icon: "sellable" or "auction" from the verdict (a quest that can be done again
+-- still takes an item with nothing else to it), or else "readable" for this copy in its bag
+-- slot (GetCopyStatus). On the star or the grey gear: "quest" for an item that starts a quest
+-- the toon has neither done nor taken.
+--
+-- feature and locationInfo are for a Pet Cage alone: its link is the same for every pet, so
+-- the tooltip of the place it lies in is asked of the feature (FeatureMixin:GetTooltipData).
+-- Every other item is judged from its link's tooltip.
+function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo)
     local itemLink = self:GetItemLink()
     if not itemLink then
         -- Requiring an itemLink for now unless I find a reason not to
+        if CaerdonCounters.on then CaerdonCounters:Mark("no link") end
         return
     end
 
     -- Pet Cage results depend on feature/location so they can't be cached by itemLink alone
-    local isPetCage = self:GetItemName() == L["Pet Cage"]
+    local isPetCage = IsPetCage(self)
     local statusCacheKey
     if not isPetCage then
-        local isBound = self:IsSoulbound()
-        statusCacheKey = isBound and (itemLink .. "|B") or itemLink
-        -- A stackable item's auction verdict depends on how many are owned.
-        if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
-            local maxStack = select(8, C_Item.GetItemInfo(itemLink))
-            if maxStack and maxStack > 1 then
-                statusCacheKey = statusCacheKey .. "|n" .. CaerdonAuctionValue:GetOwnedQuantity(self:GetItemID())
-            end
-        end
+        statusCacheKey = StatusCacheKey(self, itemLink)
         local cached = statusCache[statusCacheKey]
         if cached then
-            return cached[1], cached[2], cached[3], cached[4]
+            if CaerdonCounters.on then CaerdonCounters:Mark("cache hit") end
+            local copyStatus, copyMark = self:GetCopyStatus(cached[2], cached[4], cached[6])
+            return cached[1], copyStatus, cached[3], cached[4], cached[5],
+                (copyStatus == cached[2] and cached[6]) or copyMark
         end
     end
 
     local data = nil
     if isPetCage then
-        -- Was hoping to just use the item link but battlepets in particular cause issues showing up as Pet Cage.
-        -- Could check CaerdonItemType for BattlePet, but just going to do this for now.
+        -- Where the feature has nothing for the place, the link's tooltip below is all there is.
         data = C_TooltipInfo and feature and feature:GetTooltipData(self, locationInfo) or nil
+    end
+
+    -- The link's tooltip is asked for here and not inside GetTooltipData, so that the one answer
+    -- also serves the equipment code, which reads the PVP floor from it (GetTransmogInfo).
+    local linkTooltip = nil
+    if not data then
+        linkTooltip = self:GetLinkTooltip(itemLink)
+        data = linkTooltip
     end
 
     local tooltipData = self:GetTooltipData(data)
 
     if tooltipData and tooltipData.isRetrieving then -- Tooltip data isn't loaded yet....
-        isReady = false
-        return isReady -- Don't cache: result will change once tooltip data loads
+        if CaerdonCounters.on then CaerdonCounters:Mark("tooltip not ready") end
+        -- Don't cache: result will change once tooltip data loads. Third: the tooltip's
+        -- instance, by which the client says that what it was looking up is there
+        -- (TOOLTIP_DATA_UPDATE; CaerdonWardrobe:RetryWhenTooltipComes).
+        return false, "its tooltip", type(data) == "table" and data.dataInstanceID or nil
     end
 
     local itemID = self:GetItemID()
@@ -1453,10 +2475,24 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     itemEquipLoc, iconFileDataID, itemSellPrice, itemClassID, itemSubClassID, bindType, expacID, itemSetID,
     isCraftingReagent = C_Item.GetItemInfo(itemLink)
 
+    -- A piece of an item set: what its tooltip shows of the set's bonuses is kept for the
+    -- tooltip line about bonuses gained and lost (CaerdonSetBonuses). No part of the verdict.
+    if itemSetID and linkTooltip then
+        CaerdonSetBonuses:NoteTooltip(itemSetID, linkTooltip)
+    end
+
     local playerLevel = UnitLevel("player")
 
     local mogStatus = ""
     local isReady = true
+    -- The look a piece gains at the Catalyst could not be told: the data of the set's piece is
+    -- not in the client's cache just now (CaerdonTransformLooks, pending). No verdict then.
+    local lookPending = false
+    -- The equipment branch's transmog info, kept with the verdict and returned.
+    local statusTransmogInfo = nil
+    -- This toon's answer for an item the teaching rule judged (LearnableByTeachingLine), and
+    -- the spell the item teaches.
+    local teachingAnswer, teachingSpell = nil, nil
 
     if not self:IsCollectible() and caerdonType ~= CaerdonItemType.Conduit and caerdonType ~= CaerdonItemType.Equipment then
         local expansionID = expacID
@@ -1480,15 +2516,49 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     end
 
     local isQuestItem = itemClassID == Enum.ItemClass.Questitem
-    -- Items of any other class that an unfinished quest takes (a vendor drink, cloth, a crafted
+    -- Items of any class that an unfinished quest takes (a vendor drink, cloth, a crafted
     -- weapon). Applied after the type-specific status below, which would otherwise overwrite it.
     local hasQuestValue = false
-    if CaerdonWardrobeConfig.Icon.ShowQuestItems then
-        if isQuestItem then
-            mogStatus = "quest"
-        else
-            local questItemInfo = self:GetQuestItemInfo()
-            hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue
+    -- A Quest-class item has the quest icon by its class, until every quest known for it is
+    -- behind the toon (turned in, or never to be taken): then it is judged as what is left of
+    -- it. One no quest is known for keeps the icon, since nothing says it is done with. That
+    -- is asked with the quest icon off too: what is left of the item does not hang on it.
+    local questsOver = false
+    -- Among them one that can be done again and was set aside (the item was handed over by a
+    -- quest that is done): the quest icon stays, with what is left of the item as the small
+    -- mark on it, since that quest can still take it.
+    local questRepeats = false
+    -- The item starts a quest the toon has neither done nor taken, and that is all its quests
+    -- have left for it (the quest info's starts): one to act on, applied where quest value is.
+    local questStarter = nil
+    if isQuestItem or CaerdonWardrobeConfig.Icon.ShowQuestItems then
+        local questItemInfo = self:GetQuestItemInfo()
+        -- The client was asked about one of its quests and nothing else says whether that
+        -- quest is trivial: not ready, and asked again when the answer is in (the quest
+        -- client names the quest to the queue), so no icon is drawn to be taken away.
+        if questItemInfo ~= nil and questItemInfo.waitingFor and CaerdonWardrobeConfig.Icon.ShowQuestItems then
+            return false, "the client's word on a quest", "quest:" .. tostring(questItemInfo.waitingFor)
+        end
+        questsOver = isQuestItem and questItemInfo ~= nil and questItemInfo.isOver == true
+        questRepeats = questsOver and questItemInfo.repeatableLeft == true and
+            CaerdonWardrobeConfig.Icon.ShowQuestItems == true
+        if CaerdonWardrobeConfig.Icon.ShowQuestItems then
+            hasQuestValue = questItemInfo ~= nil and questItemInfo.hasQuestValue == true
+            questStarter = questItemInfo ~= nil and questItemInfo.starts or nil
+            -- Not where the item's own tooltip has its class or race line unmet: the client
+            -- names the quest a copy starts whoever holds the copy, and this toon cannot use
+            -- the item to start it (another class's token in the warband bank, retail).
+            if questStarter and bindingResult and bindingResult.raceClassRestricted then
+                questStarter = nil
+            end
+            -- By its class, unless the player's own options keep every quest left for it out
+            -- (beyond the range of levels chosen, or trivial): in the bags as on an auction.
+            -- One no quest is known for goes by the level the item itself asks for.
+            if isQuestItem and not questsOver and
+                not (questItemInfo ~= nil and questItemInfo.keptOutByOptions == true) and
+                not (questItemInfo == nil and self:IsQuestItemBeyondRange()) then
+                mogStatus = "quest"
+            end
         end
     end
 
@@ -1523,7 +2593,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         if consumableInfo.isNotReady then
             -- Transmog source data not yet available; defer to avoid caching a wrong result.
             isReady = false
-            return isReady
+            return isReady, "the collection's answer"
         end
         if consumableInfo.needsItem then
             -- Use canEquip instead of validForCharacter to handle ensembles with cross-class sources
@@ -1557,7 +2627,11 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             -- 		mogStatus = "own"
             -- 	end
         else
-            mogStatus = "collected"
+            -- Something that teaches this toon a spell it does not know (a rune).
+            local learnable
+            learnable, teachingAnswer = LearnableByTeachingLine(tooltipData)
+            teachingSpell = tooltipData.teachesSpell
+            mogStatus = learnable or "collected"
         end
     elseif caerdonType == CaerdonItemType.Currency then
         local currencyInfo = itemData:GetCurrencyInfo()
@@ -1572,7 +2646,7 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             if housingInfo.isPending then
                 -- Defer icon decisions until housing data finishes loading so we don't show locks erroneously.
                 isReady = false
-                return isReady
+                return isReady, "housing data"
             end
 
             local isServiceItem = housingInfo.isServiceItem
@@ -1581,7 +2655,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             -- Dyes are one-time-use consumables, not collectible — skip icon entirely.
             if not isDye then
                 local treatAsUnowned = housingInfo.isUnowned
-                if treatAsUnowned then
+                if isServiceItem and bindingResult and bindingResult.alreadyKnown then
+                    -- A service item that teaches something (the Harvesting Hatchet's "Find
+                    -- Lumber") and whose tooltip says the toon knows it: nothing to get from it,
+                    -- wherever the copy lies. The counts cannot say that; a copy in the warband
+                    -- bank is not even counted.
+                elseif treatAsUnowned then
                     mogStatus = "own"
                 else
                     local atCap = housingInfo.maxStack and housingInfo.maxStack > 0 and
@@ -1594,12 +2673,17 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     elseif caerdonType == CaerdonItemType.Equipment then
         local sameLevelBehavior = CaerdonWardrobeConfig.Icon.SameLevelBehavior or "none"
-        local transmogInfo = itemData:GetTransmogInfo()
+        local transmogInfo = itemData:GetTransmogInfo(linkTooltip)
         if transmogInfo then
             if transmogInfo.isNotReady then
                 isReady = false
-                return isReady
+                if transmogInfo.comparedGearMissing then
+                    -- "gear": what the equipment code asks the queue to listen for (ComparedPieceThere).
+                    return isReady, "the data of gear it is compared with", "gear"
+                end
+                return isReady, "the collection's answer"
             end
+            statusTransmogInfo = transmogInfo
             if transmogInfo.canEquipForPlayer == nil then
                 transmogInfo.canEquipForPlayer = playerCanEquipItem
             end
@@ -1610,6 +2694,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             local isUpgrade = transmogInfo.isUpgrade
             if bindingResult.unusableItem then
                 transmogInfo.canEquipForPlayer = false
+                -- Said in its own field for the equal-level test here and in the drawing:
+                -- canEquipForPlayer is read there with canEquip as its fallback, which is true
+                -- for such a piece (the class can use it one day).
+                transmogInfo.unusableNow = true
                 if transmogInfo.hasMetRequirements then
                     isUpgrade = nil
                 end
@@ -1647,36 +2735,66 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     learnableLaterStatus = "otherPlus"
                 end
             end
+            -- Where a piece whose own look is known is taken for a look it would gain: raised
+            -- on its upgrade track, or converted at the Catalyst (CaerdonTransformLooks). nil
+            -- where there is none. Kept on the transmog info (transformLook, with route and
+            -- secondRoute) for the drawing, which has an icon for each of the two places,
+            -- and for the export.
+            --
+            -- Where the player does not want these marked (Icon.ShowLooksAfterChange), nothing
+            -- is asked. Nor for a gear set's piece: the set keeps it from being sold and it
+            -- shows the set's own mark. It is marked once it is out of every set (a set's
+            -- change refreshes the icons).
+            local function FindLookRoute()
+                if CaerdonWardrobeConfig.Icon.ShowLooksAfterChange == false or itemData:GetEquipmentSets() then
+                    return nil
+                end
+                -- What the client answered is kept with the verdict (transformLookWhy, and
+                -- when): the export asks afresh, and what the client says then is not what
+                -- it said when the verdict was made.
+                local why = {}
+                local transformLook = self:GetTransformLookInfo(transmogInfo.sourceID,
+                    bindingResult.upgradeLevelDisabled, why)
+                transmogInfo.transformLook = transformLook
+                transmogInfo.transformLookWhy, transmogInfo.transformLookAt = why, GetTime()
+                if transformLook and transformLook.pending then
+                    -- What it waits for, where the look's code names it (a key), else true.
+                    lookPending = transformLook.pending
+                    return nil
+                end
+                -- The Catalyst's answer is for this toon. A look gained by raising the piece
+                -- counts where the toon's class can use it.
+                local route, secondRoute = CaerdonTransformLooks:GetRoute(transformLook,
+                    CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem, transmogInfo.canEquip)
+                if route then
+                    transformLook.route, transformLook.secondRoute = route, secondRoute
+                end
+                return route
+            end
             if transmogInfo.isTransmog then
                 if transmogInfo.needsItem then
+                    -- A look the toon can collect is one to learn now, whatever the piece asks
+                    -- for (a level, a standing): selling the piece to a vendor teaches its look,
+                    -- with nothing put on, in both clients (author decision, 2026-11-19, from
+                    -- play; no export shows a sale of a piece above the toon's level, and one
+                    -- that taught nothing would bring "lowSkill" back here). Until then such a
+                    -- look was one for later, the gear, by its level or any red line.
                     if not transmogInfo.isCompletionistItem then
-                        -- print(self:GetItemLink() .. ": hasMetRequirements = " .. tostring(transmogInfo.hasMetRequirements) .. ", foundRedRequirements = " .. tostring(tooltipData.foundRedRequirements))
-                        if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-                            mogStatus = "own"
-                        else
-                            mogStatus = "lowSkill"
-                        end
-                    else
-                        if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-                            if transmogInfo.hasMetRequirements and not tooltipData.foundRedRequirements then
-                                mogStatus = "ownPlus"
-                            else
-                                mogStatus = "lowSkillPlus"
-                            end
-                        end
+                        mogStatus = "own"
+                    elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                        mogStatus = "ownPlus"
                     end
                 elseif transmogInfo.otherNeedsItem then
-                    if transmogInfo.canEquip then
-                        if not transmogInfo.isCompletionistItem then
-                            mogStatus = "other"
-                        else
-                            if CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
-                                mogStatus = "otherPlus"
-                            end
-                        end
-                    else
-                        -- Can't equip but other characters need it (e.g., cross-class ensemble)
+                    -- Another toon can learn it. isCompletionistItem here: the look is already
+                    -- known from a source this toon cannot use, which is the best sign there is
+                    -- that the toon who would learn this one has the look. That makes it a Plus
+                    -- whether or not this toon could wear the piece (a shield on a mage used to
+                    -- read "other" whatever was known). Known only from a source this toon can
+                    -- use, it stays "other": the other toon may well not have the look.
+                    if not transmogInfo.isCompletionistItem then
                         mogStatus = "other"
+                    elseif CaerdonWardrobeConfig.Icon.ShowLearnable.SameLookDifferentItem then
+                        mogStatus = "otherPlus"
                     end
                 elseif learnableLaterStatus then
                     mogStatus = learnableLaterStatus
@@ -1686,13 +2804,23 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     else
                         mogStatus = "upgradeLowSkill"
                     end
+                    -- An upgrade stays one, and its arrow stands. Where the arrow is not
+                    -- drawn (switched off, or not shown by a window) the drawing puts the
+                    -- mark for a look to gain in its place, so that is worked out here too.
+                    FindLookRoute()
                 else
-                    -- if transmogInfo.hasMetRequirements then
+                    -- Not "lowSkill" for a known piece of a level the toon has not reached:
+                    -- too much noise.
                     mogStatus = "collected"
-                    -- Don't mark as lowSkill for equipment if it's known but not the right level... too much noise
-                    -- else
-                    -- 	mogStatus = "lowSkill"
-                    -- end
+                    -- The piece's own look is known. Raised on its upgrade track or converted
+                    -- at the Catalyst it has another one, and where the collection lacks that
+                    -- the piece is marked to be kept for it: "transform", a quiet mark, since
+                    -- the look takes crests or a charge and may be a while off. Not "own",
+                    -- which says "learn it now". It stands in place of "collected", so the
+                    -- piece is not offered for sale.
+                    if FindLookRoute() then
+                        mogStatus = "transform"
+                    end
                 end
             elseif isUpgrade then
                 if transmogInfo.hasMetRequirements then
@@ -1701,11 +2829,13 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     mogStatus = "upgradeLowSkill"
                 end
             else
-                if not transmogInfo.hasMetRequirements then
-                    mogStatus = "lowSkill"
-                else
-                    mogStatus = "collected"
-                end
+                -- A piece with no look (a ring, a trinket, a relic, a thrown weapon) that is no
+                -- upgrade: nothing to learn and nothing to gain. Not "lowSkill" where the toon
+                -- has not its level yet (author decision): the gear is the star's stand-in for
+                -- what can be learned later, and this piece has nothing to learn at any level.
+                -- One that would be an upgrade then has the status above. A piece with a look
+                -- that is known has no gear in that state either.
+                mogStatus = "collected"
             end
 
             local equipmentSets = itemData:GetEquipmentSets()
@@ -1722,7 +2852,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 local identicalToEquipped = transmogInfo and transmogInfo.identicalToEquipped
                 local redundantForPlayer = transmogInfo and
                     (transmogInfo.uniqueUpgradeBlocked or transmogInfo.betterItemEquipped or identicalToEquipped)
-                local canEquipEqualItem = transmogInfo and (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
+                -- A piece the toon cannot wear now (red text: mail before the proficiency) is not
+                -- kept for its equal item level: by the time it can be worn it has been outgrown.
+                local canEquipEqualItem = transmogInfo and not transmogInfo.unusableNow and
+                    (transmogInfo.canEquipForPlayer or transmogInfo.canEquip)
                 local matchesCurrentSpec = transmogInfo and (transmogInfo.matchesLootSpec ~= false)
                 local protectEqualItemLevel = false
                 if sameLevelBehavior ~= "sellable" and transmogInfo and transmogInfo.equalItemLevelEquipped and
@@ -1759,7 +2892,26 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                 if protectRecraftPotential then
                     redundantForPlayer = false
                 end
+                -- An equip effect keeps a piece; an "Equip:" line that is only a stat (spell
+                -- power on WoW Forever) does not, where a vendor pays for the piece. Without a
+                -- vendor price it is kept as before: a quest's piece (Cursed Eye of Paleth
+                -- 2944, traded in for the cleansed one) has none.
+                local keptForEquipEffect = bindingResult.hasEquipEffectBeyondStats or
+                    (bindingResult.hasEquipEffect and not (itemSellPrice and itemSellPrice > 0))
+                -- A use keeps a piece, so that nothing fun or special is marked for sale. A use
+                -- that has to be aimed at an enemy is a combat effect, outgrown like a stat,
+                -- and does not. Kept whatever the use: a trinket and a piece that asks for a
+                -- skill (an engineer's gadgets are aimed at enemies too), and a piece no vendor
+                -- pays for (a quest's tool: Morbent's Bane 7297). The client is asked last.
+                local keptForUseEffect = hasUseEffect and not (
+                    equipLocation ~= "INVTYPE_TRINKET" and
+                    not bindingResult.hasSkillRequirement and
+                    itemSellPrice and itemSellPrice > 0 and
+                    self:HasHostileUse())
 
+                -- No exception for a piece that only has a level gain to show (the arrow for a
+                -- higher item level switched off): the player said item level alone is no
+                -- upgrade, so the piece is judged like any other that is none.
                 if mogStatus == "collected" and
                     self:IsSellable() and
                     not isArtifactItem and
@@ -1771,9 +2923,9 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
                     not hasTeleportUse and
                     not protectEqualItemLevel and
                     not protectRecraftPotential and
-                    (redundantForPlayer or (not hasUseEffect and
+                    (redundantForPlayer or (not keptForUseEffect and
                         not self:GetSetID() and
-                        not bindingResult.hasEquipEffect)) then
+                        not keptForEquipEffect)) then
                     mogStatus = "sellable"
                 end
             end
@@ -1850,7 +3002,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
             -- 		end
             -- 	end
         else
-            mogStatus = "collected"
+            -- No profession's recipe for this toon. An item of this class may still teach it
+            -- something: a class's spell book asks for no skill.
+            local learnable
+            learnable, teachingAnswer = LearnableByTeachingLine(tooltipData)
+            teachingSpell = tooltipData.teachesSpell
+            mogStatus = learnable or "collected"
         end
     elseif caerdonType == CaerdonItemType.Toy then
         local toyInfo = itemData:GetToyInfo()
@@ -1868,6 +3025,12 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     end
 
     if (mogStatus == nil or mogStatus == "") and self:IsEquippableJunk(bindingResult) then
+        mogStatus = "sellable"
+    end
+
+    -- A quest's item whose quests are all behind the toon, and that does nothing else.
+    if questsOver and (mogStatus == nil or mogStatus == "" or mogStatus == "oldexpansion") and
+        self:IsSpentQuestItem(bindingResult) then
         mogStatus = "sellable"
     end
 
@@ -1894,6 +3057,34 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
+    -- Something this toon learns by using it (a recipe, a spell book, a rune) and already has
+    -- a copy of: in its bags or its bank by the client's count, in its mailbox as last seen,
+    -- or bought at the auction house and not yet fetched (CaerdonLedger:GetOwnCopies). A copy
+    -- it does not hold (an auction, a vendor's, loot) has no star and no gear then: one is
+    -- enough, and it is not bought twice (author decision, 2026-11-22). The copy it holds
+    -- keeps its icon. What follows may still make it one to send to another toon.
+    -- Asked for the copy it holds as well: what the client counts is written down for the
+    -- toon's other toons as it is asked (GetOwnCopies).
+    if (mogStatus == "own" or mogStatus == "lowSkill") and IsLearnedByUse(itemClassID) and
+        (caerdonType == CaerdonItemType.Recipe or teachingAnswer ~= nil) then
+        local copies = CaerdonLedger:GetOwnCopies(itemID)
+        if copies.total > 0 and not self:IsOwnCopy() then
+            bindingResult.ownCopies = copies
+            mogStatus = "collected"
+        end
+    end
+
+    -- What teaches a spell and asks for no skill (a class's spell book, a rune): this toon's
+    -- answer is kept for its other toons, and one it has no use for that another of them
+    -- could learn is one to send. Before the next step, which would call another class's
+    -- rune sellable.
+    if teachingAnswer then
+        CaerdonLearners:NoteOwnAnswer(itemID, teachingAnswer, teachingSpell)
+        if mogStatus == "collected" then
+            mogStatus = self:GetLearnerStatus(teachingAnswer, bindingResult) or mogStatus
+        end
+    end
+
     -- Consumables this toon's class or race can never use (Scroll: STHENIC LUNATE 211855,
     -- "Classes: Mage" on a hunter): nothing to do with them here but sell, and the auction step
     -- below decides between the vendor and the auction house.
@@ -1902,8 +3093,8 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         mogStatus = "sellable"
     end
 
-    -- Recipes this toon has no use for: one another toon can still learn gets the "other"
-    -- icon (green when some toon already knows it), a known one nobody wants is sold or listed.
+    -- Recipes this toon has no use for: one another toon can still learn gets the "send"
+    -- icon, a known one nobody wants is sold or listed.
     if mogStatus == "collected" then
         mogStatus = self:GetUnneededRecipeStatus(bindingResult) or mogStatus
     end
@@ -1917,10 +3108,29 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
-    -- Quest value only replaces the "nothing left to do with this" results, so a learnable
-    -- appearance or an upgrade keeps its own icon while a sellable one stops looking like trash.
-    if hasQuestValue and (not mogStatus or mogStatus == "" or mogStatus == "collected" or
-            mogStatus == "sellable" or mogStatus == "oldexpansion") then
+    -- Ingredients this toon has no use for: one another toon's recipes take is one to send,
+    -- one its own recipes have outgrown is sold or listed (docs/dev-notes.md, Ingredients).
+    if mogStatus == nil or mogStatus == "" then
+        mogStatus = self:GetIngredientStatus() or mogStatus
+    end
+
+    -- Quest value replaces the "nothing left to do with this" results, something to send to
+    -- another toon, and anything to learn: the item has to be there at the turn-in, and the
+    -- learnable icon is read as "sell it, use it or send it". An upgrade keeps its arrow; one
+    -- that was also a look to learn gets the arrow as a badge on the quest icon (the drawing
+    -- reads bindingResult.upgradeStatus).
+    --
+    -- An item that starts a quest the toon has neither done nor taken is one to act on
+    -- instead (author decision): the star, or the grey gear while the quest or the item asks
+    -- for a level the toon has not, with the quest icon as the small mark on it. It replaces
+    -- what quest value replaces, and the quest icon the item's class gave it.
+    local starterMark = nil
+    if questStarter and (not mogStatus or mogStatus == "" or mogStatus == "quest" or QUEST_REPLACES[mogStatus]) then
+        local belowLevel = questStarter.belowLevel or
+            (type(itemMinLevel) == "number" and type(playerLevel) == "number" and itemMinLevel > playerLevel)
+        mogStatus = belowLevel and "lowSkill" or "own"
+        starterMark = "quest"
+    elseif hasQuestValue and (not mogStatus or mogStatus == "" or QUEST_REPLACES[mogStatus]) then
         mogStatus = "quest"
     end
 
@@ -1930,9 +3140,10 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
     if CaerdonWardrobeConfig.Icon.ShowAuctionValue then
         local isSellable = mogStatus == "sellable"
         -- A tool the toon's own recipes name (an enchanting rod) is not stock to list.
+        -- Nor is an ingredient the toon keeps for its own recipes.
         local isPlainTradeGood = (mogStatus == nil or mogStatus == "") and
             (itemClassID == Enum.ItemClass.Tradegoods or isCraftingReagent) and
-            self:GetProfessionToolInfo() == nil
+            self:GetProfessionToolInfo() == nil and not self:IsIngredientKeptFromAuction()
         if isSellable or isPlainTradeGood then
             local auctionInfo = self:GetAuctionValueInfo()
             if auctionInfo and auctionInfo.shouldAuction then
@@ -1943,103 +3154,36 @@ function CaerdonItemMixin:GetCaerdonStatus(feature, locationInfo) -- TODO: Need 
         end
     end
 
-    if self:HasItemLocationBankOrBags() then
-        local bag, slot = itemLocation:GetBagAndSlot()
-
-        local containerID = bag
-        local containerSlot = slot
-
-        local texture, itemCount, locked, quality, readable, lootable
-        if C_Container and C_Container.GetContainerItemInfo then
-            local containerItemInfo = C_Container.GetContainerItemInfo(containerID, containerSlot)
-            if containerItemInfo then
-                itemCount = containerItemInfo.stackCount
-                locked = containerItemInfo.isLocked
-                quality = containerItemInfo.quality
-                readable = containerItemInfo.isReadable
-                lootable = containerItemInfo.hasLoot
-            end
-        else
-            texture, itemCount, locked, quality, readable, lootable, _ = GetContainerItemInfo(containerID, containerSlot)
-        end
-
-        if lootable then
-            local startTime, duration, isEnabled
-            if C_Container and C_Container.GetContainerItemCooldown then
-                startTime, duration, isEnabled = C_Container.GetContainerItemCooldown(containerID, containerSlot)
-            else
-                startTime, duration, isEnabled = GetContainerItemCooldown(containerID, containerSlot)
-            end
-            if duration > 0 and not isEnabled then
-                mogStatus = "refundable" -- Can't open yet... show timer
-            else
-                if bindingResult.isLocked then
-                    mogStatus = "locked"
-                else
-                    mogStatus = "openable"
-                end
-            end
-        elseif readable then
-            mogStatus = "readable"
-        else
-            local isEquipped = false
-            local money, itemCount, refundSec, currencyCount, hasEnchants
-            if C_Container and C_Container.GetContainerItemPurchaseInfo then
-                local info = C_Container.GetContainerItemPurchaseInfo(bag, slot, isEquipped)
-                money = info and info.money
-                itemCount = info and info.itemCount
-                refundSec = info and info.refundSeconds
-                currencyCount = info and info.currencyCount
-                hasEnchants = info and info.hasEnchants
-            else
-                money, itemCount, refundSec, currencyCount, hasEnchants = GetContainerItemPurchaseInfo(bag, slot,
-                    isEquipped)
-            end
-            if refundSec then
-                mogStatus = "refundable"
-            end
+    -- A quest's item whose one quest left can be done again: the quest icon, and what the
+    -- item came out as ("sellable", "auction") beside it for the small mark. One with a use or
+    -- an equip effect came out as nothing and has the quest icon alone.
+    local questMark = nil
+    if questRepeats then
+        if mogStatus == "sellable" or mogStatus == "auction" then
+            questMark = mogStatus
+            mogStatus = "quest"
+        elseif mogStatus == nil or mogStatus == "" or mogStatus == "oldexpansion" then
+            mogStatus = "quest"
         end
     end
 
-    -- TODO: C_Item.GetItemLearnTransmogSet
-
-    local spellName, spellID = C_Item.GetItemSpell(self:GetItemLink())
-    if spellID then
-        local spellDescription
-        spellDescription = C_Spell.GetSpellDescription(spellID) or ""
-        -- local isCollectDescription = string.find(spellDescription, L["^Collect .* appearances.*"]) ~= nil
-        local isCombineDescription = string.find(spellDescription, L["^Combine"]) ~= nil
-        local isArrangeDescription = string.find(spellDescription, L["^Arrange %d+"]) ~= nil
-        local CheckUsable = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
-        -- if isCollectDescription and CheckUsable(spellID) then
-        -- 	mogStatus = "own"
-        -- elseif
-        if self:HasItemLocationBankOrBags() then
-            if (spellID == 433080 or spellID == 439058) then -- Breaking Down / Attuning Stone Wing (if in bags)
-                -- TODO: Better to figure out a way to identify spells that create currency if possible
-                mogStatus = "own"
-            elseif isCombineDescription or isArrangeDescription then -- and mogStatus == "" then
-                local currentStackCount = C_Item.GetStackCount(itemLocation)
-                local combineCount = tonumber((strmatch(spellDescription, L["Combine (%d+)"]) or strmatch(spellDescription, L["Arrange (%d+)"]) or 0))
-                if combineCount > 1 then
-                    mogStatus = "canCombine"
-                    if combineCount <= currentStackCount then
-                        mogStatus = "readyToCombine"
-                    end
-                elseif CheckUsable(spellID) then
-                    mogStatus = "readyToCombine"
-                else
-                    mogStatus = "canCombine"
-                end
-            end
-        end
+    if lookPending then
+        -- Not ready, and nothing kept: the queue asks again, and the data is here by then.
+        if CaerdonCounters.on then CaerdonCounters:Mark("look data not ready") end
+        return false, "the Catalyst's answer", type(lookPending) == "string" and lookPending or nil
     end
 
-    if statusCacheKey and mogStatus ~= "canCombine" and mogStatus ~= "readyToCombine" then
-        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult}
+    -- Everything up to here follows from the link and the toon, and is kept per link. What
+    -- belongs to this copy in its bag slot is added after the lookup (GetCopyStatus).
+    -- The verdict's small mark: a quest's icon has the one, a starter's star the other.
+    local verdictMark = questMark or starterMark
+    if statusCacheKey then
+        statusCache[statusCacheKey] = {isReady, mogStatus, bindingStatus, bindingResult, statusTransmogInfo, verdictMark}
     end
 
-    return isReady, mogStatus, bindingStatus, bindingResult
+    local copyStatus, copyMark = self:GetCopyStatus(mogStatus, bindingResult, verdictMark)
+    return isReady, copyStatus, bindingStatus, bindingResult, statusTransmogInfo,
+        (copyStatus == mogStatus and verdictMark) or copyMark
 end
 
 function CaerdonItemMixin:GetItemData()

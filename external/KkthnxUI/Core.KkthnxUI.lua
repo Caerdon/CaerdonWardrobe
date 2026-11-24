@@ -9,23 +9,27 @@ function CargBagsMixin:GetName()
 	return addonName
 end
 
+-- Where this feature attaches to KkthnxUI (the integration report; see FeatureMixin.lua).
+-- The implementation only exists while KkthnxUI's own bags are switched on.
+CargBagsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "cargBags KKUI_Backpack.UpdateSlot" },
+}
+
 function CargBagsMixin:Init()
 	return {"PLAYER_LOGIN"}
 end
 
 function CargBagsMixin:PLAYER_LOGIN()
 	local impl = cargBags:GetImplementation("KKUI_Backpack")
+	self:NoteHookPoint("cargBags KKUI_Backpack.UpdateSlot", impl, "UpdateSlot")
 	if impl then
 		hooksecurefunc(impl, "UpdateSlot", function(...) self:UpdateSlot(...) end)
 	end
 end
 
 function CargBagsMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
-		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function CargBagsMixin:Refresh()

@@ -13,6 +13,20 @@ function NarcissusMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Narcissus (the integration report; see FeatureMixin.lua).
+-- None of these exists at login: the set frame is found once Narcissus has put it into the
+-- dressing room, and the buttons are hooked one by one as they are first used. So each point
+-- is noted where the code attaches, and is "not reached" until that window has been opened.
+NarcissusMixin.integration = {
+    addon = addonName,
+    hookPoints = {
+        "TransmogSetFrame.SetItemSet", "TransmogSetFrame.LoadItem",
+        "SetItemButton.OnItemLoaded", "SetItemButton.ClearItem",
+        "NarciDressingRoomItemButtonMixin.SetItemSource", "SlotButton.SetItemSource",
+    },
+    optionalHookPoints = { "TransmogSetFrame.ClearContent" },
+}
+
 function NarcissusMixin:Init()
     dbg("Init called")
     self:TryHookNarcissus()
@@ -85,6 +99,9 @@ function NarcissusMixin:TryHookNarcissus()
 
     self.narcissusSetFrame = setFrame
     local feature = self
+    self:NoteHookPoint("TransmogSetFrame.SetItemSet", setFrame, "SetItemSet")
+    self:NoteHookPoint("TransmogSetFrame.LoadItem", setFrame, "LoadItem")
+    self:NoteHookPoint("TransmogSetFrame.ClearContent", setFrame, "ClearContent")
 
     -- Hook SetItemSet: when an ensemble is displayed, schedule a delayed refresh
     -- to catch buttons that load quickly. The LoadItem hook below handles the
@@ -148,6 +165,7 @@ function NarcissusMixin:TryHookNarcissusSlots()
     self.narcissusSlotButtons = self.narcissusSlotButtons or {}
     local feature = self
 
+    self:NoteHookPoint("NarciDressingRoomItemButtonMixin.SetItemSource", NarciDressingRoomItemButtonMixin, "SetItemSource")
     self.narcissusSlotsHooked = true
 
     local container = GetNarcissusSlotContainer()
@@ -173,6 +191,8 @@ function NarcissusMixin:PrepareNarcissusSetButton(button)
 
     button.caerdonNarcissusPrepared = true
     local feature = self
+    self:NoteHookPoint("SetItemButton.OnItemLoaded", button, "OnItemLoaded")
+    self:NoteHookPoint("SetItemButton.ClearItem", button, "ClearItem")
 
     -- Hook OnItemLoaded: fires after Narcissus sets the icon/name from
     -- ITEM_DATA_LOAD_RESULT. Deferred to the next frame because
@@ -249,6 +269,7 @@ function NarcissusMixin:PrepareNarcissusOutfitButton(button)
 
     button.caerdonNarcissusSlotPrepared = true
     local feature = self
+    self:NoteHookPoint("SlotButton.SetItemSource", button, "SetItemSource")
 
     hooksecurefunc(button, "SetItemSource", function(button)
         feature:UpdateNarcissusOutfitButton(button)
@@ -307,9 +328,11 @@ function NarcissusMixin:UpdateNarcissusSetButton(button)
         statusOffsetY = 1
     }
 
+    -- The item's data (a piece's sources with it) is there before the button is asked for.
+    -- What the Debug Frame is told of the row goes with the ask.
     local feature = self
-    local function doUpdate()
-        -- Guard: button may have been recycled while waiting for item data
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- Narcissus can give the button another item with no word to this feature.
         if button.itemID == itemID then
             dbg("doUpdate: calling UpdateButton for", itemID)
             CaerdonWardrobe:UpdateButton(button, item, feature, locationInfo, options)
@@ -317,18 +340,7 @@ function NarcissusMixin:UpdateNarcissusSetButton(button)
         else
             dbg("doUpdate: button recycled, skip. current=", button.itemID, "expected=", itemID)
         end
-    end
-
-    -- Ensure item data (including Equipment source loading) is fully cached
-    -- before entering the coroutine pipeline. Without this, customDataLoaded
-    -- stays false and items are never processed by ProcessItem.
-    if item:IsItemDataCached() then
-        dbg("UpdateSetButton: item cached, calling doUpdate directly")
-        doUpdate()
-    else
-        dbg("UpdateSetButton: item not cached, deferring via ContinueOnItemLoad")
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 function NarcissusMixin:RefreshNarcissusSetButtons(setFrame)
@@ -442,17 +454,12 @@ function NarcissusMixin:UpdateNarcissusOutfitButton(button)
         statusOffsetY = 3
     }
 
+    -- What the Debug Frame is told of the slot goes with the ask.
     local feature = self
-    local function doUpdate()
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
         CaerdonWardrobe:UpdateButton(button, item, feature, locationInfo, options)
         feature:SetDebugContext(button, item, sourceID)
-    end
-
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 function NarcissusMixin:EnsureHoverHook(frame)
@@ -656,32 +663,13 @@ function NarcissusMixin:Refresh()
     self:RefreshNarcissusOutfitButtons()
 end
 
-function NarcissusMixin:GetTooltipData(item, locationInfo)
-    local itemLink = item and item:GetItemLink()
-    if itemLink then
-        return C_TooltipInfo.GetHyperlink(itemLink)
-    end
-end
-
-function NarcissusMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = false
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = true
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+NarcissusMixin.displayRules = {
+    bindingStatus = false,
+    ownIcon = true,
+    otherIcon = true,
+    sellableIcon = false,
+}
 
 local Version = nil
 local isActive = false

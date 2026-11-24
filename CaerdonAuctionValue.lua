@@ -130,7 +130,7 @@ function CaerdonAuctionValue:RecordDepositSample(itemLocation)
             local changed = data.depositRate == nil or math.abs(data.depositRate - rate) > 0.005
             data.depositRate = rate
             if changed and CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-                CaerdonWardrobe:RefreshItems()
+                CaerdonWardrobe:RefreshItems("auction deposit")
             end
         end
     end
@@ -346,9 +346,19 @@ function CaerdonAuctionValue:GetOwnedQuantity(itemID)
     return count
 end
 
+-- A full refresh has thrown every verdict away (CaerdonWardrobe:RefreshItems), and the stacks
+-- watched for those verdicts go with them. Each one that is drawn again is judged and watched
+-- again; one that is not (a stack in a bag that stays closed, an item since sold) needs no
+-- watching, because its next draw judges it on what is owned then. Kept past the refresh, the
+-- list only grew, and every change in the bags asked the client about all of it.
+function CaerdonAuctionValue:InvalidateCaches()
+    wipe(trackedStacks)
+end
+
 -- A stack's verdict depends on how many are owned. Looting one more only redraws the slot it
--- landed in, so when the new total flips a verdict every icon is refreshed.
-local function OnBagsChanged()
+-- landed in, so when the new total flips a verdict every icon is refreshed. A method, so that
+-- the counters can time it (CaerdonCounters.lua, Attach).
+function CaerdonAuctionValue:OnBagsChanged()
     if not next(trackedStacks) then
         return
     end
@@ -360,7 +370,7 @@ local function OnBagsChanged()
             if info.shouldAuction ~= tracked.shouldAuction then
                 wipe(trackedStacks)
                 if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-                    CaerdonWardrobe:RefreshItems()
+                    CaerdonWardrobe:RefreshItems("auction stacks")
                 end
                 return
             end
@@ -400,7 +410,7 @@ local function OnPricesUpdated()
     refreshTimer = C_Timer.NewTimer(REFRESH_DELAY, function()
         refreshTimer = nil
         if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-            CaerdonWardrobe:RefreshItems()
+            CaerdonWardrobe:RefreshItems("auction prices")
         end
     end)
 end
@@ -428,7 +438,7 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "BAG_UPDATE_DELAYED" then
-        OnBagsChanged()
+        CaerdonAuctionValue:OnBagsChanged()
     elseif event == "PLAYER_LOGIN" or addonName == "Auctionator" then
         RegisterForUpdates()
         if providerState.registered then

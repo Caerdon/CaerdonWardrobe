@@ -4,6 +4,10 @@ function MerchantMixin:GetName()
     return "Merchant"
 end
 
+-- A vendor's piece whose look only another toon could learn is marked as not to be had only
+-- where this toon cannot collect the source at all (FeatureMixin.lua, statusRules).
+MerchantMixin.statusRules = { noLoot = true }
+
 function MerchantMixin:Init()
     hooksecurefunc("MerchantFrame_UpdateMerchantInfo", function(...) self:OnMerchantUpdate(...) end)
     hooksecurefunc("MerchantFrame_UpdateBuybackInfo", function(...) self:OnBuybackUpdate(...) end)
@@ -26,12 +30,21 @@ function MerchantMixin:Init()
     return { "MERCHANT_UPDATE", "TOOLTIP_DATA_UPDATE", "BAG_UPDATE_DELAYED" }
 end
 
+-- Whether Blizzard's vendor window is on screen. Shown is not enough: a bag addon with a
+-- vendor window of its own (BetterBags) moves this one under a hidden parent and leaves it
+-- shown, since hiding it would end the visit. Its ten buttons are then filled like any
+-- others, where nobody sees them. A window that comes on screen updates itself
+-- (MerchantFrame_OnShow), which brings its buttons back through the two hooks in Init.
+local function IsMerchantOnScreen()
+    return MerchantFrame:IsVisible()
+end
+
 function MerchantMixin:MERCHANT_UPDATE()
     self:Refresh()
 end
 
 function MerchantMixin:TOOLTIP_DATA_UPDATE()
-    if not MerchantFrame:IsShown() then
+    if not IsMerchantOnScreen() then
         return
     end
 
@@ -47,7 +60,7 @@ end
 function MerchantMixin:BAG_UPDATE_DELAYED()
     self.bagCacheDirty = true
 
-    if MerchantFrame:IsShown() then
+    if IsMerchantOnScreen() then
         self:Refresh()
     end
 end
@@ -60,11 +73,7 @@ function MerchantMixin:GetTrackedBagIDs()
         table.insert(bagIDs, bagIndex)
     end
 
-    if REAGENTBAG_CONTAINER then
-        table.insert(bagIDs, REAGENTBAG_CONTAINER)
-    elseif Enum and Enum.BagIndex and Enum.BagIndex.Reagentbag then
-        table.insert(bagIDs, Enum.BagIndex.Reagentbag)
-    end
+    table.insert(bagIDs, Enum.BagIndex.ReagentBag)
 
     return bagIDs
 end
@@ -137,7 +146,7 @@ end
 function MerchantMixin:Refresh()
     self:RefreshBagCache()
     CaerdonWardrobeFeatureMixin:Refresh(self)
-    if MerchantFrame:IsShown() then
+    if IsMerchantOnScreen() then
         if MerchantFrame.selectedTab == 1 then
             self:OnMerchantUpdate()
         else
@@ -146,26 +155,25 @@ function MerchantMixin:Refresh()
     end
 end
 
-function MerchantMixin:GetDisplayInfo(button, item)
-    local hasBagCopy = self:IsItemInBags(item)
+-- What the vendor shows of an item (FeatureMixin.lua, displayRules): by its own settings, and
+-- nothing to learn on an item of which a copy is already carried.
+MerchantMixin.displayRules = {
+    bindingStatus = "Merchant",
+    ownIcon = "Merchant",
+    otherIcon = "Merchant",
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
+local CARRIED_RULES = {
+    bindingStatus = "Merchant",
+    ownIcon = false,
+    otherIcon = false,
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
 
-    return {
-        bindingStatus = {
-            shouldShow = CaerdonWardrobeConfig.Binding.ShowStatus.Merchant
-        },
-        ownIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnable.Merchant and not hasBagCopy
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Merchant and not hasBagCopy
-        },
-        oldExpansionIcon = {
-            shouldShow = false
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
+function MerchantMixin:GetDisplayRules(button, item)
+    return self:IsItemInBags(item) and CARRIED_RULES or self.displayRules
 end
 
 function MerchantMixin:ShowLegionRemixHelperWarning()
@@ -270,7 +278,8 @@ function MerchantMixin:IsItemCollected(item)
 
         -- Don't gray out items with learnable status
         if mogStatus == "own" or mogStatus == "ownPlus" or mogStatus == "other" or mogStatus == "otherPlus"
-            or mogStatus == "lowSkill" or mogStatus == "lowSkillPlus" or mogStatus == "otherNoLoot" then
+            or mogStatus == "lowSkill" or mogStatus == "lowSkillPlus" or mogStatus == "otherNoLoot"
+            or mogStatus == "send" then
             return false
         end
 
@@ -331,6 +340,9 @@ function MerchantMixin:IsAnotherAddonFiltering()
 end
 
 function MerchantMixin:OnMerchantUpdate()
+    if not IsMerchantOnScreen() then
+        return
+    end
     self:ProcessMerchantButtons()
 end
 
@@ -393,7 +405,18 @@ function MerchantMixin:ProcessMerchantButtons()
         end
 
         if itemLink and button:IsShown() then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
+            -- Tag the button so the debug keybind picks up the merchant item
+            -- (recipe tooltips embed the created item which can mislead detection)
+            button.caerdonDebugItemLink = itemLink
+
+            -- Decorate waits for the item's data before the button is asked for. Without that
+            -- wait customDataLoaded stays false and items loop in ContinuableContainer without
+            -- reaching ProcessItem, which prevents recipe detection for old-world recipes that
+            -- lack RestrictedSkill tooltip lines.
+            local item = self:Decorate(button, itemLink, {
+                locationKey = format("merchantitem-%d", slot),
+                slot = slot
+            }, options)
 
             -- Store the item for filtering
             self.merchantItems[i] = {
@@ -401,30 +424,6 @@ function MerchantMixin:ProcessMerchantButtons()
                 item = item,
                 slot = i
             }
-
-            -- Tag the button so the debug keybind picks up the merchant item
-            -- (recipe tooltips embed the created item which can mislead detection)
-            button.caerdonDebugItemLink = itemLink
-
-            local locationInfo = {
-                locationKey = format("merchantitem-%d", slot),
-                slot = slot
-            }
-
-            -- Ensure item data is fully cached before entering the coroutine
-            -- pipeline. Without this, customDataLoaded stays false and items
-            -- loop in ContinuableContainer without reaching ProcessItem, which
-            -- prevents recipe detection for old-world recipes that lack
-            -- RestrictedSkill tooltip lines.
-            local function doUpdate()
-                CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
-            end
-
-            if item:IsItemDataCached() then
-                doUpdate()
-            else
-                item:ContinueOnItemLoad(doUpdate)
-            end
         else
             button.caerdonDebugItemLink = nil
             CaerdonWardrobe:ClearButton(button)
@@ -450,20 +449,11 @@ function MerchantMixin:ProcessMerchantButtons()
         local itemLink = GetBuybackItemLink(numBuybackItems)
         local slot = "buybackbutton"
         if itemLink then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
             MerchantBuyBackItemItemButton.caerdonDebugItemLink = itemLink
-            local buybackLocationInfo = {
+            self:Decorate(MerchantBuyBackItemItemButton, itemLink, {
                 locationKey = format("buybackbutton"),
                 slot = slot
-            }
-            local function doBuybackUpdate()
-                CaerdonWardrobe:UpdateButton(MerchantBuyBackItemItemButton, item, self, buybackLocationInfo, options)
-            end
-            if item:IsItemDataCached() then
-                doBuybackUpdate()
-            else
-                item:ContinueOnItemLoad(doBuybackUpdate)
-            end
+            }, options)
         else
             MerchantBuyBackItemItemButton.caerdonDebugItemLink = nil
             CaerdonWardrobe:ClearButton(MerchantBuyBackItemItemButton)
@@ -475,6 +465,9 @@ function MerchantMixin:ProcessMerchantButtons()
 end
 
 function MerchantMixin:OnBuybackUpdate()
+    if not IsMerchantOnScreen() then
+        return
+    end
     local numBuybackItems = GetNumBuybackItems();
 
     for index = 1, BUYBACK_ITEMS_PER_PAGE, 1 do -- Only 1 actual page for buyback right now
@@ -485,20 +478,11 @@ function MerchantMixin:OnBuybackUpdate()
 
             local itemLink = GetBuybackItemLink(index)
             if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
                 button.caerdonDebugItemLink = itemLink
-                local buybackItemLocationInfo = {
+                self:Decorate(button, itemLink, {
                     locationKey = format("buybackitem-%d", slot),
                     slot = slot
-                }
-                local function doBuybackItemUpdate()
-                    CaerdonWardrobe:UpdateButton(button, item, self, buybackItemLocationInfo, {})
-                end
-                if item:IsItemDataCached() then
-                    doBuybackItemUpdate()
-                else
-                    item:ContinueOnItemLoad(doBuybackItemUpdate)
-                end
+                }, {})
             else
                 button.caerdonDebugItemLink = nil
                 CaerdonWardrobe:ClearButton(button)

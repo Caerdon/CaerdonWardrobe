@@ -8,21 +8,21 @@ function LiteBagMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to LiteBag (the integration report; see FeatureMixin.lua).
+LiteBagMixin.integration = {
+    addon = addonName,
+    hookPoints = { "LiteBag_RegisterHook LiteBagItemButton_Update", "LiteBag_AddPluginEvent" },
+}
+
 function LiteBagMixin:Init()
+    self:NoteHookPoint("LiteBag_RegisterHook LiteBagItemButton_Update", _G, "LiteBag_RegisterHook")
+    self:NoteHookPoint("LiteBag_AddPluginEvent", _G, "LiteBag_AddPluginEvent")
     LiteBag_RegisterHook('LiteBagItemButton_Update', function(...) self:UpdateButton(...) end)
     LiteBag_AddPluginEvent('TRANSMOG_COLLECTION_UPDATED')
 end
 
 function LiteBagMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
-		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
-end
-
-function LiteBagMixin:Refresh()
-	-- Handled via LiteBagPanel_AddUpdateEvent right now (for transmog at least)
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function LiteBagMixin:UpdateButton(button)

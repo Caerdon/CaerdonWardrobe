@@ -5,8 +5,11 @@
 ..\FrameXML\UI.xsd"
 >
 	<Script file="CaerdonAsyncCallbackSystem.lua" />
+	<Script file="CaerdonFormatPattern.lua" />
 	<Script file="FeatureMixin.lua" />
 	<Script file="ItemDataMixin.lua" />
+	<Script file="CaerdonRefresh.lua" />
+	<Script file="CaerdonLevelBonuses.lua" />
 	<Script file="CaerdonWardrobe.lua" />
 
 	<Frame name="CaerdonWardrobe" secureMixin="CaerdonWardrobeMixin">
@@ -18,15 +21,34 @@
     </Frame>
 
 	<Script file="CaerdonItem.lua" />
+	<Script file="CaerdonQuestClient.lua" />
+	<Script file="CaerdonQuestSourceATT.lua" />
 	<Script file="CaerdonQuestItems.lua" />
 	<Script file="CaerdonAuctionValue.lua" />
 	<Script file="CaerdonFoodDrink.lua" />
 	<Script file="CaerdonProfessionTools.lua" />
 	<Script file="CaerdonBagSlots.lua" />
+	<Script file="CaerdonIngredients.lua" />
+	<Script file="CaerdonLedger.lua" />
+	<Script file="CaerdonLearners.lua" />
+	<Script file="CaerdonVendorGoods.lua" />
+	<Script file="CaerdonTransformLooks.lua" />
+	<Script file="CaerdonSetBonuses.lua" />
 	<Script file="CaerdonButtonGeometry.lua" />
+	<Script file="CaerdonIntegrations.lua" />
 	<Script file="CaerdonAPI.lua" />
 
 	<Script file="features\Auction.lua" />
+	<!-- A cell of the column the auction feature adds to the auction house's lists. It inherits
+	     nothing of the auction house's, which loads on demand. -->
+	<Frame name="CaerdonAuctionCellTemplate" mixin="CaerdonAuctionCellMixin" virtual="true">
+		<Size x="0" y="16"/>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<FontString parentKey="Text" inherits="GameFontHighlightSmall" justifyH="LEFT" setAllPoints="true"/>
+			</Layer>
+		</Layers>
+	</Frame>
 	<Script file="features\Bags.lua" />
 	<Script file="features\Bank.lua" />
 	<Script file="features\BlackMarket.lua" />
@@ -68,11 +90,9 @@
 	<Script file="external\Sorted\Core.Sorted.lua" />
 	<Script file="external\VenturePlan\Core.VenturePlan.lua" />
 	<Script file="external\WorldQuestList\Core.WorldQuestsList.lua" />
+	<Script file="external\WorldQuestTab\Core.WorldQuestTab.lua" />
 	<Script file="external\WorldQuestTracker\Core.WorldQuestTracker.lua" />
 	<Script file="external\Zygor\Core.ZygorWorldQuests.lua" />
-
-	<!-- Deprecated -->
-	<!-- <Script file="external\WorldQuestTab\Core.WorldQuestTab.lua" /> -->
 
 	<Script file="types\BattlePetMixin.lua" />
 	<Script file="types\CompanionPetMixin.lua" />
@@ -86,12 +106,4 @@
 	<Script file="types\QuestMixin.lua" />
 	<Script file="types\RecipeMixin.lua" />
 	<Script file="types\ToyMixin.lua" />
-
-	<Script file="tests\CaerdonItemTests.lua" />
-	<Script file="tests\ClothTests.lua" />
-	<Script file="tests\LeatherTests.lua" />
-	<Script file="tests\MailTests.lua" />
-	<Script file="tests\PlateTests.lua" />
-	<Script file="tests\WeaponTests.lua" />
-	<Script file="tests\SharedTests.lua" />
 </Ui>

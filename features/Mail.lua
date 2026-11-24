@@ -39,31 +39,14 @@ function MailMixin:GetTooltipData(item, locationInfo)
     end
 end
 
-function MailMixin:Refresh()
-end
-
-function MailMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.Mail ~= false
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = false
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+MailMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = "Mail",
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
 
 function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreated, stationeryIcon, money)
     for i = 1, ATTACHMENTS_MAX_RECEIVE do
@@ -72,7 +55,8 @@ function MailMixin:OnMailFrameUpdateButtonPositions(letterIsTakeable, textCreate
             -- local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(InboxFrame.openMailID, i);
             local itemLink = GetInboxItemLink(InboxFrame.openMailID, i)
             if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                -- A copy in the toon's own mailbox is one it holds (CaerdonItemMixin:IsOwnCopy).
+                local item = CaerdonItem:CreateFromItemLink(itemLink, { ownCopy = true })
                 CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
                     locationKey = format("open-%d", i),
                     type = "open",
@@ -94,7 +78,7 @@ function MailMixin:OnSendMailFrameUpdate()
         if HasSendMailItem(i) then
             local itemLink = GetSendMailItemLink(i)
             if itemLink then
-                local item = CaerdonItem:CreateFromItemLink(itemLink)
+                local item = CaerdonItem:CreateFromItemLink(itemLink, { ownCopy = true })
                 CaerdonWardrobe:UpdateButton(attachmentButton, item, self, {
                     locationKey = format("send-%d", i),
                     type = "send",
@@ -115,13 +99,13 @@ function MailMixin:OnInboxFrameUpdate()
     for i = 1, INBOXITEMS_TO_DISPLAY do
         local index = ((InboxFrame.pageNum - 1) * INBOXITEMS_TO_DISPLAY) + i;
 
-        button = _G["MailItem" .. i .. "Button"];
+        local button = _G["MailItem" .. i .. "Button"];
         if (index <= numItems) then
             -- Setup mail item
             local packageIcon, stationeryIcon, sender, subject, money, CODAmount, daysLeft, itemCount, wasRead, x, y, z, isGM, firstItemQuantity, firstItemLink =
                 GetInboxHeaderInfo(index);
             if firstItemLink then
-                local item = CaerdonItem:CreateFromItemLink(firstItemLink)
+                local item = CaerdonItem:CreateFromItemLink(firstItemLink, { ownCopy = true })
                 CaerdonWardrobe:UpdateButton(button, item, self, {
                     locationKey = format("inbox-%d", index),
                     type = "inbox",

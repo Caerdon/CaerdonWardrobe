@@ -58,9 +58,19 @@ function BetterBagsMixin:UpdateBagItem(bagItem)
     CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
 end
 
+-- Where this feature attaches to BetterBags (the integration report; see FeatureMixin.lua).
+-- A message is a name BetterBags sends: that the registration exists does not prove the message
+-- is still sent, only a draw does.
+BetterBagsMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Events:RegisterMessage item/Updated", "Events:RegisterMessage item/Clearing" },
+}
+
 function BetterBagsMixin:Init()
     local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
     local events = BetterBags:GetModule("Events")
+    self:NoteHookPoint("Events:RegisterMessage item/Updated", events, "RegisterMessage")
+    self:NoteHookPoint("Events:RegisterMessage item/Clearing", events, "RegisterMessage")
     events:RegisterMessage('item/Updated', function (_, bagItem)
         trackedBagItems[bagItem] = true
         self:UpdateBagItem(bagItem)
@@ -93,24 +103,36 @@ function BetterBagsMixin:Init()
 end
 
 function BetterBagsMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
-		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
+end
+
+-- Only slots the client can describe right now are revisited. Free slots have nothing to
+-- show, and bank slots are unreadable away from the bank: re-running those would clear an
+-- icon that BetterBags will not ask us to draw again.
+local function CanRevisit(bagItem)
+    local bag, slot = GetBagAndSlot(bagItem)
+    return bag ~= nil and C_Container.GetContainerItemID(bag, slot) ~= nil
 end
 
 function BetterBagsMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
 
     for bagItem in pairs(trackedBagItems) do
-        local bag, slot = GetBagAndSlot(bagItem)
-        -- Only revisit slots the client can describe right now. Free slots have nothing to
-        -- show, and bank slots are unreadable away from the bank: re-running those would
-        -- clear an icon that BetterBags will not ask us to draw again.
-        if bag and C_Container.GetContainerItemID(bag, slot) then
+        -- A button that is not on screen (a closed bag, a collapsed section) keeps the icon it
+        -- has and is asked for when it comes on screen: BetterBags will not ask then, and
+        -- asked for here every full refresh cost the whole bag with nobody looking.
+        if CanRevisit(bagItem)
+            and not (bagItem.button and CaerdonWardrobe:AskWhenOnScreen(bagItem.button, self, bagItem)) then
             self:UpdateBagItem(bagItem)
         end
+    end
+end
+
+-- A button Refresh() left alone has come on screen. It may have been given back to BetterBags'
+-- pool or emptied since.
+function BetterBagsMixin:OnButtonOnScreen(bagItem)
+    if trackedBagItems[bagItem] and CanRevisit(bagItem) then
+        self:UpdateBagItem(bagItem)
     end
 end
 
@@ -126,8 +148,10 @@ function BetterBagsVendorMixin:GetName()
     return "BetterBagsVendor"
 end
 
-function BetterBagsVendorMixin:GetStatusRuleName()
-    return "Merchant"
+-- The vendor's own rules, asked of its feature so the two cannot drift apart.
+function BetterBagsVendorMixin:GetStatusRules()
+    local merchant = CaerdonWardrobe:GetFeature("Merchant")
+    return merchant and merchant:GetStatusRules()
 end
 
 function BetterBagsVendorMixin:UpdateVendorButton(vendorButton)
@@ -157,22 +181,17 @@ function BetterBagsVendorMixin:UpdateVendorButton(vendorButton)
         isBuyback = mode == "buyback"
     }
 
+    -- Same as the Merchant feature: the item's data is there before the button is asked for.
     local item = CaerdonItem:CreateFromItemLink(itemLink)
-    local function doUpdate()
-        -- The button may have been redrawn for something else while the item loaded.
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- BetterBags' own word on the card: it may stand for something else by now with no
+        -- draw that came through here.
         local current = (vendorButton.mode == "buy" and vendorButton.item) or
             (vendorButton.mode == "buyback" and vendorButton.buyback) or nil
         if vendorButton.mode == mode and current and current.link == itemLink then
             CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
         end
-    end
-
-    -- Same as the Merchant feature: item data has to be loaded before UpdateButton.
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
 
 -- BetterBags sends no message when a vendor button is drawn, only when one is created
@@ -187,6 +206,7 @@ function BetterBagsVendorMixin:TrackVendorButton(vendorButton)
     trackedVendorButtons[vendorButton] = true
 
     for _, methodName in ipairs(VENDOR_BUTTON_DRAW_METHODS) do
+        self:NoteHookPoint("NextVendorButton." .. methodName, vendorButton, methodName)
         local original = vendorButton[methodName]
         if type(original) == "function" then
             vendorButton[methodName] = function(drawnButton, ...)
@@ -201,9 +221,20 @@ function BetterBagsVendorMixin:TrackVendorButton(vendorButton)
     end
 end
 
+-- The buttons' draw methods are wrapped one button at a time, so those points are reached when
+-- BetterBags' vendor window first shows an item.
+BetterBagsVendorMixin.integration = {
+    addon = addonName,
+    hookPoints = {
+        "Events:RegisterMessage vendor/NewButton",
+        "NextVendorButton.SetBuy", "NextVendorButton.SetBuyback", "NextVendorButton.SetRepair", "NextVendorButton.Release",
+    },
+}
+
 function BetterBagsVendorMixin:Init()
     local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
     local events = BetterBags:GetModule("Events")
+    self:NoteHookPoint("Events:RegisterMessage vendor/NewButton", events, "RegisterMessage")
 
     -- Sent once for each button, before its first draw.
     events:RegisterMessage('vendor/NewButton', function(_, vendorButton)
@@ -234,20 +265,22 @@ function BetterBagsVendorMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetMerchantItem(locationInfo.slot)
 end
 
-function BetterBagsVendorMixin:GetDisplayInfo(button, item)
+-- The vendor's own display rules for the draw, which go by whether a copy is carried. The
+-- vendor has no GetDisplayInfo; one it gained would have to be passed on here as well.
+function BetterBagsVendorMixin:GetDisplayRules(...)
     local merchantFeature = CaerdonWardrobe:GetFeature("Merchant")
-    if merchantFeature then
-        return merchantFeature:GetDisplayInfo(button, item)
-    end
-    return {}
+    return merchantFeature and merchantFeature:GetDisplayRules(...)
 end
 
 function BetterBagsVendorMixin:Refresh()
     CaerdonWardrobeFeatureMixin:Refresh(self)
 
     for vendorButton in pairs(trackedVendorButtons) do
-        -- Pooled buttons have no mode and stay hidden until BetterBags draws them again.
-        if vendorButton.mode and vendorButton.frame and vendorButton.frame:IsShown() then
+        -- Pooled buttons have no mode and stay hidden until BetterBags draws them again. On
+        -- screen, not just shown: a closed vendor keeps its cards, shown inside a hidden
+        -- panel, and every vendor that opens draws all of its cards (through the wrapped
+        -- methods above), so nothing is owed to the ones that are skipped here.
+        if vendorButton.mode and vendorButton.frame and vendorButton.frame:IsVisible() then
             self:UpdateVendorButton(vendorButton)
         end
     end
@@ -263,10 +296,6 @@ local trackedGuildButtons = setmetatable({}, { __mode = "k" })
 
 function BetterBagsGuildBankMixin:GetName()
     return "BetterBagsGuildBank"
-end
-
-function BetterBagsGuildBankMixin:GetStatusRuleName()
-    return "GuildBank"
 end
 
 -- The guild bank tab and slot a button shows an item of, or nil for a free slot or a pooled button.
@@ -304,24 +333,25 @@ function BetterBagsGuildBankMixin:UpdateGuildButton(guildButton)
     }
 
     local item = CaerdonItem:CreateFromItemLink(itemLink)
-    local function doUpdate()
-        -- The button may have been redrawn for something else while the item loaded.
+    CaerdonWardrobe:WhenItemLoaded(button, item, function()
+        -- The guild bank's own word on the slot: another item can lie in it by now with no
+        -- draw of the button.
         local currentTab, currentSlot = GetGuildTabAndSlot(guildButton)
         if currentTab == tab and currentSlot == slot and GetGuildBankItemLink(tab, slot) == itemLink then
             CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
         end
-    end
-
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    end)
 end
+
+BetterBagsGuildBankMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Events:RegisterMessage guild/Updated" },
+}
 
 function BetterBagsGuildBankMixin:Init()
     local BetterBags = LibStub('AceAddon-3.0'):GetAddon('BetterBags')
     local events = BetterBags:GetModule("Events")
+    self:NoteHookPoint("Events:RegisterMessage guild/Updated", events, "RegisterMessage")
 
     -- Sent after every draw of a button, for an item and for a free slot. A released button is
     -- hidden and sends nothing; its next draw is announced again.
@@ -342,12 +372,11 @@ function BetterBagsGuildBankMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetGuildBankItem(locationInfo.tab, locationInfo.index)
 end
 
-function BetterBagsGuildBankMixin:GetDisplayInfo(button, item)
+-- The guild bank's own display rules. The guild bank has no GetDisplayInfo; one it gained
+-- would have to be passed on here as well.
+function BetterBagsGuildBankMixin:GetDisplayRules(...)
     local guildBankFeature = CaerdonWardrobe:GetFeature("GuildBank")
-    if guildBankFeature then
-        return guildBankFeature:GetDisplayInfo(button, item)
-    end
-    return {}
+    return guildBankFeature and guildBankFeature:GetDisplayRules(...)
 end
 
 function BetterBagsGuildBankMixin:Refresh()
@@ -355,6 +384,9 @@ function BetterBagsGuildBankMixin:Refresh()
 
     for guildButton in pairs(trackedGuildButtons) do
         -- Pooled buttons and free slots have no item; BetterBags draws them again when they do.
+        -- Shown, not on screen: BetterBags lets go of every button when the visit ends, so
+        -- none here is of a closed guild bank, and a panel that a hidden parent took off
+        -- screen (the interface hidden) is not drawn again when it comes back.
         if GetGuildTabAndSlot(guildButton) and guildButton.frame and guildButton.frame:IsShown() then
             self:UpdateGuildButton(guildButton)
         end

@@ -8,8 +8,16 @@ function WorldQuestsListMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to World Quests List (the integration report; see FeatureMixin.lua).
+-- The hook itself is on Blizzard's map pin; the buttons are then read from the addon's frame.
+WorldQuestsListMixin.integration = {
+    addon = addonName,
+    hookPoints = { "WorldMap_WorldQuestPinMixin.RefreshVisuals" },
+}
+
 function WorldQuestsListMixin:Init()
     self.WorldQuestList = _G["WorldQuestList"]
+    self:NoteHookPoint("WorldMap_WorldQuestPinMixin.RefreshVisuals", WorldMap_WorldQuestPinMixin, "RefreshVisuals")
     -- hooksecurefunc(self.WorldQuestList, 'UpdateList', function(...) self:RefreshButtons(...) end)
 
     hooksecurefunc (WorldMap_WorldQuestPinMixin, "RefreshVisuals", function (...)
@@ -35,36 +43,18 @@ end
 --     end)
 -- end
 
-function WorldQuestsListMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function WorldQuestsListMixin:Refresh()
     self:RefreshButtons()
 end
 
-function WorldQuestsListMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+WorldQuestsListMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function WorldQuestsListMixin:RefreshButtons()
     local charKey = (UnitName'player' or "").."-"..(GetRealmName() or ""):gsub(" ","")

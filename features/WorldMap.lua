@@ -36,10 +36,6 @@ function WorldMapMixin:Init()
 	end)
 end
 
-function WorldMapMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
 function WorldMapMixin:Refresh()
 	CaerdonWardrobeFeatureMixin:Refresh(self)
 	if not WorldMapFrame or not WorldMapFrame:IsShown() then
@@ -52,28 +48,14 @@ function WorldMapMixin:Refresh()
 	end
 end
 
-function WorldMapMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+WorldMapMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function WorldMapMixin:UpdatePin(pin)
 		-- QuestEventListener:AddCallback(pin.questID, function()

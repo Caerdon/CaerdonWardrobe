@@ -253,14 +253,32 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems == nil then
             CaerdonWardrobeConfig.Icon.ShowUpcomingQuestItems = NS:GetDefaultConfig().Icon.ShowUpcomingQuestItems
         end
+        if CaerdonWardrobeConfig.Icon.ShowQuestItemsInAuction == nil then
+            CaerdonWardrobeConfig.Icon.ShowQuestItemsInAuction = NS:GetDefaultConfig().Icon.ShowQuestItemsInAuction
+        end
+        if CaerdonWardrobeConfig.Icon.UpcomingQuestLevels == nil then
+            CaerdonWardrobeConfig.Icon.UpcomingQuestLevels = NS:GetDefaultConfig().Icon.UpcomingQuestLevels
+        end
+        if CaerdonWardrobeConfig.Icon.IncludeTrivialQuests == nil then
+            CaerdonWardrobeConfig.Icon.IncludeTrivialQuests = NS:GetDefaultConfig().Icon.IncludeTrivialQuests
+        end
         if CaerdonWardrobeConfig.Icon.ShowAuctionValue == nil then
             CaerdonWardrobeConfig.Icon.ShowAuctionValue = NS:GetDefaultConfig().Icon.ShowAuctionValue
+        end
+        if CaerdonWardrobeConfig.Icon.ShowLooksAfterChange == nil then
+            CaerdonWardrobeConfig.Icon.ShowLooksAfterChange = NS:GetDefaultConfig().Icon.ShowLooksAfterChange
         end
         if CaerdonWardrobeConfig.Icon.ShowOutdatedFood == nil then
             CaerdonWardrobeConfig.Icon.ShowOutdatedFood = NS:GetDefaultConfig().Icon.ShowOutdatedFood
         end
         if CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons == nil then
             CaerdonWardrobeConfig.Icon.ShowRecipesForOtherToons = NS:GetDefaultConfig().Icon.ShowRecipesForOtherToons
+        end
+        for _, key in ipairs({ "ShowIngredientsForOtherToons", "IngredientsForOtherToons", "ShowOutgrownIngredients",
+            "AuctionTradeGoods" }) do
+            if CaerdonWardrobeConfig.Icon[key] == nil then
+                CaerdonWardrobeConfig.Icon[key] = NS:GetDefaultConfig().Icon[key]
+            end
         end
         if CaerdonWardrobeConfig.Icon.ShowBagUpgrades == nil then
             CaerdonWardrobeConfig.Icon.ShowBagUpgrades = NS:GetDefaultConfig().Icon.ShowBagUpgrades
@@ -276,6 +294,21 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         end
         if CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners == nil then
             CaerdonWardrobeConfig.Tooltip.ShowRecipeLearners = NS:GetDefaultConfig().Tooltip.ShowRecipeLearners
+        end
+        if CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades == nil then
+            CaerdonWardrobeConfig.Tooltip.ShowLoadoutUpgrades = NS:GetDefaultConfig().Tooltip.ShowLoadoutUpgrades
+        end
+        if CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes == nil then
+            CaerdonWardrobeConfig.Tooltip.KeepPawnUpgradeNotes = NS:GetDefaultConfig().Tooltip.KeepPawnUpgradeNotes
+        end
+        if CaerdonWardrobeConfig.Tooltip.ShowSetBonusChanges == nil then
+            CaerdonWardrobeConfig.Tooltip.ShowSetBonusChanges = NS:GetDefaultConfig().Tooltip.ShowSetBonusChanges
+        end
+        if not CaerdonWardrobeConfig.Auction then
+            CaerdonWardrobeConfig.Auction = {}
+        end
+        if CaerdonWardrobeConfig.Auction.UpgradeColumn == nil then
+            CaerdonWardrobeConfig.Auction.UpgradeColumn = NS:GetDefaultConfig().Auction.UpgradeColumn
         end
         if CaerdonWardrobeConfig.Binding.ShowWuE == nil then
             CaerdonWardrobeConfig.Binding.ShowWuE = NS:GetDefaultConfig().Binding.ShowWuE
@@ -332,19 +365,81 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Icon.ShowUpgradeIcon == nil then
             CaerdonWardrobeConfig.Icon.ShowUpgradeIcon = NS:GetDefaultConfig().Icon.ShowUpgradeIcon
         end
-        if CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == nil then
-            CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades =
-                NS:GetDefaultConfig().Icon.ShowMismatchedSpecUpgrades
+        -- "Also for gear I am not wearing" took the place of the loot spec option, which a player
+        -- may have switched on. Where it was not, the default says what the client showed
+        -- before: the red arrows of the other talent trees on a client without specs.
+        if CaerdonWardrobeConfig.Icon.ShowOtherSpecUpgrades == nil then
+            CaerdonWardrobeConfig.Icon.ShowOtherSpecUpgrades =
+                CaerdonWardrobeConfig.Icon.ShowMismatchedSpecUpgrades == true or
+                NS:GetDefaultConfig().Icon.ShowOtherSpecUpgrades
         end
+        if CaerdonWardrobeConfig.Icon.ShowUpgradeOnGearSets == nil then
+            CaerdonWardrobeConfig.Icon.ShowUpgradeOnGearSets = NS:GetDefaultConfig().Icon.ShowUpgradeOnGearSets
+        end
+        if CaerdonWardrobeConfig.Icon.ShowItemLevelUpgrades == nil then
+            CaerdonWardrobeConfig.Icon.ShowItemLevelUpgrades = NS:GetDefaultConfig().Icon.ShowItemLevelUpgrades
+        end
+        if CaerdonWardrobeConfig.Icon.ItemLevelOverPawn == nil then
+            CaerdonWardrobeConfig.Icon.ItemLevelOverPawn = NS:GetDefaultConfig().Icon.ItemLevelOverPawn
+        end
+        NS:LoadCharacterConfig()
 
-        CaerdonWardrobe:RefreshItems()
+        CaerdonWardrobe:RefreshItems("settings", "the saved settings were loaded")
+    end
+end
+
+-- The toon's own settings (CaerdonWardrobeCharacterConfig, saved per character), for the few
+-- that describe the toon and not the player's taste. Today that is the one list of the Icons
+-- page's upgrade block:
+--   Icon.OtherSpecs: class file and spec index ("DRUID2") = false for a spec whose upgrades
+--   the player does not want shown while the toon plays another. Nothing there: every spec.
+--   Icon.OtherSets: gear set ID = false, the same for a set tied to a scale that no spec owns.
+--   Icon.GearSetScales: gear set ID = the Pawn scale the set is scored on.
+--   Icon.PvpSets: gear set ID = true for a set that is scored at PVP levels.
+-- The table has no defaults, no version and no migrations: it is made by the first choice on a
+-- page, and a reader takes a missing table or key as "never chosen".
+function NS:LoadCharacterConfig()
+    -- The spec choice was kept by class with the player's settings before (in no release).
+    -- The first toon of a class to log in takes what its class had.
+    local icon = CaerdonWardrobeConfig and CaerdonWardrobeConfig.Icon
+    local byClass = type(icon) == "table" and icon.OtherSpecs
+    if type(byClass) ~= "table" then
+        return
+    end
+    local _, classFile = UnitClass("player")
+    if classFile then
+        for key, value in pairs(byClass) do
+            if type(key) == "string" and key:sub(1, #classFile) == classFile and
+                key:sub(#classFile + 1):match("^%d+$") then
+                if type(CaerdonWardrobeCharacterConfig) ~= "table" then
+                    CaerdonWardrobeCharacterConfig = {}
+                end
+                local own = CaerdonWardrobeCharacterConfig
+                if type(own.Icon) ~= "table" then
+                    own.Icon = {}
+                end
+                if type(own.Icon.OtherSpecs) ~= "table" then
+                    own.Icon.OtherSpecs = {}
+                end
+                if own.Icon.OtherSpecs[key] == nil then
+                    own.Icon.OtherSpecs[key] = value
+                end
+                byClass[key] = nil
+            end
+        end
+    end
+    if next(byClass) == nil then
+        icon.OtherSpecs = nil
     end
 end
 
 function CaerdonWardrobeConfigMixin:OnSave()
     -- Make sure that errors aren't swallowed for InterfaceOption callbacks
+    -- A click has refreshed already (the page's own, which names the value it wrote); this one
+    -- is the settings window's own commit, which comes as it shuts, and says so: a session's record
+    -- tells the two apart.
     xpcall(function()
-        CaerdonWardrobe:RefreshItems()
+        CaerdonWardrobe:RefreshItems("settings", "the settings window's commit")
     end, geterrorhandler())
 end
 
@@ -361,6 +456,12 @@ function CaerdonWardrobeConfigMixin:OpenDebugFrame()
 end
 
 function NS:GetDefaultConfig()
+    -- The sell icon on an outgrown ingredient starts on where bag space is short (WoW Forever)
+    -- and off on retail, where a finished expansion's recipes are all gray and its reagents are
+    -- kept all the same. A starting value, not a code path: the rule is the same on both.
+    local outgrownIngredients = CaerdonAPI ~= nil and CaerdonAPI.IsForeverClient ~= nil and
+        CaerdonAPI:IsForeverClient() == true
+
     return {
         Version = 25,
         -- The last one-time chat message shown. A fresh install has nothing to catch up on.
@@ -431,9 +532,28 @@ function NS:GetDefaultConfig()
 
             ShowQuestItems = true,
             ShowUpcomingQuestItems = true,
+            -- The quest icon on auction house listings: where an item for a quest still to
+            -- come is bought.
+            ShowQuestItemsInAuction = true,
+            -- How many levels ahead a quest the toon cannot take yet still counts as coming
+            -- ("2", "5", "10", "20", "any": a dropdown's values are text), and whether a quest
+            -- that is trivial for the toon counts.
+            UpcomingQuestLevels = "5",
+            IncludeTrivialQuests = false,
             ShowAuctionValue = true,
+            -- A piece whose own look is known and which would have an unknown one raised on
+            -- its upgrade track or converted at the Catalyst (CaerdonTransformLooks.lua).
+            ShowLooksAfterChange = true,
             ShowOutdatedFood = true,
             ShowRecipesForOtherToons = true,
+            -- Ingredients (CaerdonIngredients.lua): the mail icon on one another toon's recipes
+            -- take ("skill": that still give it skill; "any": that it knows at all), the sell
+            -- icon on one this toon's recipes have outgrown, and which trade goods the auction
+            -- icon leaves alone ("all" none, "skill", "professions", "none" every one).
+            ShowIngredientsForOtherToons = true,
+            IngredientsForOtherToons = "skill",
+            ShowOutgrownIngredients = outgrownIngredients,
+            AuctionTradeGoods = "skill",
             ShowBagUpgrades = true,
             ShowSpareBags = true,
             -- The Dialogue UI addon's quest rewards (external/DialogueUI).
@@ -442,7 +562,18 @@ function NS:GetDefaultConfig()
             ShowUpgradeLevelDelta = false,
             SameLevelBehavior = "none",
             ShowUpgradeIcon = true,
-            ShowMismatchedSpecUpgrades = false,
+            -- The red arrow: an upgrade for another of the toon's specs. On where the client has
+            -- talent trees in place of specs (Pawn shows a scale per tree there, and those
+            -- arrows were always shown), off where it has specs.
+            ShowOtherSpecUpgrades = C_Traits ~= nil and C_Traits.GetGroupDisplayInfoByTreeID ~= nil,
+            -- Which of the toon's specs that is for is the toon's own setting
+            -- (CaerdonWardrobeCharacterConfig.Icon.OtherSpecs, NS:LoadCharacterConfig).
+            -- The arrow on a piece of a saved gear set. Off: such a piece never gets it.
+            ShowUpgradeOnGearSets = true,
+            -- With Pawn loaded: a higher item level than the worn piece is an upgrade where Pawn
+            -- has no verdict, and (the second) even where Pawn's scores prefer the worn piece.
+            ShowItemLevelUpgrades = true,
+            ItemLevelOverPawn = false,
         },
 
         Binding = {
@@ -478,8 +609,21 @@ function NS:GetDefaultConfig()
             }
         },
 
+        -- The addon's own columns in the auction house's lists (features/Auction.lua). The
+        -- icon's has no setting: it is there while an icon is switched on for the auction house.
+        Auction = {
+            UpgradeColumn = true
+        },
+
         Tooltip = {
-            ShowRecipeLearners = true
+            ShowRecipeLearners = true,
+            -- The line under a piece that is an upgrade for a gear set or another spec.
+            ShowLoadoutUpgrades = true,
+            -- Pawn's own upgrade notes and "your best" marks beside those lines, as Pawn
+            -- makes them. Off: they give way where the addon has a verdict of its own.
+            KeepPawnUpgradeNotes = false,
+            -- The line under a piece that would bring or end a set bonus of what is worn.
+            ShowSetBonusChanges = true
         }
     }
 end

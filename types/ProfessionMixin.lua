@@ -6,8 +6,7 @@ CaerdonProfessionMixin = {}
 		error("Usage: CaerdonProfession:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonProfessionMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonProfessionMixin, caerdonItem)
     return itemType
 end
 
@@ -36,10 +35,10 @@ function CaerdonProfessionMixin:GetProfessionInfo()
         
                     local slotType = C_Item.GetItemInventoryType(equipLocation)
                     if slotType == Enum.InventoryType.IndexProfessionToolType then
-                        if not toolGearLink then
+                        if not toolGear then
                             toolGear = { link = currentEquippedLink, location = equipLocation }
                         else
-                            error("Unexpected secondary profession tool.  Has: " .. toolGearLink .. ", Adding: " .. currentEquippedLink)
+                            error("Unexpected secondary profession tool.  Has: " .. toolGear.link .. ", Adding: " .. currentEquippedLink)
                         end
                     elseif slotType == Enum.InventoryType.IndexProfessionGearType then
                         accessoryGears[#accessoryGears + 1] = { link = currentEquippedLink, location = equipLocation }
@@ -70,7 +69,7 @@ function CaerdonProfessionMixin:GetProfessionInfo()
                 -- end
             end
 
-            if not needsItem then
+            if not result.needsItem then
                 local inventoryType = self.item:GetInventoryType()
                 if inventoryType == Enum.InventoryType.IndexProfessionToolType then
                     if not toolGear then

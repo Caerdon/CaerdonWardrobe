@@ -8,8 +8,7 @@ local version, build, date, tocversion = GetBuildInfo()
 		error("Usage: CaerdonQuest:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonQuestMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonQuestMixin, caerdonItem)
     return itemType
 end
 
@@ -24,14 +23,14 @@ function CaerdonQuestMixin:LoadQuestRewardData(callbackFunction)
     
     local waitingForItems = {}
 
-    function ProcessTheItem(itemID)
+    local function ProcessTheItem(itemID)
         waitingForItems[itemID] = nil
         if not next(waitingForItems) then
             callbackFunction()
         end
     end
 
-    function FailTheItem(itemID)
+    local function FailTheItem(itemID)
         local rewardInfo = waitingForItems[itemID]
         waitingForItems[itemID] = nil
         if CaerdonWardrobeConfig and CaerdonWardrobeConfig.Debug and CaerdonWardrobeConfig.Debug.Enabled then
@@ -185,7 +184,7 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     -- TODO: Look at reworking this section to return CaerdonItems as rewards
     for i = 1, numQuestRewards do
-        local itemLink, name, texture, numItems, quality, isUsable, itemID
+        local itemLink, name, texture, numItems, quality, isUsable, itemID, itemLevel, questRewardContextFlags
 
         if isQuestLog then
             name, texture, numItems, quality, isUsable, itemID, itemLevel, questRewardContextFlags = GetQuestLogRewardInfo(i, questID)
@@ -206,7 +205,7 @@ function CaerdonQuestMixin:GetQuestInfo()
 	end
 
     for i = 1, numQuestChoices do
-        local itemLink, name, texture, numItems, quality, isUsable, itemID, isValid
+        local itemLink, name, texture, numItems, quality, isUsable, itemID, isValid, itemLevel, questRewardContextFlags
 
         local lootType = 0; -- LOOT_LIST_ITEM
 		if ( QuestInfoFrame.questLog ) then
@@ -229,10 +228,10 @@ function CaerdonQuestMixin:GetQuestInfo()
             isValid = currencyInfo and currencyInfo.currencyID ~= nil;
 
             name = currencyInfo.name
-            quantity = currencyInfo.totalRewardAmount
+            numItems = currencyInfo.totalRewardAmount
             quality = currencyInfo.quality
             itemID = currencyInfo.currencyID
-            itemLink = C_CurrencyInfo.GetCurrencyLink(itemID, quantity)
+            itemLink = C_CurrencyInfo.GetCurrencyLink(itemID, numItems)
 
             local factionID = C_CurrencyInfo.GetFactionGrantedByCurrency(itemID)
             if not factionID then
@@ -284,10 +283,11 @@ function CaerdonQuestMixin:GetQuestInfo()
 
     numQuestCurrencies = #rewardCurrencies
     for index, currencyReward in ipairs(rewardCurrencies) do
-        isValid = currencyReward and currencyReward.currencyID ~= nil;
+        local isValid = currencyReward and currencyReward.currencyID ~= nil;
         local name = currencyReward.name
         local currencyID = currencyReward.currencyID
-        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID, quantity)
+        local numItems = currencyReward.totalRewardAmount
+        local itemLink = C_CurrencyInfo.GetCurrencyLink(currencyID, numItems)
 
         currencyRewards[index] = {
             isValid = isValid,
@@ -325,10 +325,7 @@ function CaerdonQuestMixin:GetQuestInfo()
         rewardMoney = rewardMoney,
         currencyRewards = currencyRewards,
         tagInfo = tagInfo,
-        tagID = tagID,
-        tagName = tagName,
         isWorldQuest = isWorldQuest,
-        worldQuestType = worldQuestType,
         isBonusObjective = isBonusObjective,
         isRepeatable = isRepeatable,
         isCurrentlyDisabled = isCurrentlyDisabled,

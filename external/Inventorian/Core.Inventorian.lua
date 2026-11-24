@@ -8,13 +8,23 @@ function InventorianMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Inventorian (the integration report; see FeatureMixin.lua).
+-- The two containers exist once Inventorian has enabled the module made here.
+InventorianMixin.integration = {
+	addon = addonName,
+	hookPoints = { "Inventorian:NewModule", "bag.itemContainer.UpdateSlot", "bank.itemContainer.UpdateSlot" },
+}
+
 function InventorianMixin:Init()
 	self.Inventorian = LibStub('AceAddon-3.0'):GetAddon('Inventorian')
+	self:NoteHookPoint("Inventorian:NewModule", self.Inventorian, "NewModule")
 	self.mod = self.Inventorian:NewModule("CaerdonWardrobeInventorianUpdate")
 	self.mod.uiName = L["Caerdon Wardrobe Inventorian"]
 	self.mod.uiDesc= L["Identifies transmog appearances that still need to be learned"]
 
 	self.mod.OnEnable = function(mod)
+		self:NoteHookPoint("bag.itemContainer.UpdateSlot", self.Inventorian.bag.itemContainer, "UpdateSlot")
+		self:NoteHookPoint("bank.itemContainer.UpdateSlot", self.Inventorian.bank.itemContainer, "UpdateSlot")
 		hooksecurefunc(self.Inventorian.bag.itemContainer, "UpdateSlot", function(...) self:UpdateBagSlot(...) end)
 		hooksecurefunc(self.Inventorian.bank.itemContainer, "UpdateSlot", function(...) self:UpdateBankSlot(...) end)
 	end
@@ -25,15 +35,28 @@ function InventorianMixin:GetTooltipData(item, locationInfo)
 		if not item:IsItemEmpty() then
 			return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 		end
-	elseif locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
 	else
 		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 	end
 end
 
+-- Inventorian only updates a slot when its content changes, which a newly learned appearance or
+-- a gear swap does not do, so a refresh draws every button its two windows hold again. A button
+-- knows its own bag and slot (Item.lua, Set).
 function InventorianMixin:Refresh()
-	-- TODO: Was missing
+	CaerdonWardrobeFeatureMixin:Refresh(self)
+
+	local inventorian = self.Inventorian
+	for _, window in ipairs({ inventorian and inventorian.bag, inventorian and inventorian.bank }) do
+		local items = window.itemContainer and window.itemContainer.items
+		if type(items) == "table" then
+			for _, button in pairs(items) do
+				if button.bag and button.slot then
+					self:UpdateSlot(button, button.bag, button.slot)
+				end
+			end
+		end
+	end
 end
 
 local function ToIndex(bag, slot)

@@ -5,47 +5,25 @@ function MissionMixin:GetName()
 end
 
 function MissionMixin:Init()
-    return { "ADDON_LOADED" }
+    self:WhenAddOnLoaded("Blizzard_GarrisonUI", self.OnGarrisonLoaded)
+    return {}
 end
 
-function MissionMixin:ADDON_LOADED(name)
-    if name == "Blizzard_GarrisonUI" then
-        CovenantMissionFrameMissions.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnCovenantMissionScrollBoxRangeChanged, self);
-        GarrisonLandingPageReportList.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnGarrisonLandingScrollBoxRangeChanged, self);
-    end
+function MissionMixin:OnGarrisonLoaded()
+    CovenantMissionFrameMissions.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnCovenantMissionScrollBoxRangeChanged, self);
+    GarrisonLandingPageReportList.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnGarrisonLandingScrollBoxRangeChanged, self);
 end
 
-function MissionMixin:GetTooltipData(item, locationInfo)
-    return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
-function MissionMixin:Refresh()
-end
-
-function MissionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = true
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = false
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+MissionMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = true,
+    oldExpansionIcon = false,
+    sellableIcon = false,
+}
 
 function MissionMixin:OnCovenantMissionScrollBoxRangeChanged(sortPending)
     local scrollBox = CovenantMissionFrameMissions.ScrollBox

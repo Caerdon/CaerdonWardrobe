@@ -5,19 +5,18 @@ function ItemConversionMixin:GetName()
 end
 
 function ItemConversionMixin:Init()
-	return { "ADDON_LOADED" }
+	self:WhenAddOnLoaded("Blizzard_ItemInteractionUI", self.OnItemInteractionLoaded)
+	return {}
 end
 
-function ItemConversionMixin:ADDON_LOADED(name)
-	if name == "Blizzard_ItemInteractionUI" then
-		local outputSlot = ItemInteractionFrame and ItemInteractionFrame.ItemConversionFrame
-			and ItemInteractionFrame.ItemConversionFrame.ItemConversionOutputSlot
-		if outputSlot and outputSlot.RefreshIcon then
-			local feature = self
-			hooksecurefunc(outputSlot, "RefreshIcon", function(slot)
-				feature:OnOutputSlotRefreshIcon(slot)
-			end)
-		end
+function ItemConversionMixin:OnItemInteractionLoaded()
+	local outputSlot = ItemInteractionFrame and ItemInteractionFrame.ItemConversionFrame
+		and ItemInteractionFrame.ItemConversionFrame.ItemConversionOutputSlot
+	if outputSlot and outputSlot.RefreshIcon then
+		local feature = self
+		hooksecurefunc(outputSlot, "RefreshIcon", function(slot)
+			feature:OnOutputSlotRefreshIcon(slot)
+		end)
 	end
 end
 
@@ -46,25 +45,13 @@ function ItemConversionMixin:OnOutputSlotRefreshIcon(outputSlot)
 		return
 	end
 
-	local item = CaerdonItem:CreateFromItemLink(tooltipData.hyperlink)
-	local locationInfo = {
-		locationKey = "itemConversion-output"
-	}
-
 	-- The default slot look on the 48 px output slot: a square, unmasked icon with nothing clipping it.
-	local options = {
+	self:Decorate(outputSlot, tooltipData.hyperlink, {
+		locationKey = "itemConversion-output"
+	},
+	{
 		statusProminentSize = CaerdonWardrobe:GetSlotStatusSize(outputSlot:GetSize())
-	}
-
-	local function doUpdate()
-		CaerdonWardrobe:UpdateButton(outputSlot, item, self, locationInfo, options)
-	end
-
-	if item:IsItemDataCached() then
-		doUpdate()
-	else
-		item:ContinueOnItemLoad(doUpdate)
-	end
+	})
 end
 
 function ItemConversionMixin:GetTooltipData(item, locationInfo)
@@ -89,27 +76,14 @@ function ItemConversionMixin:Refresh()
 	end
 end
 
-function ItemConversionMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = false
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = false
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-		sellableIcon = {
-			shouldShow = false
-		}
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+ItemConversionMixin.displayRules = {
+	bindingStatus = false,
+	ownIcon = true,
+	otherIcon = true,
+	questIcon = false,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 CaerdonWardrobe:RegisterFeature(ItemConversionMixin)

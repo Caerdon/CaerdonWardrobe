@@ -9,16 +9,17 @@ function WorldQuestTrackerMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to World Quest Tracker (the integration report; see FeatureMixin.lua).
+WorldQuestTrackerMixin.integration = {
+    addon = addonName,
+    hookPoints = { "WorldQuestTrackerAddon.UpdateSquareWidget", "WorldQuestTrackerAddon.SetupWorldQuestButton" },
+}
+
 function WorldQuestTrackerMixin:Init()
+    self:NoteHookPoint("WorldQuestTrackerAddon.UpdateSquareWidget", WorldQuestTracker, "UpdateSquareWidget")
+    self:NoteHookPoint("WorldQuestTrackerAddon.SetupWorldQuestButton", WorldQuestTracker, "SetupWorldQuestButton")
     hooksecurefunc(WorldQuestTracker, "UpdateSquareWidget", function(...) self:OnUpdateWorldWidget(...) end)
     hooksecurefunc(WorldQuestTracker, "SetupWorldQuestButton", function(...) self:OnSetupWorldQuestButton(...) end)
-end
-
-function WorldQuestTrackerMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
-function WorldQuestTrackerMixin:Refresh()
 end
 
 function WorldQuestTrackerMixin:IsSameItem(button, item, locationInfo)
@@ -27,39 +28,14 @@ function WorldQuestTrackerMixin:IsSameItem(button, item, locationInfo)
 	return isSame
 end
 
-function WorldQuestTrackerMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
-
-function WorldQuestTrackerMixin:IsValidItem(type)
-  return 
-	  type ~= WQT_REWARDTYPE.missing and
-	  type ~= WQT_REWARDTYPE.artifact and
-	  type ~= WQT_REWARDTYPE.gold and 
-	  type ~= WQT_REWARDTYPE.currency and 
-	  type ~= WQT_REWARDTYPE.honor and
-	  type ~= WQT_REWARDTYPE.reputation and
-	  type ~= WQT_REWARDTYPE.xp
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+WorldQuestTrackerMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function WorldQuestTrackerMixin:OnSetupWorldQuestButton(widget, questData)
     local questID = widget.questID
@@ -88,8 +64,7 @@ function WorldQuestTrackerMixin:OnSetupWorldQuestButton(widget, questData)
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         CaerdonWardrobe:UpdateButton(widget, item, self, {
             locationKey = format("questbutton-%s-index%d", widget:GetName(), itemID),
-            reward = rewardInfo,
-            questID = questId
+            questID = questID
         }, options)
     else
         CaerdonWardrobe:ClearButton(widget)
@@ -119,92 +94,11 @@ function WorldQuestTrackerMixin:OnUpdateWorldWidget(widget, questData, bIsUsingT
         local item = CaerdonItem:CreateFromItemLink(itemLink)
         CaerdonWardrobe:UpdateButton(widget, item, self, {
             locationKey = format("widget-%s-index%d", widget:GetName(), itemID),
-            reward = rewardInfo,
-            questID = questId
+            questID = questID
         }, options)
     else
         CaerdonWardrobe:ClearButton(widget)
     end
-end
-
-function WorldQuestTrackerMixin:UpdateButton(button)
-	local questInfo = button.questInfo
-
-	for k, rewardButton in ipairs(button.Rewards.rewardFrames) do
-		CaerdonWardrobe:ClearButton(rewardButton)
-	end
-
-	if questInfo and questInfo.isValid then
-		for k, rewardInfo in questInfo:IterateRewards() do
-			local rewardButton = button.Rewards.rewardFrames[k]
-			if rewardInfo.id and self:IsValidItem(rewardInfo.type) then
-				local itemLink = GetQuestLogItemLink("reward", k, button.questId)
-				if itemLink then
-					local options = {
-						hasCount = rewardInfo.amount > 0,
-						statusProminentSize = 16,
-						itemCountOffset = 9
-					}
-					
-					local item = CaerdonItem:CreateFromItemLink(itemLink)
-					CaerdonWardrobe:UpdateButton(rewardButton, item, self, {
-						locationKey = format("%s-index%d", button:GetName(), k),
-						reward = rewardInfo,
-						questID = button.questId
-					}, options)
-				end
-			end
-		end
-	end
-end
-
-function WorldQuestTrackerMixin:UpdatePin(pin)
-	local options = {
-		statusProminentSize = 15
-	}
-
-	local questLink = GetQuestLink(pin.questId)
-	if not questLink then 
-		local questName = C_QuestLog.GetTitleForQuestID(pin.questId)
-		local questLevel = C_QuestLog.GetQuestDifficultyLevel(pin.questId)
-		questLink = format("|cff808080|Hquest:%d:%d|h[%s]|h|r", pin.questId, questLevel, questName)
-	end
-
-	local questItem = CaerdonItem:CreateFromItemLink(questLink)
-	local itemData = questItem:GetItemData()
-	if not itemData then
-		CaerdonWardrobe:ClearButton(pin)
-		return
-	end
-	
-	local questInfo = itemData:GetQuestInfo()
-
-	-- TODO: Review if necessary to iterate through rewards and find unknown ones...
-	local bestIndex, bestType = QuestUtils_GetBestQualityItemRewardIndex(pin.questId)
-	local reward
-	if bestType == "reward" then
-		reward = questInfo.rewards[bestIndex]
-	elseif bestType == "choice" then
-		reward = questInfo.choices[bestIndex]
-	end
-
-	if not bestType then 
-		CaerdonWardrobe:ClearButton(pin)
-		return
-	end
-
-	local itemLink = GetQuestLogItemLink(bestType, bestIndex, pin.questId)
-	if not itemLink then
-		CaerdonWardrobe:ClearButton(pin)
-		return
-	end
-
-	local item = CaerdonItem:CreateFromItemLink(itemLink)
-	CaerdonWardrobe:UpdateButton(pin, item, self, { 
-		locationKey = format("wqtPin%d", pin.questId),
-		questID = pin.questId,
-		questItem
-	}, options)
 end
 
 local Version = nil

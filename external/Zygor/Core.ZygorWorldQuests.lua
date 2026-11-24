@@ -8,41 +8,30 @@ function ZygorMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to Zygor (the integration report; see FeatureMixin.lua).
+ZygorMixin.integration = {
+    addon = addonName,
+    hookPoints = { "ZygorGuidesViewer.WorldQuests.QueueDetailsLoad" },
+}
+
 function ZygorMixin:Init()
     self.WorldQuests = ZygorGuidesViewer.WorldQuests
+    self:NoteHookPoint("ZygorGuidesViewer.WorldQuests.QueueDetailsLoad", self.WorldQuests, "QueueDetailsLoad")
     hooksecurefunc(self.WorldQuests, 'QueueDetailsLoad', function(...) self:RefreshButtons(...) end)
-end
-
-function ZygorMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
 end
 
 function ZygorMixin:Refresh()
     self:RefreshButtons()
 end
 
-function ZygorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+ZygorMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function ZygorMixin:RefreshButtons()
     if not ZygorGuidesViewer.db.profile.worldquestenable then return end

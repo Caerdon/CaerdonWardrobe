@@ -6,8 +6,7 @@ CaerdonToyMixin = {}
 		error("Usage: CaerdonToy:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonToyMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonToyMixin, caerdonItem)
     return itemType
 end
 

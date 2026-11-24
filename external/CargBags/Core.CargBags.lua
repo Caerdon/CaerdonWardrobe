@@ -9,21 +9,20 @@ function CargBagsMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to cargBags Nivaya (the integration report; see FeatureMixin.lua).
+CargBagsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "cargBags Nivaya.UpdateSlot" },
+}
+
 function CargBagsMixin:Init()
 	local cbNivaya = cargBags:GetImplementation("Nivaya")
+	self:NoteHookPoint("cargBags Nivaya.UpdateSlot", cbNivaya, "UpdateSlot")
 	hooksecurefunc(cbNivaya, "UpdateSlot", function(...) self:UpdateSlot(...) end)
 end
 
 function CargBagsMixin:GetTooltipData(item, locationInfo)
-	if locationInfo.bag == BANK_CONTAINER then
-		return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-	else
-		return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-	end
-end
-
-function CargBagsMixin:Refresh()
-	-- TODO: This was missing
+	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
 end
 
 function CargBagsMixin:UpdateSlot(frame, bagID, slotID)

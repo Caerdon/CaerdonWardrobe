@@ -10,16 +10,16 @@ end
 
 local isHooked = false
 
+-- Where this feature attaches to Angrier World Quests (the integration report; see FeatureMixin.lua).
+AngrierWorldQuestsMixin.integration = {
+	addon = addonName,
+	hookPoints = { "QuestFrameModule.QuestLog_Update" },
+}
+
 function AngrierWorldQuestsMixin:Init()
 	local questFrame = AngrierWorldQuests:GetModule("QuestFrameModule")
+	self:NoteHookPoint("QuestFrameModule.QuestLog_Update", questFrame, "QuestLog_Update")
 	hooksecurefunc(questFrame, "QuestLog_Update", function(...) self:OnQuestLog_Update(...) end)
-end
-
-function AngrierWorldQuestsMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
-function AngrierWorldQuestsMixin:Refresh()
 end
 
 function AngrierWorldQuestsMixin:IsSameItem(button, item, locationInfo)
@@ -27,28 +27,16 @@ function AngrierWorldQuestsMixin:IsSameItem(button, item, locationInfo)
 	return isSame
 end
 
-function AngrierWorldQuestsMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = true
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules). No level gain: the
+-- reward's icon is the size of a line of text, and the number covered it whole. The arrow
+-- still says the piece is an upgrade, and the list has the piece's item level beside the icon.
+AngrierWorldQuestsMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = true,
+	sellableIcon = false,
+	levelGain = false,
+}
 
 function AngrierWorldQuestsMixin:OnQuestLog_Update()
 	if self.questTimer then
@@ -61,7 +49,6 @@ function AngrierWorldQuestsMixin:OnQuestLog_Update()
 	
 		local pool = headerButton.titleFramePool
 
-		local count = 1
 		for button in pool:EnumerateActive() do
 			local options = {
 				fixedLayout = true,
@@ -97,7 +84,7 @@ function AngrierWorldQuestsMixin:OnQuestLog_Update()
 					else
 						local item = CaerdonItem:CreateFromItemLink(itemLink)
 						CaerdonWardrobe:UpdateButton(button, item, self, { 
-							locationKey = format("button%dquest%d", count, questID),
+							locationKey = format("quest%d", questID),
 							questID = questID,
 							questItem
 						}, options)

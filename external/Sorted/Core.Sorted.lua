@@ -15,8 +15,16 @@ function SortedMixin:GetLayoutNote()
     return "Sorted: the icon is centered in a column of its own and keeps its size."
 end
 
+-- Where this feature attaches to Sorted (the integration report; see FeatureMixin.lua).
+SortedMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Sorted:AddItemColumn", "Sorted:AddSortMethod" },
+}
+
 function SortedMixin:Init()
     local Sorted = LibStub("Sorted.")
+    self:NoteHookPoint("Sorted:AddItemColumn", Sorted, "AddItemColumn")
+    self:NoteHookPoint("Sorted:AddSortMethod", Sorted, "AddSortMethod")
     local statusProminentSize
 
     -- Adds a new column that displays Caerdon Wardrobe's icon
@@ -83,9 +91,9 @@ function SortedMixin:Init()
                 return false
             elseif data2.caerdonStatus == "own" or data2.caerdonStatus == "ownPlus" then
                 return true
-            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" then
+            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" or data1.caerdonStatus == "send" then
                 return false
-            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" then
+            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" or data2.caerdonStatus == "send" then
                 return true
             else
                 return data1.caerdonStatus < data2.caerdonStatus
@@ -101,9 +109,9 @@ function SortedMixin:Init()
                 return true
             elseif data2.caerdonStatus == "own" or data2.caerdonStatus == "ownPlus" then
                 return false
-            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" then
+            elseif data1.caerdonStatus == "other" or data1.caerdonStatus == "otherPlus" or data1.caerdonStatus == "send" then
                 return true
-            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" then
+            elseif data2.caerdonStatus == "other" or data2.caerdonStatus == "otherPlus" or data2.caerdonStatus == "send" then
                 return false
             else
                 return data1.caerdonStatus > data2.caerdonStatus
@@ -136,7 +144,7 @@ function SortedMixin:Init()
                 end, 1)
             end)
         else
-            local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus(feature, locationInfo)
+            local isReady, mogStatus, bindingStatus, bindingResult = item:GetCaerdonStatus()
             itemData.caerdonStatus = mogStatus
         end
     end
@@ -146,41 +154,19 @@ end
 function SortedMixin:GetTooltipData(item, locationInfo)
     local Sorted = LibStub("Sorted.")
     if Sorted.IsPlayingCharacterSelected() then
-        if locationInfo.bag == BANK_CONTAINER then
-            return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-        else
-            return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-        end
+        return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
     else
         return C_TooltipInfo.GetHyperlink(item:GetItemLink())
     end
 end
 
-function SortedMixin:Refresh()
-end
-
-function SortedMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = false
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = true
-		},
-		questIcon = {
-			shouldShow = true
-		},
-		oldExpansionIcon = {
-			shouldShow = true
-		},
-        sellableIcon = {
-            shouldShow = true
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+SortedMixin.displayRules = {
+	bindingStatus = false,
+	ownIcon = true,
+	otherIcon = true,
+	sellableIcon = true,
+}
 
 local Version = nil
 local isActive = false

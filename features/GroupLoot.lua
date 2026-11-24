@@ -15,16 +15,10 @@ function GroupLootMixin:GetTooltipData(item, locationInfo)
 	return C_TooltipInfo.GetLootRollItem(locationInfo.index)
 end
 
-function GroupLootMixin:Refresh()
-end
-
-function GroupLootMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.GroupLoot ~= false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+GroupLootMixin.displayRules = {
+    otherIcon = "GroupLoot",
+}
 
 function GroupLootMixin:OnGroupLootFrameShow(frame)
     local itemLink = GetLootRollItemLink(frame.rollID)

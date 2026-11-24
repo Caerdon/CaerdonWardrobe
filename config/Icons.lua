@@ -6,6 +6,10 @@ local L = NS.L
 -- One block per icon the addon draws: what it means, where it shows, and its rules. A window
 -- only gets a checkbox where the choice is real: the icon can occur there and someone could
 -- reasonably not want it.
+--
+-- A line the addon adds to an item's tooltip explains one of these icons, and its switch is in
+-- that icon's block: someone who sees the line and wants it gone looks beside the icon's own
+-- switches (seen: the upgrade arrow and the level gain were switched off in search of it).
 
 local STORE_ICON_COORDS = { 16 / 64, 48 / 64, 16 / 64, 48 / 64 }
 local ARROW_COORDS = { -1 / 32, 33 / 32, -1 / 32, 33 / 32 }
@@ -17,6 +21,9 @@ local CIRCLE = {
 -- The green variants of the star and the question mark, to use inside a sentence.
 local GREEN_STAR = "|TInterface\\Store\\category-icon-featured:14:14:0:0:64:64:16:48:16:48:102:255:0|t"
 local GREEN_OTHER = "|TInterface\\Store\\category-icon-placeholder:14:14:0:0:64:64:16:48:16:48:102:255:0|t"
+-- The two marks of a piece kept for a look it would gain, as they are drawn on a button.
+local CATALYST_MARK = "|A:CreationCatalyst-32x32:14:14|a"
+local VENDOR_MARK = "|A:Crosshair_Reforge_32:14:14|a"
 
 -- Windows that load on demand are missing on some clients (the dungeon journal on WoW Forever).
 -- The guild bank exists on every client this addon supports, so it tells whether the answers
@@ -60,6 +67,238 @@ function CaerdonWardrobeConfigIcons:GetTitle()
     return "Icons"
 end
 
+-- What the toon keeps beside what it wears, one list in the upgrade block under "Also for gear
+-- I am not wearing": a row per gear set, then (on a client with specs) one per spec of its
+-- class that no gear set speaks for. A row has a switch (its upgrades are shown, in red, while
+-- something else is worn) and, for a gear set, the Pawn scale the set is scored on. Both
+-- clients have gear sets, and neither lets a set say which weights it is for. Which gear a
+-- toon keeps and which specs it plays are facts about the toon, so all of it is kept per
+-- character and the line above the rows says so. With Pawn alone: without it there is no
+-- scale to score on, and the list takes no room.
+
+-- A spec's switch: what it does, why it is on or off right now, and where it is kept.
+-- reason: what CaerdonEquipment:GetOtherSpecChoice says (the equipment code's names).
+local FOLLOWS = " Until you click it, it follows the gear sets you assign and the scales you have Pawn show."
+local function OtherSpecTooltip(specName, wanted, reason)
+    local why
+    if reason == "chosen" then
+        why = (wanted and "On" or "Off") .. " by your choice."
+    elseif reason == "gearSet" then
+        why = "On because a gear set is assigned to " .. specName .. "." .. FOLLOWS
+    elseif reason == "pawnShown" then
+        why = "On because Pawn is set to show the " .. specName .. " scale." .. FOLLOWS
+    elseif reason == "pawnHidden" then
+        why = "Off because no gear set is assigned to " .. specName .. " and Pawn is not set to show its scale." .. FOLLOWS
+    else
+        -- No gear set, and Pawn is not loaded or picks the scale it shows by itself.
+        why = "Off because no gear set is assigned to " .. specName .. "." .. FOLLOWS
+    end
+    return "Show upgrades for " .. specName .. " while you play another specialization.\n\n" .. why ..
+        "\n\nKept for this character only."
+end
+
+-- The switch of a gear set that has a scale of its own and no spec, and of one with neither.
+local SET_TOOLTIP = "Show upgrades for this gear set, in red, while you wear another.\n\nKept for this character only."
+local NO_SCALE_TOOLTIP = "This gear set is not scored on its own. Choose a Pawn scale for it first."
+
+local TIED_TOOLTIP = "While you wear this gear set, upgrades are scored on this scale, whether Pawn shows it or not. " ..
+    "While you wear another, an upgrade for this set gets the red arrow (with the set ticked, and \"Also for gear I am not wearing\" on)." ..
+    "\n\nKept for this character only."
+
+-- What a set nobody tied goes by: the dropdown's first entry, and its tooltip.
+local function UntiedChoice(set, byTree)
+    if set.byName then
+        return "By its name (" .. set.byName .. ")",
+            "This gear set is named as " .. (byTree and "the talent tree " or "the specialization ") .. set.byName ..
+            " is and no scale was chosen for it, so it is scored on the scale Pawn has for " .. set.byName ..
+            (byTree and "." or ". Assigning a gear set to that specialization in the character window comes first.") ..
+            "\n\nChoose a scale below to score it on another."
+    end
+    if set.specName then
+        return "By its specialization (" .. set.specName .. ")",
+            "This gear set is assigned to " .. set.specName .. " in the character window, so it is scored on the scale Pawn has for " ..
+            set.specName .. "."
+    end
+    return "Not tied", "This gear set is not scored on its own. While you wear it, your gear is scored for " ..
+        (byTree and "the talent tree you have the most points in." or "the specialization you are playing.")
+end
+
+-- A scale another gear set is scored on is not offered: a scale is one set's, as a spec is one
+-- set's in the character window. Its entry is greyed, names the set, and says what to do.
+-- Two sets can have one scale where one of them is marked for PvP (below): the mark tells
+-- them apart, and the toon needs no scale of its own for PvP.
+local ONE_SET = "A scale is for one gear set, or for two where one of them is marked PvP, and "
+local function TakenTooltip(scale)
+    if scale.takenBySpec then
+        return ONE_SET .. scale.takenBy .. " is scored on this one as the set assigned to " ..
+            scale.takenBySpec .. " in the character window. Choose another scale for " .. scale.takenBy ..
+            " first, or take the specialization from it there."
+    end
+    return ONE_SET .. scale.takenBy .. " is scored on this one. Choose another scale for " ..
+        scale.takenBy .. " first."
+end
+
+-- A scale that a set of the other kind is scored on: offered, with whose it is as well.
+local function SharedTooltip(scale)
+    return scale.sharedWith .. " is scored on this scale too. One of the two is marked PvP and scored at PvP levels, " ..
+        "the other at the levels its pieces have in the open world, so the same weights serve both.\n\n" .. TIED_TOOLTIP
+end
+
+-- The mark at the end of a gear set's row: the set is one for PVP, and is scored at the levels
+-- its pieces' PVP floors raise them to, wherever the toon is. Offered for a set that holds a
+-- piece with a floor, scored yet or not: the mark is what lets it take the scale another set
+-- has, so it has to be there before the scale is chosen.
+local PVP_TOOLTIP = "Score this gear set as it is in PvP. Its pieces, and a piece you compare with them, count at the item level " ..
+    "their PvP floor raises them to in arenas, battlegrounds and War Mode, wherever you are. " ..
+    "Without it a piece is scored at the level it has in the open world." ..
+    "\n\nA set marked PvP can use the scale another gear set is scored on, such as your specialization's: " ..
+    "you need no Pawn scale of its own for PvP." ..
+    "\n\nKept for this character only."
+
+-- Where a row's switch is kept: a spec's (its own row, or the row of the gear set the client
+-- ties to it) by class file and spec index, as before the rows were one list; a gear set's own
+-- by the set's ID. nil for a row with no switch to click.
+local function RowSwitch(row)
+    local specIndex = row.spec and row.spec.index or (row.set and row.set.specIndex)
+    if specIndex then
+        local _, classFile = UnitClass("player")
+        return { perCharacter = true, configSection = "Icon", configSubsection = "OtherSpecs",
+            configValue = tostring(classFile) .. specIndex }, specIndex
+    elseif row.set and row.set.tied then
+        return { perCharacter = true, configSection = "Icon", configSubsection = "OtherSets", configValue = row.set.id }
+    end
+    return nil
+end
+
+function CaerdonWardrobeConfigIcons:AddLoadoutList(dependsOn)
+    self:AddDropdownList({
+        key = "gearSetScale",
+        width = 210,
+        rows = function()
+            local sets, byTree = CaerdonEquipment:GetGearSets()
+            if not sets or not CaerdonEquipment:GetGearSetScaleChoices() then
+                return nil
+            end
+            local rows = {}
+            for _, set in ipairs(sets) do
+                local row = { icon = set.icon, text = set.name, set = set, byTree = byTree }
+                if set.tied and not set.byName then
+                    row.value, row.title = set.tied, set.tiedLabel
+                elseif set.byName then
+                    -- Scored by its name: the first entry is the one chosen, and says so.
+                    row.title = UntiedChoice(set, byTree)
+                elseif set.lost then
+                    -- Tied to a scale that is gone from Pawn: in effect not tied, and no entry
+                    -- of the list is the one chosen.
+                    row.value, row.title = false, set.lost .. " (no longer in Pawn)"
+                else
+                    row.title = UntiedChoice(set, byTree)
+                end
+                rows[#rows + 1] = row
+            end
+            for _, spec in ipairs(CaerdonEquipment:GetSpecsWithoutGearSet() or {}) do
+                rows[#rows + 1] = { icon = spec.icon, text = spec.name, spec = spec,
+                    note = "No gear set: what you wear, on " .. spec.scaleLabel }
+            end
+            return rows
+        end,
+        header = function(count, rows)
+            local name = UnitName("player")
+            local known = name ~= nil and name ~= UNKNOWNOBJECT
+            if count == 0 then
+                return (known and name or "This character") ..
+                    " has no gear sets. One you save in the character window can be scored on a Pawn scale of its own here."
+            end
+            local sets, specs = false, false
+            for _, row in ipairs(rows) do
+                sets = sets or row.set ~= nil
+                specs = specs or row.spec ~= nil
+            end
+            local whose = known and (name .. "'s") or "This character's"
+            local what = sets and specs and "gear sets and specs" or (sets and "gear sets" or "specs")
+            local text = whose .. " " .. what .. " (kept per character). Ticked: its upgrades show while you wear something else."
+            if sets then
+                text = text .. " The scale is what a gear set is scored on."
+            else
+                text = text .. " A gear set you save in the character window gets a row here, and can be scored on a Pawn scale of its own."
+            end
+            return text
+        end,
+        choices = function(row)
+            local title, tooltip = UntiedChoice(row.set, row.byTree)
+            local choices = { { title = title, tooltip = tooltip } }
+            for _, scale in ipairs(CaerdonEquipment:GetGearSetScaleChoices(row.set.id) or {}) do
+                -- The set's own scale is never greyed: two sets can have come by one all the
+                -- same (a spec assigned in the character window since).
+                if scale.takenBy and scale.name ~= row.value then
+                    choices[#choices + 1] = { title = scale.label .. " (used by " .. scale.takenBy .. ")",
+                        value = scale.name, disabled = true, tooltip = TakenTooltip(scale) }
+                elseif scale.sharedWith then
+                    choices[#choices + 1] = { title = scale.label .. " (also used by " .. scale.sharedWith .. ")",
+                        value = scale.name, tooltip = SharedTooltip(scale) }
+                else
+                    choices[#choices + 1] = { title = scale.label, value = scale.name, tooltip = TIED_TOOLTIP }
+                end
+            end
+            return choices
+        end,
+        choose = function(row, value)
+            self:SetOption({ perCharacter = true, configSection = "Icon", configSubsection = "GearSetScales",
+                configValue = row.set.id }, value)
+        end,
+        mark = {
+            text = "PvP",
+            get = function(row)
+                local set = row.set
+                if not set then
+                    return nil
+                end
+                local marked = CaerdonEquipment:IsPvpGearSet(set.id)
+                if marked or CaerdonEquipment:GearSetHasPvpFloor(set.id) then
+                    return marked
+                end
+                return nil
+            end,
+            set = function(row, checked)
+                self:SetOption({ perCharacter = true, configSection = "Icon", configSubsection = "PvpSets",
+                    configValue = row.set.id }, checked)
+            end,
+            tooltip = function()
+                return PVP_TOOLTIP
+            end,
+        },
+        check = {
+            -- A spec's switch shows what the equipment code takes the spec as until it is
+            -- clicked; the click writes that switch alone.
+            get = function(row)
+                local info, specIndex = RowSwitch(row)
+                if not info then
+                    return nil
+                elseif specIndex then
+                    return (CaerdonEquipment:GetOtherSpecChoice(specIndex)) and true or false
+                end
+                return CaerdonEquipment:IsGearSetWanted(row.set.id)
+            end,
+            set = function(row, checked)
+                local info = RowSwitch(row)
+                if info then
+                    self:SetOption(info, checked)
+                end
+            end,
+            tooltip = function(row)
+                local info, specIndex = RowSwitch(row)
+                if not info then
+                    return NO_SCALE_TOOLTIP
+                elseif specIndex then
+                    local specName = row.spec and row.spec.name or row.set.specName
+                    return OtherSpecTooltip(specName, CaerdonEquipment:GetOtherSpecChoice(specIndex))
+                end
+                return SET_TOOLTIP
+            end,
+        },
+    }, { indent = 2, dependsOn = dependsOn })
+end
+
 function CaerdonWardrobeConfigIcons:Register()
     self:Init()
 
@@ -79,13 +318,35 @@ function CaerdonWardrobeConfigIcons:Register()
         { key = "learnableInBankAndBags", text = "Bags and bank", tooltip = "Show the icon on items in your bags and bank.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "BankAndBags" },
         { key = "learnableInGuildBank", text = "Guild bank", tooltip = "Show the icon on items in the guild bank.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "GuildBank" },
         { key = "learnableInMerchant", text = "Vendor", tooltip = "Show the icon on items a vendor sells. An item you already carry a copy of is not marked.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "Merchant" },
-        { key = "learnableInAuction", text = "Auction house", tooltip = "Show the icon on auction house listings.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "Auction" },
+        { key = "learnableInAuction", text = "Auction house", tooltip = "Show the icon on auction house listings. The list of auctions has a narrow column for this addon's icons while any of them is switched on for the auction house.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "Auction" },
     })
     self:AddLabel("Always shown everywhere else: loot, rolls, mail, quest rewards and the like.")
     local sameLook = self:AddCheckbox({ key = "sameLookDifferentItem", text = "Also items that share a look I already have (green star)", tooltip = "Marks every item that gives an appearance you already know from a different item, for collecting each source of a look. These get the green star.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentItem" })
     self:AddCheckbox({ key = "sameLookDifferentLevel", text = "Including when a lower-level toon could use this one", tooltip = "Also marks an item whose look you know when its level requirement is lower than the item you learned it from, so a lower-level toon could use it for transmog.", configSection = "Icon", configSubsection = "ShowLearnable", configValue = "SameLookDifferentLevel" },
         { indent = 1, dependsOn = sameLook })
     self:AddCheckbox({ key = "showBagUpgrades", text = "Bags for an empty bag slot, or bigger than one I have equipped", tooltip = "Marks a bag that fits one of your bag slots when that slot is empty or holds a bag it improves on: a smaller bag of the same kind, a profession bag no bigger than an ordinary bag, or a profession bag smaller than a reagent bag. A profession bag is only marked for an empty slot when you have a profession that uses it, a quiver or ammo pouch when you have a bow, crossbow or gun equipped. Quivers are only compared with their own kind.", configSection = "Icon", configValue = "ShowBagUpgrades" })
+
+    ---------------------------------------------------------------------------------------------
+    -- The star's stand-in. No switch: it is shown where the star is.
+    self:AddIconHeader({
+        title = "Learnable later",
+        description = "Something this toon can learn, but not yet: it asks for a level or a skill the toon does not have. " ..
+            "It stands in for the star until then, green where the star would be, and is shown wherever the star above is.",
+        texture = "Interface\\WorldMap\\Gear_64Grey",
+        coords = { 6 / 64, 58 / 64, 6 / 64, 58 / 64 }
+    })
+
+    ---------------------------------------------------------------------------------------------
+    self:AddIconHeader({
+        title = "A look to gain later",
+        description = "You know this piece's look, but upgraded or converted at the Catalyst it would have one you do not. " ..
+            "A small mark to keep it by; it is not offered for sale. " ..
+            CATALYST_MARK .. " Take it to the Catalyst. " .. VENDOR_MARK .. " Raise it at the item upgrade vendor. " ..
+            "Both: the vendor's mark with a small Catalyst's mark on it.",
+        atlas = "CreationCatalyst-32x32",
+        texture = "Interface\\Buttons\\UI-RefreshButton"
+    })
+    self:AddCheckbox({ key = "showLooksAfterChange", text = "Mark gear that can become a look I do not have", tooltip = "Marks a piece of this season's gear whose own look you know when raising it on its upgrade track, or converting it at the Catalyst, would give a look you have not learned. The icon says where to take it: the Catalyst's mark, or the upgrade vendor's for a piece that has to be raised. The vendor's mark with a small Catalyst's mark on it means both have a part. An upgrade keeps its arrow, and shows the mark where the arrow is switched off. Not shown on a gear set's piece. Shown wherever the learnable icon is. With this off such a piece is judged like any other whose look you know, so it can get the sellable or auction icon.", configSection = "Icon", configValue = "ShowLooksAfterChange" })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -110,12 +371,26 @@ function CaerdonWardrobeConfigIcons:Register()
     end
     local otherToonLabelY = self:AddLabel("Show in:")
     self:AddAllNoneButtons(otherToonLabelY, self:AddCheckboxGrid(otherToonWindows))
-    self:AddCheckbox({ key = "showRecipesForOtherToons", text = "Recipes another of my toons can learn", tooltip = "Marks a recipe this toon already knows or cannot learn when another of your toons on this realm has the profession and has not learned it. That toon has to have opened its profession window once so its recipes are recorded. With this off, other toons are ignored and a recipe this toon knows shows as sellable.", configSection = "Icon", configValue = "ShowRecipesForOtherToons" })
+    ---------------------------------------------------------------------------------------------
+    self:AddIconHeader({
+        title = "For another toon to use",
+        description = "Something another of your toons on this realm has a use for and this one does not: mail it. Hover over it for the toon's name. Shown in the windows chosen above for \"Learning for another toon\". For a recipe or an ingredient the other toon has to have opened its profession window once, so that its recipes are recorded. For a spell book or a rune it has to have been played once since any of your toons first came across the item.",
+        atlas = "ui-hud-minimap-mail-up",
+        texture = "Interface\\MailFrame\\Mail-Icon"
+    })
+    self:AddCheckbox({ key = "showRecipesForOtherToons", text = "Recipes, spell books and runes they have not learned", tooltip = "Marks a recipe this toon already knows or cannot learn when another of your toons on this realm has the profession and has not learned it. Marks a spell book or a rune this toon cannot learn or has learned when another of your toons can learn it, now or at a later level, and has no copy in its bags or its mailbox and none on its way. With this off, other toons are ignored: a recipe this toon knows and a rune of another class show as sellable.", configSection = "Icon", configValue = "ShowRecipesForOtherToons" })
+    local sendIngredients = self:AddCheckbox({ key = "showIngredientsForOtherToons", text = "Ingredients this toon has no use for", tooltip = "Marks an ingredient that a recipe of another of your toons takes, when no recipe of this toon's still gives skill for it. Never on something soulbound, something a quest of this toon's takes, or food kept for a hunter's pet.", configSection = "Icon", configValue = "ShowIngredientsForOtherToons" })
+    self:AddDropdown({ key = "ingredientsForOtherToons", text = "That the other toon can:", configSection = "Icon", configValue = "IngredientsForOtherToons", width = 210 }, {
+        { title = "Skill up with",           value = "skill", tooltip = "Only when a recipe of that toon's still gives skill for it, a recipe it has not learned yet included." },
+        { title = "Use in a recipe it knows", value = "any",   tooltip = "Also when that toon knows a recipe that takes it, even one that no longer gives skill." }
+    }, { indent = 1, dependsOn = sendIngredients })
+    -- The tooltip lines that name the toon the mail icon is for.
+    self:AddCheckbox({ key = "showRecipeLearners", text = "Name the toons something is for in its tooltip", tooltip = "Adds a line to the tooltip of a recipe naming your other toons on this realm that have the profession and have not learned it, lines to the tooltip of a spell book or a rune naming the toons that can learn it, now or at a later level, and those that already have a copy, and a line to the tooltip of an ingredient this toon has no use for naming the toons whose recipes take it. Also says when this toon already has a copy of something it could learn, which is why a second copy has no icon.", configSection = "Tooltip", configValue = "ShowRecipeLearners" })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
         title = "Upgrade",
-        description = "Gear better than what is equipped. Yellow: Pawn says so. Green: higher item level. Red: for another spec. On an item that also has a look to learn, the arrow sits on that icon as a small badge.",
+        description = "Gear better than what is equipped. Yellow: Pawn says so. Green: higher item level. Red: for another spec or gear set. A grey gear in its place: not until you reach its level. On an item that also has a look to learn, the arrow sits on that icon as a small badge.",
         texture = "Interface\\Buttons\\JumpUpArrow",
         coords = ARROW_COORDS,
         color = { 0.4, 1, 0.2 },
@@ -125,9 +400,48 @@ function CaerdonWardrobeConfigIcons:Register()
     local showUpgrade = self:AddCheckbox({ key = "showUpgradeIcon", text = "Show the upgrade arrow", tooltip = "Shows the arrow when Pawn calls an item an upgrade or, without a Pawn verdict, when its item level is higher than what is equipped.", configSection = "Icon", configValue = "ShowUpgradeIcon" })
     self:AddCheckbox({ key = "showUpgradeInBankAndBags", text = "In bags and bank", tooltip = "Show the arrow on items in your bags and bank. Everywhere else it follows the option above.", configSection = "Icon", configSubsection = "ShowUpgrades", configValue = "BankAndBags" },
         { indent = 1, dependsOn = showUpgrade })
-    self:AddCheckbox({ key = "showMismatchedSpecUpgrade", text = "Also higher item level gear for another loot spec", tooltip = "Keeps the arrow, tinted red, on an item with a higher item level that does not match your current loot specialization.", configSection = "Icon", configValue = "ShowMismatchedSpecUpgrades" },
+    -- The auction house's column for the arrow: one more place the arrow shows, so its switch
+    -- is here under the arrow's, which it needs, and named as the place above it is. What the
+    -- column is, is the tooltip's to say.
+    self:AddCheckbox({ key = "auctionUpgradeColumn", text = "In the auction house", tooltip = "Adds a column for the upgrade arrow and the item level gain while you browse weapons or armor you could wear, and one for each auction's upgrade percentage on the page of such a piece. Off: the auction house shows neither. The list of auctions has the column only while your settings leave something to put in it.", configSection = "Auction", configValue = "UpgradeColumn" },
         { indent = 1, dependsOn = showUpgrade })
+    -- One more place of the arrow's: a piece that is saved in a gear set. Not about what a
+    -- piece is measured against, which is the list further down.
+    self:AddCheckbox({ key = "showUpgradeOnGearSets", text = "On pieces saved in a gear set", tooltip = "Show the arrow on items that belong to a saved gear set. With the gear set icon on, it sits on that icon as a small badge. Off: a gear set piece never shows the arrow.", configSection = "Icon", configValue = "ShowUpgradeOnGearSets" },
+        { indent = 1, dependsOn = showUpgrade })
+    -- Without Pawn the item level is all the arrow goes by: both are shown as they then are, on.
+    local function WithoutPawn()
+        return PawnShouldItemLinkHaveUpgradeArrowUnbudgeted == nil
+    end
+    local WITHOUT_PAWN = "Without the Pawn addon the arrow always goes by item level."
+    local showItemLevel = self:AddCheckbox({ key = "showItemLevelUpgrades", text = "Also higher item level gear", tooltip = "With Pawn: also shows the arrow, in green, on gear with a higher item level than what is equipped when Pawn has no verdict on it (a trinket, a piece Pawn has no values for, a row of the auction house's list, whose stats the game does not give until it is opened).", forcedTooltip = WITHOUT_PAWN, configSection = "Icon", configValue = "ShowItemLevelUpgrades" },
+        { indent = 1, dependsOn = showUpgrade, forcedOn = WithoutPawn })
+    self:AddCheckbox({ key = "itemLevelOverPawn", text = "Even when Pawn rates the equipped piece higher", tooltip = "For when item level is what counts (a gear score to reach, a game mode that goes by item level): a higher item level is then always an upgrade.", forcedTooltip = WITHOUT_PAWN, configSection = "Icon", configValue = "ItemLevelOverPawn" },
+        { indent = 2, dependsOn = showItemLevel, forcedOn = WithoutPawn })
+    -- What the toon keeps beside what it wears: the switch, and under it the gear sets and
+    -- specs it is for (AddLoadoutList).
+    local showOtherSpecs = self:AddCheckbox({ key = "showOtherSpecUpgrades", text = "Also for gear I am not wearing", tooltip = "Shows the arrow, in red, on gear that is an upgrade for a gear set you are not wearing or for another of your specializations: the ones ticked below. With Pawn a piece is scored on the scale of the gear set or spec, against that set's pieces, or against what you are wearing for a spec with no gear set. The gear set of the spec you are playing counts the same way for a slot where you are not wearing its piece.", configSection = "Icon", configValue = "ShowOtherSpecUpgrades" },
+        { indent = 1, dependsOn = showUpgrade })
+    self:AddLoadoutList(showOtherSpecs)
     self:AddCheckbox({ key = "showUpgradeLevelDelta", text = "Show the item level gain", tooltip = "Displays the item level difference, such as +5, on an upgrade.", configSection = "Icon", configValue = "ShowUpgradeLevelDelta" })
+    -- The tooltip lines that say what the arrow is for. A switch of their own, not one under the
+    -- arrow's: they are shown whether the arrow is or not.
+    local showLoadoutUpgrades = self:AddCheckbox({ key = "showLoadoutUpgrades", text = "Say what an upgrade is for, and by how much, in its tooltip", tooltip = "Adds a line to the tooltip of gear that is an upgrade: for what you are wearing, for one of your gear sets, or for another specialization. It names the gear set or spec and how much better the piece is on that spec's Pawn scale, with the arrow the piece has in your bags. Shown at the bottom with Pawn's lines, in place of Pawn's own upgrade note and its \"your best\" marks for the same spec. The lines for other gear follow \"Also for gear I am not wearing\" above.", configSection = "Tooltip", configValue = "ShowLoadoutUpgrades" })
+    -- Pawn's own notes for the same gear are left out by default, which nothing on this page
+    -- said in so many words: the switch says it, and the text under it why (author decision:
+    -- the player is to be able to see both, to judge the addon's numbers by, and is to be told
+    -- on the page, not in a text that shows on hover, why the two can differ).
+    self:AddCheckbox({ key = "keepPawnUpgradeNotes", text = "Keep Pawn's own upgrade notes beside them", tooltip = "Off: Pawn's own upgrade notes and \"your best\" marks are hidden wherever this addon has a verdict of its own, and this addon's lines are shown in their place. Those lines use your Pawn weights, but compare with different gear (see below), so their percentages will often differ from the ones Pawn would show.\n\nOn: Pawn's notes are shown as well, above this addon's lines. Expect different numbers for the same scale; the arrow on the item follows this addon's. A piece Pawn calls an upgrade and this addon does not has this addon's number beneath, in grey.", configSection = "Tooltip", configValue = "KeepPawnUpgradeNotes" },
+        { indent = 1, dependsOn = showLoadoutUpgrades })
+    self:AddLabel("Pawn's notes are left out because the two do not measure the same thing, and the arrow on an item goes by this addon's numbers. Pawn compares a piece with what you are wearing, at its own item level. This addon compares it:\n" ..
+        "- with the gear set of that spec, or the set you tied to the scale, where that is not what you have on\n" ..
+        "- at PvP levels, where you marked the set for PvP\n" ..
+        "- by what both hands would hold: a one-hander together with the best one-hander in your bags against a two-hander, and a two-hander against both weapons it would replace, which Pawn does not compare",
+        { indent = 2 })
+    -- A set's bonus (a tier set's and the like) is what an upgrade's arrow does not weigh: the
+    -- tooltip says what wearing the piece would do to one. A switch of its own: the lines are
+    -- there for a piece that is no upgrade too, and without Pawn.
+    self:AddCheckbox({ key = "showSetBonusChanges", text = "Say in its tooltip when wearing a piece would gain or lose a set bonus", tooltip = "Adds a line to the tooltip of gear that would complete a set bonus of what you are wearing, or break one by taking the place of a set piece. The upgrade arrow does not weigh set bonuses, so a piece can have the arrow and this warning.\n\n\"May lose\" is shown where the game has not yet said at how many pieces the bonus begins: its tooltips only give that number while you do not have the bonus. It is remembered the first time a piece of the set is seen with fewer pieces on.", configSection = "Tooltip", configValue = "ShowSetBonusChanges" })
     self:AddDropdown({ key = "sameLevelItems", text = "Same item level as equipped:", configSection = "Icon", configValue = "SameLevelBehavior" }, {
         { title = "No Icon", value = "none", tooltip = "Keep same-level pieces quiet (no neutral or sellable icons)." },
         { title = "Sellable", value = "sellable", tooltip = "Treat same-level pieces as sellable duplicates." },
@@ -141,9 +455,22 @@ function CaerdonWardrobeConfigIcons:Register()
         texture = "Interface\\MINIMAP\\MapQuestHub_Icon32",
         coords = ARROW_COORDS
     })
-    local showQuest = self:AddCheckbox({ key = "showQuestItems", text = "Show the quest icon", tooltip = "Marks quest items and items that a quest in your log takes. One switch for every window.", configSection = "Icon", configValue = "ShowQuestItems" })
-    self:AddCheckbox({ key = "showUpcomingQuestItems", text = "Also for quests I have not picked up yet (needs QuestieDB)", tooltip = "Also marks items that a quest you have not picked up yet will ask for, as long as you can take the quest within a few levels and it is not trivial for you. Uses the QuestieDB addon's data; without it only the quests in your log are checked.", configSection = "Icon", configValue = "ShowUpcomingQuestItems" },
+    local showQuest = self:AddCheckbox({ key = "showQuestItems", text = "Show the quest icon", tooltip = "Marks quest items and items that a quest in your log takes. It comes before the learnable icons, because the item has to be in your bags when you hand the quest in. One switch for every window.", configSection = "Icon", configValue = "ShowQuestItems" })
+    local showUpcoming = self:AddCheckbox({ key = "showUpcomingQuestItems", text = "Also for quests I have not picked up yet (needs QuestieDB or AllTheThings)", tooltip = "Also marks items that a quest you have not picked up yet will ask for. Uses the data of the QuestieDB or the AllTheThings addon, whichever is installed; without either only the quests in your log are checked.", configSection = "Icon", configValue = "ShowUpcomingQuestItems" },
         { indent = 1, dependsOn = showQuest })
+    self:AddDropdown({ key = "upcomingQuestLevels", text = "Quests ahead of my level, within:", configSection = "Icon", configValue = "UpcomingQuestLevels", width = 150 }, {
+        { title = "2 levels",  value = "2",   tooltip = "Only quests you can take almost now." },
+        { title = "5 levels",  value = "5",   tooltip = "Quests you can take within the next five levels." },
+        { title = "10 levels", value = "10",  tooltip = "Quests you can take within the next ten levels." },
+        { title = "20 levels", value = "20",  tooltip = "Quests you can take within the next twenty levels." },
+        { title = "Any number of levels", value = "any", tooltip = "Every quest you will be able to take later, however far off. Quests you have outgrown are the option below." }
+    }, { indent = 2, dependsOn = showUpcoming })
+    self:AddCheckbox({ key = "includeTrivialQuests", text = "Also quests that have turned gray for this character", tooltip = "A quest turns gray once it is so far below your level that it gives almost no experience. Quests below your level that are not gray yet always count; this adds the gray ones, for those who do every quest.", configSection = "Icon", configValue = "IncludeTrivialQuests" },
+        { indent = 2, dependsOn = showUpcoming })
+    self:AddLabel("Quests below your level count until they turn gray. A later quest of a chain you are on always counts, whatever its level.", { indent = 2 })
+    self:AddCheckbox({ key = "showQuestItemsInAuction", text = "Show in the auction house", tooltip = "Also show the icon on auction house listings: an item one of your quests takes is one to buy.", configSection = "Icon", configValue = "ShowQuestItemsInAuction" },
+        { indent = 1, dependsOn = showQuest })
+    self:AddLabel("An item that starts a quest you have not taken yet is one to use: it shows the \"Learnable by this toon\" star with this icon small on it, or the \"Learnable later\" gear while the quest is above your level. It has the quest icon once its quest is in your log.", { indent = 1 })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -162,6 +489,12 @@ function CaerdonWardrobeConfigIcons:Register()
         { title = "1 gold",                    value = "10000", tooltip = "Require 1 gold over vendoring." },
         { title = "5 gold",                    value = "50000", tooltip = "Require 5 gold over vendoring." }
     }, { indent = 1, dependsOn = showAuction })
+    self:AddDropdown({ key = "auctionTradeGoods", text = "On trade goods:", configSection = "Icon", configValue = "AuctionTradeGoods", width = 230 }, {
+        { title = "Any worth listing",              value = "all",         tooltip = "Every trade good with no other icon that is worth listing." },
+        { title = "Not ones I still skill up with", value = "skill",       tooltip = "Leaves out an ingredient while a recipe of this toon's that takes it still gives skill." },
+        { title = "Not ones my professions use",    value = "professions", tooltip = "Leaves out every ingredient a recipe of this toon's takes, gray or not." },
+        { title = "Never",                          value = "none",        tooltip = "No auction icon on trade goods. It still replaces the sellable icon where the auction house pays more." }
+    }, { indent = 1, dependsOn = showAuction })
 
     ---------------------------------------------------------------------------------------------
     self:AddIconHeader({
@@ -176,6 +509,7 @@ function CaerdonWardrobeConfigIcons:Register()
         { key = "sellableInGuildBank", text = "Guild bank", tooltip = "Show the icon on items in the guild bank.", configSection = "Icon", configSubsection = "ShowSellable", configValue = "GuildBank" },
     })
     self:AddCheckbox({ key = "showOutdatedFood", text = "Food and drink I have outgrown", tooltip = "Shows the sellable icon on food or drink when you carry a better one of the same kind that you can use. Your best food and best drink are never marked. Hunters keep food their pet still eats.", configSection = "Icon", configValue = "ShowOutdatedFood" })
+    self:AddCheckbox({ key = "showOutgrownIngredients", text = "Ingredients my recipes have outgrown", tooltip = "Shows the sellable icon on an ingredient when every recipe of this toon's that takes it has gone gray, the recipes it has not learned yet included. Each profession has to have been opened once so its recipes are recorded. Never on an ingredient no recipe of yours takes, one that another toon gets the mail icon for, or food kept for a hunter's pet.", configSection = "Icon", configValue = "ShowOutgrownIngredients" })
     self:AddCheckbox({ key = "showSpareBags", text = "Bags no bigger than the ones I have equipped", tooltip = "Shows the sellable icon on a bag when every bag slot it fits is filled and it would improve none of them. Never while such a slot is empty, and never when the comparison is unclear, such as a herb bag against a reagent bag. A quiver is only marked when you have one of its kind equipped that is at least as big.", configSection = "Icon", configValue = "ShowSpareBags" })
 
     ---------------------------------------------------------------------------------------------

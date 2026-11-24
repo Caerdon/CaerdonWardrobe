@@ -15,23 +15,32 @@ local ROW_HEIGHT = 26
 local DROPDOWN_ROW_HEIGHT = 34
 local BLOCK_GAP = 16
 local GRID_COLUMN_WIDTH = 185
+local LIST_ICON_SIZE = 18
+local LIST_NAME_WIDTH = 150
 local CHECKBOX_INSET = 4 -- the template's box art starts a few pixels inside its frame
 
 local defaultConfig
 
 -- The saved table can be replaced wholesale (old settings version) and can lack newer sections,
 -- so every read and write resolves it again instead of holding on to a sub-table.
+-- Saved data that is not a table where one belongs reads as nothing and is replaced on a write.
 local function GetSection(root, info, create)
-    if not (root and info.configSection) then
+    if type(root) ~= "table" or not info.configSection then
         return nil
     end
     local section = root[info.configSection]
+    if type(section) ~= "table" then
+        section = nil
+    end
     if section == nil and create then
         section = {}
         root[info.configSection] = section
     end
     if section and info.configSubsection then
         local subsection = section[info.configSubsection]
+        if type(subsection) ~= "table" then
+            subsection = nil
+        end
         if subsection == nil and create then
             subsection = {}
             section[info.configSubsection] = subsection
@@ -41,20 +50,76 @@ local function GetSection(root, info, create)
     return section
 end
 
+-- Where an option's value is kept. The player's settings are one table for every toon
+-- (CaerdonWardrobeConfig). An option that describes the toon and not the player's taste
+-- (info.perCharacter: which of its specs it plays) is kept with the toon
+-- (CaerdonWardrobeCharacterConfig, saved per character). That table has no defaults and is
+-- not there until the toon's first choice: a value it does not hold reads as info.default.
+-- A click writes what the control then shows, so a default that was only shown becomes a choice
+-- with the first click on that control and on no other.
 local function GetValue(info)
-    local section = GetSection(CaerdonWardrobeConfig, info)
-    local value = section and section[info.configValue]
+    local value
+    if info.perCharacter then
+        local section = GetSection(CaerdonWardrobeCharacterConfig, info)
+        value = section and section[info.configValue]
+    else
+        local section = GetSection(CaerdonWardrobeConfig, info)
+        value = section and section[info.configValue]
+        if value == nil then
+            defaultConfig = defaultConfig or NS:GetDefaultConfig()
+            local defaults = GetSection(defaultConfig, info)
+            value = defaults and defaults[info.configValue]
+        end
+    end
+    -- info.default: for a key made at run time (one per spec of the toon's class), which the
+    -- defaults cannot list. A function where the default follows the game: it is asked each
+    -- time the page shows, and the control shows what is in effect until the player clicks.
     if value == nil then
-        defaultConfig = defaultConfig or NS:GetDefaultConfig()
-        local defaults = GetSection(defaultConfig, info)
-        value = defaults and defaults[info.configValue]
+        value = info.default
+        if type(value) == "function" then
+            value = value()
+        end
     end
     return value
 end
 
+local written = { count = 0, last = nil }
+
 local function SetValue(info, value)
-    CaerdonWardrobeConfig = CaerdonWardrobeConfig or {}
-    GetSection(CaerdonWardrobeConfig, info, true)[info.configValue] = value
+    local root
+    if info.perCharacter then
+        if type(CaerdonWardrobeCharacterConfig) ~= "table" then
+            CaerdonWardrobeCharacterConfig = {}
+        end
+        root = CaerdonWardrobeCharacterConfig
+    else
+        CaerdonWardrobeConfig = CaerdonWardrobeConfig or {}
+        root = CaerdonWardrobeConfig
+    end
+    GetSection(root, info, true)[info.configValue] = value
+    -- For the refresh's reason: which value the click wrote, and how many more with it.
+    local name = tostring(info.configSection)
+    if info.configSubsection ~= nil then
+        name = name .. "." .. tostring(info.configSubsection)
+    end
+    written.count = written.count + 1
+    written.last = string.format("%s.%s = %s%s", name, tostring(info.configValue), tostring(value),
+        info.perCharacter and ", this toon's" or "")
+end
+
+-- The player changed something on a page: the icons follow at once, with the windows that are
+-- open behind the settings. Once per click, whatever number of values the click wrote. (The
+-- settings window's own "commit" comes only as it closes.) The refresh names the value
+-- written, so that a session's record says which option was clicked and when.
+local function Changed()
+    local detail = written.last
+    if detail and written.count > 1 then
+        detail = string.format("%s, and %d more", detail, written.count - 1)
+    end
+    written.count, written.last = 0, nil
+    if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
+        CaerdonWardrobe:RefreshItems("settings", detail)
+    end
 end
 
 local function ApplyTexture(texture, spec)
@@ -96,6 +161,12 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     self.controls = {}
     self.hasBlock = false
     self.bodyX = SECTION_BODY_X
+    -- A page is laid out once, from the top down, at fixed places. Where a part of it changes
+    -- its height while the game runs (AddDropdownList), what comes after is laid out on a
+    -- frame that hangs below that part (self.flow) and moves with it: nextPoint counts from
+    -- that frame's top, heightAbove is what was laid out before it.
+    self.heightAbove = 0
+    self.flexible = {}
 
     local frame = CreateFrame("Frame")
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -124,6 +195,7 @@ function CaerdonWardrobeConfigPanelMixin:Init()
 
     self.frame = frame
     self.scrollChild = scrollChild
+    self.flow = scrollChild
     self.scrollFrame = scrollFrame
 
     -- The main page's category, registered by CaerdonWardrobeConfigMixin:OnLoad before any page.
@@ -131,9 +203,8 @@ function CaerdonWardrobeConfigPanelMixin:Init()
     local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(category, frame, self:GetTitle());
 end
 
--- Call after the last control: gives the scroll child its real height and loads the values.
+-- Call after the last control: loads the values and gives the scroll child its real height.
 function CaerdonWardrobeConfigPanelMixin:FinishLayout()
-    self.scrollChild:SetHeight(-self.nextPoint + 24)
     self:RefreshControls()
 end
 
@@ -142,6 +213,17 @@ function CaerdonWardrobeConfigPanelMixin:RefreshControls()
         control.caerdonRefresh()
     end
     self:UpdateDependents()
+    self:UpdateHeight()
+end
+
+-- The scroll child's height: what was laid out, and each part whose height changes as it is
+-- now.
+function CaerdonWardrobeConfigPanelMixin:UpdateHeight()
+    local height = self.heightAbove - self.nextPoint + 24
+    for _, part in ipairs(self.flexible) do
+        height = height + part:GetHeight()
+    end
+    self.scrollChild:SetHeight(height)
 end
 
 -- A control with dependsOn is only usable while that checkbox is checked and usable itself.
@@ -160,7 +242,7 @@ function CaerdonWardrobeConfigPanelMixin:RegisterControl(control)
 end
 
 function CaerdonWardrobeConfigPanelMixin:CreateText(font, text, x, y, width)
-    local parent = self.scrollChild
+    local parent = self.flow
     local fontString = parent:CreateFontString(nil, "OVERLAY", font)
     fontString:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     fontString:SetJustifyH("LEFT")
@@ -193,7 +275,7 @@ function CaerdonWardrobeConfigPanelMixin:AddTitle(title, intro)
 end
 
 function CaerdonWardrobeConfigPanelMixin:StartBlock()
-    local parent = self.scrollChild
+    local parent = self.flow
     if self.hasBlock then
         self.nextPoint = self.nextPoint - BLOCK_GAP / 2
         local line = parent:CreateTexture(nil, "BACKGROUND")
@@ -212,7 +294,7 @@ end
 --            inset (pixels the icon is smaller than its background), background = { same fields },
 --            label (text in the icon's place, for things that are drawn as text) }
 function CaerdonWardrobeConfigPanelMixin:AddIconHeader(spec)
-    local parent = self.scrollChild
+    local parent = self.flow
     self:StartBlock()
 
     local top = self.nextPoint
@@ -272,7 +354,7 @@ end
 
 function CaerdonWardrobeConfigPanelMixin:CreateCheckbox(info, x, y, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
 
     local checkbox = CreateFrame("CheckButton", "CaerdonWardrobe" .. info.key, parent,
         "InterfaceOptionsCheckButtonTemplate")
@@ -294,17 +376,33 @@ function CaerdonWardrobeConfigPanelMixin:CreateCheckbox(info, x, y, opts)
         SetValue(info, checked)
         PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
         self:UpdateDependents()
+        Changed()
     end)
+    -- opts.forcedOn(): the option is on whatever was chosen, because the choice does not exist
+    -- right now (an option about another addon that is not loaded). It is then shown checked
+    -- and not to be changed, with info.forcedTooltip as its explanation; the stored value stays.
+    local function Forced()
+        return opts.forcedOn ~= nil and opts.forcedOn() and true or false
+    end
+    -- info.tooltip can be a function, for a text that depends on what the option shows now.
     checkbox:SetScript("OnEnter", function(button)
-        ShowOptionTooltip(button, info.text, info.tooltip)
+        local tooltip = Forced() and info.forcedTooltip or info.tooltip
+        if type(tooltip) == "function" then
+            tooltip = tooltip()
+        end
+        ShowOptionTooltip(button, info.text, tooltip)
     end)
     checkbox:SetScript("OnLeave", HideOptionTooltip)
+    if opts.forcedOn and checkbox.SetMotionScriptsWhileDisabled then
+        checkbox:SetMotionScriptsWhileDisabled(true)
+    end
 
     checkbox.caerdonDependsOn = opts.dependsOn
     checkbox.caerdonRefresh = function()
-        checkbox:SetChecked(GetValue(info) and true or false)
+        checkbox:SetChecked(Forced() or (GetValue(info) and true or false))
     end
     checkbox.caerdonSetEnabled = function(enabled)
+        enabled = enabled and not Forced()
         checkbox:SetEnabled(enabled)
         if enabled then
             checkbox.label:SetTextColor(labelR or 1, labelG or 1, labelB or 1)
@@ -350,7 +448,7 @@ end
 
 -- "All" and "None" at the right end of a label row, for a grid that is one decision per window.
 function CaerdonWardrobeConfigPanelMixin:AddAllNoneButtons(y, checkboxes)
-    local parent = self.scrollChild
+    local parent = self.flow
 
     local function createButton(text, value, right)
         local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
@@ -364,6 +462,7 @@ function CaerdonWardrobeConfigPanelMixin:AddAllNoneButtons(y, checkboxes)
             end
             PlaySound(value and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
             self:UpdateDependents()
+            Changed()
         end)
         return button
     end
@@ -377,7 +476,7 @@ end
 -- info.formatUnknown(value) gives the text for a saved value that is not one of the entries.
 function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
     local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
 
     local label = self:CreateText("GameFontHighlight", info.text, x, self.nextPoint - 9)
@@ -407,6 +506,7 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
             menuInfo.func = function()
                 SetValue(info, entry.value)
                 text:SetText(entry.title)
+                Changed()
             end
             UIDropDownMenu_AddButton(menuInfo)
         end
@@ -449,10 +549,248 @@ function CaerdonWardrobeConfigPanelMixin:AddDropdown(info, values, opts)
     return dropdown
 end
 
+-- A list that is not known until the page shows and changes while the game runs (a row per
+-- gear set of the toon): one small line of text, then a row per entry with its icon, its name
+-- and a dropdown. What comes after it on the page hangs below it and moves as it grows.
+--   spec = { key, width (of the dropdowns),
+--            rows = function() -> { { icon, text, value, title (what the dropdown shows),
+--                   note (a line of text in the dropdown's place, for a row with nothing to
+--                   choose) } ... },
+--                   or nil where there is nothing to choose from: the list then takes no room
+--            header = function(count, rows) -> the line above the rows; with no rows, what the
+--                   list is for
+--            choices = function(row) -> { { title, value, tooltip, disabled } ... }, as a
+--                   dropdown opens. disabled: greyed and not to be clicked, and its tooltip,
+--                   which says why, still shows
+--            choose = function(row, value): the player's click
+--            check = a switch at the head of each row (optional):
+--                   { get = function(row) -> true, false, or nil for a row whose switch is not
+--                           to be clicked (shown empty and greyed; its tooltip still shows),
+--                     set = function(row, checked): the player's click,
+--                     tooltip = function(row) -> text } }
+--            mark = a second, labelled switch at the end of a row (optional), which hangs on
+--                   nothing: { text, get = function(row) -> true, false, or nil for a row that
+--                   has none, set = function(row, checked), tooltip = function(row) -> text } }
+-- opts = { indent = levels, dependsOn = checkbox (for the rows' switches alone: a dropdown is
+--          usable whatever that checkbox says) }
+function CaerdonWardrobeConfigPanelMixin:AddDropdownList(spec, opts)
+    opts = opts or {}
+    local parent = self.flow
+    local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
+    local width = CONTENT_RIGHT - x
+
+    local list = CreateFrame("Frame", "CaerdonWardrobe" .. spec.key, parent)
+    list.key = spec.key
+    list:SetPoint("TOPLEFT", parent, "TOPLEFT", x, self.nextPoint)
+    list:SetSize(width, 1)
+
+    local header = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    header:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -3)
+    header:SetJustifyH("LEFT")
+    header:SetJustifyV("TOP")
+    header:SetWidth(width)
+    header:SetWordWrap(true)
+    list.header = header
+    list.rows = {}
+
+    local function Row(index)
+        local row = list.rows[index]
+        if row then
+            return row
+        end
+        row = CreateFrame("Frame", nil, list)
+        row:SetSize(width, DROPDOWN_ROW_HEIGHT)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(LIST_ICON_SIZE, LIST_ICON_SIZE)
+        if spec.check then
+            local check = CreateFrame("CheckButton", "CaerdonWardrobe" .. spec.key .. "Check" .. index, row,
+                "InterfaceOptionsCheckButtonTemplate")
+            check:SetPoint("LEFT", row, "LEFT", -CHECKBOX_INSET, 0)
+            -- The template's text is not used: the row has its name beside the icon.
+            local label = check.Text or (check:GetName() and _G[check:GetName() .. "Text"])
+            if label then
+                label:SetText("")
+            end
+            check:SetScript("OnClick", function(button)
+                local checked = button:GetChecked() and true or false
+                PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+                if row.entry then
+                    spec.check.set(row.entry, checked)
+                end
+            end)
+            check:SetScript("OnEnter", function(button)
+                if row.entry and spec.check.tooltip then
+                    ShowOptionTooltip(button, row.entry.text, spec.check.tooltip(row.entry))
+                end
+            end)
+            check:SetScript("OnLeave", HideOptionTooltip)
+            if check.SetMotionScriptsWhileDisabled then
+                check:SetMotionScriptsWhileDisabled(true)
+            end
+            row.check = check
+            row.icon:SetPoint("LEFT", row, "LEFT", ROW_HEIGHT + 2, 0)
+        else
+            row.icon:SetPoint("LEFT", row, "LEFT", INDENT_STEP, 0)
+        end
+        -- One width for every name, so that the dropdowns stand in a column.
+        row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+        row.name:SetWidth(LIST_NAME_WIDTH)
+        row.name:SetJustifyH("LEFT")
+        row.name:SetWordWrap(false)
+
+        local dropdown = CreateFrame("Frame", "CaerdonWardrobe" .. spec.key .. index, row, "UIDropDownMenuTemplate")
+        dropdown:SetPoint("LEFT", row.name, "RIGHT", -8, -2)
+        if UIDropDownMenu_SetWidth then
+            UIDropDownMenu_SetWidth(dropdown, spec.width or 150)
+        end
+        row.dropdown = dropdown
+        row.text = dropdown.Text or _G[dropdown:GetName() .. "Text"]
+        if spec.mark then
+            local mark = CreateFrame("CheckButton", "CaerdonWardrobe" .. spec.key .. "Mark" .. index, row,
+                "InterfaceOptionsCheckButtonTemplate")
+            mark:SetPoint("LEFT", dropdown, "RIGHT", -14, 2)
+            local label = mark.Text or (mark:GetName() and _G[mark:GetName() .. "Text"])
+            if label then
+                label:SetText(spec.mark.text)
+            end
+            mark:SetScript("OnClick", function(button)
+                local checked = button:GetChecked() and true or false
+                PlaySound(checked and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+                if row.entry then
+                    spec.mark.set(row.entry, checked)
+                end
+            end)
+            mark:SetScript("OnEnter", function(button)
+                if row.entry and spec.mark.tooltip then
+                    ShowOptionTooltip(button, spec.mark.text, spec.mark.tooltip(row.entry))
+                end
+            end)
+            mark:SetScript("OnLeave", HideOptionTooltip)
+            row.mark = mark
+        end
+        -- In the dropdown's place, for a row with nothing to choose.
+        row.note = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.note:SetPoint("LEFT", row.name, "RIGHT", 10, 0)
+        row.note:SetJustifyH("LEFT")
+        row.note:SetWordWrap(false)
+        dropdown.initialize = function()
+            local entry = row.entry
+            for _, choice in ipairs(entry and spec.choices(entry) or {}) do
+                local menuInfo = UIDropDownMenu_CreateInfo and UIDropDownMenu_CreateInfo() or {}
+                menuInfo.text = choice.title
+                menuInfo.value = choice.value
+                menuInfo.checked = choice.value == entry.value
+                if choice.tooltip then
+                    menuInfo.tooltipTitle = choice.title
+                    menuInfo.tooltipText = choice.tooltip
+                    menuInfo.tooltipOnButton = true
+                end
+                if choice.disabled then
+                    menuInfo.disabled = true
+                    menuInfo.tooltipWhileDisabled = true
+                else
+                    menuInfo.func = function()
+                        spec.choose(entry, choice.value)
+                        -- A choice can change the rows themselves (a spec is listed until a
+                        -- gear set is given its scale), and with them the page's height.
+                        list.caerdonRefresh()
+                        self:UpdateHeight()
+                    end
+                end
+                UIDropDownMenu_AddButton(menuInfo)
+            end
+        end
+        list.rows[index] = row
+        return row
+    end
+
+    -- A row's switch is usable where the option above the list is on and the row has one to
+    -- click.
+    local function EnableChecks()
+        for _, row in ipairs(list.rows) do
+            if row.check then
+                row.check:SetEnabled(list.checksEnabled ~= false and row.checkUsable == true)
+            end
+        end
+    end
+
+    list.caerdonRefresh = function()
+        local entries = spec.rows()
+        local y = 0
+        if entries then
+            header:SetText(spec.header(#entries, entries))
+            header:Show()
+            y = -3 - TextHeight(header, 10) - 3
+        else
+            header:Hide()
+        end
+        local count = entries and #entries or 0
+        for index = 1, count do
+            local entry = entries[index]
+            local row = Row(index)
+            row.entry = entry
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", list, "TOPLEFT", 0, y)
+            row.icon:SetTexture(entry.icon)
+            row.name:SetText(entry.text)
+            row.text:SetText(entry.title or "")
+            row.dropdown:SetShown(entry.note == nil)
+            row.note:SetText(entry.note or "")
+            row.note:SetShown(entry.note ~= nil)
+            if row.check then
+                local checked = spec.check.get(entry)
+                row.checkUsable = checked ~= nil
+                row.check:SetChecked(checked == true)
+            end
+            if row.mark then
+                local marked = spec.mark.get(entry)
+                row.mark:SetShown(marked ~= nil)
+                row.mark:SetChecked(marked == true)
+            end
+            row:Show()
+            y = y - DROPDOWN_ROW_HEIGHT
+        end
+        for index = count + 1, #list.rows do
+            list.rows[index].entry = nil
+            list.rows[index]:Hide()
+        end
+        -- Never no height at all: a frame without one has no place, and what hangs below
+        -- is placed by this one's lower edge.
+        list:SetHeight(math.max(1, -y))
+        EnableChecks()
+    end
+    if spec.check then
+        list.caerdonDependsOn = opts.dependsOn
+        list.caerdonSetEnabled = function(enabled)
+            list.checksEnabled = enabled and true or false
+            EnableChecks()
+        end
+    end
+
+    local rest = CreateFrame("Frame", nil, parent)
+    rest:SetPoint("TOPLEFT", list, "BOTTOMLEFT", -x, 0)
+    rest:SetSize(CONTENT_RIGHT, 1)
+    self.heightAbove = self.heightAbove - self.nextPoint
+    table.insert(self.flexible, list)
+    self.flow = rest
+    self.nextPoint = 0
+
+    self:RegisterControl(list)
+    return list
+end
+
+-- For a control a page builds from parts of its own: the player's click on it, written as a
+-- checkbox's or a dropdown's is, with the one refresh a click brings.
+function CaerdonWardrobeConfigPanelMixin:SetOption(info, value)
+    SetValue(info, value)
+    Changed()
+end
+
 -- A frame built elsewhere, placed in the flow of the page. opts = { indent = levels }
 function CaerdonWardrobeConfigPanelMixin:AddFrame(frame, height, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
     local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
     frame:SetParent(parent)
     frame:ClearAllPoints()
@@ -464,7 +802,7 @@ end
 -- A button on its own row. opts = { indent = levels, width = pixels, tooltip = text }
 function CaerdonWardrobeConfigPanelMixin:AddButton(text, onClick, opts)
     opts = opts or {}
-    local parent = self.scrollChild
+    local parent = self.flow
     local x = self.bodyX + (opts.indent or 0) * INDENT_STEP
 
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")

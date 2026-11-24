@@ -55,10 +55,11 @@ end
 
 -- Baganator freezes its ItemButton mixin tables, so we hook SetItemDetails on
 -- each button instance rather than on the shared mixin.
-local function HookBaganatorButton(itemButton)
+local function HookBaganatorButton(feature, itemButton)
     if not itemButton or itemButton.caerdonSetItemDetailsHooked then
         return
     end
+    feature:NoteHookPoint("ItemButton.SetItemDetails", itemButton, "SetItemDetails")
     if type(itemButton.SetItemDetails) ~= "function" then
         return
     end
@@ -144,10 +145,6 @@ end
 -- than Pawn's (another talent tree's upgrade, a level too low, a gear set item). Which of two
 -- arrows shows is the player's choice in Baganator's Icon Corners: in the same corner only the
 -- higher one shows.
-function BaganatorMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {}
-end
-
 -- Has the item on this button drawn. One request serves all three widgets.
 function BaganatorMixin:RequestDraw(itemButton, details, state, bag, slot)
     local item, locationInfo
@@ -245,13 +242,22 @@ function BaganatorMixin:OnButtonDrawn(itemButton, item)
     end
 end
 
+-- Where this feature attaches to Baganator (the integration report; see FeatureMixin.lua).
+-- The item buttons are hooked one by one as Baganator creates them, so that point is reached
+-- when a bag is first shown.
+BaganatorMixin.integration = {
+    addon = addonName,
+    hookPoints = { "Baganator.API.RegisterCornerWidget", "ItemButton.SetItemDetails" },
+}
+
 function BaganatorMixin:Init()
     local function Register(label, part, regionName, defaultPosition)
+        self:NoteHookPoint("Baganator.API.RegisterCornerWidget", Baganator.API, "RegisterCornerWidget")
         Baganator.API.RegisterCornerWidget(label, WIDGETS[part], function(region, details)
             local itemButton = region.caerdonItemButton or region:GetParent():GetParent()
             return self:Ask(itemButton, details, part)
         end, function(itemButton)
-            HookBaganatorButton(itemButton)
+            HookBaganatorButton(self, itemButton)
             -- With no item, this only creates the overlay and its parts ahead of time.
             CaerdonWardrobe:UpdateButton(itemButton, nil, self, nil, options)
             local caerdonButton = CaerdonWardrobe:GetCaerdonButton(itemButton)
@@ -267,14 +273,6 @@ function BaganatorMixin:Init()
     Register("Caerdon Binding", "text", "bindsOnText", { corner = "bottom_left", priority = 2 })
     -- Ahead of Baganator's stack count: gear that shows a level gain does not stack.
     Register("Caerdon Level Gain", "gain", "upgradeDeltaText", { corner = "bottom_right", priority = 1 })
-end
-
-function BaganatorMixin:GetTooltipData(item, locationInfo)
-    -- if locationInfo.bag == BANK_CONTAINER then
-    -- 	return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
-    -- else
-    -- 	return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
-    -- end
 end
 
 function BaganatorMixin:Refresh()

@@ -7,23 +7,26 @@ function EncounterJournalMixin:GetName()
     return "EncounterJournal"
 end
 
+-- A drop is marked by the loot spec chosen, and as not to be had where this toon cannot collect
+-- its source or the piece binds when picked up (FeatureMixin.lua, statusRules).
+EncounterJournalMixin.statusRules = { otherSpec = true, noLoot = true, noLootBindOnPickup = true }
+
 function EncounterJournalMixin:Init()
-    return { "ADDON_LOADED", "PLAYER_LOOT_SPEC_UPDATED", "LOOT_JOURNAL_ITEM_UPDATE" }
+    self:WhenAddOnLoaded("Blizzard_EncounterJournal", self.OnEncounterJournalLoaded)
+    return { "PLAYER_LOOT_SPEC_UPDATED", "LOOT_JOURNAL_ITEM_UPDATE" }
 end
 
-function EncounterJournalMixin:ADDON_LOADED(name)
-    if name == "Blizzard_EncounterJournal" then
-        EncounterJournal.searchResults.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnSearchResultsScrollBoxRangeChanged, self);
-        EncounterJournal.encounter.info.LootContainer.ScrollBox:RegisterCallback("OnDataRangeChanged",
-            self.OnLootContainerScrollBoxRangeChanged, self);
-        hooksecurefunc("EncounterJournal_UpdateSearchPreview",
-            function(...) self:OnEncounterJournalUpdateSearchPreview(...) end)
-        hooksecurefunc("EJSuggestFrame_UpdateRewards", function(...) self:OnEJSuggestFrame_UpdateRewards(...) end)
-        ScrollUtil.AddInitializedFrameCallback(EncounterJournal.LootJournalItems.ItemSetsFrame.ScrollBox,
-            function(...) self:OnItemSetsInitializedFrame(...) end, EncounterJournal.LootJournalItems.ItemSetsFrame,
-            false)
-    end
+function EncounterJournalMixin:OnEncounterJournalLoaded()
+    EncounterJournal.searchResults.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnSearchResultsScrollBoxRangeChanged, self);
+    EncounterJournal.encounter.info.LootContainer.ScrollBox:RegisterCallback("OnDataRangeChanged",
+        self.OnLootContainerScrollBoxRangeChanged, self);
+    hooksecurefunc("EncounterJournal_UpdateSearchPreview",
+        function(...) self:OnEncounterJournalUpdateSearchPreview(...) end)
+    hooksecurefunc("EJSuggestFrame_UpdateRewards", function(...) self:OnEJSuggestFrame_UpdateRewards(...) end)
+    ScrollUtil.AddInitializedFrameCallback(EncounterJournal.LootJournalItems.ItemSetsFrame.ScrollBox,
+        function(...) self:OnItemSetsInitializedFrame(...) end, EncounterJournal.LootJournalItems.ItemSetsFrame,
+        false)
 end
 
 function EncounterJournalMixin:LOOT_JOURNAL_ITEM_UPDATE()
@@ -42,19 +45,10 @@ function EncounterJournalMixin:OnItemSetsInitializedFrame(listFrame, frame, elem
     }
 
     for j = 1, #items do
-        local itemButton = frame.ItemButtons[j];
-        local item = CaerdonItem:CreateFromItemID(items[j].itemID)
-        if item:IsItemDataCached() then
-            CaerdonWardrobe:UpdateButton(itemButton, item, self, {
-                locationKey = format("itemset-" .. "%d-%d", elementData.setID, item:GetItemID())
-            }, options)
-        else
-            item:ContinueOnItemLoad(function()
-                CaerdonWardrobe:UpdateButton(itemButton, item, self, {
-                    locationKey = format("itemset-" .. "%d-%d", elementData.setID, item:GetItemID())
-                }, options)
-            end)
-        end
+        local itemID = items[j].itemID
+        self:Decorate(frame.ItemButtons[j], itemID, {
+            locationKey = format("itemset-" .. "%d-%d", elementData.setID, itemID)
+        }, options)
     end
 end
 
@@ -120,28 +114,13 @@ function EncounterJournalMixin:Refresh()
     end
 end
 
-function EncounterJournalMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-    return {
-        bindingStatus = {
-            shouldShow = true
-        },
-        ownIcon = {
-            shouldShow = true
-        },
-        otherIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.EncounterJournal ~= false
-        },
-        questIcon = {
-            shouldShow = CaerdonWardrobeConfig.Icon.ShowQuestItems
-        },
-        oldExpansionIcon = {
-            shouldShow = true
-        },
-        sellableIcon = {
-            shouldShow = false
-        }
-    }
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+EncounterJournalMixin.displayRules = {
+    bindingStatus = true,
+    ownIcon = true,
+    otherIcon = "EncounterJournal",
+    sellableIcon = false,
+}
 
 function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
     local button = suggestion.reward
@@ -168,29 +147,6 @@ function EncounterJournalMixin:OnEJSuggestFrame_UpdateRewards(suggestion)
         end
     else
         CaerdonWardrobe:ClearButton(button)
-    end
-end
-
-function EncounterJournalMixin:OnConfigureItemButton(button)
-    local options = {
-        relativeFrame = button.icon,
-        statusOffsetX = 8,
-        statusOffsetY = 7
-    }
-
-    -- TODO: Confirm once this is turned on and check if button has an index instead.
-    -- local itemLink = button.itemLink
-    if button.itemID then
-        local _, itemLink, itemQuality = C_Item.GetItemInfo(button.itemID);
-        -- print(itemLink)
-        if itemLink then
-            local item = CaerdonItem:CreateFromItemLink(itemLink)
-            CaerdonWardrobe:UpdateButton(button, item, self, {
-                locationKey = format("itemSets%d", button.itemID)
-            }, options)
-        else
-            CaerdonWardrobe:ClearButton(button)
-        end
     end
 end
 

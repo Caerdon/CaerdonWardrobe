@@ -4,19 +4,18 @@ function CustomerOrdersMixin:GetName()
 	return "CustomerOrders"
 end
 
-function CustomerOrdersMixin:Init(frame)
-	self.orderContinuableContainer = ContinuableContainer:Create()
+-- An order's piece is marked by the loot spec chosen, and as not to be had where this toon
+-- cannot collect its source (FeatureMixin.lua, statusRules).
+CustomerOrdersMixin.statusRules = { otherSpec = true, noLoot = true }
 
-	return {
-        "ADDON_LOADED"
-	}
+function CustomerOrdersMixin:Init(frame)
+	self:WhenAddOnLoaded("Blizzard_ProfessionsCustomerOrders", self.OnCustomerOrdersLoaded)
+	return {}
 end
 
-function CustomerOrdersMixin:ADDON_LOADED(name)
-    if name == "Blizzard_ProfessionsCustomerOrders" then
-        ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList, false)
-        hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "InitSchematic", function (...) self:OnSchematicFormInit(...) end)
-    end
+function CustomerOrdersMixin:OnCustomerOrdersLoaded()
+    ScrollUtil.AddInitializedFrameCallback(ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsCustomerOrdersFrame.BrowseOrders.RecipeList, false)
+    hooksecurefunc(ProfessionsCustomerOrdersFrame.Form, "InitSchematic", function (...) self:OnSchematicFormInit(...) end)
 end
 
 function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
@@ -37,43 +36,15 @@ function CustomerOrdersMixin:OnInitializedFrame(listFrame, frame, elementData)
     })
 end
 
-function CustomerOrdersMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-
-	-- local option = locationInfo.option
-	-- if option then
-        -- local reagents = {};
-        -- TODO: Do I need to get this somehow?  New link method seems fine...
-        -- C_TradeSkillUI.SetTooltipRecipeResultItem(option.spellID, reagents);
-        -- DevTools_Dump(tooltip)
-	-- end
-end
-
-function CustomerOrdersMixin:Refresh()
-end
-
-function CustomerOrdersMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = false
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.CustomerOrders ~= false
-		},
-		questIcon = {
-			shouldShow = false
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+CustomerOrdersMixin.displayRules = {
+	bindingStatus = false,
+	ownIcon = true,
+	otherIcon = "CustomerOrders",
+	questIcon = false,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 function CustomerOrdersMixin:OnSchematicFormInit(frame)
     -- DevTools_Dump(frame)

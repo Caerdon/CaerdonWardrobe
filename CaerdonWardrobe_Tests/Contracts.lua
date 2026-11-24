@@ -1,0 +1,2672 @@
+-- Client contracts: facts about the client the addon leans on, checked in the client.
+--
+-- Each one answers a question that reading Blizzard's code cannot settle. A contract names
+-- client functions only when both clients have them; anything that may be missing is looked
+-- up by name at run time, so a missing name is an answer and not an error.
+
+local _, T = ...
+
+-- "C_Item.GetItemInfo", "Enum.ItemBind.Quest", "InboxFrame.Update": nil when any step is missing.
+local function Lookup(path)
+    local value = _G
+    for part in path:gmatch("[^.]+") do
+        if type(value) ~= "table" then
+            return nil
+        end
+        value = value[part]
+        if value == nil then
+            return nil
+        end
+    end
+    return value
+end
+T.Lookup = Lookup
+
+local function Join(list, limit)
+    table.sort(list)
+    local shown = table.concat(list, ", ", 1, math.min(#list, limit or 8))
+    if #list > (limit or 8) then
+        shown = shown .. (", +%d more"):format(#list - (limit or 8))
+    end
+    return shown
+end
+
+-- Bag slots that hold an item, backpack first: a list of { bag, slot }.
+local function FilledBagSlots(limit)
+    local found = {}
+    for bag = Enum.BagIndex.Backpack, Enum.BagIndex.ReagentBag do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
+            if C_Container.GetContainerItemID(bag, slot) then
+                found[#found + 1] = { bag = bag, slot = slot }
+                if limit and #found >= limit then
+                    return found
+                end
+            end
+        end
+    end
+    return found
+end
+
+local function TypeOf(value)
+    return issecretvalue(value) and "secret" or type(value)
+end
+
+-- Checks the fields of a table against the types the addon expects. A type ending in "?"
+-- may be nil.
+local function CheckFields(c, what, value, fields)
+    if not c:Check(type(value) == "table", "%s is a %s, not a table", what, TypeOf(value)) then
+        return
+    end
+    for _, name in ipairs(T.SortedKeys(fields)) do
+        local want = fields[name]
+        local optional = want:sub(-1) == "?"
+        if optional then
+            want = want:sub(1, -2)
+        end
+        local have = TypeOf(value[name])
+        c:Check(have == want or (optional and have == "nil"), "%s.%s is a %s, expected %s", what, name, have, want)
+    end
+    c:Note(what .. " keys", T.SortedKeys(value))
+end
+
+------------------------------------------------------------------------------------------
+-- Who we are
+------------------------------------------------------------------------------------------
+
+T.Contract({
+    id = "client.identity",
+    version = 1,
+    title = "The client reports the flavor the addon assumes",
+    run = function(c)
+        local client = T.GetClient()
+        c:Note("client", client)
+        c:Note("isForeverClient", CaerdonAPI:IsForeverClient())
+        c:Check(client.flavor == "retail" or client.flavor == "forever", "unknown flavor %s", client.flavor)
+        if client.flavor == "forever" then
+            c:Check(client.projectID == 18, "WOW_PROJECT_ID is %s, expected 18", tostring(client.projectID))
+            c:Check(client.toc >= 16000 and client.toc < 20000, "interface version is %s", tostring(client.toc))
+        end
+    end,
+})
+
+-- The addon keeps its index of the equipment sets for as long as GetTime() gives the same
+-- value, taking that to be one frame (types/EquipmentMixin.lua, GetEquipmentSets). If the
+-- value moved within a frame the index would be built for every call: right, but no cheaper
+-- than before it existed.
+T.Contract({
+    id = "client.frameTime",
+    version = 1,
+    title = "GetTime() stands still within a frame",
+    run = function(c)
+        local before = GetTime()
+        local started = T.Milliseconds()
+        local spins = 0
+        -- Three milliseconds of nothing, counted too in case the stopwatch does not move.
+        while T.Milliseconds() - started < 3 and spins < 200000 do
+            spins = spins + 1
+        end
+        local busy = T.Milliseconds() - started
+        local after = GetTime()
+        c:Note("busyMs", busy)
+        c:Note("movedSeconds", after - before)
+        if busy < 1 then
+            return "skip", "the stopwatch did not move, so nothing was waited for"
+        end
+        c:Check(after == before, "GetTime() moved by %s s during %s ms within one frame", tostring(after - before),
+            tostring(busy))
+    end,
+})
+
+-- The transmog info of a piece of equipment is kept with the cached status, which is per
+-- link. So a piece in a bag slot can be drawn with the info that was made for another copy of
+-- its link, or for the bare link (the mail, a vendor, a loot window). That is right as long
+-- as the info does not depend on where the copy lies: the slot gives the item level and the
+-- PVP floor through other calls than the link does. Both are computed here for every piece in
+-- the bags, and what differs is listed.
+--
+-- A piece whose slot and link have cache entries of their own shares nothing, so a field
+-- that differs there fails nothing: a soulbound copy is one, and so is a crafted piece
+-- (whether it can be recrafted is asked of the copy, and a retail client showed that field
+-- differing on every crafted piece in the bags). Those are compared all the same and what
+-- differs is noted (apartDiffering, apartFields): most pieces in a bag are soulbound, and
+-- their slots and links agreeing is the evidence for the few that do share.
+T.Contract({
+    id = "equipment.keptInfo",
+    version = 3,
+    title = "A piece of equipment's transmog info is the same for its bag slot and for its bare link, where the two share a cache entry",
+    run = function(c)
+        local pieces, differing, apart, apartDiffering, apartFields, examples = 0, 0, 0, 0, {}, {}
+        for _, where in ipairs(FilledBagSlots()) do
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local linkItem = link and T.LoadItem(link, 5)
+            if linkItem and linkItem:GetCaerdonItemType() == CaerdonItemType.Equipment then
+                local slotItem = CaerdonItem:CreateFromBagAndSlot(where.bag, where.slot)
+                local loaded = false
+                slotItem:ContinueOnItemLoad(function() loaded = true end)
+                -- The slot can hold something else by the time its data has come.
+                if T.WaitUntil(function() return loaded end, 5) and slotItem:GetItemLink() == link
+                    and slotItem:GetItemData() and linkItem:GetItemData() then
+                    pieces = pieces + 1
+                    local fromSlot = T.Facts.Scalars(slotItem:GetItemData():GetTransmogInfo())
+                    local fromLink = T.Facts.Scalars(linkItem:GetItemData():GetTransmogInfo())
+                    local fields = {}
+                    for key, value in pairs(fromSlot) do
+                        if fromLink[key] ~= value then
+                            fields[#fields + 1] = key
+                        end
+                    end
+                    for key in pairs(fromLink) do
+                        if fromSlot[key] == nil then
+                            fields[#fields + 1] = key
+                        end
+                    end
+                    -- An addon from before the key could be asked for keeps every piece per link.
+                    local shared = not slotItem.GetStatusCacheKey
+                        or slotItem:GetStatusCacheKey() == linkItem:GetStatusCacheKey()
+                    if not shared then
+                        apart = apart + 1
+                        if #fields > 0 then
+                            apartDiffering = apartDiffering + 1
+                            for _, key in ipairs(fields) do
+                                apartFields[key] = (apartFields[key] or 0) + 1
+                            end
+                        end
+                        fields = {}
+                    end
+                    if #fields > 0 then
+                        differing = differing + 1
+                        table.sort(fields)
+                        if #examples < 8 then
+                            local texts = {}
+                            for index, key in ipairs(fields) do
+                                texts[index] = ("%s: %s in the slot, %s for the link"):format(key, tostring(fromSlot[key]),
+                                    tostring(fromLink[key]))
+                            end
+                            examples[#examples + 1] = { link = link, bag = where.bag, slot = where.slot, fields = texts }
+                        end
+                    end
+                    if pieces % 5 == 0 then
+                        T.Yield()
+                    end
+                end
+            end
+        end
+        c:Note("pieces", pieces)
+        c:Note("differing", differing)
+        c:Note("apart", apart)
+        c:Note("apartDiffering", apartDiffering)
+        c:Note("apartFields", apartFields)
+        c:Note("examples", examples)
+        if pieces == 0 then
+            return "skip", "needs a piece of equipment in the bags"
+        end
+        local first = examples[1] and (examples[1].link .. ": " .. table.concat(examples[1].fields, "; ")) or ""
+        c:Check(differing == 0, "%d of %d pieces have a transmog info that depends on where the copy lies; the first is %s",
+            differing, pieces, first)
+    end,
+})
+
+-- Which equipment sets hold a piece is asked of the copy: the addon reads where each set's
+-- pieces lie (C_EquipmentSet.GetItemLocations) and looks a bag item up by its slot
+-- (types/EquipmentMixin.lua, GetEquipmentSetsOf). The game answers the same question for a bag
+-- slot itself, with the names in one string. The two are compared for every filled bag slot:
+-- in a set or not, every name the addon gives found in the game's string, and nothing left of
+-- that string but what stands between names. How the game joins the names is not assumed.
+T.Contract({
+    id = "equipment.setsByCopy",
+    version = 1,
+    title = "The equipment sets the addon finds for a bag slot are the ones the game names for that slot",
+    run = function(c)
+        if not (CaerdonEquipment and CaerdonEquipment.GetEquipmentSetsOf) then
+            return "skip", "this addon does not ask about the copy"
+        end
+        local slots, inSets, differing, examples, lists = 0, 0, 0, {}, {}
+        for _, where in ipairs(FilledBagSlots()) do
+            local inSet, setList = C_Container.GetContainerItemEquipmentSetInfo(where.bag, where.slot)
+            local names = CaerdonEquipment:GetEquipmentSetsOf(CaerdonItem:CreateFromBagAndSlot(where.bag, where.slot))
+            local gameSays = type(setList) == "string" and setList or ""
+            local addonSays = names and table.concat(names, " | ") or ""
+            slots = slots + 1
+
+            local fault = nil
+            if (inSet and true or false) ~= (names ~= nil) then
+                fault = inSet and "the game names sets, the addon none" or "the addon names sets, the game none"
+            elseif names then
+                local rest = gameSays
+                for _, name in ipairs(names) do
+                    local from, to = rest:find(name, 1, true)
+                    if not from then
+                        fault = "the game does not name " .. name
+                        break
+                    end
+                    rest = rest:sub(1, from - 1) .. rest:sub(to + 1)
+                end
+                if not fault and rest:find("%w") then
+                    fault = "the game names more"
+                end
+            end
+
+            if inSet or names then
+                inSets = inSets + 1
+                if #lists < 4 then
+                    lists[#lists + 1] = { game = gameSays, addon = addonSays }
+                end
+            end
+            if fault then
+                differing = differing + 1
+                if #examples < 8 then
+                    examples[#examples + 1] = { bag = where.bag, slot = where.slot, fault = fault, game = gameSays,
+                        addon = addonSays, link = C_Container.GetContainerItemLink(where.bag, where.slot) }
+                end
+            end
+        end
+        c:Note("slots", slots)
+        c:Note("inSets", inSets)
+        c:Note("differing", differing)
+        c:Note("lists", lists)
+        c:Note("examples", examples)
+        if inSets == 0 then
+            return "skip", "needs a piece of an equipment set in the bags"
+        end
+        local first = examples[1] and ("bag %d slot %d: %s"):format(examples[1].bag, examples[1].slot, examples[1].fault) or ""
+        c:Check(differing == 0, "%d of %d bag slots are in other sets for the addon than for the game; the first is %s",
+            differing, slots, first)
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- Reloading the UI from addon code
+------------------------------------------------------------------------------------------
+
+-- The results only reach the disk on a reload or logout, and rotating bag addons needs a
+-- reload per addon. Blizzard's own UI calls the plain ReloadUI() from click handlers; these
+-- three say whether addon code may do the same, and whether it needs the click.
+
+local RELOAD_HOW = {
+    click = "press \"Save results (reload)\" in the /cwtest window",
+    slash = "type /cwtest reload",
+    timer = "type /cwtest reload timer (reloads a second later, with no click or key behind it)",
+}
+
+for how, instruction in pairs(RELOAD_HOW) do
+    T.Contract({
+        id = "reload." .. how,
+        version = 1,
+        title = "ReloadUI() from addon code: " .. how,
+        run = function()
+            return "manual", instruction
+        end,
+    })
+end
+
+local lastBlocked
+local TIMER_REFUSED = "ReloadUI() is refused without a click or key press behind it"
+
+local function OnActionBlocked(event, addon, blockedFunction)
+    if addon == T.NAME then
+        lastBlocked = { event = event, blocked = blockedFunction, time = GetTime() }
+    end
+end
+T.RegisterEvent("ADDON_ACTION_FORBIDDEN", OnActionBlocked)
+T.RegisterEvent("ADDON_ACTION_BLOCKED", OnActionBlocked)
+
+-- Reloads, leaving a note in the saved variables. The note coming back after the reload is
+-- the proof that it worked; still being here two seconds later is the proof that it did not.
+function T.RequestReload(how)
+    T.db.pending.reload = { how = how, at = GetServerTime() }
+    lastBlocked = nil
+    C_Timer.After(2, function()
+        local pending = T.db.pending.reload
+        if pending and pending.how == how then
+            T.db.pending.reload = nil
+            if how == "timer" then
+                -- Without a click or key press the client may refuse, and that is an answer.
+                T.SetResult("reload.timer", "info", { blocked = lastBlocked }, TIMER_REFUSED)
+                T.Print("The client refused to reload without a click or key press behind it, which is what this was asking. Use /reload to save the results.")
+            else
+                T.SetResult("reload." .. how, "fail", { blocked = lastBlocked },
+                    "the UI was still running 2 seconds after ReloadUI()")
+                T.Print("ReloadUI() did nothing (%s). Recorded; use /reload to save the results.", how)
+            end
+        end
+    end)
+    ReloadUI()
+end
+
+T.OnLogin(function()
+    local pending = T.db.pending.reload
+    if pending then
+        T.db.pending.reload = nil
+        T.SetResult("reload." .. pending.how, "pass", { secondsAway = GetServerTime() - pending.at })
+    end
+    -- A refusal recorded as a failure before it was called an answer.
+    local stored = (T.db.contracts[T.GetClient().build] or {})["reload.timer"]
+    if stored and stored.status == "fail" then
+        stored.status, stored.message = "info", TIMER_REFUSED
+    end
+end)
+
+------------------------------------------------------------------------------------------
+-- What the static check believes, against the client
+------------------------------------------------------------------------------------------
+
+-- StaticFacts.lua is written by tools/static-checks.lua. The check decides from Blizzard's
+-- code and listings which names each client has; these contracts ask the client. A name the
+-- check calls missing that exists here means its model of the client is wrong. A name it
+-- expects that is absent here is not proof: its Blizzard addon may load on demand.
+
+-- The file is generated and not tracked, so a working copy may not have it.
+local NO_STATIC_FACTS = "StaticFacts.lua has not been generated: luajit tools/static-checks.lua --emit-facts"
+
+local function NoteStaticBuild(c)
+    local facts, client = T.StaticFacts, T.GetClient()
+    c:Note("generatedFor", facts.builds[client.flavor])
+    c:Note("clientBuild", client.build)
+    if facts.builds[client.flavor] ~= client.build then
+        c:Note("warning", "the static facts were generated for another build; run update.sh and the static check")
+    end
+end
+
+T.Contract({
+    id = "static.names",
+    version = 2,
+    title = "Names the static check calls missing from this client are missing",
+    run = function(c)
+        if not T.StaticFacts then
+            return "skip", NO_STATIC_FACTS
+        end
+        local flavor = T.GetClient().flavor
+        local unexpected, fromAddons, absent, checked = {}, {}, {}, 0
+        for name, state in pairs(T.StaticFacts.names) do
+            checked = checked + 1
+            local predicted = state == flavor
+            local found = Lookup(name) ~= nil
+            if found and not predicted then
+                -- A global another addon created says nothing about the client: several of
+                -- these names are plain words (options, feature) that addons leak.
+                local isSecure, taintedBy = issecurevariable(name:match("^[^.]+"))
+                if isSecure then
+                    unexpected[#unexpected + 1] = name
+                else
+                    fromAddons[name] = taintedBy or "an addon"
+                end
+            elseif predicted and not found then
+                absent[#absent + 1] = name
+            end
+        end
+        table.sort(unexpected)
+        table.sort(absent)
+        NoteStaticBuild(c)
+        c:Note("checked", checked)
+        c:Note("existsAgainstPrediction", unexpected)
+        c:Note("createdByOtherAddons", fromAddons)
+        c:Note("absentButExpected", absent)
+        -- Names Blizzard's deprecation fallbacks define or wrap: there while the CVar is on.
+        -- Listed, not judged.
+        local fallbacks = { cvar = C_CVar.GetCVar("loadDeprecationFallbacks"), present = {}, absent = {} }
+        for name in pairs(T.StaticFacts.deprecated or {}) do
+            local list = Lookup(name) ~= nil and fallbacks.present or fallbacks.absent
+            list[#list + 1] = name
+        end
+        table.sort(fallbacks.present)
+        table.sort(fallbacks.absent)
+        c:Note("deprecationFallbacks", fallbacks)
+        c:Check(#unexpected == 0, "%d names exist here although the static check calls them missing: %s",
+            #unexpected, Join(unexpected))
+    end,
+})
+
+T.Contract({
+    id = "static.hooks",
+    version = 1,
+    title = "Blizzard functions the features hook exist",
+    run = function(c)
+        if not T.StaticFacts then
+            return "skip", NO_STATIC_FACTS
+        end
+        local flavor = T.GetClient().flavor
+        local unexpected, absent, found = {}, {}, 0
+        for name, state in pairs(T.StaticFacts.hooks) do
+            local predicted = state == "both" or state == flavor
+            local exists = type(Lookup(name)) == "function"
+            if exists then
+                found = found + 1
+            end
+            if exists and not predicted then
+                unexpected[#unexpected + 1] = name
+            elseif predicted and not exists then
+                absent[#absent + 1] = name
+            end
+        end
+        table.sort(unexpected)
+        table.sort(absent)
+        NoteStaticBuild(c)
+        c:Note("found", found)
+        c:Note("existsAgainstPrediction", unexpected)
+        -- Not a failure: the target's Blizzard addon may not be loaded yet.
+        c:Note("absentButExpected", absent)
+        c:Check(#unexpected == 0, "%d hook targets exist here although the static check calls them missing: %s",
+            #unexpected, Join(unexpected))
+    end,
+})
+
+T.Contract({
+    id = "static.events",
+    version = 1,
+    title = "Events the static check gives to one client only are known to that client only",
+    run = function(c)
+        if not T.StaticFacts then
+            return "skip", NO_STATIC_FACTS
+        end
+        local flavor = T.GetClient().flavor
+        local probe = CreateFrame("Frame")
+        local function Knows(event)
+            local ok = pcall(probe.RegisterEvent, probe, event)
+            if ok then
+                probe:UnregisterEvent(event)
+            end
+            return ok
+        end
+
+        local unexpected, absent = {}, {}
+        for event, state in pairs(T.StaticFacts.events) do
+            local predicted = state == flavor
+            local known = Knows(event)
+            if known and not predicted then
+                unexpected[#unexpected + 1] = event
+            elseif predicted and not known then
+                absent[#absent + 1] = event
+            end
+        end
+        NoteStaticBuild(c)
+        c:Note("knownAgainstPrediction", unexpected)
+        c:Note("unknownButExpected", absent)
+        c:Check(#unexpected == 0, "events known here that the static check calls unknown: %s", Join(unexpected))
+        c:Check(#absent == 0, "events unknown here that the static check expects: %s", Join(absent))
+
+        -- Events the addon registers through pcall because a client might not know them.
+        local guarded = {}
+        for _, event in ipairs({ "UPDATE_EXPANSION_LEVEL", "TRAIT_CONFIG_UPDATED", "TRAIT_CONFIG_LIST_UPDATED",
+            "ACTIVE_COMBAT_CONFIG_CHANGED", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE" }) do
+            guarded[event] = Knows(event)
+        end
+        c:Note("guardedEvents", guarded)
+    end,
+})
+
+T.Contract({
+    id = "static.addons",
+    version = 2,
+    title = "The static check's list of Blizzard addons this client loads is right",
+    run = function(c)
+        if not T.StaticFacts then
+            return "skip", NO_STATIC_FACTS
+        end
+        local flavor = T.GetClient().flavor
+        local notLoaded, loads = T.StaticFacts.notLoaded[flavor], T.StaticFacts.loads[flavor]
+
+        -- The client may raise an error for a name it has never heard of.
+        local function Ask(fn, name)
+            local ok, first, second = pcall(fn, name)
+            if ok then
+                return first, second
+            end
+            return nil, "error"
+        end
+
+        -- Addons the check says never load here must not be loaded.
+        local loadedAnyway, reasons = {}, {}
+        for _, name in ipairs(notLoaded) do
+            if Ask(C_AddOns.IsAddOnLoaded, name) then
+                loadedAnyway[#loadedAnyway + 1] = name
+            end
+            local loadable, reason = Ask(C_AddOns.IsAddOnLoadable, name)
+            local key = Ask(C_AddOns.DoesAddOnExist, name) and (loadable and "loadable" or tostring(reason))
+                or "unknown to the client"
+            -- By name: "loadable" for an addon the check says never loads is worth a look.
+            reasons[key] = reasons[key] or {}
+            table.insert(reasons[key], name)
+        end
+
+        -- Addons it says load here should at least be known to the client.
+        local unknown = {}
+        for _, name in ipairs(loads) do
+            if not Ask(C_AddOns.DoesAddOnExist, name) then
+                unknown[#unknown + 1] = name
+            end
+        end
+
+        NoteStaticBuild(c)
+        c:Note("loadedAgainstPrediction", loadedAnyway)
+        c:Note("notLoadedByAnswer", reasons)
+        c:Note("expectedButUnknown", unknown)
+        c:Note("expected", #loads)
+        c:Check(#loadedAnyway == 0, "loaded although the static check says this client never loads them: %s",
+            Join(loadedAnyway))
+        -- If the client does not answer for Blizzard's own addons at all, that is a fact about
+        -- the API and says nothing about the list.
+        if #unknown > #loads / 2 then
+            c:Note("warning", "C_AddOns.DoesAddOnExist does not answer for most Blizzard addons")
+        else
+            c:Check(#unknown == 0, "unknown to this client although the static check says it loads them: %s",
+                Join(unknown))
+        end
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- Shapes of the answers the addon reads
+------------------------------------------------------------------------------------------
+
+T.Contract({
+    id = "shape.itemInfo",
+    version = 1,
+    title = "C_Item.GetItemInfo returns its values where the addon reads them",
+    run = function(c)
+        local item, why = T.LoadItem(6948) -- Hearthstone, in both clients
+        if not item then
+            return "skip", why
+        end
+        local values = { C_Item.GetItemInfo(item:GetItemLink()) }
+        c:Note("values", values)
+        c:Check(type(values[1]) == "string", "value 1 (name) is a %s", TypeOf(values[1]))
+        c:Check(type(values[2]) == "string", "value 2 (link) is a %s", TypeOf(values[2]))
+        c:Check(type(values[8]) == "number", "value 8 (max stack) is a %s", TypeOf(values[8]))
+        c:Check(type(values[9]) == "string", "value 9 (equip location) is a %s", TypeOf(values[9]))
+        c:Check(type(values[11]) == "number", "value 11 (sell price) is a %s", TypeOf(values[11]))
+        c:Check(type(values[12]) == "number", "value 12 (class) is a %s", TypeOf(values[12]))
+        c:Check(type(values[13]) == "number", "value 13 (subclass) is a %s", TypeOf(values[13]))
+        c:Check(type(values[14]) == "number", "value 14 (bind type) is a %s", TypeOf(values[14]))
+        c:Check(type(values[15]) == "number", "value 15 (expansion) is a %s", TypeOf(values[15]))
+        c:Check(type(values[17]) == "boolean", "value 17 (crafting reagent) is a %s", TypeOf(values[17]))
+    end,
+})
+
+T.Contract({
+    id = "shape.containerItemInfo",
+    version = 1,
+    title = "C_Container.GetContainerItemInfo has the fields the addon reads",
+    run = function(c)
+        local slots = FilledBagSlots(1)
+        if #slots == 0 then
+            return "skip", "needs an item in the bags"
+        end
+        local info = C_Container.GetContainerItemInfo(slots[1].bag, slots[1].slot)
+        CheckFields(c, "containerItemInfo", info, {
+            stackCount = "number", isLocked = "boolean", quality = "number?", isReadable = "boolean",
+            hasLoot = "boolean", hyperlink = "string", isFiltered = "boolean", itemID = "number",
+            isBound = "boolean",
+        })
+    end,
+})
+
+T.Contract({
+    id = "shape.tooltipData",
+    version = 1,
+    title = "C_TooltipInfo.GetHyperlink returns typed lines with colors",
+    run = function(c)
+        local item, why = T.LoadItem(6948)
+        if not item then
+            return "skip", why
+        end
+        local data = C_TooltipInfo.GetHyperlink(item:GetItemLink())
+        CheckFields(c, "tooltipData", data, { lines = "table", type = "number", dataInstanceID = "number" })
+        local line = type(data) == "table" and type(data.lines) == "table" and data.lines[1]
+        CheckFields(c, "line", line, { leftText = "string", type = "number", leftColor = "table" })
+        if type(line) == "table" and type(line.leftColor) == "table" then
+            CheckFields(c, "leftColor", line.leftColor, { r = "number", g = "number", b = "number" })
+        end
+    end,
+})
+
+T.Contract({
+    id = "shape.sourceInfo",
+    version = 1,
+    title = "The transmog source answers have the fields the addon reads",
+    perToon = true,
+    run = function(c)
+        local sourceID, link
+        for slot = 1, 19 do
+            link = GetInventoryItemLink("player", slot)
+            if link then
+                local _, source = C_TransmogCollection.GetItemInfo(link)
+                if source then
+                    sourceID = source
+                    break
+                end
+            end
+        end
+        if not sourceID then
+            return "skip", "needs an equipped item with an appearance"
+        end
+        c:Note("item", link)
+        CheckFields(c, "sourceInfo", C_TransmogCollection.GetSourceInfo(sourceID), {
+            isCollected = "boolean", isValidSourceForPlayer = "boolean", categoryID = "number",
+            itemID = "number", visualID = "number", sourceType = "number?", useErrorType = "number?",
+        })
+        local ready, canCollect = C_TransmogCollection.PlayerCanCollectSource(sourceID)
+        c:Check(type(ready) == "boolean" and type(canCollect) == "boolean",
+            "PlayerCanCollectSource returned %s, %s", TypeOf(ready), TypeOf(canCollect))
+        ready, canCollect = C_TransmogCollection.AccountCanCollectSource(sourceID)
+        c:Check(type(ready) == "boolean" and type(canCollect) == "boolean",
+            "AccountCanCollectSource returned %s, %s", TypeOf(ready), TypeOf(canCollect))
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- One known item, build after build
+------------------------------------------------------------------------------------------
+
+-- The WoWUnit tests the addon used to ship began with a "data change canary": everything the
+-- client says about one plain item, Brawler's Harness, so that a patch which changes what
+-- the client hands out is noticed. This is that canary. It reads what does not depend on the
+-- toon or the collection and compares it with the reading of the build before, so it needs no
+-- expected values and holds for either client. The old test's values (retail, 2020) are kept
+-- for the reader: where today's reading differs from them is noted, not judged.
+
+local CANARY_ITEM = 6125
+local CANARY_ID, CANARY_VERSION = "canary.knownItem", 1
+
+local CANARY_2020 = {
+    name = "Brawler's Harness", quality = 2, minLevel = 0, equipLoc = "INVTYPE_BODY", classID = 4, subClassID = 0,
+    bindType = 2, expansionID = 0, craftingReagent = false, appearanceID = 1979, sourceID = 2260,
+    ["source.visualID"] = 1979, ["source.itemID"] = 6125, ["source.categoryID"] = 5, ["source.invType"] = 5,
+    ["source.itemModID"] = 0, ["source.name"] = "Brawler's Harness", ["source.quality"] = 2,
+    ["source.isHideVisual"] = false,
+}
+-- The fields GetSourceInfo had then, for a source nobody had collected.
+local CANARY_2020_SOURCE_KEYS = "categoryID, invType, isCollected, isHideVisual, itemID, itemModID, name, quality, "
+    .. "sourceID, visualID"
+
+-- The same contract's reading from the newest other build the results still hold.
+local function EarlierReading(id, version)
+    local current = T.GetClient().build
+    local found, foundBuild
+    for build, results in pairs(T.db.contracts) do
+        local stored = results[id]
+        if build ~= current and stored and stored.v == version and type(stored.detail) == "table"
+            and type(stored.detail.reading) == "table" and (not found or stored.at > found.at) then
+            found, foundBuild = stored, build
+        end
+    end
+    return found and found.detail.reading, foundBuild
+end
+
+T.Contract({
+    id = CANARY_ID,
+    version = CANARY_VERSION,
+    title = "What the client says about one plain item is what it said in the build before",
+    run = function(c)
+        local item, why = T.LoadItem(CANARY_ITEM)
+        if not item then
+            return "skip", why
+        end
+        local link = item:GetItemLink()
+        local values = { C_Item.GetItemInfo(link) }
+        local reading = {
+            name = values[1], quality = values[3], minLevel = values[5], maxStack = values[8], equipLoc = values[9],
+            classID = values[12], subClassID = values[13], bindType = values[14], expansionID = values[15],
+            craftingReagent = values[17],
+        }
+        local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(link)
+        reading.appearanceID, reading.sourceID = appearanceID or false, sourceID or false
+
+        local source = sourceID and C_TransmogCollection.GetSourceInfo(sourceID)
+        if type(source) == "table" then
+            for _, key in ipairs({ "visualID", "itemID", "categoryID", "invType", "itemModID", "name", "quality",
+                "isHideVisual" }) do
+                local value = source[key]
+                if value == nil then
+                    value = false
+                end
+                reading["source." .. key] = T.Plain(value)
+            end
+            -- Which fields a source has depends on the toon and the collection as well (a use
+            -- error, a source type), so the list is kept to be read and is no part of the
+            -- comparison.
+            local keys = table.concat(T.SortedKeys(source), ", ")
+            c:Note("sourceKeys", keys)
+            c:Note("sourceKeysAsIn2020", keys == CANARY_2020_SOURCE_KEYS)
+            c:Note("source", T.Facts.Scalars(source))
+            c:Note("lookSources", #(appearanceID and C_TransmogCollection.GetAllAppearanceSources(appearanceID) or {}))
+        end
+        reading = T.Plain(reading)
+        c:Note("reading", reading)
+        c:Note("link", link)
+
+        local unlike2020 = {}
+        for _, key in ipairs(T.SortedKeys(CANARY_2020)) do
+            if reading[key] ~= CANARY_2020[key] then
+                unlike2020[#unlike2020 + 1] = ("%s is %s, was %s"):format(key, tostring(reading[key]),
+                    tostring(CANARY_2020[key]))
+            end
+        end
+        c:Note("unlikeTheOldTest", unlike2020)
+
+        local earlier, earlierBuild = EarlierReading(CANARY_ID, CANARY_VERSION)
+        if not earlier then
+            return "info", "a first reading: the next build is compared with it"
+        end
+        c:Note("comparedWith", earlierBuild)
+        local changed = T.Facts.Diff(earlier, reading)
+        for _, key in ipairs(T.SortedKeys(changed or {})) do
+            c:Check(false, "since build %s, %s went from %s to %s", earlierBuild, key, tostring(changed[key].before),
+                tostring(changed[key].after))
+        end
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- Tooltip lines
+------------------------------------------------------------------------------------------
+
+-- The fields of a tooltip line are documented for neither client. This collects every field
+-- seen on the lines of the items in the bags, per line type, with one example each. It adds
+-- to what earlier runs saw, so the list grows with what the toons carry.
+
+local function MergeKeySets(old, new)
+    local merged = old
+    merged.items = (old.items or 0) + (new.items or 0)
+    merged.data = merged.data or {}
+    for key, sample in pairs(new.data or {}) do
+        if merged.data[key] == nil then
+            merged.data[key] = sample
+        end
+    end
+    merged.lineTypes = merged.lineTypes or {}
+    for lineType, entry in pairs(new.lineTypes or {}) do
+        local target = merged.lineTypes[lineType]
+        if not target then
+            merged.lineTypes[lineType] = entry
+        else
+            target.lines = (target.lines or 0) + (entry.lines or 0)
+            for key, sample in pairs(entry.fields or {}) do
+                if target.fields[key] == nil then
+                    target.fields[key] = sample
+                end
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.lineFields",
+    version = 1,
+    title = "Which fields tooltip lines carry, per line type",
+    accumulate = true,
+    merge = MergeKeySets,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local dataKeys, lineTypes = {}, {}
+        for index, where in ipairs(slots) do
+            local data = C_TooltipInfo.GetBagItem(where.bag, where.slot)
+            if type(data) == "table" then
+                for key, value in pairs(data) do
+                    if key ~= "lines" and dataKeys[key] == nil then
+                        dataKeys[key] = T.Plain(value, 2)
+                    end
+                end
+                for _, line in ipairs(data.lines or {}) do
+                    local lineType = tostring(line.type)
+                    local entry = lineTypes[lineType]
+                    if not entry then
+                        entry = { lines = 0, fields = {} }
+                        lineTypes[lineType] = entry
+                    end
+                    entry.lines = entry.lines + 1
+                    for key, value in pairs(line) do
+                        if entry.fields[key] == nil then
+                            entry.fields[key] = T.Plain(value, 2)
+                        end
+                    end
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("data", dataKeys)
+        c:Note("lineTypes", lineTypes)
+        return "info"
+    end,
+})
+
+-- The account-bound label is read from what the binding line says as a number (`bonding`;
+-- CaerdonItem.lua, ACCOUNT_BONDING), and from the line's text only where a line has no such
+-- field. So the two have to say the same: a line whose bonding is one of the four account
+-- values has one of the four account texts, and no other line has one. Asked of both
+-- tooltips, the slot's and the link's, of every item in the bags. Which value came with which
+-- text is kept and added to over the runs: a toon without an account-bound item answers for
+-- the other lines only, and its result says so.
+
+local function MergeBindingLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "bindingLines", "accountLines", "withoutField" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.seen = merged.seen or {}
+    for pair, count in pairs(new.seen or {}) do
+        merged.seen[pair] = (merged.seen[pair] or 0) + count
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.accountBonding",
+    version = 1,
+    title = "A binding line's bonding says account bound where its text does",
+    accumulate = true,
+    merge = MergeBindingLines,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local enum = Enum.TooltipDataItemBinding
+        if not c:Check(type(enum) == "table", "Enum.TooltipDataItemBinding is a %s", TypeOf(enum)) then
+            return
+        end
+        local accountValues, names = {}, {}
+        for name, value in pairs(enum) do
+            names[value] = name
+        end
+        for _, name in ipairs({ "Account", "BnetAccount", "BindToAccount", "BindToBnetAccount" }) do
+            if c:Check(type(enum[name]) == "number", "Enum.TooltipDataItemBinding.%s is a %s", name, TypeOf(enum[name])) then
+                accountValues[enum[name]] = true
+            end
+        end
+        local accountTexts = {
+            [ITEM_ACCOUNTBOUND] = true,
+            [ITEM_BNETACCOUNTBOUND] = true,
+            [ITEM_BIND_TO_ACCOUNT] = true,
+            [ITEM_BIND_TO_BNETACCOUNT] = true,
+        }
+
+        local bindingLines, accountLines, withoutField, seen = 0, 0, 0, {}
+        local function Read(side, data, itemID)
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                local text, bonding = line.leftText, line.bonding
+                if issecretvalue(text) or issecretvalue(bonding) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's text or bonding is a secret value", itemID, side)
+                else
+                    local isBindingLine = line.type == Enum.TooltipDataLineType.ItemBinding
+                    local saysAccount = accountTexts[text] == true
+                    local shown = ("%s (%s) \"%s\""):format(tostring(bonding), tostring(names[bonding]), tostring(text))
+                    if isBindingLine then
+                        bindingLines = bindingLines + 1
+                        local pair = side .. ": " .. shown
+                        seen[pair] = (seen[pair] or 0) + 1
+                        if bonding == nil then
+                            withoutField = withoutField + 1
+                        end
+                        c:Check(type(bonding) == "number", "item %d, the %s's tooltip: the binding line has no bonding, it is %s",
+                            itemID, side, shown)
+                    elseif bonding ~= nil then
+                        -- The addon reads the field on the line types it reads texts from.
+                        c:Check(false, "item %d, the %s's tooltip: a line of type %s carries a bonding, %s", itemID, side,
+                            tostring(line.type), shown)
+                    end
+                    if saysAccount or accountValues[bonding] then
+                        accountLines = accountLines + 1
+                    end
+                    if bonding ~= nil then
+                        c:Check(saysAccount == (accountValues[bonding] == true),
+                            "item %d, the %s's tooltip: the bonding and the text do not agree, %s", itemID, side, shown)
+                    elseif saysAccount then
+                        c:Check(isBindingLine, "item %d, the %s's tooltip: an account-bound text on a line of type %s", itemID,
+                            side, tostring(line.type))
+                    end
+                end
+            end
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                Read("link", C_TooltipInfo.GetHyperlink(link), itemID)
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("bindingLines", bindingLines)
+        c:Note("accountLines", accountLines)
+        c:Note("withoutField", withoutField)
+        c:Note("seen", seen)
+        if accountLines == 0 then
+            return "info", "no account-bound line in these bags: only the other lines were asked"
+        end
+    end,
+})
+
+-- What a toon does not meet is read from a line's fields where it has them (CaerdonItem.lua,
+-- IsUnmet): `usable` on a requirement line, `isValidInvSlot` and `isValidItemType` on the slot
+-- line, and from red text everywhere else. It used to be red text alone. So the fields have to
+-- say what the colour says: a field is false exactly where its column is red, on both
+-- tooltips of every item in the bags. And red has to be the client's RED_FONT_COLOR, which the
+-- addon takes its red from. Red on any other line type is collected with an example each:
+-- those are the lines colour is all there is for. Added to over the runs; a toon that meets
+-- everything it carries answers for the met lines only, and its result says so.
+--
+-- A slot line of an item that goes in no slot holds its type alone, in the left column, with
+-- `isValidItemType` and no `isValidInvSlot` ("Housing Dye", retail 12.1.5.70961). There the
+-- one field is asked against the one column, and the line is counted with its text
+-- (`typeOnly`). A slot line with a right column still has to carry both.
+
+local UNMET_EXAMPLES = 4
+
+local function HasExample(list, example)
+    for _, known in ipairs(list) do
+        if known == example then
+            return true
+        end
+    end
+    return false
+end
+
+local function MergeUnmetLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "requirementLines", "slotLines", "unmetByField" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.red = new.red or old.red
+    for _, key in ipairs({ "redElsewhere", "fieldsElsewhere", "unmet", "typeOnly" }) do
+        merged[key] = merged[key] or {}
+        for lineType, entry in pairs(new[key] or {}) do
+            local target = merged[key][lineType]
+            if not target then
+                merged[key][lineType] = entry
+            else
+                target.lines = (target.lines or 0) + (entry.lines or 0)
+                target.examples = target.examples or {}
+                for _, example in ipairs(entry.examples or {}) do
+                    if #target.examples < UNMET_EXAMPLES and not HasExample(target.examples, example) then
+                        target.examples[#target.examples + 1] = example
+                    end
+                end
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.unmetLines",
+    version = 2,
+    title = "A line's fields say unmet exactly where its text is red",
+    accumulate = true,
+    merge = MergeUnmetLines,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local red = type(RED_FONT_COLOR) == "table" and RED_FONT_COLOR.GenerateHexColor and RED_FONT_COLOR:GenerateHexColor()
+        c:Note("red", red or "none")
+        if not c:Check(type(red) == "string", "RED_FONT_COLOR is a %s with no hex colour", TypeOf(RED_FONT_COLOR)) then
+            return
+        end
+        -- The value the addon falls back on where a client has no such colour.
+        c:Check(red == "ffff2020", "RED_FONT_COLOR is %s, not ffff2020", red)
+
+        local REQUIREMENT, SLOT = Enum.TooltipDataLineType.UsageRequirement, Enum.TooltipDataLineType.EquipSlot
+        local requirementLines, slotLines, unmetByField = 0, 0, 0
+        local redElsewhere, fieldsElsewhere = {}, {}
+        -- The lines a field calls unmet, by the field: which of the three a client has shown
+        -- at false, and on what text.
+        local unmet = {}
+        -- Slot lines that hold a type alone, by the slot line's type, with their text.
+        local typeOnly = {}
+        local function Collect(into, lineType, example)
+            local key = tostring(lineType)
+            local entry = into[key]
+            if not entry then
+                entry = { lines = 0, examples = {} }
+                into[key] = entry
+            end
+            entry.lines = entry.lines + 1
+            if #entry.examples < UNMET_EXAMPLES and not HasExample(entry.examples, example) then
+                entry.examples[#entry.examples + 1] = example
+            end
+        end
+        local function IsRed(color)
+            return type(color) == "table" and color.GenerateHexColor ~= nil and color:GenerateHexColor() == red
+        end
+        -- One column of a line: its field against its colour.
+        local function Column(itemID, side, line, field, color, column)
+            local value = line[field]
+            if not c:Check(type(value) == "boolean", "item %d, the %s's tooltip: %s on a line of type %s is a %s", itemID,
+                    side, field, tostring(line.type), TypeOf(value)) then
+                return
+            end
+            if value == false then
+                unmetByField = unmetByField + 1
+                Collect(unmet, field, ("%s: \"%s\""):format(side,
+                    tostring(column == "left" and line.leftText or line.rightText)))
+            end
+            c:Check((value == false) == IsRed(color),
+                "item %d, the %s's tooltip: %s is %s and the %s column is %s (\"%s\")", itemID, side, field,
+                tostring(value), column, IsRed(color) and "red" or "not red",
+                tostring(column == "left" and line.leftText or line.rightText))
+        end
+        local function Read(side, data, itemID)
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                if issecretvalue(line.leftText) or issecretvalue(line.usable) or issecretvalue(line.isValidInvSlot)
+                    or issecretvalue(line.isValidItemType) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's text or field is a secret value", itemID, side)
+                elseif line.type == REQUIREMENT then
+                    requirementLines = requirementLines + 1
+                    Column(itemID, side, line, "usable", line.leftColor, "left")
+                elseif line.type == SLOT then
+                    slotLines = slotLines + 1
+                    local noRight = line.rightText == nil or line.rightText == ""
+                    if noRight and line.isValidInvSlot == nil and line.isValidItemType ~= nil then
+                        Collect(typeOnly, line.type, tostring(line.leftText))
+                        Column(itemID, side, line, "isValidItemType", line.leftColor, "left")
+                    else
+                        Column(itemID, side, line, "isValidInvSlot", line.leftColor, "left")
+                        Column(itemID, side, line, "isValidItemType", line.rightColor, "right")
+                    end
+                else
+                    if IsRed(line.leftColor) or IsRed(line.rightColor) then
+                        Collect(redElsewhere, line.type, tostring(line.leftText))
+                    end
+                    if line.usable ~= nil or line.isValidInvSlot ~= nil or line.isValidItemType ~= nil then
+                        Collect(fieldsElsewhere, line.type, tostring(line.leftText))
+                    end
+                end
+            end
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                Read("link", C_TooltipInfo.GetHyperlink(link), itemID)
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("requirementLines", requirementLines)
+        c:Note("slotLines", slotLines)
+        c:Note("unmetByField", unmetByField)
+        c:Note("unmet", unmet)
+        c:Note("typeOnly", typeOnly)
+        c:Note("redElsewhere", redElsewhere)
+        c:Note("fieldsElsewhere", fieldsElsewhere)
+        if unmetByField == 0 then
+            return "info", "nothing unmet in these bags: only the met lines were asked"
+        end
+    end,
+})
+
+-- The addon keeps the client's "Already known" line off the tooltip of an ensemble that still
+-- teaches something (features/Tooltip.lua, OnRequirementLine), and knows that line by its
+-- requirement type, where it used to compare the text on the tooltip's font string. So the
+-- kind has to hold every line with that text in a client: a line whose text is
+-- ITEM_SPELL_KNOWN is a requirement line of the kind NotAlreadyKnown. Not the other way
+-- round: retail writes other words on a line of the kind ("Already Known" on a cosmetic piece
+-- whose look is collected, seen in 12.1.5), so such a line's words are kept with its item and
+-- not checked. Asked of both tooltips, the slot's and the link's, of every item in the bags.
+-- What was seen is kept and added to over the runs, and beside it every bag item that teaches
+-- a transmog set: is the set collected, how many of its sources are not, does its tooltip say
+-- known. A toon that carries nothing with the client's words for a spell it knows answers for
+-- no such line, and its result says so.
+
+local function MergeKnownLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "knownLines", "spellKnownLines" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    for _, key in ipairs({ "seen", "otherWords" }) do
+        merged[key] = merged[key] or {}
+        for shape, count in pairs(new[key] or {}) do
+            merged[key][shape] = (merged[key][shape] or 0) + count
+        end
+    end
+    merged.ensembles = merged.ensembles or {}
+    for itemID, entry in pairs(new.ensembles or {}) do
+        merged.ensembles[itemID] = entry
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.alreadyKnown",
+    version = 2,
+    title = "The \"Already known\" text is on a requirement line of its own kind",
+    accumulate = true,
+    merge = MergeKnownLines,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local kinds = Enum.TooltipDataUsageRequirementType
+        local KNOWN = type(kinds) == "table" and kinds.NotAlreadyKnown or nil
+        if not c:Check(type(KNOWN) == "number", "Enum.TooltipDataUsageRequirementType.NotAlreadyKnown is a %s", TypeOf(KNOWN)) then
+            return
+        end
+        local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
+        c:Check(type(ITEM_SPELL_KNOWN) == "string", "ITEM_SPELL_KNOWN is a %s", TypeOf(ITEM_SPELL_KNOWN))
+
+        local knownLines, spellKnownLines, seen, otherWords, ensembles = 0, 0, {}, {}, {}
+        -- Whether the tooltip has the line, by its kind or by its text.
+        local function Read(side, data, itemID)
+            local says = false
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                local text, kind = line.leftText, line.requirementType
+                if issecretvalue(text) or issecretvalue(kind) or issecretvalue(line.type) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's type, text or requirement type is a secret value",
+                        itemID, side)
+                elseif kind == KNOWN or text == ITEM_SPELL_KNOWN then
+                    says = true
+                    knownLines = knownLines + 1
+                    local shape = ("%s: type %s, requirementType %s, usable %s, \"%s\""):format(side, tostring(line.type),
+                        tostring(kind), tostring(line.usable), tostring(text))
+                    seen[shape] = (seen[shape] or 0) + 1
+                    c:Check(line.type == REQUIREMENT and kind == KNOWN,
+                        "item %d, the %s's tooltip: the text \"%s\" is on a line of type %s with requirement type %s", itemID,
+                        side, tostring(text), tostring(line.type), tostring(kind))
+                    if text == ITEM_SPELL_KNOWN then
+                        spellKnownLines = spellKnownLines + 1
+                    else
+                        local words = ("\"%s\" on item %d"):format(tostring(text), itemID)
+                        otherWords[words] = (otherWords[words] or 0) + 1
+                    end
+                end
+            end
+            return says
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            local slotSays = Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local linkSays = link ~= nil and Read("link", C_TooltipInfo.GetHyperlink(link), itemID)
+            local setID = C_Item.GetItemLearnTransmogSet(itemID)
+            if setID then
+                local info = C_TransmogSets.GetSetInfo(setID)
+                local sources, uncollected = C_TransmogSets.GetAllSourceIDs(setID) or {}, 0
+                for _, sourceID in ipairs(sources) do
+                    local sourceInfo = C_TransmogCollection.GetSourceInfo(sourceID)
+                    if sourceInfo and not sourceInfo.isCollected then
+                        uncollected = uncollected + 1
+                    end
+                end
+                ensembles[tostring(itemID)] = {
+                    name = C_Item.GetItemNameByID(itemID),
+                    classID = select(6, C_Item.GetItemInfoInstant(itemID)),
+                    setID = setID,
+                    setCollected = info and info.collected,
+                    sources = #sources,
+                    uncollected = uncollected,
+                    slotSaysKnown = slotSays,
+                    linkSaysKnown = linkSays,
+                }
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("knownLines", knownLines)
+        c:Note("spellKnownLines", spellKnownLines)
+        c:Note("seen", seen)
+        c:Note("otherWords", otherWords)
+        c:Note("ensembles", ensembles)
+        if knownLines == 0 then
+            return "info", "nothing in these bags is already known: no such line was asked"
+        elseif spellKnownLines == 0 then
+            return "info", "the bags have lines of the kind, none with the client's words for a spell that is known"
+        end
+    end,
+})
+
+-- The addon finds a recipe item's recipe by the item's name: what follows the first colon,
+-- looked up among the names the profession window gave. That fails wherever the item and the
+-- list word the recipe differently, which Classic's data does in Spanish and Russian. The
+-- tooltip has a line of a type of its own for what an item teaches (ItemSpellTriggerLearn),
+-- and in every recording made so far it carries a spell ID that looks like the recipe's.
+-- Whether it is, asked of a client: for every item of the class Recipe in the bags, the line's
+-- spell in the slot's and the link's tooltip, and beside it what the addon has by other ways:
+-- the recipe ID its name finds, and the entry of that ID in a recorded profession list (the
+-- lists are kept by recipe ID). Where a recorded list has the name's recipe, the line has to
+-- name the same one. What else carries such a line is kept by item class. Nothing is decided
+-- from this yet. So that a toon that carries no recipe answers too, a few recipe items of
+-- the old world are asked by their ID as well (the link's tooltip alone): of Alchemy and
+-- Tailoring first, then one each of four other professions. The IDs are from memory and
+-- from the recordings; one that is no recipe in the client at hand is left out and counted.
+-- A tooltip may have more than one teaching line: the lines of the item a recipe makes come
+-- before the recipe's own, and that item may teach something itself. The recipe's is the last.
+
+T.TaughtSpellPool = {
+    2553, 2555, 3393, 3394, 3396, 5640, 6211,   -- Alchemy
+    2598, 2601, 4292, 5771, 5772, 6270, 6271, 6272, 6274, -- Tailoring
+    7084, 7086,                                 -- Tailoring, a name two recipes of the list have
+    10424, 6342, 6325, 2406,                    -- Blacksmithing, Enchanting, Cooking, Leatherworking
+    4408, 11827,                                -- Engineering, for a pet: the made item's teaching line, then the recipe's
+}
+
+local function MergeTaughtSpells(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "recipeItems", "byID", "learnLines", "withoutLine", "inRecordedList", "nameAgrees", "nameFindsNone",
+        "nameFindsAnother" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.poolNotRecipes, merged.poolNotLoaded = new.poolNotRecipes, new.poolNotLoaded
+    merged.recipes = merged.recipes or {}
+    for itemID, entry in pairs(new.recipes or {}) do
+        merged.recipes[itemID] = entry
+    end
+    merged.elsewhere = merged.elsewhere or {}
+    for shape, count in pairs(new.elsewhere or {}) do
+        merged.elsewhere[shape] = (merged.elsewhere[shape] or 0) + count
+    end
+    return merged
+end
+
+T.Contract({
+    id = "recipe.taughtSpell",
+    version = 3,
+    title = "A recipe item's tooltip names the spell it teaches, that spell is the recipe's ID in the profession's list, and the addon finds the recipe by it",
+    accumulate = true,
+    merge = MergeTaughtSpells,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local LEARN = Enum.TooltipDataLineType.ItemSpellTriggerLearn
+        if not c:Check(type(LEARN) == "number", "Enum.TooltipDataLineType.ItemSpellTriggerLearn is a %s", TypeOf(LEARN)) then
+            return
+        end
+        local RECIPE = Enum.ItemClass.Recipe
+        local kinds = Enum.TooltipDataUsageRequirementType
+        local KNOWN = type(kinds) == "table" and kinds.NotAlreadyKnown or nil
+        local recorded = CaerdonRecipe and CaerdonRecipe.GetRealmRecordedRecipes and CaerdonRecipe:GetRealmRecordedRecipes() or {}
+        local names = type(CaerdonRecipeData) == "table" and CaerdonRecipeData.globalRecipeNameToID or nil
+
+        local learnLines, elsewhere = 0, {}
+        -- The spells of the tooltip's teaching lines in their order, and whether it says known.
+        local function Read(side, data, itemID, classID)
+            local spells, saysKnown = {}, false
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                if issecretvalue(line.type) or issecretvalue(line.spellID) or issecretvalue(line.requirementType) then
+                    c:Check(false, "item %d, the %s's tooltip: a line's type, spell or requirement type is a secret value", itemID, side)
+                elseif line.type == LEARN then
+                    learnLines = learnLines + 1
+                    if c:Check(type(line.spellID) == "number", "item %d, the %s's tooltip: the teaching line's spellID is a %s",
+                            itemID, side, type(line.spellID)) then
+                        spells[#spells + 1] = line.spellID
+                    end
+                    if classID ~= RECIPE then
+                        local shape = ("%s: an item of class %s"):format(side, tostring(classID))
+                        elsewhere[shape] = (elsewhere[shape] or 0) + 1
+                    end
+                elseif KNOWN and line.requirementType == KNOWN then
+                    saysKnown = true
+                end
+            end
+            return spells, saysKnown
+        end
+
+        -- The entry a recorded list of the profession has for a recipe ID, with the toon whose
+        -- list it is: this toon's first.
+        local player = UnitName("player")
+        local function Recorded(profession, recipeID)
+            local found, of
+            for toon, lists in pairs(recorded) do
+                local list = type(lists) == "table" and lists[profession]
+                local entry = type(list) == "table" and type(list.recipes) == "table" and list.recipes[recipeID]
+                if type(entry) == "table" and (not found or toon == player) then
+                    found, of = entry, toon == player and "this toon" or "another toon"
+                end
+            end
+            return found, of
+        end
+
+        local recipes, recipeItems, withoutLine, inRecordedList, nameAgrees, nameFindsNone = {}, 0, 0, 0, 0, 0
+        local nameFindsAnother = 0
+        -- What is kept of one recipe item, from the spells its tooltips teach.
+        local function Judge(itemID, asked, slotSpells, linkSpells, saysKnown)
+            recipeItems = recipeItems + 1
+            local name = C_Item.GetItemNameByID(itemID)
+            local profession = select(7, C_Item.GetItemInfo(itemID))
+            local spell = linkSpells[#linkSpells] or slotSpells[#slotSpells]
+            if #slotSpells > 0 and #linkSpells > 0 then
+                c:Check(slotSpells[#slotSpells] == linkSpells[#linkSpells], "item %d: the slot's tooltip teaches spell %s and the link's %s", itemID,
+                    tostring(slotSpells[#slotSpells]), tostring(linkSpells[#linkSpells]))
+            end
+            local recipeName = CaerdonRecipe and CaerdonRecipe:GetRecipeNameFromItemName(name) or nil
+            local byName = CaerdonRecipe and names and CaerdonRecipe:FindByName(names, recipeName) or nil
+            local entry = {
+                name = name,
+                asked = asked,
+                profession = profession,
+                slotSpells = table.concat(slotSpells, ", "),
+                linkSpells = table.concat(linkSpells, ", "),
+                saysKnown = saysKnown,
+                recipeName = recipeName,
+                byName = byName,
+            }
+            if not spell then
+                withoutLine = withoutLine + 1
+            else
+                entry.spellName = C_Spell.GetSpellName(spell)
+                local info = C_TradeSkillUI.GetRecipeInfo(spell)
+                if type(info) == "table" then
+                    entry.infoName, entry.infoLearned, entry.infoRecipeID = info.name, info.learned, info.recipeID
+                end
+                local listed, of = Recorded(profession, spell)
+                if listed then
+                    inRecordedList = inRecordedList + 1
+                    entry.listedName, entry.listedLearned, entry.listedOf = listed.name, listed.learned, of
+                    -- A spell a recorded list has is the recipe the addon finds, whatever the name finds.
+                    if CaerdonRecipe and CaerdonRecipe.FindRecipeID then
+                        local found, by = CaerdonRecipe:FindRecipeID(CaerdonItem:CreateFromItemID(itemID))
+                        entry.foundID, entry.foundBy = found, by
+                        c:Check(found == spell and by == "spell",
+                            "item %d (%s): its tooltip teaches spell %s, which a recorded list has, and the addon finds recipe %s by its %s",
+                            itemID, tostring(name), tostring(spell), tostring(found), tostring(by))
+                    end
+                end
+                if byName == nil then
+                    nameFindsNone = nameFindsNone + 1
+                elseif byName == spell then
+                    nameAgrees = nameAgrees + 1
+                else
+                    -- The name's recipe is another one than the line names: two recipes of one
+                    -- name, of which the name finds whichever was read last.
+                    nameFindsAnother = nameFindsAnother + 1
+                    entry.nameFindsAnother = true
+                end
+            end
+            recipes[tostring(itemID)] = entry
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            local classID = select(6, C_Item.GetItemInfoInstant(itemID))
+            local slotSpells, slotKnown = Read("slot", C_TooltipInfo.GetBagItem(where.bag, where.slot), itemID, classID)
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local linkSpells, linkKnown = {}, false
+            if link then
+                linkSpells, linkKnown = Read("link", C_TooltipInfo.GetHyperlink(link), itemID, classID)
+            end
+            if classID == RECIPE then
+                Judge(itemID, "in the bags", slotSpells, linkSpells, slotKnown or linkKnown)
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+
+        -- Recipes the toon does not carry, asked by their ID: the link's tooltip alone. An ID
+        -- the client has no recipe for is left out and counted.
+        local byID, notRecipes, notLoaded = 0, 0, 0
+        for _, itemID in ipairs(T.TaughtSpellPool) do
+            if not recipes[tostring(itemID)] then
+                if select(6, C_Item.GetItemInfoInstant(itemID)) ~= RECIPE then
+                    notRecipes = notRecipes + 1
+                else
+                    local item = T.LoadItem(itemID, 5)
+                    local link = item and item:GetItemLink()
+                    local data
+                    -- The tooltip of an item just loaded may still be the client's "retrieving" one.
+                    for _ = 1, 10 do
+                        data = link and C_TooltipInfo.GetHyperlink(link)
+                        local first = type(data) == "table" and data.lines and data.lines[1]
+                        if not link or (first and not issecretvalue(first.leftText) and first.leftText ~= RETRIEVING_ITEM_INFO) then
+                            break
+                        end
+                        data = nil
+                        T.Sleep(0.3)
+                    end
+                    if data then
+                        byID = byID + 1
+                        local linkSpells, linkKnown = Read("link", data, itemID, RECIPE)
+                        Judge(itemID, "by its ID", {}, linkSpells, linkKnown)
+                    else
+                        notLoaded = notLoaded + 1
+                    end
+                end
+            end
+        end
+
+        c:Note("items", #slots)
+        c:Note("recipeItems", recipeItems)
+        c:Note("byID", byID)
+        c:Note("poolNotRecipes", notRecipes)
+        c:Note("poolNotLoaded", notLoaded)
+        c:Note("learnLines", learnLines)
+        c:Note("withoutLine", withoutLine)
+        c:Note("inRecordedList", inRecordedList)
+        c:Note("nameAgrees", nameAgrees)
+        c:Note("nameFindsNone", nameFindsNone)
+        c:Note("nameFindsAnother", nameFindsAnother)
+        c:Note("recipes", recipes)
+        c:Note("elsewhere", elsewhere)
+        if recipeItems == 0 then
+            return "info", "no recipe in these bags and none of the asked IDs is one here: nothing was asked"
+        end
+        if inRecordedList == 0 then
+            return "info", "no recipe asked teaches a spell that a recorded profession list has: nothing to compare"
+        end
+    end,
+})
+
+-- The addon keeps that line off a tooltip by answering true when the client asks before it
+-- adds a requirement line (TooltipDataProcessor.AddLinePreCall). Blizzard's code says an
+-- addon may: this asks a client. A tooltip of the tests' own is filled twice with a bag item
+-- that has a requirement line, with a callback of the tests' own asked for the same line
+-- type: once answering nothing, once answering true for the first such line. The callback
+-- has to be asked once per requirement line, before the line is on the tooltip, with the
+-- tooltip and the line; the tooltip has to be one line shorter the second time; and what the
+-- addon's handler reads has to be there while it is asked: the data the tooltip is being
+-- filled from, with the item's ID. The callback stays for the session and answers nothing
+-- outside these two fills.
+
+local PRECALL_TOOLTIP = "CaerdonWardrobeTestsLinePreCallTooltip"
+local preCallTooltip, preCall
+
+T.Contract({
+    id = "tooltip.linePreCall",
+    version = 1,
+    title = "A line pre-call of an addon's is asked for each requirement line and can keep it off the tooltip",
+    run = function(c)
+        if InCombatLockdown() then
+            return "skip", "out of combat only"
+        end
+        local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
+        -- The first bag item whose slot's tooltip has a requirement line. One that teaches a
+        -- transmog set is passed over: the addon's own callback may answer for its line, and
+        -- the client asks nobody after an answer.
+        local bag, slot, itemID, wanted
+        for _, where in ipairs(FilledBagSlots()) do
+            local data = C_TooltipInfo.GetBagItem(where.bag, where.slot)
+            local count = 0
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                if not issecretvalue(line.type) and line.type == REQUIREMENT then
+                    count = count + 1
+                end
+            end
+            local candidate = C_Container.GetContainerItemID(where.bag, where.slot)
+            if count > 0 and candidate and not C_Item.GetItemLearnTransmogSet(candidate) then
+                bag, slot, wanted, itemID = where.bag, where.slot, count, candidate
+                break
+            end
+        end
+        if not bag then
+            return "skip", "needs a bag item whose tooltip has a requirement line (a level, a class, a skill)"
+        end
+        c:Note("itemID", itemID)
+        c:Note("requirementLines", wanted)
+
+        if not preCallTooltip then
+            preCallTooltip = CreateFrame("GameTooltip", PRECALL_TOOLTIP, UIParent, "GameTooltipTemplate")
+            preCall = { armed = false }
+            TooltipDataProcessor.AddLinePreCall(REQUIREMENT, function(tooltip, lineData)
+                if not preCall.armed or tooltip ~= preCallTooltip then
+                    return nil
+                end
+                preCall.calls = preCall.calls + 1
+                if preCall.calls > 1 then
+                    return nil
+                end
+                local info = tooltip.GetProcessingTooltipInfo and tooltip:GetProcessingTooltipInfo()
+                local data = type(info) == "table" and info.tooltipData or nil
+                preCall.line = lineData
+                preCall.linesBefore = tooltip:NumLines() or 0
+                preCall.dataType = type(data) == "table" and data.type or nil
+                preCall.dataID = type(data) == "table" and data.id or nil
+                preCall.lineInData = false
+                for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                    preCall.lineInData = preCall.lineInData or line == lineData
+                end
+                return preCall.consume or nil
+            end)
+        end
+
+        local function LeftTexts()
+            local texts = {}
+            for index = 1, preCallTooltip:NumLines() or 0 do
+                local fontString = _G[PRECALL_TOOLTIP .. "TextLeft" .. index]
+                local text = fontString and fontString:GetText()
+                texts[index] = not issecretvalue(text) and text or nil
+            end
+            return texts
+        end
+        local function Fill(consume)
+            preCall.armed, preCall.consume, preCall.calls, preCall.line = true, consume, 0, nil
+            preCallTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+            preCallTooltip:SetBagItem(bag, slot)
+            preCall.armed = false
+            return preCallTooltip:NumLines() or 0, LeftTexts()
+        end
+
+        -- Answering nothing: every line is on the tooltip.
+        local fullLines, fullTexts = Fill(false)
+        c:Note("lines", fullLines)
+        if not c:Check(preCall.calls > 0, "the callback was not asked while a tooltip with %d requirement lines was filled", wanted) then
+            preCallTooltip:Hide()
+            return
+        end
+        c:Check(preCall.calls == wanted, "the callback was asked %d times for %d requirement lines", preCall.calls, wanted)
+        local line, at = preCall.line, (preCall.linesBefore or 0) + 1
+        c:Check(type(line) == "table" and not issecretvalue(line.type) and line.type == REQUIREMENT,
+            "the callback was handed a %s, not a requirement line", TypeOf(line))
+        local text = type(line) == "table" and line.leftText or nil
+        c:Note("lineText", issecretvalue(text) and "secret" or tostring(text))
+        c:Check(text ~= nil and not issecretvalue(text) and fullTexts[at] == text,
+            "the line the callback was asked about is not where the next line went: line %d of the tooltip says \"%s\"", at,
+            tostring(fullTexts[at]))
+        -- What the addon's handler reads while it is asked.
+        c:Check(preCall.dataType == Enum.TooltipDataType.Item and preCall.dataID == itemID,
+            "while the callback is asked, the tooltip's processing info has data of type %s for %s, not an item's for %s",
+            tostring(preCall.dataType), tostring(preCall.dataID), tostring(itemID))
+        -- Not relied on: whether the line handed over is the data's own table.
+        c:Note("lineIsTheDatas", preCall.lineInData == true)
+
+        -- Answering true for the first requirement line: that line is not on the tooltip.
+        local shortLines, shortTexts = Fill(true)
+        preCallTooltip:Hide()
+        c:Note("linesWithOneKeptOff", shortLines)
+        c:Check(shortLines == fullLines - 1, "the tooltip has %d lines with one line kept off and %d with none", shortLines, fullLines)
+        local same = shortLines == fullLines - 1
+        for index = 1, shortLines do
+            same = same and shortTexts[index] == fullTexts[index < at and index or index + 1]
+        end
+        c:Check(same, "with the line kept off, the tooltip's other lines are not the ones it had")
+    end,
+})
+
+-- The client says of an item in a bag slot whether it is a quest's item and which quest it
+-- starts (C_Container.GetContainerItemQuestInfo; Blizzard's bags draw their quest border and
+-- bang from it). The quest it names is one of the item's quests for the addon, and a copy
+-- that starts a quest the toon has neither done nor taken is drawn as one to act on: the star
+-- or the grey gear, with the quest icon as the small mark. This collects what the client
+-- answers for the bags beside what the addon makes of the same item: which items the client
+-- calls a quest's, which start a quest, and of those which are drawn as starters, which have
+-- the quest icon (the quest is in the log, or another quest takes the item), which neither
+-- (the quest is done, behind the toon or kept out by the options), and which have a quest
+-- only the client names. Added to over the runs, by item.
+
+local SLOT_QUEST_COUNTS = { "items", "questItems", "starters", "startersShownAsStarters", "startersWithQuestIcon",
+    "startersWithNeither", "startersTheQuestDataDoesNotName" }
+
+local function MergeSlotQuestInfo(old, new)
+    local merged = old
+    for _, key in ipairs(SLOT_QUEST_COUNTS) do
+        merged[key] = new[key]
+    end
+    -- What version 1 counted, when no status was made of the client's answer.
+    merged.startersWithoutQuestIcon, merged.startersTheAddonDoesNotName = nil, nil
+    merged.runs = (old.runs or 1) + 1
+    merged.seen = merged.seen or {}
+    for itemID, entry in pairs(new.seen or {}) do
+        merged.seen[itemID] = entry
+    end
+    return merged
+end
+
+T.Contract({
+    id = "quest.slotInfo",
+    version = 2,
+    title = "What the client says about quest items in the bags, beside the addon's icon for them",
+    accumulate = true,
+    merge = MergeSlotQuestInfo,
+    run = function(c)
+        if not (C_Container and C_Container.GetContainerItemQuestInfo) then
+            return "skip", "this client has no C_Container.GetContainerItemQuestInfo"
+        end
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local questItems, starters, asStarters, withIcon, withNeither, notNamed, seen = 0, 0, 0, 0, 0, 0, {}
+        for index, where in ipairs(slots) do
+            local info = C_Container.GetContainerItemQuestInfo(where.bag, where.slot)
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            if c:Check(type(info) == "table", "item %d: the answer is a %s, not a table", itemID, TypeOf(info)) then
+                c:Check(type(info.isQuestItem) == "boolean" and type(info.isActive) == "boolean"
+                        and (info.questID == nil or type(info.questID) == "number"),
+                    "item %d: isQuestItem is a %s, isActive a %s, questID a %s", itemID, TypeOf(info.isQuestItem),
+                    TypeOf(info.isActive), TypeOf(info.questID))
+                if info.isQuestItem == true or info.questID ~= nil then
+                    local entry = {
+                        isQuestItem = info.isQuestItem,
+                        questID = info.questID,
+                        isActive = info.isActive,
+                    }
+                    local item = CaerdonItem:CreateFromBagAndSlot(where.bag, where.slot)
+                    local loaded = false
+                    item:ContinueOnItemLoad(function() loaded = true end)
+                    if T.WaitUntil(function() return loaded end, 10) then
+                        entry.name = item:GetItemName()
+                        entry.classID = select(6, C_Item.GetItemInfoInstant(itemID))
+                        local isReady, status = T.GetVerdict(item, nil, { bag = where.bag, slot = where.slot }, 8)
+                        entry.status = isReady and (status or "") or "not ready"
+                        -- The small mark beside the status ("quest" on a starter's star).
+                        if isReady then
+                            entry.mark = select(6, item:GetCaerdonStatus(nil, { bag = where.bag, slot = where.slot }))
+                        end
+                        -- The quests the addon knows for the copy, the client's among them,
+                        -- and what it made of the one the client names.
+                        local questInfo = item:GetQuestItemInfo()
+                        local roles = {}
+                        for _, quest in ipairs(questInfo and questInfo.quests or {}) do
+                            roles[#roles + 1] = ("%s: %s"):format(tostring(quest.questID), tostring(quest.role))
+                            if quest.questID == info.questID then
+                                entry.questReason = quest.reason
+                                entry.questStartable = quest.startable == true
+                                entry.questOver = quest.over == true
+                            end
+                        end
+                        entry.addonQuests = table.concat(roles, "; ")
+                        entry.addonHasQuestValue = questInfo ~= nil and questInfo.hasQuestValue == true
+                        entry.addonStarts = questInfo ~= nil and questInfo.starts ~= nil and questInfo.starts.questID or nil
+                        if info.questID ~= nil then
+                            entry.completed = C_QuestLog.IsQuestFlaggedCompleted(info.questID) == true
+                            -- Whether the quest data names that quest as one the item starts:
+                            -- asked without the client's word for the slot.
+                            local byData = CaerdonQuestItems:GetItemQuestInfo(itemID, entry.name)
+                            for _, quest in ipairs(byData and byData.quests or {}) do
+                                if quest.questID == info.questID and quest.starts then
+                                    entry.dataNamesQuest = true
+                                end
+                            end
+                        end
+                    else
+                        entry.status = "not loaded"
+                    end
+                    if info.isQuestItem == true then
+                        questItems = questItems + 1
+                    end
+                    if info.questID ~= nil then
+                        starters = starters + 1
+                        if entry.mark == "quest" and (entry.status == "own" or entry.status == "lowSkill") then
+                            asStarters = asStarters + 1
+                        elseif entry.status == "quest" then
+                            withIcon = withIcon + 1
+                        else
+                            withNeither = withNeither + 1
+                        end
+                        if not entry.dataNamesQuest then
+                            notNamed = notNamed + 1
+                        end
+                        -- What the rule rests on: a quest the addon calls one to start is
+                        -- neither in the log nor done by the client's own word.
+                        if entry.addonStarts == info.questID then
+                            c:Check(info.isActive == false and entry.completed ~= true,
+                                "item %d: the addon calls quest %d one to start, and the client says it is %s", itemID,
+                                info.questID, info.isActive and "in the log" or "done")
+                        end
+                    end
+                    seen[tostring(itemID)] = entry
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("questItems", questItems)
+        c:Note("starters", starters)
+        c:Note("startersShownAsStarters", asStarters)
+        c:Note("startersWithQuestIcon", withIcon)
+        c:Note("startersWithNeither", withNeither)
+        c:Note("startersTheQuestDataDoesNotName", notNamed)
+        c:Note("seen", seen)
+        return "info", ("%d of %d bag items are a quest's for the client, %d start a quest: %d drawn as one to start, %d with the quest icon, %d with neither; the quest data names the quest of %d")
+            :format(questItems, #slots, starters, asStarters, withIcon, withNeither, starters - notNamed)
+    end,
+})
+
+-- Some facts are on a tooltip as a line of text and nowhere else, and the addon reads the
+-- line back through the client's own format string (CaerdonFormatPattern.lua): the skill and
+-- rank an item asks for, a bag's size, the durability. That rests on the client writing the
+-- line from that string, in whatever language it runs in. Asked here of what the toon carries:
+--   * a skill requirement line of a link's tooltip is read, and the skill and rank written
+--     back with ITEM_MIN_SKILL are the line;
+--   * a bag's or quiver's size (carried, or in a bag slot) is read by CONTAINER_SLOTS and not
+--     by the fallback;
+--   * the slot's tooltip of a piece with durability has the line DURABILITY_TEMPLATE writes
+--     with the client's two numbers.
+-- A food's restore line has no format string behind it; what the food code made of each food
+-- carried is kept beside its line (kind, amount), and a food it could not read is listed.
+-- Added to over the runs. A toon that carries none of these answers nothing, and says so.
+
+local READ_BACK_EXAMPLES = 6
+
+local function MergeReadBack(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "skillLines", "bags", "durabilityLines", "foods", "foodsNotRead" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.locale = new.locale or old.locale
+    merged.formats = new.formats or old.formats
+    for _, key in ipairs({ "skillExamples", "bagExamples", "durabilityExamples", "foodExamples", "notReadExamples" }) do
+        merged[key] = merged[key] or {}
+        for _, example in ipairs(new[key] or {}) do
+            if #merged[key] < READ_BACK_EXAMPLES and not HasExample(merged[key], example) then
+                merged[key][#merged[key] + 1] = example
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "text.readBack",
+    version = 1,
+    title = "Tooltip lines the addon reads through the client's format strings are written from them",
+    accumulate = true,
+    merge = MergeReadBack,
+    run = function(c)
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local counts = { skillLines = 0, bags = 0, durabilityLines = 0, foods = 0, foodsNotRead = 0 }
+        local examples = { skill = {}, bag = {}, durability = {}, food = {}, notRead = {} }
+        local function Example(kind, text)
+            local list = examples[kind]
+            if #list < READ_BACK_EXAMPLES and not HasExample(list, text) then
+                list[#list + 1] = text
+            end
+        end
+        local SKILL = Enum.TooltipDataUsageRequirementType and Enum.TooltipDataUsageRequirementType.Skill
+        local REQUIREMENT = Enum.TooltipDataLineType.UsageRequirement
+        local FOOD_DRINK = Enum.ItemConsumableSubclass and Enum.ItemConsumableSubclass.Fooddrink or 5
+
+        local function ReadBag(itemID, link, where)
+            local info = CaerdonBagSlots:GetItemInfo(itemID, link)
+            if not info then
+                return
+            end
+            counts.bags = counts.bags + 1
+            Example("bag", ("%s: \"%s\" is %s, read by %s"):format(where, tostring(info.sizeText), tostring(info.size),
+                tostring(info.sizeMatchedBy)))
+            c:Check(info.sizeMatchedBy == "format", "item %d (%s): its size was read by %s, not by CONTAINER_SLOTS (\"%s\"), from \"%s\"",
+                itemID, where, tostring(info.sizeMatchedBy), tostring(CONTAINER_SLOTS), tostring(info.sizeText))
+        end
+
+        for index, where in ipairs(slots) do
+            local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
+
+            -- The skill requirement of the link's tooltip, which is the one the addon reads.
+            local data = link and C_TooltipInfo.GetHyperlink(link)
+            for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+                local text = line.leftText
+                if not issecretvalue(text) and not issecretvalue(line.type) and line.type == REQUIREMENT
+                    and SKILL ~= nil and line.requirementType == SKILL and type(text) == "string" then
+                    counts.skillLines = counts.skillLines + 1
+                    local requirement = CaerdonItem:CreateFromItemLink(link):GetSkillRequirement()
+                    local skillName, rank = requirement and requirement.skillName, requirement and requirement.rank
+                    Example("skill", ("\"%s\" is %s at %s"):format(text, tostring(skillName), tostring(rank)))
+                    if c:Check(type(skillName) == "string" and type(rank) == "number",
+                            "item %d: the skill line \"%s\" was not read (ITEM_MIN_SKILL is \"%s\")", itemID, text,
+                            tostring(ITEM_MIN_SKILL)) then
+                        local written = ITEM_MIN_SKILL:format(skillName, rank)
+                        c:Check(written == text, "item %d: the skill line \"%s\" read and written back is \"%s\"", itemID, text, written)
+                    end
+                    break
+                end
+            end
+
+            if classID == Enum.ItemClass.Container or classID == Enum.ItemClass.Quiver then
+                ReadBag(itemID, link, "carried")
+            end
+
+            if classID == Enum.ItemClass.Consumable and subClassID == FOOD_DRINK and link then
+                counts.foods = counts.foods + 1
+                local food = CaerdonFoodDrink:Classify(itemID, link)
+                if food then
+                    Example("food", ("\"%s\" is %s, %s%s"):format(tostring(food.text), tostring(food.kind), tostring(food.amount),
+                        food.isBuff and ", with an effect" or ""))
+                else
+                    counts.foodsNotRead = counts.foodsNotRead + 1
+                    Example("notRead", ("item %d, %s"):format(itemID, tostring(C_Item.GetItemNameByID(itemID))))
+                end
+            end
+
+            -- The durability line of the slot's tooltip.
+            local current, maximum = C_Container.GetContainerItemDurability(where.bag, where.slot)
+            if type(current) == "number" and type(maximum) == "number" and maximum > 0 then
+                local wanted = DURABILITY_TEMPLATE:format(current, maximum)
+                local slotData = C_TooltipInfo.GetBagItem(where.bag, where.slot)
+                local found, loaded = false, false
+                for _, line in ipairs(type(slotData) == "table" and slotData.lines or {}) do
+                    local text = line.leftText
+                    if not issecretvalue(text) and type(text) == "string" then
+                        loaded = loaded or text ~= RETRIEVING_ITEM_INFO
+                        if text:match("^%s*(.-)%s*$") == wanted then
+                            found = true
+                        end
+                    end
+                end
+                if loaded then
+                    counts.durabilityLines = counts.durabilityLines + 1
+                    Example("durability", ("\"%s\""):format(wanted))
+                    c:Check(found, "item %d: its slot's tooltip has no line \"%s\" (DURABILITY_TEMPLATE is \"%s\")", itemID, wanted,
+                        tostring(DURABILITY_TEMPLATE))
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+
+        -- The bags in the bag slots.
+        for bag = Enum.BagIndex.Backpack + 1, Enum.BagIndex.ReagentBag do
+            local inventorySlot = C_Container.ContainerIDToInventoryID(bag)
+            local itemID = inventorySlot and GetInventoryItemID("player", inventorySlot)
+            if itemID then
+                ReadBag(itemID, GetInventoryItemLink("player", inventorySlot), "bag slot " .. bag)
+            end
+        end
+
+        c:Note("locale", GetLocale())
+        c:Note("formats", { ITEM_MIN_SKILL = ITEM_MIN_SKILL, CONTAINER_SLOTS = CONTAINER_SLOTS,
+            DURABILITY_TEMPLATE = DURABILITY_TEMPLATE, HEALTH = HEALTH, MANA = MANA })
+        c:Note("items", #slots)
+        for key, count in pairs(counts) do
+            c:Note(key, count)
+        end
+        c:Note("skillExamples", examples.skill)
+        c:Note("bagExamples", examples.bag)
+        c:Note("durabilityExamples", examples.durability)
+        c:Note("foodExamples", examples.food)
+        c:Note("notReadExamples", examples.notRead)
+        if counts.skillLines + counts.bags + counts.durabilityLines == 0 then
+            return "info", "nothing here is written from a format string the addon reads back"
+        end
+    end,
+})
+
+-- What wearing a piece would do to a set's bonuses is read off tooltips alone
+-- (CaerdonSetBonuses.lua): the set's line with the pieces worn, a bonus the toon does not have
+-- with the pieces it begins at, a bonus it has without. Asked here of every piece worn and
+-- carried whose tooltip has such lines or whose item info names a set:
+--   * a piece whose item info names a set has set lines the addon reads, and the set's name on
+--     them is the client's own for that set;
+--   * the pieces worn by the line are the worn pieces whose item info names the same set;
+--   * a bonus line read and written back with the client's format string is the line (not
+--     asked where the string has a grammar escape, which is drawn as one of its forms);
+--   * a bonus the toon does not have is on a greyed-out line (DisabledLine) and one it has is
+--     not, and the first needs more pieces than are worn;
+--   * the pieces of the bonuses not had stand in ascending order, which the addon reasons by.
+-- Whether the item info names a set at all for a piece with set lines is counted and no
+-- failure: the addon files such a set under its name. Each set's lines as seen are kept, with
+-- the pieces worn at the time, and added to over the runs: a set seen with fewer worn shows the
+-- numbers that are gone while more are. A toon with no piece of a set answers nothing.
+
+local SET_STATES = 8
+
+local function MergeSetLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "pieces", "ofSets", "withSetID", "withoutSetID", "bonusesHad", "bonusesNotHad", "writtenBack" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.formats = new.formats or old.formats
+    merged.remembered = new.remembered or old.remembered
+    merged.sets = merged.sets or {}
+    for name, states in pairs(new.sets or {}) do
+        local target = merged.sets[name]
+        if not target then
+            merged.sets[name] = states
+        else
+            for _, state in ipairs(states) do
+                if #target < SET_STATES and not HasExample(target, state) then
+                    target[#target + 1] = state
+                end
+            end
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "tooltip.setBonuses",
+    version = 1,
+    title = "An item set's tooltip lines are what the addon reads its bonuses from",
+    accumulate = true,
+    merge = MergeSetLines,
+    run = function(c)
+        local DISABLED = Enum.TooltipDataLineType.DisabledLine
+        -- A format with a grammar escape is not written back: the line has one of its forms.
+        local function Plain(format)
+            return type(format) == "string" and not format:find("|4", 1, true) and not format:find("|1", 1, true)
+        end
+
+        local links = {}
+        local wornSets, wornInfoComplete = {}, true
+        for slot = INVSLOT_FIRST_EQUIPPED, INVSLOT_LAST_EQUIPPED do
+            local link = GetInventoryItemLink("player", slot)
+            if link then
+                links[#links + 1] = { link = link, where = "worn in slot " .. slot }
+                local name, _, _, _, _, _, _, _, _, _, _, _, _, _, _, setID = C_Item.GetItemInfo(link)
+                if not name then
+                    wornInfoComplete = false
+                elseif setID then
+                    wornSets[setID] = (wornSets[setID] or 0) + 1
+                end
+            end
+        end
+        for _, where in ipairs(FilledBagSlots()) do
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                links[#links + 1] = { link = link, where = ("bag %d slot %d"):format(where.bag, where.slot) }
+            end
+        end
+
+        local counts = { ofSets = 0, withSetID = 0, withoutSetID = 0, bonusesHad = 0, bonusesNotHad = 0, writtenBack = 0 }
+        local sets, remembered = {}, {}
+        for index, entry in ipairs(links) do
+            local link = entry.link
+            local itemID = C_Item.GetItemInfoInstant(link) or 0
+            local setID = select(16, C_Item.GetItemInfo(link))
+            local data = C_TooltipInfo.GetHyperlink(link)
+            local loaded = type(data) == "table" and type(data.lines) == "table"
+            for _, line in ipairs(loaded and data.lines or {}) do
+                if not issecretvalue(line.leftText) and line.leftText == RETRIEVING_ITEM_INFO then
+                    loaded = false
+                end
+            end
+            local reading = loaded and CaerdonSetBonuses:Read(data) or nil
+            if loaded and setID then
+                c:Check(reading ~= nil, "item %d (%s): its item info names set %s and its tooltip has no set lines the addon reads",
+                    itemID, entry.where, tostring(setID))
+            end
+            if reading then
+                counts.ofSets = counts.ofSets + 1
+                if setID then
+                    counts.withSetID = counts.withSetID + 1
+                    local clientName = C_Item.GetItemSetInfo and C_Item.GetItemSetInfo(setID) or nil
+                    c:Check(clientName == nil or clientName == reading.name,
+                        "item %d (%s): the set's line names \"%s\" and the client calls set %s \"%s\"", itemID, entry.where,
+                        tostring(reading.name), tostring(setID), tostring(clientName))
+                    if wornInfoComplete then
+                        c:Check((wornSets[setID] or 0) == reading.worn,
+                            "item %d (%s): the set's line says %s worn and %s worn pieces are of set %s by their item info",
+                            itemID, entry.where, tostring(reading.worn), tostring(wornSets[setID] or 0), tostring(setID))
+                    end
+                else
+                    counts.withoutSetID = counts.withoutSetID + 1
+                end
+
+                -- Each bonus against the line it was read from.
+                local byText = {}
+                for _, line in ipairs(data.lines) do
+                    if not issecretvalue(line.leftText) and type(line.leftText) == "string" then
+                        byText[line.leftText:match("^%s*(.-)%s*$")] = line
+                    end
+                end
+                local state, lastNeeds = {}, 0
+                for position, bonus in ipairs(reading.bonuses) do
+                    if bonus.needs then
+                        counts.bonusesNotHad = counts.bonusesNotHad + 1
+                        state[position] = "(" .. bonus.needs .. ")"
+                        c:Check(bonus.needs > reading.worn, "item %d (%s): a bonus not had begins at %s pieces with %s worn", itemID,
+                            entry.where, tostring(bonus.needs), tostring(reading.worn))
+                        c:Check(bonus.needs >= lastNeeds, "item %d (%s): the bonuses not had are not in ascending order (%s after %s)",
+                            itemID, entry.where, tostring(bonus.needs), tostring(lastNeeds))
+                        lastNeeds = bonus.needs
+                        if Plain(ITEM_SET_BONUS_GRAY) then
+                            local written = ITEM_SET_BONUS_GRAY:format(bonus.needs, bonus.text)
+                            local line = byText[written]
+                            counts.writtenBack = counts.writtenBack + 1
+                            if c:Check(line ~= nil, "item %d (%s): no line is \"%s\", a bonus read and written back with ITEM_SET_BONUS_GRAY",
+                                    itemID, entry.where, written) then
+                                c:Check(line.type == DISABLED, "item %d (%s): the line of a bonus not had is of type %s, not greyed out",
+                                    itemID, entry.where, tostring(line.type))
+                            end
+                        end
+                    else
+                        counts.bonusesHad = counts.bonusesHad + 1
+                        state[position] = "had"
+                        if Plain(ITEM_SET_BONUS) then
+                            local written = ITEM_SET_BONUS:format(bonus.text)
+                            local line = byText[written]
+                            counts.writtenBack = counts.writtenBack + 1
+                            if c:Check(line ~= nil, "item %d (%s): no line is \"%s\", a bonus read and written back with ITEM_SET_BONUS",
+                                    itemID, entry.where, written) then
+                                c:Check(line.type ~= DISABLED, "item %d (%s): the line of a bonus the toon has is greyed out", itemID,
+                                    entry.where)
+                            end
+                        end
+                    end
+                end
+
+                local key = setID or reading.name
+                local label = ("%s (%s)"):format(tostring(reading.name), setID and ("set " .. setID) or "no set ID")
+                sets[label] = sets[label] or {}
+                local shown = ("%d of %d worn%s: %s"):format(reading.worn, reading.total, reading.legacy and ", legacy" or "",
+                    #state > 0 and table.concat(state, ", ") or "no bonus lines")
+                if #sets[label] < SET_STATES and not HasExample(sets[label], shown) then
+                    sets[label][#sets[label] + 1] = shown
+                end
+                local saved = type(CaerdonSetBonusData) == "table" and CaerdonSetBonusData[key] or nil
+                if type(saved) == "table" and type(saved.pieces) == "table" then
+                    local numbers = {}
+                    for position = 1, saved.bonuses or 0 do
+                        numbers[position] = tostring(saved.pieces[position] or "?")
+                    end
+                    remembered[label] = table.concat(numbers, ", ")
+                end
+            end
+            if index % 20 == 0 then
+                T.Yield()
+            end
+        end
+
+        c:Note("pieces", #links)
+        for key, count in pairs(counts) do
+            c:Note(key, count)
+        end
+        c:Note("formats", { ITEM_SET_NAME = ITEM_SET_NAME, ITEM_SET_BONUS = ITEM_SET_BONUS, ITEM_SET_BONUS_GRAY = ITEM_SET_BONUS_GRAY })
+        c:Note("sets", sets)
+        c:Note("remembered", remembered)
+        if counts.ofSets == 0 then
+            return "info", ("none of %d pieces worn and carried is of an item set"):format(#links)
+        end
+    end,
+})
+
+-- The export's tooltip sections (Copy Details), asked for every item in the bags: each line
+-- of the client's answer has its row, and every field of the line is on it. An item in a bag
+-- has two tooltips, the slot's and the bare link's, which is the one the addon computes the
+-- status from; where the two differ, the line types that differ are collected with a few
+-- examples each. That list is what the addon cannot know about a copy from its link.
+--
+-- An example says that a line is on one side only, not what the other side has in its place.
+-- So each example names its item, and for the first kinds of each line type the item's whole
+-- export is kept (cases): both tooltips, as a Copy Details of that item would show them.
+
+local EXPORT_ROW_FIELDS = { type = true, leftText = true, rightText = true, leftColor = true, rightColor = true }
+local EXPORT_EXAMPLE_LENGTH = 200
+local EXPORT_EXAMPLES = 6
+local EXPORT_CASES = 2 -- per line type and side: the kinds whose item is kept whole
+
+-- Keeps an example unless one like it is there: two lines that differ in their numbers only
+-- (a cooldown, a price) are one kind of line. Returns whether it was kept.
+local function AddExportExample(list, example)
+    local shape = example:gsub("%d+", "#")
+    for _, known in ipairs(list) do
+        local knownShape = known:gsub("%d+", "#")
+        if knownShape == shape then
+            return false
+        end
+    end
+    if #list < EXPORT_EXAMPLES then
+        list[#list + 1] = example
+        return true
+    end
+    return false
+end
+
+-- The export's rows as sections: { title, info = { row text }, lines = { { row, fields } } }.
+-- A line's row loses its "[3] " so that a line can be found again where the count differs.
+local function ExportSections(rows)
+    local sections, current = {}, nil
+    for _, row in ipairs(rows) do
+        local text = row.text
+        if row.indent == 0 and text:sub(1, 1) == "[" then
+            current = { title = text, info = {}, lines = {} }
+            sections[#sections + 1] = current
+        elseif current and row.indent == 1 and text:find("^%[%d+%] ") then
+            current.lines[#current.lines + 1] = { row = (text:gsub("^%[%d+%] ", "")), fields = "" }
+        elseif current and row.indent == 3 and #current.lines > 0 then
+            current.lines[#current.lines].fields = text
+        elseif current and row.indent == 1 then
+            current.info[#current.info + 1] = text
+        end
+    end
+    return sections
+end
+
+-- Whether a section's lines are the client's lines, one row each with every field.
+local function CheckExportLines(c, what, section, data)
+    local lines = type(data) == "table" and data.lines or {}
+    if not c:Check(#section.lines == #lines, "%s: %d rows for %d tooltip lines", what, #section.lines, #lines) then
+        return
+    end
+    for index, line in ipairs(lines) do
+        local shown = section.lines[index]
+        local leftText = line.leftText
+        if type(leftText) == "string" and leftText ~= "" then
+            c:Check(shown.row:find(leftText, 1, true) ~= nil, "%s: line %d does not show its text", what, index)
+        end
+        for key, value in pairs(line) do
+            if not EXPORT_ROW_FIELDS[key] and type(value) ~= "function" then
+                c:Check((", " .. shown.fields):find(", " .. tostring(key) .. "=", 1, true) ~= nil,
+                    "%s: line %d (type %s) does not show its field %s", what, index, tostring(line.type), tostring(key))
+            end
+        end
+    end
+end
+
+-- Counts the lines one section has and the other lacks, by line type, into differs. An example
+-- that is kept gets its item beside it (slotItems, linkItems: the same index), and the first
+-- kinds of a type the item's whole export in cases, which rows() makes.
+local function NoteExportDifferences(differs, section, other, side, itemID, cases, rows)
+    local has = {}
+    for _, line in ipairs(other.lines) do
+        has[line.row .. "\n" .. line.fields] = true
+    end
+    for _, line in ipairs(section.lines) do
+        if not has[line.row .. "\n" .. line.fields] then
+            local lineType = line.row:match("^type=%S+ %b()") or line.row:match("^type=%S+") or "?"
+            local entry = differs[lineType]
+            if not entry then
+                entry = { slotOnly = 0, linkOnly = 0, slotExamples = {}, linkExamples = {}, slotItems = {}, linkItems = {} }
+                differs[lineType] = entry
+            end
+            entry[side .. "Only"] = entry[side .. "Only"] + 1
+            local example = line.row .. (line.fields ~= "" and ("  {" .. line.fields .. "}") or "")
+            local examples = entry[side .. "Examples"]
+            if AddExportExample(examples, example:sub(1, EXPORT_EXAMPLE_LENGTH)) then
+                entry[side .. "Items"][#examples] = itemID
+                if #examples <= EXPORT_CASES and cases[itemID] == nil then
+                    cases[itemID] = rows()
+                end
+            end
+        end
+    end
+end
+
+local function MergeExportLines(old, new)
+    local merged = old
+    for _, key in ipairs({ "items", "linkSame", "linkDiffers" }) do
+        merged[key] = (old[key] or 0) + (new[key] or 0)
+    end
+    merged.sample = old.sample or new.sample
+    merged.differs = merged.differs or {}
+    for lineType, entry in pairs(new.differs or {}) do
+        local target = merged.differs[lineType]
+        if not target then
+            merged.differs[lineType] = entry
+        else
+            target.slotOnly = (target.slotOnly or 0) + (entry.slotOnly or 0)
+            target.linkOnly = (target.linkOnly or 0) + (entry.linkOnly or 0)
+            for _, side in ipairs({ "slot", "link" }) do
+                local examples, items = side .. "Examples", side .. "Items"
+                target[examples] = target[examples] or {}
+                target[items] = target[items] or {}
+                for index, example in ipairs(entry[examples] or {}) do
+                    if AddExportExample(target[examples], example) then
+                        target[items][#target[examples]] = (entry[items] or {})[index] or 0
+                    end
+                end
+            end
+        end
+    end
+    -- A case is kept for an item the merged record names among a type's first kinds, so the
+    -- cases do not grow with the logins.
+    local wanted = {}
+    for _, entry in pairs(merged.differs) do
+        for _, side in ipairs({ "slotItems", "linkItems" }) do
+            for index = 1, EXPORT_CASES do
+                local itemID = (entry[side] or {})[index]
+                if itemID then
+                    wanted[itemID] = true
+                end
+            end
+        end
+    end
+    merged.cases = merged.cases or {}
+    for itemID, rows in pairs(new.cases or {}) do
+        if wanted[itemID] and merged.cases[itemID] == nil then
+            merged.cases[itemID] = rows
+        end
+    end
+    return merged
+end
+
+T.Contract({
+    id = "export.tooltipLines",
+    version = 3,
+    title = "The export shows every tooltip line of a bag item with every field, for the slot and for the link",
+    accumulate = true,
+    merge = MergeExportLines,
+    run = function(c)
+        local feature = CaerdonWardrobe and CaerdonWardrobe.GetFeature and CaerdonWardrobe:GetFeature("DebugFrame")
+        if not feature or type(feature.GetTooltipReportRows) ~= "function" then
+            return "skip", "the addon's Debug Frame has no GetTooltipReportRows"
+        end
+        local slots = FilledBagSlots()
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local items, linkSame, linkDiffers, differs, cases, sample = 0, 0, 0, {}, {}, nil
+        for index, where in ipairs(slots) do
+            local link = C_Container.GetContainerItemLink(where.bag, where.slot)
+            if link then
+                items = items + 1
+                local what = ("bag %d slot %d"):format(where.bag, where.slot)
+                local rows = feature:GetTooltipReportRows(link, ItemLocation:CreateFromBagAndSlot(where.bag, where.slot))
+                local sections = ExportSections(rows)
+                local slotSection, linkSection = sections[1], sections[2]
+                local itemID = C_Container.GetContainerItemID(where.bag, where.slot) or 0
+                local texts
+                local function Texts()
+                    if not texts then
+                        texts = {}
+                        for rowIndex, row in ipairs(rows) do
+                            texts[rowIndex] = string.rep("  ", row.indent) .. row.text
+                        end
+                    end
+                    return texts
+                end
+                if c:Check(#sections == 2 and slotSection.title == "[Tooltip Lines (Raw)]"
+                        and linkSection.title == "[Tooltip Lines (Link)]", "%s: %d sections, expected the slot's and the link's",
+                        what, #sections) then
+                    CheckExportLines(c, what .. ", slot", slotSection, C_TooltipInfo.GetBagItem(where.bag, where.slot))
+                    local linkData = C_TooltipInfo.GetHyperlink(link)
+                    local same = false
+                    for _, text in ipairs(linkSection.info) do
+                        same = same or text:find("^Lines: %d+, each the same") ~= nil
+                    end
+                    if same then
+                        linkSame = linkSame + 1
+                        c:Check(#linkSection.lines == 0, "%s: the link's lines are called the same and printed as well", what)
+                    else
+                        linkDiffers = linkDiffers + 1
+                        CheckExportLines(c, what .. ", link", linkSection, linkData)
+                        NoteExportDifferences(differs, slotSection, linkSection, "slot", itemID, cases, Texts)
+                        NoteExportDifferences(differs, linkSection, slotSection, "link", itemID, cases, Texts)
+                    end
+                    if not sample or (not same and not sample.differs) then
+                        sample = { link = link, differs = not same, rows = Texts() }
+                    end
+                end
+            end
+            if index % 10 == 0 then
+                T.Yield()
+            end
+        end
+        c:Note("items", items)
+        c:Note("linkSame", linkSame)
+        c:Note("linkDiffers", linkDiffers)
+        c:Note("differs", differs)
+        c:Note("cases", cases)
+        c:Note("sample", sample)
+    end,
+})
+
+-- Whether what C_TooltipInfo answers is the game's alone. Other addons write on tooltips, and
+-- the addon decides statuses from tooltip lines, so a line of theirs must never be among the
+-- lines it reads. They have three ways in, and each is tried here:
+--   * adding a line to a tooltip frame while it is filled (what nearly all of them do): the
+--     test does exactly that on a frame of its own and looks for its line in the data;
+--   * changing the table the frame hands to their callback: the test changes a table it got
+--     and asks again;
+--   * replacing a C_TooltipInfo function: a function that is not the client's own is named.
+
+local MARKER_TEXT = "CaerdonWardrobe_Tests: a line an addon added"
+local MARKER_TOOLTIP = "CaerdonWardrobeTestsMarkerTooltip"
+local markerTooltip, markerArmed
+
+local function HasMarker(data)
+    for _, line in ipairs(type(data) == "table" and data.lines or {}) do
+        if not issecretvalue(line.leftText) and line.leftText == MARKER_TEXT then
+            return true
+        end
+    end
+    return false
+end
+
+T.Contract({
+    id = "tooltip.gameOnly",
+    version = 1,
+    title = "Tooltip data holds the game's lines only: nothing an addon adds to a tooltip reaches it",
+    run = function(c)
+        if InCombatLockdown() then
+            return "skip", "out of combat only"
+        end
+        local slots = FilledBagSlots(1)
+        if #slots == 0 then
+            return "skip", "needs an item in the bags"
+        end
+        local bag, slot = slots[1].bag, slots[1].slot
+
+        -- A function an addon assigned is not secure, and the client says whose it is.
+        local replaced, functions = {}, 0
+        for name, value in pairs(C_TooltipInfo) do
+            if type(value) == "function" then
+                functions = functions + 1
+                local isSecure, taintedBy = issecurevariable(C_TooltipInfo, name)
+                if not isSecure then
+                    replaced[#replaced + 1] = ("%s (%s)"):format(tostring(name), tostring(taintedBy))
+                end
+            end
+        end
+        c:Note("functions", functions)
+        c:Note("replaced", replaced)
+        c:Check(#replaced == 0, "%d C_TooltipInfo functions are not the client's own: %s", #replaced, Join(replaced))
+
+        -- A line added to a frame, the way an addon adds one.
+        if not markerTooltip then
+            markerTooltip = CreateFrame("GameTooltip", MARKER_TOOLTIP, UIParent, "GameTooltipTemplate")
+            TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip)
+                if markerArmed and tooltip == markerTooltip then
+                    tooltip:AddLine(MARKER_TEXT)
+                end
+            end)
+        end
+        markerArmed = true
+        markerTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+        markerTooltip:SetBagItem(bag, slot)
+        markerArmed = false
+        local frameLines, onFrame = markerTooltip:NumLines() or 0, false
+        for index = 1, frameLines do
+            local fontString = _G[MARKER_TOOLTIP .. "TextLeft" .. index]
+            local text = fontString and fontString:GetText()
+            if not issecretvalue(text) and text == MARKER_TEXT then
+                onFrame = true
+            end
+        end
+        markerTooltip:Hide()
+
+        local data = C_TooltipInfo.GetBagItem(bag, slot)
+        if not c:Check(type(data) == "table" and type(data.lines) == "table", "the slot's tooltip data is a %s", type(data)) then
+            return
+        end
+        c:Note("frameLines", frameLines)
+        c:Note("dataLines", #data.lines)
+        c:Check(onFrame, "the line added to the tooltip frame is not on it (%d lines), so the test shows nothing", frameLines)
+        c:Check(not HasMarker(data), "a line an addon added to a tooltip frame is in the data of C_TooltipInfo.GetBagItem")
+        local link = C_Container.GetContainerItemLink(bag, slot)
+        if link then
+            c:Check(not HasMarker(C_TooltipInfo.GetHyperlink(link)),
+                "a line an addon added to a tooltip frame is in the data of C_TooltipInfo.GetHyperlink")
+        end
+
+        -- A table that was handed out and changed.
+        data.lines[#data.lines + 1] = { type = 0, leftText = MARKER_TEXT }
+        local again = C_TooltipInfo.GetBagItem(bag, slot)
+        c:Check(again ~= data, "two calls for one slot return the same table, so a change by anyone is seen by everyone")
+        c:Check(not HasMarker(again), "a line written into one answer's table is in the next answer")
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- Secret values
+------------------------------------------------------------------------------------------
+
+local function CountSecrets(value, depth)
+    if issecretvalue(value) then
+        return 1
+    end
+    if type(value) ~= "table" or depth <= 0 then
+        return 0
+    end
+    local count = 0
+    for _, item in pairs(value) do
+        count = count + CountSecrets(item, depth - 1)
+    end
+    return count
+end
+
+T.Contract({
+    id = "secrets.itemData",
+    version = 1,
+    title = "The item, container, tooltip and transmog answers hold no secret values out of combat",
+    run = function(c)
+        local slots = FilledBagSlots(15)
+        if #slots == 0 then
+            return "skip", "needs items in the bags"
+        end
+        local secrets, calls = {}, 0
+        local function Probe(name, ...)
+            calls = calls + 1
+            local count = CountSecrets({ ... }, 4)
+            if count > 0 then
+                secrets[name] = (secrets[name] or 0) + count
+            end
+        end
+        for _, where in ipairs(slots) do
+            local bag, slot = where.bag, where.slot
+            local link = C_Container.GetContainerItemLink(bag, slot)
+            Probe("C_Container.GetContainerItemInfo", C_Container.GetContainerItemInfo(bag, slot))
+            Probe("C_Container.GetContainerItemLink", link)
+            Probe("C_TooltipInfo.GetBagItem", C_TooltipInfo.GetBagItem(bag, slot))
+            if link and not issecretvalue(link) then
+                Probe("C_Item.GetItemInfo", C_Item.GetItemInfo(link))
+                Probe("C_Item.GetItemStats", C_Item.GetItemStats(link))
+                Probe("C_TooltipInfo.GetHyperlink", C_TooltipInfo.GetHyperlink(link))
+                local appearanceID, sourceID = C_TransmogCollection.GetItemInfo(link)
+                Probe("C_TransmogCollection.GetItemInfo", appearanceID, sourceID)
+                if sourceID and not issecretvalue(sourceID) then
+                    Probe("C_TransmogCollection.GetSourceInfo", C_TransmogCollection.GetSourceInfo(sourceID))
+                    Probe("C_TransmogCollection.PlayerCanCollectSource",
+                        C_TransmogCollection.PlayerCanCollectSource(sourceID))
+                end
+            end
+        end
+        c:Note("items", #slots)
+        c:Note("calls", calls)
+        c:Note("secretValuesByFunction", secrets)
+        c:Check(next(secrets) == nil, "secret values came back from: %s", Join(T.SortedKeys(secrets)))
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- Transmog collection
+------------------------------------------------------------------------------------------
+
+T.Contract({
+    id = "transmog.categoryAppearances",
+    version = 1,
+    title = "GetCategoryAppearances lists appearances that are not collected",
+    run = function(c)
+        local api = C_TransmogCollection
+        local collectedShown, uncollectedShown = api.GetCollectedShown(), api.GetUncollectedShown()
+        c:Note("filtersFound", { collected = collectedShown, uncollected = uncollectedShown })
+        -- The list follows the wardrobe's own filter, so both sides are switched on for the
+        -- reading and put back afterwards.
+        if not collectedShown then api.SetCollectedShown(true) end
+        if not uncollectedShown then api.SetUncollectedShown(true) end
+
+        local totals = { categories = 0, appearances = 0, collected = 0, uncollected = 0 }
+        local perCategory, fields, refused = {}, nil, {}
+        for name, category in pairs(Enum.TransmogCollectionType) do
+            -- Not every value of the enum is a category the function takes.
+            local ok, list = pcall(api.GetCategoryAppearances, category)
+            if not ok then
+                refused[name] = tostring(list)
+            elseif type(list) == "table" and #list > 0 then
+                local collected = 0
+                for _, appearance in ipairs(list) do
+                    if appearance.isCollected then
+                        collected = collected + 1
+                    end
+                end
+                fields = fields or T.SortedKeys(list[1])
+                perCategory[name] = { total = #list, collected = collected }
+                totals.categories = totals.categories + 1
+                totals.appearances = totals.appearances + #list
+                totals.collected = totals.collected + collected
+                totals.uncollected = totals.uncollected + (#list - collected)
+            end
+            T.Yield()
+        end
+
+        if not collectedShown then api.SetCollectedShown(false) end
+        if not uncollectedShown then api.SetUncollectedShown(false) end
+
+        c:Note("totals", totals)
+        c:Note("perCategory", perCategory)
+        c:Note("categoriesRefused", refused)
+        c:Note("appearanceFields", fields)
+        if not c:Check(totals.appearances > 0, "no category returned an appearance") then
+            return
+        end
+        c:Check(totals.uncollected > 0, "all %d appearances returned are collected", totals.appearances)
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- The client's own addon profiler
+------------------------------------------------------------------------------------------
+
+local PROFILER_METRICS = {
+    "SessionAverageTime", "RecentAverageTime", "EncounterAverageTime", "LastTime", "PeakTime",
+    "CountTimeOver1Ms", "CountTimeOver5Ms", "CountTimeOver10Ms", "CountTimeOver50Ms", "CountTimeOver100Ms",
+    "CountTimeOver500Ms", "CountTimeOver1000Ms",
+}
+
+-- The profiler's figures for one addon, by metric name, plus the share the addon list shows
+-- (Blizzard_AddOnList: the addon's time over the application's time without the other addons).
+function T.ReadProfiler(addonName)
+    if not C_AddOnProfiler.IsEnabled() then
+        return nil
+    end
+    local figures, share = {}, {}
+    for _, name in ipairs(PROFILER_METRICS) do
+        local metric = Enum.AddOnProfilerMetric[name]
+        if metric then
+            local value = C_AddOnProfiler.GetAddOnMetric(addonName, metric)
+            figures[name] = value
+            if not name:find("^Count") then
+                local total = C_AddOnProfiler.GetApplicationMetric(metric) - C_AddOnProfiler.GetOverallMetric(metric)
+                    + value
+                share[name] = total > 0 and (value / total) or 0
+            end
+        end
+    end
+    figures.share = share
+    return figures
+end
+
+T.Contract({
+    id = "profiler.metrics",
+    version = 1,
+    title = "C_AddOnProfiler reports this addon's CPU time without extra setup",
+    run = function(c)
+        local enabled = C_AddOnProfiler.IsEnabled()
+        c:Note("enabled", enabled)
+        if not c:Check(enabled, "the addon profiler is off") then
+            return
+        end
+        local figures = T.ReadProfiler(T.SUBJECT)
+        c:Note("subject", figures)
+        c:Note("tests", T.ReadProfiler(T.NAME))
+        for _, name in ipairs(PROFILER_METRICS) do
+            c:Check(type(figures[name]) == "number", "%s is a %s", name, TypeOf(figures[name]))
+        end
+
+        -- Timing.lua adds up LastTime frame by frame to get the addon's time for a stretch of
+        -- play. That is only right if LastTime is the time spent in the frame before. Over three
+        -- seconds, compare the sum with what the session average grew by.
+        local frames, sum = 0, 0
+        local deadline = GetTime() + 3
+        while GetTime() < deadline do
+            T.Yield()
+            frames = frames + 1
+            sum = sum + C_AddOnProfiler.GetAddOnMetric(T.SUBJECT, Enum.AddOnProfilerMetric.LastTime)
+        end
+        c:Note("lastTimeSample", {
+            frames = frames,
+            sumMs = sum,
+            meanMs = frames > 0 and sum / frames or 0,
+            recentAverageMs = C_AddOnProfiler.GetAddOnMetric(T.SUBJECT, Enum.AddOnProfilerMetric.RecentAverageTime),
+        })
+    end,
+})
+
+------------------------------------------------------------------------------------------
+-- WoW Forever
+------------------------------------------------------------------------------------------
+
+local RED = { r = 0.9, g = 0.2, b = 0.2 }
+
+local function HasRedText(lines)
+    for _, line in ipairs(lines) do
+        for _, color in ipairs({ line.leftColor, line.rightColor }) do
+            if type(color) == "table" and (color.r or 0) > RED.r and (color.g or 1) < RED.g and (color.b or 1) < RED.b then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+T.Contract({
+    id = "forever.canUseItem",
+    version = 1,
+    title = "Does C_PlayerInfo.CanUseItem know the classic armor proficiencies",
+    flavor = "forever",
+    perToon = true,
+    run = function(c)
+        local toon = T.GetToon()
+        if not ((toon.class == "HUNTER" or toon.class == "SHAMAN") and toon.level < 40) then
+            return "skip", "needs a hunter or shaman below level 40 (mail comes at 40)"
+        end
+        local itemID = 6550 -- Soldier's Wristguards, mail
+        local item, why = T.LoadItem(itemID)
+        if not item then
+            return "skip", why
+        end
+        local facts = T.Facts.Item(item)
+        local data = C_TooltipInfo.GetHyperlink(item:GetItemLink())
+        local redText = HasRedText(data and data.lines or {})
+        c:Note("item", facts)
+        c:Note("tooltipHasRedText", redText)
+        if (facts.minLevel or 0) > toon.level then
+            return "skip", "the toon is below the item's own level requirement, so the answer proves nothing"
+        end
+        c:Note("answer", facts.canUse and "CanUseItem says usable: it does not know the proficiency"
+            or "CanUseItem says not usable: it knows the proficiency")
+        return "info"
+    end,
+})
+
+T.Contract({
+    id = "forever.laterExpansionItems",
+    version = 1,
+    title = "Does the client have item data from later expansions",
+    flavor = "forever",
+    run = function(c)
+        local samples = {
+            { id = 6948, from = "classic (control)" },
+            { id = 34334, from = "The Burning Crusade" },
+            { id = 49623, from = "Wrath of the Lich King" },
+            { id = 71086, from = "Cataclysm" },
+            { id = 93607, from = "Mists of Pandaria" },
+            { id = 110560, from = "Warlords of Draenor" },
+            { id = 140192, from = "Legion" },
+        }
+        local found = 0
+        for _, sample in ipairs(samples) do
+            sample.exists = C_Item.DoesItemExistByID(sample.id)
+            if sample.exists then
+                local item = T.LoadItem(sample.id, 5)
+                if item then
+                    sample.name = item:GetItemName()
+                    sample.hasAppearance = select(2, C_TransmogCollection.GetItemInfo(item:GetItemLink())) ~= nil
+                    if sample.id ~= 6948 then
+                        found = found + 1
+                    end
+                end
+            end
+        end
+        c:Note("items", samples)
+        c:Note("laterExpansionItemsLoaded", found)
+        return "info"
+    end,
+})

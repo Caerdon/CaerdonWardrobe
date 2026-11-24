@@ -7,15 +7,13 @@ function TradeSkillMixin:GetName()
 end
 
 function TradeSkillMixin:Init()
-    return { "ADDON_LOADED", "TRADE_SKILL_SHOW" }
+    self:WhenAddOnLoaded("Blizzard_Professions", self.OnProfessionsLoaded)
+    return { "TRADE_SKILL_SHOW" }
 end
 
-function TradeSkillMixin:ADDON_LOADED(name)
-	if name == "Blizzard_Professions" then
-        ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
-        hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
-        -- hooksecurefunc(ProfessionsFrame, "Refresh", function (...) self:Refresh(...) end)
-	end
+function TradeSkillMixin:OnProfessionsLoaded()
+    ScrollUtil.AddInitializedFrameCallback(ProfessionsFrame.CraftingPage.RecipeList.ScrollBox, function (...) self:OnInitializedFrame(...) end, ProfessionsFrame.CraftingPage.RecipeList, false)
+    hooksecurefunc(ProfessionsFrame.CraftingPage.SchematicForm, "Init", function (...) self:OnSchematicFormInit(...) end)
 end
 
 function TradeSkillMixin:TRADE_SKILL_SHOW(name)
@@ -79,34 +77,14 @@ function TradeSkillMixin:OnSchematicFormInit(frame, recipeInfo)
     end)
 end
 
-function TradeSkillMixin:GetTooltipData(item, locationInfo)
-	return C_TooltipInfo.GetHyperlink(item:GetItemLink())
-end
-
-function TradeSkillMixin:Refresh()
-end
-
-function TradeSkillMixin:GetDisplayInfo(button, item, feature, locationInfo, options, mogStatus, bindingStatus)
-	return {
-		bindingStatus = {
-			shouldShow = true
-		},
-		ownIcon = {
-			shouldShow = true
-		},
-		otherIcon = {
-			shouldShow = CaerdonWardrobeConfig.Icon.ShowLearnableByOther.TradeSkill ~= false
-		},
-		questIcon = {
-			shouldShow = false
-		},
-		oldExpansionIcon = {
-			shouldShow = false
-		},
-        sellableIcon = {
-            shouldShow = false
-        }
-	}
-end
+-- What this window shows of an item (FeatureMixin.lua, displayRules).
+TradeSkillMixin.displayRules = {
+	bindingStatus = true,
+	ownIcon = true,
+	otherIcon = "TradeSkill",
+	questIcon = false,
+	oldExpansionIcon = false,
+	sellableIcon = false,
+}
 
 CaerdonWardrobe:RegisterFeature(TradeSkillMixin)

@@ -136,20 +136,10 @@ function DialogueUIMixin:UpdateRewardButton(button)
     }
     local options = GetRewardOptions(button)
 
-    local item = CaerdonItem:CreateFromItemLink(itemLink)
-    local function doUpdate()
-        -- The button may have been released, or set to something else, while the item loaded.
-        if trackedButtons[button] == drawn then
-            CaerdonWardrobe:UpdateButton(button, item, self, locationInfo, options)
-        end
-    end
-
-    -- Item data has to be loaded before UpdateButton.
-    if item:IsItemDataCached() then
-        doUpdate()
-    else
-        item:ContinueOnItemLoad(doUpdate)
-    end
+    -- A button that is released or set to something else while its item loads is cleared or
+    -- asked for anew above, each time what is tracked for it changes, so the answer that comes
+    -- late is not drawn (Decorate).
+    self:Decorate(button, itemLink, locationInfo, options)
 end
 
 -- Dialogue UI has put its arrow on a button, either inside SetItem (the button is not tracked
@@ -160,8 +150,18 @@ function DialogueUIMixin:OnUpgradeArrowShown(button)
     end
 end
 
+-- Where this feature attaches to Dialogue UI (the integration report; see FeatureMixin.lua).
+DialogueUIMixin.integration = {
+    addon = addonName,
+    hookPoints = { "DUIDialogItemButtonMixin.SetItem", "DUIDialogItemButtonMixin.OnRelease" },
+    optionalHookPoints = { "DUIDialogItemButtonMixin.ShowUpgradeIcon" },
+}
+
 function DialogueUIMixin:Init()
     local buttonMixin = DUIDialogItemButtonMixin
+    self:NoteHookPoint("DUIDialogItemButtonMixin.SetItem", buttonMixin, "SetItem")
+    self:NoteHookPoint("DUIDialogItemButtonMixin.OnRelease", buttonMixin, "OnRelease")
+    self:NoteHookPoint("DUIDialogItemButtonMixin.ShowUpgradeIcon", buttonMixin, "ShowUpgradeIcon")
     if type(buttonMixin) ~= "table" or type(buttonMixin.SetItem) ~= "function" or
         type(buttonMixin.OnRelease) ~= "function" then
         return
@@ -205,10 +205,16 @@ end
 
 -- The same icons as on Blizzard's quest rewards, under the same settings, minus the upgrade arrow
 -- and the level gain where Dialogue UI shows its own arrow.
+function DialogueUIMixin:GetDisplayRules(...)
+    local questLogFeature = CaerdonWardrobe:GetFeature("QuestLog")
+    return questLogFeature and questLogFeature:GetDisplayRules(...)
+end
+
 function DialogueUIMixin:GetDisplayInfo(button, ...)
     local questLogFeature = CaerdonWardrobe:GetFeature("QuestLog")
-    local displayInfo = questLogFeature and questLogFeature:GetDisplayInfo(button, ...) or {}
+    local displayInfo = questLogFeature and questLogFeature:GetDisplayInfo(button, ...)
     if HasOwnUpgradeArrow(button) then
+        displayInfo = displayInfo or {}
         displayInfo.upgradeIcon = { shouldShow = false }
         displayInfo.levelGain = { shouldShow = false }
     end

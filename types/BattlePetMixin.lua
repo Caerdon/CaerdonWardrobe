@@ -6,8 +6,7 @@ CaerdonBattlePetMixin = {}
 		error("Usage: CaerdonBattlePet:CreateFromCaerdonItem(caerdonItem)", 2)
 	end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonBattlePetMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonBattlePetMixin, caerdonItem)
     return itemType
 end
 
@@ -32,7 +31,7 @@ function CaerdonBattlePetMixin:GetBattlePetInfo()
 
     local petName, petIcon, petType, creatureID, sourceText, description, isWild, canBattle, isTradeable, isUnique, isObtainable, displayID = C_PetJournal.GetPetInfoBySpeciesID(speciesID);
 
-    local numCollected = C_PetJournal.GetNumCollectedInfo(speciesID)
+    local numCollected, limit = C_PetJournal.GetNumCollectedInfo(speciesID)
     if numCollected == 0 then
         needsItem = true
     end
@@ -51,6 +50,7 @@ function CaerdonBattlePetMixin:GetBattlePetInfo()
         speciesID = tonumber(speciesID),
         displayID = tonumber(displayID),
         numCollected = numCollected,
+        limit = limit,
         quality = tonumber(quality),
         level = tonumber(level),
         health = tonumber(health),

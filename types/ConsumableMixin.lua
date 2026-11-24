@@ -81,8 +81,7 @@ function CaerdonConsumable:CreateFromCaerdonItem(caerdonItem)
         error("Usage: CaerdonConsumable:CreateFromCaerdonItem(caerdonItem)", 2)
     end
 
-    local itemType = CreateFromMixins(CaerdonWardrobeItemDataMixin, CaerdonConsumableMixin)
-    itemType.item = caerdonItem
+    local itemType = CaerdonWardrobeItemDataMixin.CreateItemData(CaerdonConsumableMixin, caerdonItem)
 
     return itemType
 end
@@ -445,7 +444,6 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                                 sourceID = sourceID,
                                                 itemID = sourceInfo.itemID,
                                                 itemLink = GetDebugItemLink(sourceInfo.itemID),
-                                                itemType = itemType,
                                                 itemEquipLoc = itemEquipLoc,
                                                 classID = classID,
                                                 itemSubTypeID = itemSubTypeID,
@@ -696,7 +694,6 @@ function CaerdonConsumableMixin:GetConsumableInfo()
                                                 sourceID = sourceID,
                                                 itemID = sourceInfo.itemID,
                                                 appearanceID = sourceInfo.visualID,
-                                                itemType = itemType,
                                                 itemEquipLoc = itemEquipLoc,
                                                 classID = classID,
                                                 isValidSourceForPlayer = sourceInfo.isValidSourceForPlayer,

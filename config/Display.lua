@@ -3,7 +3,8 @@ local CaerdonWardrobeConfigDisplay = CreateFromMixins(CaerdonWardrobeConfigPanel
 local ADDON_NAME, NS = ...
 local L = NS.L
 
--- How things are drawn, plus the few settings that are not about an icon.
+-- How things are drawn, plus the few settings that are not about an icon. A line the addon adds
+-- to a tooltip explains an icon, and its switch is in that icon's block on the Icons page.
 
 function CaerdonWardrobeConfigDisplay:GetTitle()
     return "Display"
@@ -42,9 +43,6 @@ function CaerdonWardrobeConfigDisplay:Register()
         self:AddSection("Dialogue UI")
         self:AddCheckbox({ key = "showOnDialogueUI", text = "Show icons on its quest rewards", tooltip = "Draws this addon's icons and binding text on the quest rewards in Dialogue UI's window. Which icons show there follows the quest reward settings on the Icons page. Blizzard's own quest windows are not affected.", configSection = "Icon", configValue = "ShowOnDialogueUI" })
     end
-
-    self:AddSection("Tooltip")
-    self:AddCheckbox({ key = "showRecipeLearners", text = "Add who could learn a recipe to its tooltip", tooltip = "Adds a line to a recipe's tooltip naming your other toons on this realm that have the profession and have not learned it.", configSection = "Tooltip", configValue = "ShowRecipeLearners" })
 
     self:AddSection("Debug")
     self:AddCheckbox({ key = "enableDebug", text = "Enable debug", tooltip = "Adds debugging details to item tooltips.", configSection = "Debug", configValue = "Enabled" })

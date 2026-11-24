@@ -8,7 +8,14 @@ function BaudBagMixin:GetName()
     return addonName
 end
 
+-- Where this feature attaches to BaudBag (the integration report; see FeatureMixin.lua).
+BaudBagMixin.integration = {
+    addon = addonName,
+    hookPoints = { "BaudBag.ItemSlot_Updated" },
+}
+
 function BaudBagMixin:Init()
+    self:NoteHookPoint("BaudBag.ItemSlot_Updated", BaudBag, "ItemSlot_Updated")
     hooksecurefunc(BaudBag, "ItemSlot_Updated", function(...) self:ItemSlotUpdated(...) end)
 end
 
@@ -17,19 +24,27 @@ function BaudBagMixin:GetTooltipData(item, locationInfo)
         if not item:IsItemEmpty() then
             return C_TooltipInfo.GetHyperlink(item:GetItemLink())
         end
-    elseif locationInfo.bag == BANK_CONTAINER then
-        return C_TooltipInfo.GetInventoryItem("player", BankButtonIDToInvSlotID(locationInfo.slot))
     else
         return C_TooltipInfo.GetBagItem(locationInfo.bag, locationInfo.slot)
     end
 end
 
+-- The item buttons BaudBag has had drawn, each with the slot it was last drawn for, so Refresh()
+-- can draw them again: BaudBag only reports a slot when its content changes, which a newly
+-- learned appearance or a gear swap does not do. Weak keys: BaudBag owns the buttons.
+local trackedButtons = setmetatable({}, { __mode = "k" })
+
 function BaudBagMixin:Refresh()
-    -- Can do something like BaudBag.Sets[bagSet.Id]:RebuildContainers() if needed
+    CaerdonWardrobeFeatureMixin:Refresh(self)
+
+    for button, where in pairs(trackedButtons) do
+        self:ProcessItem(where.bag, where.slot, button)
+    end
 end
 
 function BaudBagMixin:ProcessItem(bag, slot, button)
     if bag and slot then
+        local options = {}
         if BaudBag.Cache:UsesCache(bag) then
             local bagCache = BaudBag.Cache:GetBagCache(bag)
             local slotCache = bagCache[slot]
@@ -43,9 +58,6 @@ function BaudBagMixin:ProcessItem(bag, slot, button)
                 CaerdonWardrobe:ClearButton(button)
             end
         else
-            local options = {
-            }
-
             local item = CaerdonItem:CreateFromBagAndSlot(bag, slot)
             CaerdonWardrobe:UpdateButton(button, item, self, { bag = bag, slot = slot }, options)
         end
@@ -53,6 +65,14 @@ function BaudBagMixin:ProcessItem(bag, slot, button)
 end
 
 function BaudBagMixin:ItemSlotUpdated(bb, bagSet, containerId, subContainerId, slotId, button)
+    if button and subContainerId and slotId then
+        local where = trackedButtons[button]
+        if not where then
+            where = {}
+            trackedButtons[button] = where
+        end
+        where.bag, where.slot = subContainerId, slotId
+    end
     self:ProcessItem(subContainerId, slotId, button)
 end
 

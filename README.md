@@ -38,7 +38,7 @@ Tooltips can also say which of your toons can learn a recipe.
 ## Works with other addons
 
 - **Bag and UI addons:** AdiBags, ArkInventory, Baganator, Bagnon, Bagnonium, BaudBag, BetterBags, cargBags_Nivaya, ElvUI, Inventorian, KkthnxUI, LiteBag, NDui and Sorted.
-- **Other windows:** Auctionator, Dialogue UI, Narcissus, Skillet, Venture Plan, Angrier World Quests, World Quests List, World Quest Tracker and Zygor.
+- **Other windows:** Auctionator, Dialogue UI, Narcissus, Skillet, Venture Plan, Angrier World Quests, World Quests List, World Quest Tab, World Quest Tracker and Zygor.
 - **Better answers when installed:** Pawn (upgrades), Auctionator (auction prices) and QuestieDB (items for quests you have not picked up yet).
 
 ## Settings

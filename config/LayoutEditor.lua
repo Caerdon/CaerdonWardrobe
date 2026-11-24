@@ -600,7 +600,7 @@ function Editor:Changed()
         self.redrawQueued = true
         C_Timer.After(0.2, function()
             self.redrawQueued = false
-            CaerdonWardrobe:RefreshItems()
+            CaerdonWardrobe:RefreshItems("layout editor")
         end)
     end
 end
@@ -622,7 +622,7 @@ end
 function Editor:AfterClose()
     self:RedrawSamples()
     if CaerdonWardrobe and CaerdonWardrobe.RefreshItems then
-        CaerdonWardrobe:RefreshItems()
+        CaerdonWardrobe:RefreshItems("layout editor")
     end
 end
 
