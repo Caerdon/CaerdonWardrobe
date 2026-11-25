@@ -2587,6 +2587,25 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
     end
 
+    -- The loot window: how its rows came to their buttons this session and, while it is open,
+    -- each slot with what is on its button. A row's tooltip belongs to the row and not to the
+    -- button, so "Its Button" above has nothing for one.
+    do
+        local loot = CaerdonWardrobe:GetFeature("Loot")
+        if loot and loot.GetReportLines then
+            addLine(0, "")
+            addLine(0, "[Loot Window]")
+            local ok, lootLines = pcall(loot.GetReportLines, loot)
+            if ok then
+                for _, lootLine in ipairs(lootLines) do
+                    addLine(lootLine.indent, lootLine.text)
+                end
+            else
+                addKV(1, "Report failed", tostring(lootLines))
+            end
+        end
+    end
+
     -- What the addon has cost this session: login milestones, what the client was asked to
     -- load, what caused each full refresh and, when its profile has run, the time and memory
     -- of the functions a draw goes through. Session-wide, not about this item.
