@@ -3565,7 +3565,7 @@ function DebugFrameMixin:BuildClipboardPayload(item)
             end
             addKV(1, "Remembered Answer", petFood.remembered == nil and "none" or petFood.remembered)
             if petFood.judged then
-                addKV(1, "Rule", string.format("the best %d pieces in one or two kinds, a piece counting for the square of its item level",
+                addKV(1, "Rule", string.format("the best %d pieces in one or two kinds, a piece counting for the square of its item level; a kind to send to another toon is never the second",
                     petFood.pieces))
                 addKV(1, "Kept For The Pet", petFood.kept)
                 if #petFood.carried > 0 then

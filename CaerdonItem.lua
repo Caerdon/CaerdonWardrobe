@@ -1594,7 +1594,10 @@ end
 -- quest takes, one in the log or one still to come: a quest comes before another toon. The
 -- quest module is asked itself, since "has quest value" in GetCaerdonStatus follows the quest
 -- icon's settings and this must hold with that icon switched off too.
-function CaerdonItemMixin:GetIngredientStatus()
+-- petAside: what the rule would say were the item not kept for the pet. The food module asks
+-- that while it chooses the pet's food (a kind to send is not kept as the second one), so the
+-- pet's food is not asked for here: it is not chosen yet.
+function CaerdonItemMixin:GetIngredientStatus(petAside)
     local iconConfig = CaerdonWardrobeConfig.Icon
     local showSend = iconConfig.ShowIngredientsForOtherToons == true
     local showOutgrown = iconConfig.ShowOutgrownIngredients == true
@@ -1617,7 +1620,7 @@ function CaerdonItemMixin:GetIngredientStatus()
         return nil, info
     end
     local itemID = self:GetItemID()
-    if self:GetProfessionToolInfo() ~= nil or CaerdonFoodDrink:IsKeptForPet(itemID) then
+    if self:GetProfessionToolInfo() ~= nil or (not petAside and CaerdonFoodDrink:IsKeptForPet(itemID)) then
         return nil, info
     end
 

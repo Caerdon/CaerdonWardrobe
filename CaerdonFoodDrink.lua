@@ -15,11 +15,15 @@
 -- Hunters feed food to their pet. Where the client says what the pet eats (WoW Forever), the
 -- food kept for it is chosen from everything carried that it eats, raw meat included: the
 -- PET_FOOD_PIECES best pieces that fit in one or two kinds, a piece counting for the square
--- of its item level. Two kinds at most, so that pet food does not fill the bags a few pieces
--- at a time. By item level, because higher food is good for longer; squared, so that the level
--- outweighs the count (counted plainly, ten pieces of level 14 beat four of level 30) while
--- the count still decides between kinds of about one level. Food kept that way is never
--- outdated, and any other food is judged as for another class.
+-- of its item level. Two kinds at most, and the second only while the best one is down to its
+-- last few pieces, so that pet food does not fill the bags a few pieces at a time. By item
+-- level, because higher food is good for longer; squared, so that the level outweighs the
+-- count (counted plainly, ten pieces of level 14 beat four of level 30). Food kept that way is
+-- never outdated, and any other food is judged as for another class.
+--
+-- A kind that would be sent to another toon as an ingredient is not taken as the second one:
+-- the pet's best food stays whatever another toon wants, but what only fills it up goes to
+-- the toon that gets skill from it (CaerdonItemMixin:GetIngredientStatus).
 --
 -- Where the client cannot say (retail, or no pet seen yet this session), food must instead sit
 -- more than HUNTER_FOOD_LEVEL_GAP item levels below the toon's level to be outdated.
@@ -32,14 +36,17 @@ local ADDON_NAME, NS = ...
 CaerdonFoodDrink = {}
 
 local HUNTER_FOOD_LEVEL_GAP = 20
-local PET_FOOD_PIECES = 20
+-- How many pieces are kept for the pet. With that many of the best kind there is no second
+-- kind, so it is also the number below which a second kind is kept beside it.
+local PET_FOOD_PIECES = 4
 
 local FOOD_DRINK_SUBCLASS = Enum.ItemConsumableSubclass and Enum.ItemConsumableSubclass.Fooddrink or 5
 
 -- itemID -> classification (only stored once the tooltip gave a restore line)
 local classifications = {}
 -- Carried food and drink: { items = { [itemID] = classification }, signature = "...",
--- petFood = nil or { candidates = { { itemID, count, level } }, kept = { [itemID] = true } } }
+-- petFood = nil or { candidates = { { itemID, count, level, bag, slot, forAnotherToon } },
+-- kept = { [itemID] = true } } }
 local carried
 -- itemID -> true / false: what the client said the pet eats, asked while a pet was out. nil
 -- until one was. Kept while the pet is away (dismissed, dead, or the toon is mounted), so
@@ -251,8 +258,20 @@ local function PetFoodValue(first, second)
     return value
 end
 
+-- Whether a carried kind is an ingredient this toon would send to another, the pet aside.
+-- Asked of the item's own rule, once per kind and only for one that would otherwise be the
+-- second kind kept. The first stack seen stands for the kind.
+local function IsForAnotherToon(candidate)
+    if candidate.forAnotherToon == nil then
+        local item = CaerdonItem:CreateFromBagAndSlot(candidate.bag, candidate.slot)
+        local petAside = true
+        candidate.forAnotherToon = item:GetIngredientStatus(petAside) == "send"
+    end
+    return candidate.forAnotherToon
+end
+
 -- The one or two kinds to keep for the pet out of everything carried that it eats. One kind
--- wins over two that give no more.
+-- wins over two that give no more, and a kind to send to another toon is never the second.
 local function ChoosePetFood(candidates)
     table.sort(candidates, function(a, b)
         if a.level ~= b.level then
@@ -272,7 +291,7 @@ local function ChoosePetFood(candidates)
         for j = i + 1, #candidates do
             local second = candidates[j]
             value = PetFoodValue(first, second)
-            if value > best then
+            if value > best and not IsForAnotherToon(second) then
                 best, kept = value, { [first.itemID] = true, [second.itemID] = true }
             end
         end
@@ -314,7 +333,9 @@ local function BuildCarried()
                     candidates[#candidates + 1] = {
                         itemID = itemID,
                         count = count > 0 and count or 1,
-                        level = math.max(select(4, C_Item.GetItemInfo(itemID)) or 1, 1)
+                        level = math.max(select(4, C_Item.GetItemInfo(itemID)) or 1, 1),
+                        bag = bag,
+                        slot = slot
                     }
                 end
             end
@@ -455,8 +476,8 @@ function CaerdonFoodDrink:GetItemInfo(itemID, itemLink)
 end
 
 -- Whether the item is one of the kinds kept for a hunter's pet (ChoosePetFood). Raw meat is no
--- food to this module, so the ingredient rule asks before it calls one outgrown. False where
--- nothing is known of a pet.
+-- food to this module, so the ingredient rule asks before it calls one outgrown or one to
+-- send. False where nothing is known of a pet.
 function CaerdonFoodDrink:IsKeptForPet(itemID)
     local petFood = GetCarried().petFood
     return petFood ~= nil and petFood.kept[itemID] == true
@@ -500,8 +521,10 @@ function CaerdonFoodDrink:GetPetFoodDebugState(itemID, itemLink)
         state.kept = itemID ~= nil and petFood.kept[itemID] == true
         state.carried = {}
         for _, candidate in ipairs(petFood.candidates) do
+            local mark = petFood.kept[candidate.itemID] and "kept: " or
+                candidate.forAnotherToon and "one to send to another toon, so not the second kind: " or ""
             state.carried[#state.carried + 1] = string.format("%s%s x%d (item %d, level %d)",
-                petFood.kept[candidate.itemID] and "kept: " or "", tostring(C_Item.GetItemNameByID(candidate.itemID)),
+                mark, tostring(C_Item.GetItemNameByID(candidate.itemID)),
                 candidate.count, candidate.itemID, candidate.level)
         end
     end
