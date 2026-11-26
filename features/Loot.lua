@@ -5,31 +5,58 @@ local LootMixin = {}
 -- one by then, and the client says when it has changed a slot (LOOT_SLOT_CHANGED).
 local built = { withLink = 0, withoutLink = 0 }
 local changed = { withLink = 0, withoutLink = 0, noRow = 0 }
--- [row] = { builtWithLink, changes, fadeReadings }: how the row that is in the list now came
--- to its button.
+-- [row] = { builtWithLink, changes, events, ... }: how the row that is in the list now came to
+-- its button.
 local rowNotes = setmetatable({}, { __mode = "k" })
 -- Rows whose fade-in is listened to (WatchFadeIn). A row is the list's and is used again.
 local fadeWatched = setmetatable({}, { __mode = "k" })
+-- Animation groups whose starts and stops are noted while debug is on (WatchAnimation).
+local animationWatched = setmetatable({}, { __mode = "k" })
+
+-- One more line of what happened to a row since it was built: when, and what.
+local EVENTS_KEPT = 40
+local function NoteEvent(note, what)
+    if not note then
+        return
+    end
+    note.eventCount = (note.eventCount or 0) + 1
+    local events = note.events
+    if not events then
+        events = {}
+        note.events = events
+    end
+    if #events < EVENTS_KEPT then
+        events[#events + 1] = format("%.2f %s", GetTime() - (note.builtAt or GetTime()), what)
+    end
+end
 
 function LootMixin:GetName()
     return "Loot"
+end
+
+-- Whether a fade-in is running (WatchFadeIn).
+local function IsFading(fade)
+    return (fade and fade.IsPlaying and fade:IsPlaying()) and true or false
 end
 
 function LootMixin:Init()
     -- The feature is the callback's owner. The list keeps one callback per owner, so one
     -- registered under the loot window itself is replaced by any addon that names it too.
     ScrollUtil.AddInitializedFrameCallback(LootFrame.ScrollBox, function(_, frame, elementData)
+        local earlier = rowNotes[frame]
+        if earlier and earlier.sampler then
+            earlier.sampler:Cancel()
+        end
         rowNotes[frame] = nil
-        self:WatchFadeIn(frame)
-        self:AskForRow(frame, elementData, built)
+        self:OnRowFilled(frame, elementData, built, "built")
     end, self, false)
 
-    -- The window fades in as it opens, over its rows' own fade (WatchFadeIn).
+    -- The window fades in as it opens, over its rows' own fade.
     local windowFade = LootFrame.ShowAnim
     if windowFade and windowFade.HookScript then
         windowFade:HookScript("OnFinished", function()
             LootFrame.ScrollBox:ForEachFrame(function(frame)
-                self:OnFadedIn(frame)
+                self:OnFadedIn(frame, frame.ShowAnim)
             end)
         end)
     end
@@ -37,59 +64,161 @@ function LootMixin:Init()
     return { "LOOT_SLOT_CHANGED" }
 end
 
--- A row fades in when the window fills it (its ShowAnim, a tenth of a second, played by the
--- row's Init), and the window fades in as it opens. An icon drawn while either runs comes out
--- of it with no alpha: seen on WoW Forever 1.60.1.71091, where a row's icon was in place,
--- shown, and had alpha 0 after a draw that had set 1. The queue draws a frame after the row is
--- built, which is inside the fade. So the row is asked for again when a fade has ended, and
--- that draw stays.
+-- A row is drawn when it has faded in, never before.
+--
+-- The window fills a row with its Init, which plays the row's fade-in (ShowAnim, a tenth of a
+-- second), and the window plays one of its own as it opens. What is drawn on a row while a
+-- fade runs is not left as it was drawn (WoW Forever 1.60.1.71091): the icon came out with
+-- alpha 0 where the draw had set 1, read at the end of each fade, and a star whose bounce was
+-- started inside the fade moved far faster than it does anywhere else, with one animation
+-- playing at the settings and the pace it was made with. The queue draws a frame after a
+-- request, which is inside the fade. So a row that is filled is cleared and waits, and is
+-- asked for when its own fade and the window's have both ended.
+--
+-- Returns whether the row's fade-in is listened to. A row is the list's and is used again.
 function LootMixin:WatchFadeIn(frame)
     local fade = frame.ShowAnim
-    if fadeWatched[frame] or not (fade and fade.HookScript) then
-        return
+    if not (fade and fade.HookScript) then
+        return false
     end
-    fadeWatched[frame] = true
-    fade:HookScript("OnFinished", function()
-        self:OnFadedIn(frame)
-    end)
+    if not fadeWatched[frame] then
+        fadeWatched[frame] = true
+        fade:HookScript("OnFinished", function()
+            self:OnFadedIn(frame, LootFrame.ShowAnim)
+        end)
+    end
+    return true
 end
 
-function LootMixin:OnFadedIn(frame)
+-- The window has filled a row: as the list builds it, or again for a slot the client changed.
+-- `tally`: the count this belongs to.
+function LootMixin:OnRowFilled(frame, elementData, tally, why)
+    local button = frame.Item
+    if not button then
+        return
+    end
+    self:TallyRow(frame, elementData, tally)
+    if self:WatchFadeIn(frame) then
+        NoteEvent(rowNotes[frame], why .. ", waits for its fade-in")
+        self:Decorate(button, nil)
+    else
+        self:AskForRow(frame, elementData, why)
+    end
+end
+
+-- A fade-in has ended: the row's own or the window's. `other` is the other of the two; while
+-- that one still runs the row goes on waiting, for its end.
+function LootMixin:OnFadedIn(frame, other)
     -- A row given back to the list shows no slot.
     local elementData = frame.Item and frame.GetElementData and frame:GetElementData()
     if not elementData then
         return
     end
+    if IsFading(other) then
+        NoteEvent(rowNotes[frame], "a fade-in ended, the other still runs")
+        return
+    end
+    self:AskForRow(frame, elementData, "asked (faded in)")
+end
 
-    -- For the export: the icon's alpha as the fade left it, beside what the draw had set.
-    local note = rowNotes[frame]
-    local overlay = CaerdonWardrobe:GetCaerdonButton(frame.Item)
-    local icon = overlay and overlay.mogStatus
-    if note and icon then
-        local readings = note.fadeReadings
-        if not readings then
-            readings = {}
-            note.fadeReadings = readings
-        end
-        if #readings < 4 then
-            readings[#readings + 1] = format("%.1f where the draw set %s", icon:GetAlpha() or -1,
-                tostring(icon.assignedAlpha))
+-- The core has drawn a row's button (ProcessItem calls this for a feature that has it). Kept
+-- for the export: an icon that moves too fast may be one that is drawn over and over.
+function LootMixin:OnButtonDrawn(button)
+    local frame = button:GetParent()
+    local note = frame and rowNotes[frame]
+    if not note then
+        return
+    end
+    note.draws = (note.draws or 0) + 1
+    local overlay = CaerdonWardrobe:GetCaerdonButton(button)
+    local group = overlay and overlay.mogAnim
+    NoteEvent(note, format("drawn (its animation playing: %s)", group and (group:IsPlaying() and "yes" or "no") or "none"))
+    if CaerdonWardrobeConfig.Debug.Enabled then
+        self:WatchAnimation(note, button)
+    end
+end
+
+-- While debug is on: every start and stop of the icon's animation is noted, whoever asks for
+-- it, and the animation is read twenty times a second for four seconds after a draw: how far
+-- through its loop it is and which of its turns is running. A loop that is started over, or
+-- runs faster than it was made, shows there.
+local SAMPLE_SECONDS, SAMPLE_COUNT = 0.05, 80
+function LootMixin:WatchAnimation(note, button)
+    local overlay = CaerdonWardrobe:GetCaerdonButton(button)
+    local group = overlay and overlay.mogAnim
+    if group and not animationWatched[group] then
+        animationWatched[group] = true
+        for _, method in ipairs({ "Play", "Stop", "Finish", "Restart", "Pause" }) do
+            if group[method] then
+                -- Not every object of the client's can be hooked this way; one that cannot
+                -- is left unwatched.
+                pcall(hooksecurefunc, group, method, function()
+                    local row = button:GetParent()
+                    NoteEvent(row and rowNotes[row], "animation " .. method)
+                end)
+            end
         end
     end
-
-    self:AskForRow(frame, elementData)
+    if note.sampler then
+        return
+    end
+    local samples = {}
+    note.samples = samples
+    note.sampler = C_Timer.NewTicker(SAMPLE_SECONDS, function()
+        local current = CaerdonWardrobe:GetCaerdonButton(button)
+        local playing = current and current.mogAnim
+        if not playing then
+            samples[#samples + 1] = "none"
+        else
+            local turn = "-"
+            for index, part in ipairs({ playing:GetAnimations() }) do
+                if part:IsPlaying() then
+                    turn = (part.IsDelaying and part:IsDelaying()) and (index .. "d") or tostring(index)
+                    break
+                end
+            end
+            samples[#samples + 1] = format("%s%.2f/%s", playing:IsPlaying() and "" or "x", playing:GetProgress() or -1, turn)
+        end
+        if #samples >= SAMPLE_COUNT then
+            note.sampler = nil
+        end
+    end, SAMPLE_COUNT)
 end
 
 function LootMixin:GetTooltipData(item, locationInfo)
     return C_TooltipInfo.GetLootItem(locationInfo.elementData.slotIndex)
 end
 
--- One row of the list, asked for as its slot is now. `tally`: the count this ask belongs to.
+-- Counts a row the window filled, for the export.
+function LootMixin:TallyRow(frame, elementData, tally)
+    local slotIndex = elementData.slotIndex
+    if GetLootSlotType(slotIndex) ~= Enum.LootSlotType.Item then
+        return
+    end
+    local hasLink = GetLootSlotLink(slotIndex) ~= nil
+    local key = hasLink and "withLink" or "withoutLink"
+    tally[key] = tally[key] + 1
+    local note = rowNotes[frame]
+    if not note then
+        note = { changes = 0, builtAt = GetTime() }
+        rowNotes[frame] = note
+    end
+    if tally == built then
+        note.builtWithLink = hasLink
+        note.builtOnScreen = frame:IsVisible() and true or false
+        note.firstUse = CaerdonWardrobe:GetCaerdonButton(frame.Item) == nil
+        note.fadingWhenBuilt = IsFading(frame.ShowAnim)
+    else
+        note.changes = note.changes + 1
+    end
+end
+
+-- One row of the list, asked for as its slot is now.
 --
 -- A slot whose item the client has no data for yet has no link, and its button is cleared.
--- The row is not built again when the data comes: the window fills it in from
--- LOOT_SLOT_CHANGED, and so does this.
-function LootMixin:AskForRow(frame, elementData, tally)
+-- The row is not built again when the data comes: the window fills it in again from
+-- LOOT_SLOT_CHANGED.
+function LootMixin:AskForRow(frame, elementData, why)
     local button = frame.Item
     if not button then
         return
@@ -97,20 +226,7 @@ function LootMixin:AskForRow(frame, elementData, tally)
 
     local slotIndex = elementData.slotIndex
     local link = GetLootSlotLink(slotIndex)
-    if tally and GetLootSlotType(slotIndex) == Enum.LootSlotType.Item then
-        local key = link and "withLink" or "withoutLink"
-        tally[key] = tally[key] + 1
-        local note = rowNotes[frame]
-        if not note then
-            note = { changes = 0 }
-            rowNotes[frame] = note
-        end
-        if tally == built then
-            note.builtWithLink = link ~= nil
-        else
-            note.changes = note.changes + 1
-        end
-    end
+    NoteEvent(rowNotes[frame], format("%s%s", why or "asked", link and "" or ", no link"))
 
     self:Decorate(button, link, {
         locationKey = format("%d", slotIndex),
@@ -118,14 +234,15 @@ function LootMixin:AskForRow(frame, elementData, tally)
     })
 end
 
--- The client changed what a slot holds, or has its item's data now. The window draws that
--- slot's row again without building it, so the list's callback does not come.
+-- The client changed what a slot holds, or has its item's data now. The window fills that
+-- slot's row in again without building it (so the list's callback does not come), which
+-- plays the row's fade-in again.
 function LootMixin:LOOT_SLOT_CHANGED(slotIndex)
     local frame = LootFrame.ScrollBox:FindFrameByPredicate(function(row)
         return row:GetSlotIndex() == slotIndex
     end)
     if frame then
-        self:AskForRow(frame, frame:GetElementData(), changed)
+        self:OnRowFilled(frame, frame:GetElementData(), changed, "the client changed the slot")
     else
         changed.noRow = changed.noRow + 1
     end
@@ -134,7 +251,12 @@ end
 function LootMixin:Refresh()
     -- elementData: slotIndex, group (coin = 1 else 0), quality
     LootFrame.ScrollBox:ForEachFrame(function(frame, elementData)
-        self:AskForRow(frame, elementData)
+        -- A row that is fading in is asked for when it has.
+        if IsFading(frame.ShowAnim) or IsFading(LootFrame.ShowAnim) then
+            NoteEvent(rowNotes[frame], "a full refresh, left to its fade-in")
+        else
+            self:AskForRow(frame, elementData, "asked (a full refresh)")
+        end
     end)
 end
 
@@ -204,6 +326,28 @@ local function AddDrawnFacts(Add, frame)
     Add(3, format("row: shown %s, on screen %s, alpha %s (in effect %s); the client's quest mark on it: %s",
         YesNo(frame:IsShown()), YesNo(frame:IsVisible()), Number(frame:GetAlpha()), Number(frame:GetEffectiveAlpha()),
         YesNo(frame.IconQuestTexture and frame.IconQuestTexture:IsShown())))
+
+    -- Every animation group the icon has, not only the one the overlay holds: an icon that
+    -- moves too fast has more than one playing, or one playing faster than it was made.
+    if icon and icon.GetAnimationGroups then
+        local groups = { icon:GetAnimationGroups() }
+        local held = overlay.mogAnim
+        Add(3, format("icon's animations: %d groups; the overlay holds %s (as the waiting spinner: %s)", #groups,
+            held and "one" or "none", YesNo(overlay.isWaitingIcon)))
+        for index, group in ipairs(groups) do
+            local parts = { group:GetAnimations() }
+            local degrees = {}
+            for partIndex, part in ipairs(parts) do
+                degrees[partIndex] = part.GetDegrees and Number(part:GetDegrees()) or part:GetObjectType()
+            end
+            Add(4, format("%d: %s; playing %s, paused %s, done %s, to finish %s; loops %s (%s), %s s, speed %s; turns %s", index,
+                group == held and "the overlay's" or "not the overlay's", YesNo(group:IsPlaying()), YesNo(group:IsPaused()),
+                YesNo(group:IsDone()), YesNo(group:IsPendingFinish()), tostring(group:GetLooping()),
+                tostring(group:GetLoopState()), Number(group:GetDuration()),
+                Number(group.GetAnimationSpeedMultiplier and group:GetAnimationSpeedMultiplier() or 1),
+                table.concat(degrees, " / ")))
+        end
+    end
 end
 
 -- For the export: what the list handed over this session and, while the window is open, each
@@ -231,9 +375,11 @@ function LootMixin:GetReportLines()
         local note = rowNotes[frame]
         local history = "holds no item now (money, a currency, or taken)"
         if isItem then
-            history = note and format("built %s, changed by the client %d times; the icon's alpha as a fade-in ended: %s",
-                note.builtWithLink and "with a link" or "before the client had a link", note.changes,
-                note.fadeReadings and table.concat(note.fadeReadings, ", ") or "no fade-in ended with an icon on it") or
+            history = note and format("built %s (%s, %s, its fade-in running then: %s), changed by the client %d times",
+                note.builtWithLink and "with a link" or "before the client had a link",
+                note.builtOnScreen and "on screen" or "not on screen yet",
+                note.firstUse and "its button's first use" or "its button used before",
+                note.fadingWhenBuilt and "yes" or "no", note.changes) or
                 "built before this feature heard of it"
         end
         local drawn
@@ -243,6 +389,13 @@ function LootMixin:GetReportLines()
         end
         Add(2, format("- slot %d: %s; %s; its button: %s", slotIndex, link or "no link", history,
             drawn or "not asked for (nothing on it)"))
+        if note then
+            Add(3, format("since it was built %.1f s ago: drawn %d times; %d things noted (seconds after it was built): %s",
+                GetTime() - (note.builtAt or GetTime()), note.draws or 0, note.eventCount or 0,
+                note.events and table.concat(note.events, "; ") or "none"))
+            Add(3, "its animation every " .. SAMPLE_SECONDS .. " s from the first draw (share of its loop / the turn running, d: in its pause, x: not playing): " ..
+                (note.samples and table.concat(note.samples, " ") or "not read (turn on Enable debug, then loot again)"))
+        end
         if drawn then
             -- What the client says of a frame is asked for one row at a time: a failure
             -- costs that row's lines and not the section.

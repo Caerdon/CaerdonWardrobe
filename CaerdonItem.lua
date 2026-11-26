@@ -1291,6 +1291,10 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.FlavorText then
         elseif line.type == Enum.TooltipDataLineType.ErrorLine then
         elseif line.type == Enum.TooltipDataLineType.DisabledLine then
+        elseif line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnProc then
+            -- "Chance on hit: ..." with its spell. No equip effect: it does something only
+            -- against an enemy, a combat effect that is outgrown like a stat, as a use that
+            -- has to be aimed at one is (HasHostileUse). It never kept a piece.
         else
             if CaerdonWardrobeConfig.Debug.Enabled then
                 print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
