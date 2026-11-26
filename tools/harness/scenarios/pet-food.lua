@@ -3,9 +3,11 @@
 -- A hunter's food used to be kept whenever it sat within 20 item levels of the toon, however
 -- much of it there was and whatever the pet eats. On a client that says what the pet eats
 -- (C_PetInfo.CanPetEatItem, WoW Forever) the kinds kept for it are chosen instead from all
--- that is carried and that it eats, raw meat included: the best 20 pieces that fit in one or
--- two kinds, a piece counting for the square of its item level. Any other food is judged as for another
--- class. Without the answer (retail, or no pet seen yet) the level gap still decides.
+-- that is carried and that it eats, raw meat included: the best 4 pieces that fit in one or
+-- two kinds, a piece counting for the square of its item level, so a second kind only while
+-- the best is down to its last few. A kind that would be sent to another toon as an ingredient
+-- is not taken as the second one. Any other food is judged as for another class. Without the
+-- answer (retail, or no pet seen yet) the level gap still decides.
 --
 -- The game is hand-made. Seen in a Forever client (1.60.1.70959, a hunter with a level 32 pet
 -- that eats meat and fish): that the client answers true for a raw meat, and the bags of the
@@ -51,9 +53,23 @@ return function(H, S)
     local EATS = { [KABOB] = true, [LEG] = true, [CROC] = true, [BEAR] = true, [BOAR] = true, [TIGER] = true,
         [WOLF] = true, [SPIDER] = true, [CLAM] = true }
 
-    local function Start(flavor)
+    -- saved, professions: another toon's recordings and ranks from its own sessions
+    -- (CaerdonRecipeData, CaerdonProfessionData).
+    local function Start(flavor, saved, professions)
         local bags, petOut, asked = {}, false, 0
         local game = H.StockGame(TOON, ITEMS)
+        -- A stack in its bag slot, for the item the food module makes of a kind it asks about.
+        local function Place(location)
+            if type(location) == "table" and location.IsBagAndSlot and location:IsBagAndSlot() then
+                local bag, slot = location:GetBagAndSlot()
+                return bag == 0 and bags[slot] and bags[slot].id or nil
+            end
+        end
+        game:Set("C_Item.DoesItemExist", function(location) return Place(location) ~= nil end)
+        game:Set("C_Item.GetItemLink", function(location) return Place(location) and game.Link(Place(location)) end)
+        game:Set("C_Item.GetItemID", function(location) return Place(location) end)
+        game:Set("C_Item.GetItemName", function(location) return Place(location) and ITEMS[Place(location)].name end)
+        game:Set("C_Item.IsBound", function() return false end)
         game:Set("C_Container.GetContainerNumSlots", function(bag) return bag == 0 and #bags or 0 end)
         game:Set("C_Container.GetContainerItemID", function(bag, slot) return bag == 0 and bags[slot] and bags[slot].id or nil end)
         game:Set("C_Container.GetContainerItemLink", function(bag, slot)
@@ -86,6 +102,10 @@ return function(H, S)
         local namespace = H.LoadAddon(client, "CaerdonWardrobe", H.addonDir)
         client:LoadAddonFile("CaerdonWardrobe", H.addonDir, "config/Config.lua", namespace)
         rawset(client.env, "CaerdonWardrobeConfig", H.DeepCopy(namespace:GetDefaultConfig()))
+        if saved then
+            rawset(client.env, "CaerdonRecipeData", H.DeepCopy(saved))
+            rawset(client.env, "CaerdonProfessionData", H.DeepCopy(professions))
+        end
         client:Fire("ADDON_LOADED", "CaerdonWardrobe")
         client:Fire("VARIABLES_LOADED")
         client:Fire("PLAYER_LOGIN")
@@ -132,6 +152,11 @@ return function(H, S)
             local state = client.env.CaerdonFoodDrink:GetPetFoodDebugState(itemID)
             return state and state.judged and state.kept
         end
+        -- The export's rows of what is carried that the pet eats.
+        function world.Carried()
+            local state = client.env.CaerdonFoodDrink:GetPetFoodDebugState(nil)
+            return state and state.carried and table.concat(state.carried, "; ") or ""
+        end
         return world
     end
 
@@ -151,7 +176,7 @@ return function(H, S)
         Equal((world.Status(OLD_BREAD)), "collected", "no pet seen: bread within the gap is kept too")
         Equal(world.Asked(), 0, "no pet seen: the client is not asked what a pet eats")
 
-        -- The pet comes out. The two best meats are kept; the kabob is no longer needed.
+        -- The pet comes out. The best meat is kept; the kabob is no longer needed.
         local before = world.refreshes
         world.Pet(true)
         Check(world.refreshes > before, "pet out: the kinds kept for it are new, so the items are judged again")
@@ -163,9 +188,9 @@ return function(H, S)
         Equal(info.reason, "better one carried, and the pet does not eat it", "pet out: and says why")
         Equal((world.Status(BREAD)), "collected", "pet out: the toon's best food stays")
         Equal(world.Kept(LEG), true, "pet out: the highest meat is kept")
-        Equal(world.Kept(CROC), true, "pet out: and the next one, since the first is not a stack")
-        Equal(world.Kept(BEAR), false, "pet out: a third kind is not")
-        Equal(world.Kept(BOAR), false, "pet out: twelve pieces far below do not beat six just below")
+        Equal(world.Kept(CROC), false, "pet out: and not the next one, since there are pieces enough of the first")
+        Equal(world.Kept(BEAR), false, "pet out: nor a third kind")
+        Equal(world.Kept(BOAR), false, "pet out: nor twelve pieces far below")
         -- The ingredient rule asks this before it calls a raw meat outgrown.
         local food = world.client.env.CaerdonFoodDrink
         Check(food:IsKeptForPet(LEG) == true and food:IsKeptForPet(BEAR) == false and food:IsKeptForPet(BREAD) == false,
@@ -189,7 +214,15 @@ return function(H, S)
         status, info = world.Status(KABOB)
         Equal(status, "collected", "meats gone: the kabob is kept for the pet")
         Equal(info.reason, "better food carried, but this is kept for the pet", "meats gone: and says why")
-        Equal(world.Kept(BOAR), true, "meats gone: the second kind fills out the stack")
+        Equal(world.Kept(BOAR), false, "meats gone: and there is enough of it, so nothing beside it")
+
+        -- A second kind is kept only while the best is down to its last few pieces.
+        world.Carry({ { BREAD, 11 }, { LEG, 4 }, { CROC, 6 } })
+        Equal(world.Kept(LEG), true, "four pieces: kept")
+        Equal(world.Kept(CROC), false, "four pieces: and they are enough, nothing beside them")
+        world.Carry({ { BREAD, 11 }, { LEG, 3 }, { CROC, 6 } })
+        Equal(world.Kept(LEG), true, "three pieces: kept")
+        Equal(world.Kept(CROC), true, "three pieces: with a second kind beside them")
 
         -- A full stack needs no second kind.
         world.Carry({ { BREAD, 11 }, { KABOB, 7 }, { LEG, 20 }, { CROC, 6 } })
@@ -213,15 +246,79 @@ return function(H, S)
         world.Carry({ { BREAD, 11 }, { TIGER, 4 }, { CROC, 6 }, { BEAR, 2 }, { WOLF, 5 }, { SPIDER, 9 }, { KABOB, 7 },
             { CLAM, 10 }, { BOAR, 12 } })
         Equal(world.Kept(TIGER), true, "level before count: four pieces of the best food are kept")
-        Equal(world.Kept(CROC), true, "level before count: with the six of the next")
+        Equal(world.Kept(CROC), false, "level before count: and are enough, so the six of the next are not")
         Equal(world.Kept(CLAM), false, "level before count: ten pieces far below take no place")
-        -- Between kinds of about one level the count still decides.
-        world.Carry({ { BREAD, 11 }, { TIGER, 4 }, { CROC, 6 }, { BEAR, 20 } })
-        Equal(world.Kept(TIGER), true, "near levels: the best food is kept")
-        Equal(world.Kept(BEAR), true, "near levels: with the stack two levels below the six pieces")
-        Equal(world.Kept(CROC), false, "near levels: and not the six")
+        -- The second kind is the higher one too, where it has the pieces to fill up with.
+        world.Carry({ { BREAD, 11 }, { TIGER, 2 }, { CROC, 6 }, { BEAR, 20 } })
+        Equal(world.Kept(TIGER), true, "the second kind: the best food is kept")
+        Equal(world.Kept(CROC), true, "the second kind: with the six of the next level")
+        Equal(world.Kept(BEAR), false, "the second kind: and not the stack below them")
 
         Equal(#world.client.errors, 0, "forever: no error reached the error handler")
+        for _, message in ipairs(world.client.errors) do
+            print("        error: " .. tostring(message))
+        end
+    end
+
+    ------------------------------------------------------------------------------------
+    -- Forever: a kind another toon gets skill from is not kept as the second one
+    ------------------------------------------------------------------------------------
+    do
+        -- Another toon of the realm cooks: a recipe not learned yet takes the clam meat, one
+        -- that still gives it skill takes the spider leg.
+        local saved = {
+            globalRecipeNameToID = {},
+            Farrealm = {
+                Dorn = { knownRecipes = {}, scannedProfessions = {}, tools = {}, recipes = {
+                    Cooking = { skillLine = 185, rank = 5, maxRank = 75, line = "Cooking", complete = true, build = "70938",
+                        recipes = {
+                            [9501] = { name = "Clam Chowder", learned = false, difficulty = 0, maxTrivialLevel = 170,
+                                reagents = { [CLAM] = 1 } },
+                            [9502] = { name = "Spider Cake", learned = true, difficulty = 0, maxTrivialLevel = 150,
+                                reagents = { [LEG] = 1 } },
+                        } },
+                } },
+            },
+        }
+        local professions = { Farrealm = { Dorn = { Cooking = { skillLevel = 5 } } } }
+        local world = Start("forever", saved, professions)
+        local iconConfig = world.client.env.CaerdonWardrobeConfig.Icon
+        world.Carry({ { BREAD, 11 }, { LEG, 14 }, { CLAM, 10 } })
+        world.Pet(true)
+
+        -- Enough of the best food: the clam meat is no pet food, in the bags as in the bank.
+        Equal(world.Kept(LEG), true, "enough: the best food is kept")
+        Equal(world.Kept(CLAM), false, "enough: and the meat far below takes no place beside it")
+        Equal((world.Status(CLAM)), "send", "enough: so it is one to send to the toon that gets skill from it")
+        Equal((world.Status(LEG)), "", "enough: the pet's best food is not, whatever another toon would make of it")
+
+        -- The best food is down to two pieces. The clam meat would fill them up best, and goes
+        -- to the other toon instead; the next kind takes the place.
+        world.Carry({ { BREAD, 11 }, { LEG, 2 }, { CLAM, 10 }, { BOAR, 12 } })
+        Equal(world.Kept(LEG), true, "the last few: the best food is kept")
+        Equal(world.Kept(CLAM), false, "the last few: a kind to send is not the second one")
+        Equal(world.Kept(BOAR), true, "the last few: the next kind is")
+        Equal((world.Status(CLAM)), "send", "the last few: and the kind to send has the mail icon")
+        Check(world.Carried():find("one to send to another toon, so not the second kind: Clam Meat x10", 1, true) ~= nil,
+            "the last few: the export says why it was passed over (" .. world.Carried() .. ")")
+
+        -- With nothing sent to other toons it is the pet's again.
+        iconConfig.ShowIngredientsForOtherToons = false
+        world.client.env.CaerdonWardrobe:RefreshItems("test")
+        Equal(world.Kept(CLAM), true, "option off: the clam meat is the second kind")
+        Equal(world.Kept(BOAR), false, "option off: and the meat below it is not")
+        Equal((world.Status(CLAM)), "", "option off: with no icon")
+        iconConfig.ShowIngredientsForOtherToons = true
+        world.client.env.CaerdonWardrobe:RefreshItems("test")
+        Equal(world.Kept(CLAM), false, "option on again: one to send once more")
+
+        -- The pet's best kind stays its food, though another toon would take it.
+        world.Carry({ { BREAD, 11 }, { CLAM, 2 }, { BOAR, 12 } })
+        Equal(world.Kept(CLAM), true, "the best kind: kept for the pet")
+        Equal(world.Kept(BOAR), true, "the best kind: with the next one beside its two pieces")
+        Equal((world.Status(CLAM)), "", "the best kind: and not one to send")
+
+        Equal(#world.client.errors, 0, "another toon: no error reached the error handler")
         for _, message in ipairs(world.client.errors) do
             print("        error: " .. tostring(message))
         end

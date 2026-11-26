@@ -47,6 +47,7 @@ return function(H, S)
 
     local FIRST_ID, NO_PRICE_ID, WORN_ID, MAIN_HAND = 970001, 970800, 970900, 16
     local MIDDLE_ID, USE_LINE_ID, FLOOR_ID, ON_USE = 970801, 970802, 970803, 44
+    local PROC_ID, ON_PROC = 970804, 46
     local function Items()
         local items = {}
         for index, case in ipairs(CASES) do
@@ -89,6 +90,14 @@ return function(H, S)
             tooltip = { { text = "Equip: Increases item level to a minimum of 285 in Arenas, Battlegrounds, and War Mode.",
                 type = NONE } },
             appearance = { appearanceID = 5394, sourceID = 7494, collected = true } }
+        -- A weapon's proc (recorded: the line, its type and its spell, of a Forever export of
+        -- build 1.60.1.71139). It is no equip line and keeps nothing.
+        items[PROC_ID] = { name = "Barbed Charm", quality = 2, level = 31, minLevel = 26, type = "Armor",
+            subType = "Miscellaneous", stack = 1, equipLoc = "INVTYPE_HOLDABLE", price = 537, classID = 4,
+            subClassID = 0, bindType = 2,
+            tooltip = { { text = "Chance on hit: Wounds the target for 132 damage.", type = ON_PROC, spellID = 14126,
+                r = 0, g = 1, b = 0 } },
+            appearance = { appearanceID = 5393, sourceID = 7493, collected = true } }
         -- What the toon wields, as the hunter of the exports did: a two-handed sword of a lower
         -- level and nothing in the off-hand. A charm is then no upgrade (the slot is taken),
         -- no tie and not outdone by a better piece, so only its own lines decide.
@@ -232,6 +241,27 @@ return function(H, S)
         _, result = Judge(client, FLOOR_ID)
         Equal(result.hasEquipEffect, true, flavor .. ", the PVP floor: an untyped equip line")
         Equal(result.hasEquipEffectBeyondStats, true, flavor .. ", the PVP floor: and more than a stat, as before")
+
+        -- A proc's line has a type of its own, which the reader knows: with the debug setting
+        -- on it says so of a line whose type it has no place for.
+        Equal(client.env.Enum.TooltipDataLineType.ItemSpellTriggerOnProc, ON_PROC,
+            flavor .. ": the type of a proc's line is the one the case uses")
+        Equal(client.listing.strings.ITEM_SPELL_TRIGGER_ONPROC, "Chance on hit:", flavor .. ": the client's word for a proc's line")
+        client.env.CaerdonWardrobeConfig.Debug.Enabled = true
+        local printedBefore = #client.printed
+        local status
+        status, result = Judge(client, PROC_ID)
+        client.env.CaerdonWardrobeConfig.Debug.Enabled = false
+        local unknown = {}
+        for index = printedBefore + 1, #client.printed do
+            if client.printed[index]:find("TOOLTIP PROCESSING NEEDED", 1, true) then
+                unknown[#unknown + 1] = client.printed[index]
+            end
+        end
+        Equal(table.concat(unknown, " | "), "", flavor .. ", a proc: its line's type is one the reader knows")
+        Equal(result.hasEquipEffect, false, flavor .. ", a proc: no equip line")
+        Equal(result.hasEquipEffectBeyondStats, false, flavor .. ", a proc: and no effect that keeps a piece")
+        Equal(status, "sellable", flavor .. ", a proc: the learned piece is sellable, as before")
     end
     Equal(#retail.errors, 0, "retail: no error reached the error handler")
 

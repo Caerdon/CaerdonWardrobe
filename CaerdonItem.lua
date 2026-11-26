@@ -1291,6 +1291,10 @@ function CaerdonItemMixin:GetTooltipData(data)
         elseif line.type == Enum.TooltipDataLineType.FlavorText then
         elseif line.type == Enum.TooltipDataLineType.ErrorLine then
         elseif line.type == Enum.TooltipDataLineType.DisabledLine then
+        elseif line.type == Enum.TooltipDataLineType.ItemSpellTriggerOnProc then
+            -- "Chance on hit: ..." with its spell. No equip effect: it does something only
+            -- against an enemy, a combat effect that is outgrown like a stat, as a use that
+            -- has to be aimed at one is (HasHostileUse). It never kept a piece.
         else
             if CaerdonWardrobeConfig.Debug.Enabled then
                 print("Caerdon: TOOLTIP PROCESSING NEEDED: " .. self:GetItemLink() .. ", type: " .. tostring(line.type))
@@ -1594,7 +1598,10 @@ end
 -- quest takes, one in the log or one still to come: a quest comes before another toon. The
 -- quest module is asked itself, since "has quest value" in GetCaerdonStatus follows the quest
 -- icon's settings and this must hold with that icon switched off too.
-function CaerdonItemMixin:GetIngredientStatus()
+-- petAside: what the rule would say were the item not kept for the pet. The food module asks
+-- that while it chooses the pet's food (a kind to send is not kept as the second one), so the
+-- pet's food is not asked for here: it is not chosen yet.
+function CaerdonItemMixin:GetIngredientStatus(petAside)
     local iconConfig = CaerdonWardrobeConfig.Icon
     local showSend = iconConfig.ShowIngredientsForOtherToons == true
     local showOutgrown = iconConfig.ShowOutgrownIngredients == true
@@ -1617,7 +1624,7 @@ function CaerdonItemMixin:GetIngredientStatus()
         return nil, info
     end
     local itemID = self:GetItemID()
-    if self:GetProfessionToolInfo() ~= nil or CaerdonFoodDrink:IsKeptForPet(itemID) then
+    if self:GetProfessionToolInfo() ~= nil or (not petAside and CaerdonFoodDrink:IsKeptForPet(itemID)) then
         return nil, info
     end
 
