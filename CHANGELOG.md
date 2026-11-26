@@ -1,4 +1,12 @@
-# What's new in Caerdon Wardrobe
+# What's new in Caerdon Wardrobe v6.0.1
+
+Fixes for the loot window, and for a hunter's pet food on WoW Forever.
+
+- **Loot window:** every row has its icon again. Since v6.0.0 a quest item showed none there, and a piece of gear got its star only after a pause.
+- **WoW Forever, hunters:** with plenty of your pet's best food in the bags, a second kind of food is no longer kept beside it. A second kind is kept only while the best one is down to its last few pieces.
+- **WoW Forever, hunters:** food that another of your toons' recipes take is not kept as your pet's second kind, so it keeps its mail icon in your bags as it has in the bank. Your pet's best food always stays its food.
+
+# What was new in v6.0.0
 
 A big update for both World of Warcraft (Retail) and WoW Forever. The icons are right in more places, and there are several new things to see in your bags.
 
