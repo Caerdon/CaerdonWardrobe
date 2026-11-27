@@ -79,6 +79,7 @@
 	<Script file="external\BaudBag\Core.BaudBag.lua" />
 	<Script file="external\BetterBags\Core.BetterBags.lua" />
 	<Script file="external\CargBags\Core.CargBags.lua" />
+	<Script file="external\DaylightUI\Core.DaylightUI.lua" />
 	<Script file="external\DialogueUI\Core.DialogueUI.lua" />
 	<Script file="external\ElvUI\Core.ElvUI.lua" />
 	<Script file="external\Inventorian\Core.Inventorian.lua" />

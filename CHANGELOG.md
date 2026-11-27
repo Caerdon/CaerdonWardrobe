@@ -1,4 +1,22 @@
-# What's new in Caerdon Wardrobe v6.0.1
+# What's new in Caerdon Wardrobe v6.1.0
+
+Daylight UI's windows on WoW Forever have their icons, and two fixes for both games.
+
+## Daylight UI (WoW Forever)
+
+- **Icons in Daylight UI's own windows:** the vendor, the auction house, the mailbox, a quest's items at the NPC and in the quest journal, loot roll cards, and the profession window's recipe list and picked recipe.
+- **One upgrade arrow in a bag slot.** Where Caerdon Wardrobe shows its arrow, Pawn's is no longer drawn beside it.
+- **Your layout in Daylight UI's bags and bank, if you want it.** Daylight UI puts the icon in a slot's top right corner at a size of its own. The layout editor (`/caerdonlayout`) has a box, "Use my layout in Daylight UI's bags and bank", that puts it where your layout does. Daylight UI has marks of its own in a slot's corners, which the icon can then lie across.
+- **The upgrade line of a comparison tooltip is one of Daylight UI's "If you swap" chips.** On Daylight UI's own tooltip cards, what a piece would gain you over the one you are wearing ("+30% Main") stands with the stat changes, green for an upgrade and red for a loss. A line that says more than that (both hands, PvP gear, another spec, a later level) stays a line.
+- A slot that empties no longer keeps the item level gain of the item that left it, and the bags' icons follow what you learn, equip or change in the settings without being filled again.
+- The bank no longer opens without its icons when the bags were opened before it.
+
+## Fixes
+
+- **WoW Forever, auction house:** a listing with a random suffix ("of the Bear") is compared with its suffix's stats, so it can show as the upgrade it is.
+- **Thrown weapons** are no longer marked as a look to collect for another toon. The wardrobe has no place for them.
+
+# What was new in v6.0.1
 
 Fixes for the loot window, and for the sell, auction and mail icons on a hunter's pet food on WoW Forever.
 

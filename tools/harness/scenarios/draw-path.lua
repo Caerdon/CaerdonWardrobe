@@ -771,6 +771,14 @@ return function(H, S)
             end
         end
         function stateful:ClearAllPoints() Value(self).point = nil end
+        -- Kept beside what the client's stand-in does with it, and read back through Value.
+        function stateful:SetScale(scale)
+            Value(self).scale = scale
+            local inner = base.__index(self, "SetScale")
+            if type(inner) == "function" then
+                return inner(self, scale)
+            end
+        end
         function stateful:GetFrameStrata() return "MEDIUM" end
         function stateful:SetFrameLevel(level) Value(self).level = level end
         function stateful:GetFrameLevel() return Value(self).level or 3 end
@@ -1042,6 +1050,17 @@ return function(H, S)
             info = { upgradeItemLevelDelta = 5, isUpgrade = true, upgradeStatus = "upgrade", canEquip = true,
                 hasMetRequirements = true } },
         { name = "one that starts a quest, no window", smallMark = "quest", feature = false },
+        -- A slot smaller than a bag's (options.slotScale): the player's layout as above, with
+        -- the two texts, their space from the edge and the nudges smaller by as much.
+        { name = "the player's layout, on a small slot", binding = "BoE",
+            info = { upgradeItemLevelDelta = 5, upgradeStatus = "upgrade" },
+            options = function() return { hasCount = true, slotScale = 0.75 } end,
+            config = function(config)
+                config.Icon.EnableAnimation = false
+                config.Icon.Position, config.Icon.Scale, config.Icon.OffsetX, config.Icon.OffsetY = "BOTTOMLEFT", 150, 2, -3
+                config.Binding.Position, config.Binding.Scale, config.Binding.OffsetX = "BOTTOMRIGHT", 120, -1
+                config.Icon.UpgradeDelta = { Position = "BOTTOMRIGHT", Scale = 80, OffsetX = 1, OffsetY = 1 }
+            end },
     }
 
     -- One button drawn with every status in turn, the way the queue draws it, with a frame
@@ -1108,6 +1127,7 @@ return function(H, S)
                 text = overlay.bindsOnText:GetText(),
                 gain = overlay.upgradeDeltaText:IsShown() and overlay.upgradeDeltaText:GetText() or nil,
                 badge = overlay.caerdonHasUpgradeBadge == true,
+                hasUpgrade = select(4, core:GetDrawnParts(button)),
                 colour = world.Value(icon).colour,
                 ringColour = world.Value(icon.mogStatusBackground).colour,
                 badgeColour = icon.upgradeBadge and world.Value(icon.upgradeBadge).colour or nil,
@@ -1123,6 +1143,14 @@ return function(H, S)
                 hasIcon = hasIcon, hasText = hasText, hasGain = hasGain,
                 playing = overlay.mogAnim ~= nil and overlay.mogAnim:IsPlaying(),
                 width = icon:GetWidth(),
+                textScale = world.Value(overlay.bindsOnText).scale,
+                gainScale = world.Value(overlay.upgradeDeltaText).scale,
+                textAnchor = (world.Value(overlay.bindsOnText).point or {})[1],
+                textX = (world.Value(overlay.bindsOnText).point or {})[#(world.Value(overlay.bindsOnText).point or {}) - 1],
+                textY = (world.Value(overlay.bindsOnText).point or {})[#(world.Value(overlay.bindsOnText).point or {})],
+                gainAnchor = (world.Value(overlay.upgradeDeltaText).point or {})[1],
+                gainX = (world.Value(overlay.upgradeDeltaText).point or {})[4],
+                gainY = (world.Value(overlay.upgradeDeltaText).point or {})[5],
             }
         end
         world.log[#world.log + 1] = ("== %s / cleared"):format(variant.name)
@@ -1151,6 +1179,198 @@ return function(H, S)
         NoErrors(world, "drawing")
         Check(splitAt > 5000, "drawing: the drawing was written down (" .. tostring(splitAt) .. " lines)")
 
+        -- A small slot is a bag slot in miniature: each text three quarters the size, at the
+        -- same place in its own units, which are three quarters the size too.
+        do
+            local full, small = results["the player's layout"].upgrade, results["the player's layout, on a small slot"].upgrade
+            local function Near(a, b) return type(a) == "number" and type(b) == "number" and math.abs(a - b) < 1e-9 end
+            Check(Near(full.textScale, 1.2) and Near(small.textScale, 0.9), "small slot: the text is smaller by the slot's scale (" ..
+                tostring(full.textScale) .. ", " .. tostring(small.textScale) .. ")")
+            Check(Near(full.gainScale, 0.8) and Near(small.gainScale, 0.6), "small slot: and the level gain (" ..
+                tostring(full.gainScale) .. ", " .. tostring(small.gainScale) .. ")")
+            Equal(small.gainAnchor, "BOTTOMRIGHT", "small slot: the level gain where the player put it")
+            Check(Near(full.gainX, -3.75) and Near(small.gainX, -3.75) and Near(full.gainY, 6.25) and Near(small.gainY, 6.25),
+                "small slot: the gain's space from the edge and its nudge smaller by as much (the same in its own units: " ..
+                tostring(small.gainX) .. ", " .. tostring(small.gainY) .. ")")
+            Equal(small.textAnchor, "BOTTOMRIGHT", "small slot: the text where the player put it")
+            Check(type(full.textX) == "number" and Near(small.textX, full.textX) and Near(small.textY, full.textY),
+                "small slot: the text's space from the edge and its nudge smaller by as much (the same in its own units: " ..
+                tostring(small.textX) .. ", " .. tostring(small.textY) .. ")")
+            Equal(small.text, full.text, "small slot: the same text")
+            Equal(small.width, full.width, "small slot: the icon's size is the window's own word (statusProminentSize)")
+        end
+
+        -- An icon in a list that cuts off what hangs over its edge: inside and a fifth smaller
+        -- where the list leaves it no room, with half a pixel let pass, or the share of the
+        -- icon the window allows (options.clipCutAllowed). `room` is what the list leaves to
+        -- the left of the slot; the star overhangs its corner by 6.
+        do
+            local function WidthIn(room, cutAllowed)
+                rawset(world.client.env, "CaerdonWardrobeConfig", H.DeepCopy(world.defaults))
+                local list = world.client:NewFrame("Frame")
+                rawset(list, "DoesClipChildren", function() return true end)
+                rawset(list, "GetScaledRect", function() return 100, 100, 400, 400 end)
+                local button = world.client:NewFrame("Button", nil, list)
+                button:SetSize(37, 37)
+                button.icon = button:CreateTexture()
+                local options = { keepInsideWhenClipped = true, clipCutAllowed = cutAllowed }
+                local item = DrawnItem()
+                core:SetupCaerdonButton(button, item, world.feature, nil, options)
+                local overlay = core:GetCaerdonButton(button)
+                rawset(overlay, "GetScaledRect", function() return 100 + room, 200, 37, 37 end)
+                rawset(overlay, "GetEffectiveScale", function() return 1 end)
+                core:SetItemButtonStatus(button, item, world.feature, nil, options, "own", nil, nil, nil, nil)
+                -- The pass that measures the room comes a moment after the draw.
+                world.client:Tick(4)
+                return overlay.mogStatus:GetWidth(), core:GetClipNote(button), select(3, core:GetAskedOf(button))
+            end
+            Equal(WidthIn(8), 20, "clip: an icon with room to hang over its corner is drawn at its size")
+            Equal(WidthIn(4), 16, "clip: one that would be cut off is drawn inside, a fifth smaller")
+            Equal(WidthIn(4, 0.15), 20, "clip: where the window lets that much be cut off, it hangs over its corner")
+            Equal(WidthIn(1, 0.15), 16, "clip: and is drawn inside where more would be cut off")
+            Equal(WidthIn(5.6), 20, "clip: half a pixel cut off is let pass without a word of the window's")
+            -- The export's line on it: the decision's own numbers, and what the least room was seen on.
+            local _, inside, asked = WidthIn(4)
+            Check(type(inside) == "string" and inside:find("TOPLEFT, 20.00 across and drawn 16.00, over the slot's edge by 6.00 of which 0.50 may be cut off; cut off by a Frame 1 above its button", 1, true) ~= nil,
+                "clip note: the icon's size, how far it hangs over and what cuts it off (" .. tostring(inside) .. ")")
+            Check(type(inside) == "string" and inside:find("which moves it inside; room now 4.00 left and 359.00 right (slot 37.00 wide, list 400.00 wide, scale 1.000); least room left 4.00 (0 s ago, slot 37.00 wide, list 400.00 wide, scale 1.000); least room right 359.00", 1, true) ~= nil,
+                "clip note: the decision, the room now and the least room with what it was seen on (" .. tostring(inside) .. ")")
+            local _, over = WidthIn(4, 0.15)
+            Check(type(over) == "string" and over:find("of which 3.00 may be cut off", 1, true) ~= nil and
+                over:find("which leaves it over the corner", 1, true) ~= nil,
+                "clip note: with the window's allowance it says so (" .. tostring(over) .. ")")
+            Equal(asked, nil, "clip note: none for a button no window asked for")
+            do
+                local plainButton = world.client:NewFrame("Button")
+                plainButton:SetSize(37, 37)
+                plainButton.icon = plainButton:CreateTexture()
+                local item = DrawnItem()
+                core:SetupCaerdonButton(plainButton, item, world.feature, nil, {})
+                core:SetItemButtonStatus(plainButton, item, world.feature, nil, {}, "own", nil, nil, nil, nil)
+                Equal(core:GetClipNote(plainButton), nil, "clip note: none where the window does not ask for clip-aware placement")
+                -- Whose alpha the icon has: this addon's own, another's call, or neither's.
+                local icon = core:GetCaerdonButton(plainButton).mogStatus
+                local own = core:GetRequestNote(plainButton, world.feature)
+                Check(own:find("; this addon last set its alpha to 1.00, ", 1, true) ~= nil and
+                    own:find("; others set it 0 times; no fade of Daylight UI's on it", 1, true) ~= nil,
+                    "alpha: after a draw the icon's alpha is this addon's (" .. tostring(own) .. ")")
+                icon:SetAlpha(0)
+                local other = core:GetRequestNote(plainButton, world.feature)
+                Check(other:find("alpha 0.00; the client's silent changes of an alpha put back on this button: 0; this addon last set its alpha to 1.00, ", 1, true) ~= nil and
+                    other:find("; others set it 1 times, last to 0.00, ", 1, true) ~= nil,
+                    "alpha: a call of another's is counted, and this addon's own stays what it was (" .. tostring(other) .. ")")
+                Check(other:find("; its last changes, oldest first: ", 1, true) ~= nil and
+                    other:find(" s ago alpha: the icon was made 0.00 | ", 1, true) ~= nil and
+                    other:find(" s ago alpha: drawn 1.00 | ", 1, true) ~= nil and
+                    other:find(" s ago alpha by another's call 0.00", 1, true) ~= nil,
+                    "alpha: the icon's last changes are listed with their causes, oldest first (" .. tostring(other) .. ")")
+                core:SetItemButtonMogStatusFilter(plainButton, true)
+                Check(core:GetRequestNote(plainButton, world.feature):find("; this addon last set its alpha to 0.30, ", 1, true) ~= nil,
+                    "alpha: a dimmed icon's is this addon's too")
+                -- An alpha the client changes without a call (a window's own fade-in ending) is
+                -- put back for a while after a draw, on the icon and on the button's other parts.
+                do
+                    local watched = world.client:NewFrame("Button")
+                    watched:SetSize(37, 37)
+                    watched.icon = watched:CreateTexture()
+                    local watchedItem = DrawnItem()
+                    core:SetupCaerdonButton(watched, watchedItem, world.feature, nil, {})
+                    core:SetItemButtonStatus(watched, watchedItem, world.feature, nil, {}, "own", nil, nil, nil, nil)
+                    core:WatchDrawnAlphas(watched)
+                    local overlay = core:GetCaerdonButton(watched)
+                    local drawnIcon = overlay.mogStatus
+                    Equal(drawnIcon:GetAlpha(), 1, "alpha watch: (drawn at 1)")
+                    world.Value(drawnIcon).alpha = 0
+                    world.Value(drawnIcon.mogStatusBackground).alpha = 0
+                    world.client:Tick(1)
+                    Equal(drawnIcon:GetAlpha(), 1, "alpha watch: an icon's alpha that changed with no call is put back")
+                    Equal(drawnIcon.mogStatusBackground:GetAlpha(), 1, "alpha watch: its background's too")
+                    Check(core:GetRequestNote(watched, world.feature):find("put back on this button: 2;", 1, true) ~= nil and
+                        core:GetRequestNote(watched, world.feature):find("alpha: put back, the client had made it 0.00 without a call: 1.00", 1, true) ~= nil,
+                        "alpha watch: the export says so (" .. tostring(core:GetRequestNote(watched, world.feature)) .. ")")
+                    drawnIcon:SetAlpha(0.6)
+                    world.client:Tick(1)
+                    Equal(drawnIcon:GetAlpha(), 0.6, "alpha watch: an alpha a call gave it stands")
+                    core:SetItemButtonStatus(watched)
+                    world.client:Tick(1)
+                    Equal(drawnIcon:GetAlpha(), 0, "alpha watch: a cleared icon stays cleared")
+                    core:SetItemButtonStatus(watched, watchedItem, world.feature, nil, {}, "own", nil, nil, nil, nil)
+                    core:WatchDrawnAlphas(watched)
+                    -- The watch is over a second after the draw.
+                    world.client:Tick(30)
+                    world.Value(drawnIcon).alpha = 0
+                    world.client:Tick(2)
+                    Equal(drawnIcon:GetAlpha(), 0, "alpha watch: it ends a second after the draw")
+                    world.Value(drawnIcon).alpha = 1
+                end
+                -- The same for a button drawn by the queue, as a host addon's slot is: asked for
+                -- with nothing, with its item, shown by the host, and drawn some frames later.
+                do
+                    local slot = world.client:NewFrame("Button")
+                    slot:SetSize(37, 37)
+                    slot.icon = slot:CreateTexture()
+                    local function SlotItem()
+                        local item = world.client.env.CaerdonItem:CreateFromBagAndSlot(0, 7)
+                        function item:GetCaerdonItemType() return "Miscellaneous" end
+                        function item:IsItemEmpty() return false end
+                        function item:IsItemDataCached() return true end
+                        function item:GetItemID() return 3173 end
+                        function item:GetCaerdonStatus() return true, "quest", nil, {}, nil end
+                        return item
+                    end
+                    local hostOptions = { fixedStatusPosition = true, statusProminentSize = 16 }
+                    core:UpdateButton(slot, nil, world.feature, nil, hostOptions)
+                    core:UpdateButton(slot, SlotItem(), world.feature, { bag = 0, slot = 7 }, hostOptions)
+                    local slotIcon = core:GetCaerdonButton(slot).mogStatus
+                    slotIcon:SetShown(true)
+                    world.client:Tick(3)
+                    Equal(slotIcon:GetAlpha(), 1, "alpha watch, queued: (the slot's icon is drawn)")
+                    -- The window's fade-in ends: the icon has the alpha of before its draw again.
+                    world.Value(slotIcon).alpha = 0
+                    world.client:Tick(1)
+                    Equal(slotIcon:GetAlpha(), 1, "alpha watch, queued: a drawn slot's icon is put back when the client changes it")
+                    NoErrors(world, "the alpha watch")
+                end
+            end
+            -- A row that is cleared before the pass has come: a clear lays the overlay over the
+            -- whole row, which has no room beside it, and that must not be taken for the list's.
+            do
+                rawset(world.client.env, "CaerdonWardrobeConfig", H.DeepCopy(world.defaults))
+                local list = world.client:NewFrame("Frame")
+                rawset(list, "DoesClipChildren", function() return true end)
+                rawset(list, "GetScaledRect", function() return 100, 100, 400, 400 end)
+                local row = world.client:NewFrame("Button", nil, list)
+                row:SetSize(400, 37)
+                row.icon = row:CreateTexture()
+                local options = { keepInsideWhenClipped = true, relativeFrame = row.icon }
+                local item = DrawnItem()
+                core:SetupCaerdonButton(row, item, world.feature, nil, options)
+                local overlay = core:GetCaerdonButton(row)
+                local onIcon = true
+                rawset(overlay, "GetScaledRect", function()
+                    if onIcon then
+                        return 108, 200, 37, 37
+                    end
+                    return 100, 200, 400, 37
+                end)
+                rawset(overlay, "GetEffectiveScale", function() return 1 end)
+                core:SetItemButtonStatus(row, item, world.feature, nil, options, "own", nil, nil, nil, nil)
+                overlay.caerdonHasUpgradeBadge = true
+                core:SetItemButtonStatus(row)
+                Equal(select(4, core:GetDrawnParts(row)), false, "upgrade on it: none on a button that was cleared")
+                onIcon = false
+                world.client:Tick(4)
+                onIcon = true
+                core:SetItemButtonStatus(row, item, world.feature, nil, options, "own", nil, nil, nil, nil)
+                world.client:Tick(4)
+                Equal(overlay.mogStatus:GetWidth(), 20, "clip: a row cleared before it was measured is not measured as the clear left it")
+                local note = core:GetClipNote(row)
+                Check(type(note) == "string" and note:find("least room left 8.00 (", 1, true) ~= nil,
+                    "clip: and the list's least room is the icon's, measured at the next draw (" .. tostring(note) .. ")")
+            end
+            NoErrors(world, "the clip decision")
+        end
+
         local RING = "Interface\\HUD\\UIUnitFrameBoss2x"
         local plain = results["plain"]
         Equal(plain.own.texture, "Interface\\Store\\category-icon-featured", "drawn: own is the star")
@@ -1169,6 +1389,13 @@ return function(H, S)
         Equal(upgrade.upgrade.gain, "+5", "gain: the upgrade shows its level gain")
         Equal(upgrade.upgrade.hasGain, true, "gain: and says so")
         Equal(upgrade.upgrade.badge, false, "gain: with no badge on the arrow itself")
+        -- Whether an upgrade is on the button in any form, for a host that shows an arrow of
+        -- its own in the slot (GetDrawnParts' fourth value).
+        Equal(plain.upgrade.hasUpgrade, true, "upgrade on it: the arrow as the icon")
+        Equal(plain.own.hasUpgrade, false, "upgrade on it: not a star")
+        Equal(plain.sellable.hasUpgrade, false, "upgrade on it: nor the bag")
+        Equal(upgrade.own.hasUpgrade, true, "upgrade on it: the arrow as the badge on another icon")
+        Equal(upgrade.waiting.hasUpgrade, false, "upgrade on it: not while its verdict is waited for")
         Equal(upgrade.own.badge, true, "badge: a look to learn that is also an upgrade carries the arrow as a badge")
         Equal(upgrade.own.texture, "Interface\\Store\\category-icon-featured", "badge: on the star")
         Equal(upgrade.own.gain, "+5", "badge: with the level gain")
@@ -1201,6 +1428,10 @@ return function(H, S)
         local namedOff = results["gear set, upgrade, no arrow on sets"]
         local iconOff = results["gear set as icon, upgrade, no arrow on sets"]
         Equal(namedOff.upgrade.hasIcon, false, "sets, arrow off: a set piece is never drawn as an upgrade")
+        Equal(namedOff.upgrade.hasUpgrade, false, "sets, arrow off: so no upgrade is on it, whatever its level gain")
+        Equal(withIcon.upgrade.hasUpgrade, true, "sets: the badge on the set's icon is an upgrade on it")
+        Equal(withIcon.upgradeLowSkill.hasUpgrade, true, "sets: the badge of an upgrade to come too")
+        Equal(iconOff.upgrade.hasUpgrade, false, "sets, arrow off: nor on the set's icon without the badge")
         Equal(namedOff.upgrade.gain, "+5", "sets, arrow off: its level gain is")
         Equal(namedOff.own.badge, false, "sets, arrow off: and no other icon of it carries the badge")
         Equal(iconOff.upgrade.texture, CLOTHES, "sets, arrow off: the set's icon stays on a piece that is an upgrade")

@@ -70,6 +70,16 @@ return function(H, S)
             [910016] = Armor("Lent Cloak", "INVTYPE_CLOAK",
                 { appearanceID = 5116, sourceID = 7116, valid = false, canCollect = false, account = true }),
             [910017] = Armor("Own Cloak", "INVTYPE_CLOAK", { appearanceID = 5116, sourceID = 7117, collected = true }),
+            -- A thrown weapon: the wardrobe has no category for its source, and the client
+            -- still answers that the account can collect it (Keen Throwing Knife 3107 on a
+            -- rogue, Forever 1.60.1.71139: its item values and answers). The first with a look
+            -- the client names for the source, the second with none, as the knife's.
+            [910020] = { name = "Flung Hatchet", quality = 1, level = 16, minLevel = 11, type = "Weapon", subType = "Thrown",
+                stack = 1, equipLoc = "INVTYPE_THROWN", price = 366, classID = 2, subClassID = 16, bindType = 0,
+                appearance = { appearanceID = 5120, sourceID = 7120, category = 0, canCollect = false, account = true } },
+            [910021] = { name = "Flung Knife", quality = 1, level = 16, minLevel = 11, type = "Weapon", subType = "Thrown",
+                stack = 1, equipLoc = "INVTYPE_THROWN", price = 366, classID = 2, subClassID = 16, bindType = 0,
+                appearance = { sourceID = 7121, category = 0, canCollect = false, account = true } },
             -- A piece whose tooltip the client has not got yet (lateTooltip).
             [910018] = Armor("Hazy Greaves", "INVTYPE_LEGS", { appearanceID = 5118, sourceID = 7118 },
                 { tooltip = lateTooltip }),
@@ -234,6 +244,21 @@ return function(H, S)
         Equal(info.isCompletionistItem, false, "other: the look is new")
         Equal(info.canEquip, false, "other: the toon cannot use it")
         Equal((Status(client, item)), "other", "other: the status is other")
+    end
+
+    -- A source the wardrobe has no category for is nothing to learn, for this toon or
+    -- another, whatever the collect answers say.
+    for _, id in ipairs({ 910020, 910021 }) do
+        local label = "no category (" .. id .. "): "
+        local item = Load(client, id)
+        local info = item and item:GetItemData():GetTransmogInfo() or {}
+        Equal(info.noCollectionCategory, true, label .. "the source has no category")
+        Equal(info.needsItem, false, label .. "this toon has nothing to learn")
+        Equal(info.otherNeedsItem, false, label .. "nor has another, though the account is said to be able to collect it")
+        local status = Status(client, item)
+        Check(status ~= "other" and status ~= "otherPlus" and status ~= "own" and status ~= "ownPlus" and
+            status ~= "otherNoLoot" and status ~= "lowSkill", label .. "the status is none of the learnable ones (" ..
+            tostring(status) .. ")")
     end
 
     -- A learned source (LeatherTests: CorruptedAspirantGlovesKnown).

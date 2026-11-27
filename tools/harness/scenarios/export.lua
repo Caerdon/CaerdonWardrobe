@@ -670,13 +670,20 @@ return function(H, S)
 
         -- A piece a window gave with more than its link (an auction row's item level): the export
         -- says what was passed, and what is on the window's button.
-        feature.currentAsk = { drawn = "asked for by Auction; on it now: icon yes, upgrade badge no, level gain no, text no" }
+        feature.currentAsk = { drawn = "asked for by Auction; on it now: icon yes, upgrade badge no, level gain no, text no",
+            placed = "TOPLEFT, 20.00 across and drawn 16.00" }
+        feature.currentRecord = "asked for 2 times, last 1.0 s ago with item 1 by Auction"
         payload = feature:BuildClipboardPayload(env.CaerdonItem:CreateFromItemLink(LINK, { overrideItemLevel = 999 }))
         feature.currentAsk = nil
+        feature.currentRecord = nil
+        Check(payload:find("  Its Button's Record: asked for 2 times, last 1.0 s ago with item 1 by Auction", 1, true) ~= nil,
+            "a row's piece: and everything said of its button this session")
         Check(payload:find("  Passed By The Window: item level 999 (the link's own: ", 1, true) ~= nil,
             "a row's piece: the level the window passed, beside the link's own")
         Check(payload:find("  Its Button: asked for by Auction; on it now: icon yes, upgrade badge no", 1, true) ~= nil,
             "a row's piece: and what is on its button")
+        Check(payload:find("  Its Icon's Place: TOPLEFT, 20.00 across and drawn 16.00", 1, true) ~= nil,
+            "a row's piece: and where its icon was placed in a list that cuts icons off")
 
         -- A row whose key names a suffix: the name the window passed beside the link's, the
         -- key's own tooltip, and the links that can be made from the suffix.
