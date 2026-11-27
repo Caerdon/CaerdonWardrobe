@@ -1,4 +1,15 @@
-# What's new in Caerdon Wardrobe v6.1.0
+# What's new in Caerdon Wardrobe v6.2.0
+
+Caerdon Wardrobe now works with GudaBags.
+
+## GudaBags
+
+- **Icons in GudaBags' bags and bank:** the status icon, the binding text and the item level gain on every slot, placed by your layout at any slot size you set in GudaBags.
+- **One mark for one thing.** Where Caerdon Wardrobe shows its own upgrade arrow, quest icon, binding text or gear set on a slot, GudaBags' mark for the same is hidden there: its upgrade arrow (Pawn's), its quest marks, its BoE and BoA labels and its equipment set mark. Switch one of those off in Caerdon Wardrobe's settings and GudaBags' own shows again. The layout editor (`/caerdonlayout`) has a note that says so while GudaBags is loaded.
+- GudaBags' other marks stay as they are: its junk coin, item level, borders, charges, lock and the rest.
+- Its guild bank and its view of another character's bags have no Caerdon Wardrobe icons.
+
+# What was new in v6.1.0
 
 Daylight UI's windows on WoW Forever have their icons, and two fixes for both games.
 
