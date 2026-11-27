@@ -146,7 +146,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Auction icon | Auction Value |
 | Housing items (retail only) | Housing |
 | Stale icons, refresh events | Refresh |
-| Baganator, BetterBags | Bag Addon Integrations |
+| Baganator, BetterBags, GudaBags | Bag Addon Integrations |
 | An integration that stopped drawing, hook points | Integration Report |
 | Skillet's recipe list | Skillet |
 | World Quest Tab's list and pins | World Quest Tab |

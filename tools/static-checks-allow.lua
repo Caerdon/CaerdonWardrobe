@@ -39,6 +39,7 @@ return {
         DaylightUI = "Daylight UI",
         DUIDialogItemButtonMixin = "Dialogue UI",
         ElvUI = "ElvUI",
+        GudaBags = "GudaBags",
         KkthnxUI = "KkthnxUI",
         LegionRemixHelperDB = "Legion Remix Helper",
         LibQuestieDB = "Questie",
