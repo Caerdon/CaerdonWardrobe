@@ -5341,15 +5341,17 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
                 end
 
                 if not currentSourceFound then
-                    if canCollect and isValidSourceForPlayer then
+                    if noCollectionCategory then
+                        -- Nothing to learn, for this toon or another: the wardrobe has no
+                        -- category to hold the source (a thrown weapon's, a tool's), whatever
+                        -- the collect APIs say of it. They answer that the account can
+                        -- collect a thrown weapon's source.
+                    elseif canCollect and isValidSourceForPlayer then
                         needsItem = true
                         isCompletionistItem = otherSourceFoundForPlayer
                     elseif accountCanCollect then
                         otherNeedsItem = true
                         isCompletionistItem = otherSourceFound
-                    elseif noCollectionCategory then
-                        -- Nothing to learn: the "selling it teaches the look" cases below are
-                        -- all sources the wardrobe has a category for.
                     elseif collectInfoReady and isValidSourceForPlayer and not sourceInfo.useErrorType then
                         validSourceNotCollectable = true
                         validSourceNotCollectableKnownLook = otherSourceFoundForPlayer or otherSourceFound
@@ -5361,12 +5363,12 @@ function CaerdonEquipmentMixin:GetTransmogInfo(linkTooltip)
                 end
             else
                 -- No appearance ID means we can't enumerate alternates, but we still know the source is collectible.
-                if canCollect and isValidSourceForPlayer then
+                if noCollectionCategory then
+                    -- Nothing to learn (see above).
+                elseif canCollect and isValidSourceForPlayer then
                     needsItem = true
                 elseif accountCanCollect then
                     otherNeedsItem = true
-                elseif noCollectionCategory then
-                    -- Nothing to learn (see above).
                 elseif collectInfoReady and isValidSourceForPlayer and not sourceInfo.useErrorType then
                     validSourceNotCollectable = true
                 elseif collectInfoReady and not isValidSourceForPlayer and
