@@ -4718,6 +4718,38 @@ return function(H, S)
         beside1:Update()
         Equal(table.concat(beside2.lines, " | ", 3), Line("8ec3e6", nil, "Guardian", "+25% upgrade", true),
             "replacing: one tooltip's frame adds what another is owed")
+        -- For a host addon that has a form of its own for the line: the gain behind a line as
+        -- it was written, and a gain in plain words.
+        do
+            local written = feature:GetReplacementGainOfLine(beside2.lines[3])
+            Check(type(written) == "table" and written.percent == 25 and written.upgrade == true and written.name == "Guardian",
+                "plain gain: the gain of a line, by its text as it was written")
+            Equal(feature:GetReplacementGainOfLine("+5 Stamina"), nil, "plain gain: none for a line that is not the addon's")
+            Equal(feature:GetReplacementGainOfLine(beside2.lines[3] .. " "), nil, "plain gain: none for a text that is nearly one")
+            Equal(feature:GetReplacementGainOfLine(nil), nil, "plain gain: none for no text")
+            Equal(feature:GetReplacementGainOfLine({}), nil, "plain gain: none for what is no text")
+            local function Plain(gain)
+                local text, kind = feature:GetPlainGain(gain)
+                return tostring(text) .. " / " .. tostring(kind)
+            end
+            Equal(Plain(written), "+25% Guardian / gain", "plain gain: an upgrade, with no colour or icon in it")
+            Equal(Plain({ name = "Guardian", percent = -17, upgrade = false }), "-17% Guardian / loss", "plain gain: a loss")
+            Equal(Plain({ name = "Guardian", percent = 2, upgrade = false }), "+2% Guardian / even",
+                "plain gain: more, and under what makes an upgrade")
+            Equal(Plain({ name = "Guardian", percent = 0, upgrade = false }), "+0% Guardian / even", "plain gain: the same")
+            Equal(Plain({ name = "Guardian", upgrade = true }), "Guardian: upgrade / gain", "plain gain: an upgrade with no number")
+            Equal(Plain({ name = "Guardian", upgrade = false }), "nil / nil", "plain gain: nothing with no number and no upgrade")
+            for what, more in pairs({ ["both hands"] = { pair = "both" }, ["PvP levels"] = { pvp = true },
+                ["another spec's gear"] = { otherSpecs = { "Balance" } }, ["a level to come"] = { atLevel = 30 } }) do
+                local gain = { name = "Guardian", percent = 25, upgrade = true, worn = true }
+                for key, value in pairs(more) do
+                    gain[key] = value
+                end
+                Equal(Plain(gain), "nil / nil", "plain gain: nothing where the line says more (" .. what .. ")")
+            end
+            Equal(Plain(nil), "nil / nil", "plain gain: nothing for no gain")
+            Equal(Plain({ percent = 25, upgrade = true }), "nil / nil", "plain gain: nothing for a gain with no name")
+        end
         -- Two worn rings: the client builds both comparison tooltips before a frame goes by,
         -- and that one frame adds to both.
         world.BuildComparison(primary, beside1, ring1)

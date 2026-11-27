@@ -1,4 +1,4 @@
-local ADDON_NAME = ...
+local ADDON_NAME, NS = ...
 
 local addonName = "DaylightUI"
 
@@ -1347,6 +1347,96 @@ function CraftMixin:OnRecipeFilled(pane, picked)
     }, GetIconOptions(entry.holder, GetLineIconSize()))
 end
 
+-- The comparison tooltip's chips.
+--
+-- With its Rich tooltips Daylight UI draws a card of its own over a tooltip. On the card of a
+-- worn piece shown beside the piece looked at, the client's stat changes are chips at the foot
+-- under a heading, and a line of another addon's is among the addons' lines above them. This
+-- addon's line there is of the changes' kind (what the piece looked at would do in the worn
+-- one's place; features/Tooltip.lua), so it is made the last of the chips.
+--
+-- The API has no piece for a chip (its tooltip pieces are rows, tiles and tags of the card's
+-- header). The chips are gathered by a function of the tooltip module's, RichItems.Changes(
+-- lines, from, n), reached as the API's documentation says a module's parts are
+-- (DaylightUI:GetModule(name).ns). It returns the chips, each { text, colour }, and the numbers
+-- of the lines they took, which the card then leaves out of the addons' lines. It is wrapped
+-- (AttachAndNote): a line from `from` on whose text is one this addon wrote is taken, and its
+-- gain is a chip in the colours the stat changes have (API.Colors: GOOD for an upgrade, DAMAGE
+-- for a loss, LABEL for neither).
+--
+-- A gain whose line says more than a name and a number keeps its line (GetPlainGain). Without
+-- the module, the function or the colours, and where the function answers with something
+-- else, the line stays where it was.
+local SwapChipsMixin = {}
+
+function SwapChipsMixin:GetName()
+    return "DaylightUITooltip"
+end
+
+SwapChipsMixin.integration = {
+    addon = addonName,
+    hookPoints = { "DaylightUI.API.For", "DaylightUI.API.For(addon).Wrap", "DaylightUI.API.Colors" },
+    -- Daylight UI's tooltips are a module of their own, which the player can leave off.
+    optionalHookPoints = { "DaylightUI_Tooltip RichItems.Changes", "DaylightUI_Tooltip RichItems.Changes wrapped" },
+}
+
+function SwapChipsMixin:Init()
+    local API = GetAPI()
+    if not API then
+        return
+    end
+    local me = self:NoteHookPoint("DaylightUI.API.For", API, "For") and API.For(ADDON_NAME) or nil
+    local canWrap = self:NoteHookPoint("DaylightUI.API.For(addon).Wrap", me, "Wrap")
+    canWrap = self:NoteHookPoint("DaylightUI.API.Colors", API, "Colors") and canWrap
+    if canWrap then
+        self.API, self.me = API, me
+        self:WhenAddOnLoaded("DaylightUI_Tooltip", self.Attach)
+    end
+end
+
+function SwapChipsMixin:Attach()
+    local module = type(DaylightUI.GetModule) == "function" and DaylightUI:GetModule("Tooltip") or nil
+    local parts = type(module) == "table" and type(module.ns) == "table" and module.ns or nil
+    local items = parts and type(parts.RichItems) == "table" and parts.RichItems or nil
+    if not self:NoteHookPoint("DaylightUI_Tooltip RichItems.Changes", items, "Changes") then
+        return
+    end
+    -- Daylight UI runs a wrap contained, and calls its own function where the wrap raises an
+    -- error.
+    AttachAndNote(self, self.me.Wrap, items, "Changes", "DaylightUI_Tooltip RichItems.Changes wrapped",
+        function(original, lines, from, n, ...)
+            local chips, skip = original(lines, from, n, ...)
+            self:AddChips(chips, skip, lines, from, n)
+            return chips, skip
+        end)
+end
+
+local CHIP_INKS = { gain = "GOOD", loss = "DAMAGE", even = "LABEL" }
+
+-- `chips` and `skip` are what Daylight UI's function made; this addon's lines among `lines`
+-- from `from` to `n` are added to both.
+function SwapChipsMixin:AddChips(chips, skip, lines, from, n)
+    local tooltip = NS.Tooltip
+    if type(chips) ~= "table" or type(skip) ~= "table" or type(lines) ~= "table" or type(from) ~= "number" or
+        type(n) ~= "number" or not tooltip then
+        return
+    end
+    local colours
+    for index = from, n do
+        local line = lines[index]
+        local gain = type(line) == "table" and tooltip:GetReplacementGainOfLine(line.left) or nil
+        local text, kind = tooltip:GetPlainGain(gain)
+        if text then
+            colours = colours or self.API.Colors()
+            local colour = type(colours) == "table" and colours[CHIP_INKS[kind]] or nil
+            if type(colour) == "table" then
+                chips[#chips + 1] = { text, colour }
+                skip[index] = true
+            end
+        end
+    end
+end
+
 if select(4, C_AddOns.GetAddOnInfo(addonName)) then
     if C_AddOns.IsAddOnLoaded(addonName) then
         CaerdonWardrobe:RegisterFeature(VendorMixin)
@@ -1356,5 +1446,6 @@ if select(4, C_AddOns.GetAddOnInfo(addonName)) then
         CaerdonWardrobe:RegisterFeature(QuestsMixin)
         CaerdonWardrobe:RegisterFeature(RollsMixin)
         CaerdonWardrobe:RegisterFeature(CraftMixin)
+        CaerdonWardrobe:RegisterFeature(SwapChipsMixin)
     end
 end

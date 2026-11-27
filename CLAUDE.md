@@ -151,7 +151,7 @@ A mainline-family client: retail 12.x UI architecture running classic-era conten
 | Skillet's recipe list | Skillet |
 | World Quest Tab's list and pins | World Quest Tab |
 | Quest rewards in the Dialogue UI addon | Dialogue UI |
-| Daylight UI's vendor, bags, auction house, mailbox, quest rewards, loot rolls and profession window, its public API | Daylight UI |
+| Daylight UI's vendor, bags, auction house, mailbox, quest rewards, loot rolls, profession window and comparison tooltip, its public API | Daylight UI |
 | Icon size, clipping, measuring a window | Icon Size and Placement |
 | Settings pages, layout settings | Settings |
 | Layout editor | Layout Editor |

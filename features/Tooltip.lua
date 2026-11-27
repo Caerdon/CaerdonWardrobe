@@ -706,6 +706,14 @@ local comparisonTooltips = {}
 local pendingBuilds = {}
 local pawnAddsValues = nil
 
+-- A host addon that draws tooltips itself (Daylight UI's cards) has the client's stat changes
+-- in a form of its own, and this addon's line among the lines of other addons, apart from
+-- them. For an integration that puts it with the changes there, the text of each line last
+-- added to a comparison tooltip is kept with its gain (GetReplacementGainOfLine), and a gain
+-- can be had in plain words (GetPlainGain). A few dozen texts: the same gain is the same text.
+local REPLACEMENT_LINES_KEPT = 40
+local replacementLines, replacementLineCount = {}, 0
+
 local LOSS_COLOUR = "808080"
 local function AddReplacementLine(tooltip, gain)
     local icon = gain.icon and format("|T%s:0|t ", tostring(gain.icon)) or ""
@@ -720,8 +728,47 @@ local function AddReplacementLine(tooltip, gain)
         text = format("|cff%s%s|r%s%s", LOSS_COLOUR, gain.percent and format("%+d%%", gain.percent) or L["no upgrade"],
             PairNote(gain), PvpNote(gain))
     end
-    tooltip:AddLine(format("|cff%s%s%s:|r  %s", gain.colour or LOADOUT_NAME_COLOUR, icon, tostring(gain.name), text),
-        1, 1, 1, true)
+    local line = format("|cff%s%s%s:|r  %s", gain.colour or LOADOUT_NAME_COLOUR, icon, tostring(gain.name), text)
+    tooltip:AddLine(line, 1, 1, 1, true)
+    if replacementLines[line] == nil then
+        if replacementLineCount >= REPLACEMENT_LINES_KEPT then
+            wipe(replacementLines)
+            replacementLineCount = 0
+        end
+        replacementLineCount = replacementLineCount + 1
+    end
+    replacementLines[line] = gain
+end
+
+-- The gain of a line this addon added to a comparison tooltip, by the line's text as it was
+-- written, or nil for any other text. The text is compared with what was written and not read.
+function TooltipMixin:GetReplacementGainOfLine(text)
+    if text == nil or issecretvalue(text) or type(text) ~= "string" then
+        return nil
+    end
+    return replacementLines[text]
+end
+
+-- A gain in plain words, with no colour or icon in them: "+12% Main" (or "Main: upgrade"
+-- against a piece the scale gives no value), and what it is: "gain" for an upgrade, "loss" for
+-- a piece that is worse, "even" for one that is neither. Nothing for a gain whose line says more
+-- than that (what the number is by: both hands, PvP levels, another spec's gear, a level to
+-- come), and nothing where there is no number and no upgrade.
+function TooltipMixin:GetPlainGain(gain)
+    if type(gain) ~= "table" or gain.name == nil then
+        return nil
+    end
+    if PairNote(gain) ~= "" or PvpNote(gain) ~= "" or OtherSpecNote(gain) ~= "" or LaterNote(gain) ~= "" then
+        return nil
+    end
+    if type(gain.percent) ~= "number" then
+        if not gain.upgrade then
+            return nil
+        end
+        return format("%s: %s", tostring(gain.name), L["upgrade"]), "gain"
+    end
+    return format("%+d%% %s", gain.percent, tostring(gain.name)),
+        gain.upgrade and "gain" or (gain.percent < 0 and "loss" or "even")
 end
 
 -- With Pawn's own notes kept (Tooltip.KeepPawnUpgradeNotes): the addon's number for a piece

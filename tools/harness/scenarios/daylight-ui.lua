@@ -107,6 +107,16 @@
 --      back, and off again the icon is pinned where Daylight UI had it. An answer that raises
 --      an error leaves the request to the window's own options.
 --
+-- Daylight UI's Rich tooltips (DaylightUI_Tooltip/Rich/Items.lua): on a comparison tooltip's
+-- card the client's stat changes are chips at the foot. RichItems.Changes(lines, from, n) makes
+-- them from the lines after the item's own (each { left = its text, ... }): it returns the
+-- chips, each { text, colour }, and the numbers of the lines they took. The module's parts are
+-- reached by DaylightUI:GetModule("Tooltip").ns, and API.Colors() has the colours.
+--
+--  27. The tooltip's feature wraps that function once Daylight UI's tooltips are loaded. A line
+--      this addon wrote is the last of the chips, in the colour of what it is, and is taken as
+--      the stat changes' lines are; a line that says more than a chip can stays a line.
+--
 -- Logic only: where the icon lies on a tile has not been seen in a client.
 
 return function(H, S)
@@ -129,6 +139,14 @@ return function(H, S)
             mailbox = {}, sending = {}, ours = {} }
 
         local api = { major = apiIs == "another major version" and 2 or 1, minor = 16 }
+        world.modules = {}
+        if apiIs ~= "without Colors" then
+            function api.Colors()
+                world.coloursAsked = (world.coloursAsked or 0) + 1
+                return { GOOD = { 0.5, 0.8, 0.5 }, DAMAGE = { 0.9, 0.4, 0.4 }, LABEL = apiIs ~= "without a colour" and
+                    { 0.7, 0.7, 0.6 } or nil }
+            end
+        end
         function api.On(event, fn, owner)
             world.listeners[#world.listeners + 1] = { event = event, fn = fn, owner = owner }
             return world.listeners[#world.listeners]
@@ -224,6 +242,7 @@ return function(H, S)
         end
         world.api = api
         game:Set("DaylightUI", { API = api, Win = { Parts = parts },
+            GetModule = function(_, name) return world.modules[name] end,
             Mail = apiIs ~= "without the mailbox" and { Inbox = inbox, Send = send } or nil,
             Craft = apiIs ~= "without the mailbox" and { Recipe = recipePage } or nil })
         game:Set("C_TradeSkillUI.GetRecipeInfo", function(recipeID)
@@ -1652,6 +1671,177 @@ return function(H, S)
             AskAs(bare, 32, "upgrade")
             Equal(passes, 3, label .. "one arrow: a slot Daylight UI has not asked the widget for asks for no pass")
             Equal(#world.client.errors, 0, label .. "one arrow: no error")
+        end
+
+        -- 27. The comparison tooltip's chips.
+        do
+            local HEAD = "If you replace this item"
+            -- Daylight UI's tooltips in a world: the function that makes the chips, as far as
+            -- it is read here, and this addon's tooltip feature standing in with what it wrote.
+            local function WithTooltips(inWorld, changes)
+                local items = { calls = 0 }
+                items.Changes = changes or function(lines, from, n)
+                    items.calls = items.calls + 1
+                    local chips, skip, changing = {}, {}, false
+                    for index = from, n do
+                        local text = lines[index].left
+                        if text == HEAD then
+                            changing, skip[index] = true, true
+                        elseif changing and text:match("^[%+%-]%d") then
+                            chips[#chips + 1] = { text, { 1, 1, 1 } }
+                            skip[index] = true
+                        end
+                    end
+                    return chips, skip
+                end
+                inWorld.ours[items] = true
+                inWorld.modules.Tooltip = { ns = { RichItems = items } }
+                local written = {}
+                inWorld.namespace.Tooltip = {
+                    GetReplacementGainOfLine = function(_, text) return written[text] end,
+                    GetPlainGain = function(_, gain)
+                        if gain and not gain.more then
+                            return gain.plain, gain.kind
+                        end
+                    end,
+                }
+                return items, written
+            end
+            local function Texts(chips)
+                local texts = {}
+                for index, chip in ipairs(chips or {}) do
+                    texts[index] = tostring(chip[1]) .. "=" .. table.concat(chip[2] or {}, ",")
+                end
+                return table.concat(texts, " | ")
+            end
+            local function Skipped(skip, n)
+                local taken = {}
+                for index = 1, n do
+                    if skip[index] then
+                        taken[#taken + 1] = index
+                    end
+                end
+                return table.concat(taken, " ")
+            end
+            local function Lines(...)
+                local lines = {}
+                for index = 1, select("#", ...) do
+                    lines[index] = { left = (select(index, ...)) }
+                end
+                return lines
+            end
+
+            local tips = core:GetFeature("DaylightUITooltip")
+            Check(tips ~= nil, label .. "chips: the feature is registered")
+            local tipNoted = tips and tips.hookPointsNoted or {}
+            for _, point in ipairs({ "DaylightUI.API.For", "DaylightUI.API.For(addon).Wrap", "DaylightUI.API.Colors" }) do
+                Equal(tipNoted[point] and tipNoted[point].found, 1, label .. "chips: the hook point " .. point .. " is noted as found")
+            end
+            Equal(tipNoted["DaylightUI_Tooltip RichItems.Changes"], nil,
+                label .. "chips: nothing is looked for before Daylight UI's tooltips are loaded")
+            local items, written = WithTooltips(world)
+            local theirs = items.Changes
+            world.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            Equal(tipNoted["DaylightUI_Tooltip RichItems.Changes"] and tipNoted["DaylightUI_Tooltip RichItems.Changes"].found, 1,
+                label .. "chips: the function is noted as found")
+            Equal(tipNoted["DaylightUI_Tooltip RichItems.Changes wrapped"] and tipNoted["DaylightUI_Tooltip RichItems.Changes wrapped"].found, 1,
+                label .. "chips: and as wrapped")
+            Check(items.Changes ~= theirs, label .. "chips: the function is wrapped")
+            Equal(world.hookOwners[theirs], "CaerdonWardrobe", label .. "chips: under this addon's name")
+            local wrapped = items.Changes
+            world.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            Check(items.Changes == wrapped, label .. "chips: a second word of the addon wraps nothing twice")
+
+            written["OURS gain"] = { plain = "+25% Guardian", kind = "gain" }
+            written["OURS loss"] = { plain = "-17% Guardian", kind = "loss" }
+            written["OURS even"] = { plain = "+2% Guardian", kind = "even" }
+            written["OURS more"] = { plain = "+25% Guardian", kind = "gain", more = true }
+            -- The worn piece's two lines, another addon's, the client's changes, this addon's.
+            local chips, skip = items.Changes(Lines("Worn Ring", "+3 Stamina", "pawn: Guardian", HEAD, "+5 Stamina", "-2 Spirit",
+                "OURS gain"), 3, 7)
+            Equal(Texts(chips), "+5 Stamina=1,1,1 | -2 Spirit=1,1,1 | +25% Guardian=0.5,0.8,0.5",
+                label .. "chips: this addon's line is the last of the chips, in the colour of a gain")
+            Equal(Skipped(skip, 7), "4 5 6 7", label .. "chips: and is taken with the lines of the changes, another addon's left")
+            Equal(items.calls, 1, label .. "chips: Daylight UI's own function is called once for it")
+            chips, skip = items.Changes(Lines("Worn Ring", HEAD, "+5 Stamina", "OURS loss"), 2, 4)
+            Equal(Texts(chips), "+5 Stamina=1,1,1 | -17% Guardian=0.9,0.4,0.4", label .. "chips: a loss in the colour of a loss")
+            chips, skip = items.Changes(Lines("Worn Ring", HEAD, "+5 Stamina", "OURS even"), 2, 4)
+            Equal(Texts(chips), "+5 Stamina=1,1,1 | +2% Guardian=0.7,0.7,0.6", label .. "chips: neither, in the colour of a label")
+            -- The client names no changes: the line is a chip all the same.
+            chips, skip = items.Changes(Lines("Worn Ring", "OURS gain"), 2, 2)
+            Equal(Texts(chips) .. " / " .. Skipped(skip, 2), "+25% Guardian=0.5,0.8,0.5 / 2",
+                label .. "chips: with no changes of the client's the line is a chip by itself")
+            -- A line that says more than a chip can.
+            chips, skip = items.Changes(Lines("Worn Ring", HEAD, "+5 Stamina", "OURS more"), 2, 4)
+            Equal(Texts(chips) .. " / " .. Skipped(skip, 4), "+5 Stamina=1,1,1 / 2 3",
+                label .. "chips: a line that says more stays a line")
+            -- Two lines of this addon's on one tooltip.
+            local askedBefore = world.coloursAsked
+            chips, skip = items.Changes(Lines("Worn Ring", HEAD, "OURS gain", "OURS loss"), 2, 4)
+            Equal(world.coloursAsked, askedBefore + 1, label .. "chips: the colours are asked for once for a tooltip")
+            Equal(Texts(chips), "+25% Guardian=0.5,0.8,0.5 | -17% Guardian=0.9,0.4,0.4", label .. "chips: every line of this addon's, in their order")
+            -- Before the lines the card hands over, and a text the tooltip did not write.
+            chips, skip = items.Changes(Lines("OURS gain", HEAD, "+5 Stamina", "OURS gain?"), 2, 4)
+            Equal(Texts(chips) .. " / " .. Skipped(skip, 4), "+5 Stamina=1,1,1 / 2 3",
+                label .. "chips: no line before the ones handed over, and none the tooltip did not write")
+            -- The colours are asked for when there is a chip to colour.
+            local asked = world.coloursAsked
+            items.Changes(Lines("Worn Ring", HEAD, "+5 Stamina"), 2, 3)
+            Equal(world.coloursAsked, asked, label .. "chips: no colours are asked for a tooltip with no line of this addon's")
+            -- Without the tooltip feature (its file is loaded with the others; a guard).
+            local kept = world.namespace.Tooltip
+            world.namespace.Tooltip = nil
+            chips, skip = items.Changes(Lines("Worn Ring", HEAD, "+5 Stamina", "OURS gain"), 2, 4)
+            Equal(Texts(chips) .. " / " .. Skipped(skip, 4), "+5 Stamina=1,1,1 / 2 3", label .. "chips: without the tooltip feature Daylight UI's answer stands")
+            world.namespace.Tooltip = kept
+            Equal(#world.client.errors, 0, label .. "chips: no error")
+
+            -- A function of Daylight UI's that answers with something else.
+            local odd = Start(flavor)
+            local oddItems, oddWritten = WithTooltips(odd, function() return nil, "no table" end)
+            oddWritten["OURS gain"] = { plain = "+25% Guardian", kind = "gain" }
+            odd.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            local first, second = oddItems.Changes(Lines("Worn Ring", "OURS gain"), 2, 2)
+            Equal(tostring(first) .. " / " .. tostring(second), "nil / no table", label .. "chips: another answer of Daylight UI's is handed on as it is")
+            Equal(#odd.client.errors, 0, label .. "chips: another answer: no error")
+
+            -- A colour the API does not name: the line stays a line.
+            local pale = Start(flavor, "without a colour")
+            local paleItems, paleWritten = WithTooltips(pale)
+            paleWritten["OURS even"] = { plain = "+2% Guardian", kind = "even" }
+            paleWritten["OURS gain"] = { plain = "+25% Guardian", kind = "gain" }
+            pale.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            chips, skip = paleItems.Changes(Lines("Worn Ring", HEAD, "OURS even", "OURS gain"), 2, 4)
+            Equal(Texts(chips) .. " / " .. Skipped(skip, 4), "+25% Guardian=0.5,0.8,0.5 / 2 4",
+                label .. "chips: a colour the API does not name leaves that line a line")
+            Equal(#pale.client.errors, 0, label .. "chips: a colour not named: no error")
+
+            -- An API without the colours, a wrap Daylight UI refuses, a module without the function.
+            local plain = Start(flavor, "without Colors")
+            local plainItems = WithTooltips(plain)
+            local plainTheirs = plainItems.Changes
+            plain.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            local plainNoted = plain.core:GetFeature("DaylightUITooltip").hookPointsNoted or {}
+            Equal(plainNoted["DaylightUI.API.Colors"] and plainNoted["DaylightUI.API.Colors"].missing, 1,
+                label .. "chips: an API without the colours is noted")
+            Check(plainItems.Changes == plainTheirs, label .. "chips: and nothing is wrapped")
+            local unwilling = Start(flavor, "the wrap refused")
+            local unwillingItems = WithTooltips(unwilling)
+            local unwillingTheirs = unwillingItems.Changes
+            unwilling.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            local unwillingNoted = unwilling.core:GetFeature("DaylightUITooltip").hookPointsNoted or {}
+            Equal(unwillingNoted["DaylightUI_Tooltip RichItems.Changes wrapped"] and
+                unwillingNoted["DaylightUI_Tooltip RichItems.Changes wrapped"].missing, 1, label .. "chips: a wrap Daylight UI refuses is noted as missing")
+            Check(unwillingItems.Changes == unwillingTheirs, label .. "chips: a wrap refused: the function is Daylight UI's own")
+            Equal(#unwilling.client.errors, 0, label .. "chips: a wrap refused: no error")
+            local bare = Start(flavor)
+            bare.modules.Tooltip = { ns = {} }
+            bare.client:Fire("ADDON_LOADED", "DaylightUI_Tooltip")
+            local bareNoted = bare.core:GetFeature("DaylightUITooltip").hookPointsNoted or {}
+            Equal(bareNoted["DaylightUI_Tooltip RichItems.Changes"] and bareNoted["DaylightUI_Tooltip RichItems.Changes"].missing, 1,
+                label .. "chips: a module without the function is noted as missing")
+            Equal(bareNoted["DaylightUI_Tooltip RichItems.Changes wrapped"], nil, label .. "chips: and no wrap is tried")
+            Equal(#bare.client.errors, 0, label .. "chips: a module without the function: no error")
         end
 
         -- 15.
