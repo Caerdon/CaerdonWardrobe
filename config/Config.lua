@@ -310,6 +310,12 @@ function CaerdonWardrobeConfigMixin:OnEvent(event, ...)
         if CaerdonWardrobeConfig.Auction.UpgradeColumn == nil then
             CaerdonWardrobeConfig.Auction.UpgradeColumn = NS:GetDefaultConfig().Auction.UpgradeColumn
         end
+        if type(CaerdonWardrobeConfig.DaylightUI) ~= "table" then
+            CaerdonWardrobeConfig.DaylightUI = {}
+        end
+        if CaerdonWardrobeConfig.DaylightUI.OwnLayoutInBags == nil then
+            CaerdonWardrobeConfig.DaylightUI.OwnLayoutInBags = NS:GetDefaultConfig().DaylightUI.OwnLayoutInBags
+        end
         if CaerdonWardrobeConfig.Binding.ShowWuE == nil then
             CaerdonWardrobeConfig.Binding.ShowWuE = NS:GetDefaultConfig().Binding.ShowWuE
         end
@@ -613,6 +619,13 @@ function NS:GetDefaultConfig()
         -- icon's has no setting: it is there while an icon is switched on for the auction house.
         Auction = {
             UpgradeColumn = true
+        },
+
+        -- Daylight UI's bags and bank put the status icon in a corner of their own, at their
+        -- own size. On: by the player's layout, as everywhere else (the layout editor's box;
+        -- external/DaylightUI).
+        DaylightUI = {
+            OwnLayoutInBags = false
         },
 
         Tooltip = {

@@ -43,6 +43,26 @@ local function GetButtonState(originalButton, create)
     return state
 end
 
+-- For the export: what was said of each button and when (GetButtonRecord). A button with no
+-- icon was never asked for with its item, was asked and then cleared, or was asked and not
+-- drawn, and on screen the three are one. Kept apart from the button's state, which a window
+-- that pools its rows gives up with the row (ClearButtonState). Weak keys: the buttons are
+-- their windows'.
+local buttonRecords = setmetatable({}, { __mode = "k" })
+
+local function NoteOnRecord(button, what, detail, by)
+    if not button then
+        return
+    end
+    local record = buttonRecords[button]
+    if not record then
+        record = {}
+        buttonRecords[button] = record
+    end
+    record[what] = (record[what] or 0) + 1
+    record[what .. "At"], record[what .. "Detail"], record[what .. "By"] = GetTime(), detail, by
+end
+
 -- What each button was last asked to show: the request as UpdateButton got it, kept under the
 -- window that made it. A window with no Refresh() of its own is asked again from here after a
 -- full refresh (AskAgain). The record is the button's until it is cleared or another window
@@ -283,6 +303,24 @@ function CaerdonWardrobeMixin:GetSlotStatusSize(width, height, noMaximum)
     return math.max(SLOT_STATUS_MIN_SIZE, size)
 end
 
+-- The options.slotScale of a square frame of this size: how much smaller than a default bag slot
+-- it is. GetSlotStatusSize makes the status icon smaller with the slot; this does the same for
+-- the two texts (the binding text, the level gain), their space from the slot's edge and the
+-- player's nudges, so that a small slot is a bag slot in miniature and the player's layout holds
+-- on it as it does in the bags. Without it the texts are a bag slot's size on any slot: on a
+-- 28 px icon "BoE" at its full width lay across the status icon (seen in the Forever client,
+-- 1.60.1.71139, Daylight UI's profession window). Never larger than a bag slot's, and no
+-- smaller than text can still be read at. nil when the frame has no size yet.
+local SLOT_SCALE_MIN = 0.75
+
+function CaerdonWardrobeMixin:GetSlotScale(width, height)
+    local side = math.min(width or 0, height or 0)
+    if side < 1 then
+        return nil
+    end
+    return math.max(SLOT_SCALE_MIN, math.min(1, side / REFERENCE_SLOT_SIZE))
+end
+
 -- Clip-aware placement, for callers that pass options.keepInsideWhenClipped.
 --
 -- The default placement hangs the status icon over the slot's corner. In a scrolling grid with
@@ -363,12 +401,18 @@ local function MeasureClipRoom(caerdonButton, button, changed)
         caerdonButton.caerdonClipMeasured = nil
         return
     end
+    -- The least room stands for the session, so what it was seen on is kept for the export
+    -- (GetClipNote): when, how wide the slot and the list were then, and at what scale.
     if info.left == nil or left < info.left - 0.25 then
         info.left = left
+        info.leftSeen = { at = GetTime(), slot = (overlayRight - overlayLeft) / scale,
+            list = (clipRight - clipLeft) / scale, scale = scale }
         changed[clipper] = true
     end
     if info.right == nil or right < info.right - 0.25 then
         info.right = right
+        info.rightSeen = { at = GetTime(), slot = (overlayRight - overlayLeft) / scale,
+            list = (clipRight - clipLeft) / scale, scale = scale }
         changed[clipper] = true
     end
 end
@@ -446,7 +490,13 @@ end
 -- nil while this icon can hang over its corner (the grid leaves room, has not been measured, or
 -- the icon does not overhang). Otherwise the icon goes inside the slot, and this is the fraction
 -- of its size to draw it at.
-local function GetClipInsideScale(clipper, statusPosition, extent, xOffset)
+--
+-- Half a pixel cut off is let pass. A window whose lists leave nearly the room the icon needs
+-- can let more pass (options.clipCutAllowed, a share of the icon's size): inside, the icon is a
+-- fifth smaller and lies on the item, which is the worse look where the list would only shave
+-- its edge. Daylight UI's pages leave 4.5 to 5 where a full-size icon on one of their tiles
+-- overhangs 5.5 (by its code and one measured line; not seen to decide a draw).
+local function GetClipInsideScale(clipper, statusPosition, extent, xOffset, cutAllowed)
     local info = clipper and clipRoom[clipper]
     if not info then
         return nil
@@ -463,7 +513,8 @@ local function GetClipInsideScale(clipper, statusPosition, extent, xOffset)
     end
 
     local overhang = extent / 2 - xOffset
-    if overhang > 0.5 and room < overhang - 0.5 then
+    local tolerance = math.max(0.5, extent * (tonumber(cutAllowed) or 0))
+    if overhang > 0.5 and room < overhang - tolerance then
         return CLIP_INSIDE_SCALE
     end
     return nil
@@ -538,7 +589,8 @@ function CaerdonWardrobeMixin:SetStatusIconPosition(icon, button, item, feature,
 
         local clipper = FindClippingParent(button)
         local baseXOffset = options.statusOffsetX or (4 * baseSize / ICON_PROMINENT_SIZE)
-        clipInsideScale = GetClipInsideScale(clipper, statusPosition, math.max(baseSize, baseBackgroundSize), baseXOffset)
+        clipInsideScale = GetClipInsideScale(clipper, statusPosition, math.max(baseSize, baseBackgroundSize), baseXOffset,
+            options.clipCutAllowed)
 
         local sizeScale = clipInsideScale or 1
         icon:SetSize(baseSize * sizeScale, baseSize * sizeScale)
@@ -677,6 +729,142 @@ function CaerdonWardrobeMixin:AddRotation(group, order, degrees, duration, smoot
     end
 end
 
+-- For the export: who gave a status icon its alpha. An icon that is drawn and cannot be seen
+-- has an alpha this addon did not give it, and the region alone does not say whose it is: a
+-- host addon that shows and hides the icon can fade it too. Every alpha this addon sets goes
+-- through SetOwnAlpha; any other call of the icon's SetAlpha is counted, with the line that
+-- made it for the first few (a line costs a stack read). An alpha that differs from both was
+-- set by no call at all: an animation's.
+--
+-- The icon's last changes are kept beside that, two dozen of them (LogIcon): each alpha with its
+-- cause, and each time the region came on screen or went off it. An icon that was invisible
+-- for two seconds and is drawn again by the time the export is taken still has what made it
+-- so. Nothing here reads the icon or the stack at a draw: what it costs is a few fields.
+local ownAlphaCall = false
+local ALPHA_LINES_KEPT = 20
+local ICON_LOG_SIZE = 24
+
+local function LogIcon(icon, what, value, by)
+    local log = icon.caerdonLog
+    if not log then
+        log = { at = 0 }
+        icon.caerdonLog = log
+    end
+    local at = log.at % ICON_LOG_SIZE + 1
+    log.at = at
+    local entry = log[at]
+    if not entry then
+        entry = {}
+        log[at] = entry
+    end
+    entry.what, entry.value, entry.by, entry.time = what, value, by, GetTime()
+end
+
+local function SetOwnAlpha(icon, alpha, why)
+    ownAlphaCall = true
+    icon:SetAlpha(alpha)
+    ownAlphaCall = false
+    LogIcon(icon, why, alpha)
+end
+
+local function NoteIconAlpha(icon, alpha)
+    icon.caerdonAlphaSet = alpha
+    if ownAlphaCall then
+        icon.caerdonAlphaOwn, icon.caerdonAlphaOwnAt = alpha, GetTime()
+        return
+    end
+    local count = (icon.caerdonAlphaOther or 0) + 1
+    icon.caerdonAlphaOther, icon.caerdonAlphaOtherValue, icon.caerdonAlphaOtherAt = count, alpha, GetTime()
+    if count <= ALPHA_LINES_KEPT then
+        local line = debugstack(3, 1, 0) or ""
+        icon.caerdonAlphaOtherBy = line:gsub("%s+$", "")
+    end
+    LogIcon(icon, "alpha by another's call", alpha, icon.caerdonAlphaOtherBy)
+end
+
+-- An alpha the client changes without a call.
+--
+-- A window can fade in with an animation on its own frame (Daylight UI's windows do: an Alpha
+-- animation of 0.2 s on the window, played when it is shown). A part of a button that is given
+-- its alpha while such an animation runs has, once it is over, the alpha it had before: the
+-- client puts it back, and no SetAlpha is called for it. Seen in the Forever client
+-- (1.60.1.71139) in Daylight UI's bank: a slot's icon is made at alpha 0 in the frame the
+-- bank opens, drawn at 1 a fifth of a second later, and read 0 again from then on with no
+-- call between, by this addon or another. It stayed unseen until the slot was next drawn,
+-- which was whenever something made Daylight UI go over its slots. What exactly the client's
+-- rule is has not been worked out, and this does not rest on it.
+--
+-- Each part remembers the last alpha a call gave it, whoever called (NoteAlphaSet). For a
+-- second after a draw the button's parts are looked at every frame, and one whose alpha is
+-- not what the last call gave it is given that again.
+local ALPHA_WATCH_SECONDS = 1
+local alphaWatched = {} -- [overlay] = the time its watch ends
+local alphaWatcher
+
+local function NoteAlphaSet(region, alpha)
+    region.caerdonAlphaSet = alpha
+end
+
+local function PutAlphaBack(caerdonButton, region, isIcon)
+    local want = region and region.caerdonAlphaSet
+    if not want then
+        return
+    end
+    local has = region:GetAlpha()
+    if has and math.abs(has - want) > 0.005 then
+        caerdonButton.caerdonAlphaPutBack = (caerdonButton.caerdonAlphaPutBack or 0) + 1
+        if isIcon then
+            SetOwnAlpha(region, want, format("alpha: put back, the client had made it %.2f without a call:", has))
+        else
+            region:SetAlpha(want)
+        end
+    end
+end
+
+local function WatchPartsOf(caerdonButton)
+    local icon = caerdonButton.mogStatus
+    if icon then
+        PutAlphaBack(caerdonButton, icon, true)
+        PutAlphaBack(caerdonButton, icon.mogStatusBackground)
+        PutAlphaBack(caerdonButton, icon.upgradeBadge)
+        PutAlphaBack(caerdonButton, icon.upgradeBadgeRing)
+    end
+    PutAlphaBack(caerdonButton, caerdonButton.bindsOnText)
+    PutAlphaBack(caerdonButton, caerdonButton.upgradeDeltaText)
+end
+
+local function RunAlphaWatch()
+    local now = GetTime()
+    for caerdonButton, untilTime in pairs(alphaWatched) do
+        -- One that fails is let go of, and the rest are looked at.
+        local ok, problem = pcall(WatchPartsOf, caerdonButton)
+        if not ok or now >= untilTime then
+            alphaWatched[caerdonButton] = nil
+        end
+        if not ok then
+            geterrorhandler()(problem)
+        end
+    end
+    if next(alphaWatched) == nil then
+        alphaWatcher:SetScript("OnUpdate", nil)
+    end
+end
+
+-- A button was drawn: its parts are watched for a while (see above).
+function CaerdonWardrobeMixin:WatchDrawnAlphas(button)
+    local caerdonButton = self:GetCaerdonButton(button)
+    if not caerdonButton then
+        return
+    end
+    alphaWatched[caerdonButton] = GetTime() + ALPHA_WATCH_SECONDS
+    if not alphaWatcher then
+        alphaWatcher = CreateFrame("Frame")
+    end
+    if not alphaWatcher:GetScript("OnUpdate") then
+        alphaWatcher:SetScript("OnUpdate", RunAlphaWatch)
+    end
+end
+
 function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFiltered)
     local caerdonButton = self:GetCaerdonButton(originalButton)
     if caerdonButton then
@@ -691,7 +879,7 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
                 if mogStatusBackground then
                     mogStatusBackground:SetAlpha(0)
                 end
-                mogStatus:SetAlpha(0)
+                SetOwnAlpha(mogStatus, 0, "alpha: the icon was not shown when its draw ended")
                 mogStatus:SetDesaturated(false)
                 return
             end
@@ -700,10 +888,10 @@ function CaerdonWardrobeMixin:SetItemButtonMogStatusFilter(originalButton, isFil
 
             if isFiltered then
                 mogStatusBackground:SetAlpha(0.3)
-                mogStatus:SetAlpha(0.3)
+                SetOwnAlpha(mogStatus, 0.3, "alpha: dimmed, its item is filtered out")
             else
                 mogStatusBackground:SetAlpha(assignedAlpha)
-                mogStatus:SetAlpha(assignedAlpha)
+                SetOwnAlpha(mogStatus, assignedAlpha, "alpha: as it was drawn (no filter)")
             end
             if mogStatus.upgradeBadge then
                 mogStatus.upgradeBadge:SetAlpha(isFiltered and 0.3 or assignedAlpha)
@@ -744,7 +932,7 @@ local function RunSearchDimPass()
         local mogStatus = caerdonButton.mogStatus
         if mogStatus and caerdonButton.searchOverlay:IsShown() then
             mogStatus.mogStatusBackground:SetAlpha(0.3)
-            mogStatus:SetAlpha(0.3)
+            SetOwnAlpha(mogStatus, 0.3, "alpha: dimmed, a search has dimmed its slot")
             if mogStatus.upgradeBadge then
                 mogStatus.upgradeBadge:SetAlpha(0.3)
                 mogStatus.upgradeBadgeRing:SetAlpha(0.3)
@@ -979,6 +1167,8 @@ local function DrawUpgradeIcon(core, originalButton, caerdonButton, anchorFrame,
                                allowMismatchedSpecUpgrades, gain)
     local mogStatus = caerdonButton.mogStatus
     local mogStatusBackground = mogStatus.mogStatusBackground
+    -- For GetDrawnParts: the icon is the upgrade's, as the arrow or as the mark of one to come.
+    caerdonButton.caerdonHasUpgradeIcon = true
     if lowSkill then
         SetLaterMark(mogStatus)
     else
@@ -1022,13 +1212,16 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
         mogStatus.mogStatusBackground = mogStatusBackground
         button.mogStatus = mogStatus
 
+        hooksecurefunc(mogStatusBackground, "SetAlpha", NoteAlphaSet)
         mogStatusBackground:SetAlpha(0)
         mogStatusBackground:Hide()
-        mogStatus:SetAlpha(0)
+        hooksecurefunc(mogStatus, "SetAlpha", NoteIconAlpha)
+        SetOwnAlpha(mogStatus, 0, "alpha: the icon was made")
         mogStatus:Hide()
 
         if not mogStatus._caerdonBackgroundHooked then
             mogStatus:HookScript("OnHide", function(statusTexture)
+                LogIcon(statusTexture, statusTexture:IsShown() and "off screen with a parent" or "hidden")
                 local background = statusTexture.mogStatusBackground
                 if background then
                     background._caerdonPrevAlpha = background:GetAlpha()
@@ -1041,6 +1234,7 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
                 end
             end)
             mogStatus:HookScript("OnShow", function(statusTexture)
+                LogIcon(statusTexture, "on screen")
                 local background = statusTexture.mogStatusBackground
                 if background then
                     background:Show()
@@ -1065,10 +1259,12 @@ function CaerdonWardrobeMixin:SetupCaerdonButton(originalButton, item, feature, 
 
     if not button.bindsOnText then
         button.bindsOnText = button:CreateFontString(nil, "ARTWORK", "SystemFont_Outline_Small") -- TODO: Note: placing directly on button to enable search fade - need to check on other addons
+        hooksecurefunc(button.bindsOnText, "SetAlpha", NoteAlphaSet)
     end
 
     if not button.upgradeDeltaText then
         button.upgradeDeltaText = button:CreateFontString(nil, "ARTWORK", "NumberFontNormalSmall")
+        hooksecurefunc(button.upgradeDeltaText, "SetAlpha", NoteAlphaSet)
         button.upgradeDeltaText:SetPoint("BOTTOMRIGHT", originalButton, "BOTTOMRIGHT", -2, 2)
         button.upgradeDeltaText:SetText("")
         button.upgradeDeltaText:Hide()
@@ -1137,8 +1333,19 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     -- What ends up on the button, for GetDrawnParts.
     caerdonButton.caerdonHasIcon = false
     caerdonButton.caerdonHasGain = false
+    caerdonButton.caerdonHasUpgradeIcon = false
 
     if not status then
+        -- Nothing is placed on it now, so the room it was to be measured for (the clip pass,
+        -- a moment after a draw) is no longer there to measure. A clear lays the overlay over
+        -- the whole button, and for a window that draws on a part of its row
+        -- (options.relativeFrame) that is the row from edge to edge: measured so, the list had
+        -- no room at all, which stands for the session and moved every icon of it inside
+        -- (seen in the Forever client, 1.60.1.71139, in Daylight UI's profession list and at
+        -- its vendor, whose lists fill, clear and fill again as they open). The next draw has
+        -- it measured as it is then.
+        clipPending[caerdonButton] = nil
+        caerdonButton.caerdonClipMeasured = nil
         if mogAnim and mogAnim:IsPlaying() then
             mogAnim:Stop()
         end
@@ -1151,7 +1358,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
         if mogStatus then
             mogStatus:SetVertexColor(1, 1, 1)
             mogStatus:SetTexture(nil)
-            mogStatus:SetAlpha(0)
+            SetOwnAlpha(mogStatus, 0, "alpha: the button was cleared")
             mogStatus:SetDesaturated(false)
             mogStatus.assignedAlpha = 0
             SetPartShown(caerdonButton, mogStatus, false)
@@ -1162,6 +1369,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus.upgradeBadge:Hide()
             mogStatus.upgradeBadgeRing:Hide()
         end
+        caerdonButton.caerdonHasUpgradeBadge = false
         return
     end
 
@@ -1176,6 +1384,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     local bindingAnchor = (options and options.overrideBindingPosition) or CaerdonWardrobeConfig.Binding.Position
     caerdonButton.bindingTextMovedFor = nil
     caerdonButton.caerdonFixedLayout = (options and options.fixedLayout) and true or false
+    caerdonButton.caerdonSlotScale = options and tonumber(options.slotScale) or 1
     -- A window that fits the number by hand too (options.levelGainAnchor = { point, x, y }):
     -- a row of text has no corner for it, and its bottom right is the window's own text.
     caerdonButton.caerdonLevelGainAnchor = options and options.levelGainAnchor or nil
@@ -1566,6 +1775,8 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
     if showBadge and not upgradeBadge then
         upgradeBadgeRing = caerdonButton:CreateTexture(nil, "ARTWORK", nil, 3)
         upgradeBadge = caerdonButton:CreateTexture(nil, "ARTWORK", nil, 4)
+        hooksecurefunc(upgradeBadgeRing, "SetAlpha", NoteAlphaSet)
+        hooksecurefunc(upgradeBadge, "SetAlpha", NoteAlphaSet)
         upgradeBadgeRing:Hide()
         upgradeBadge:Hide()
         mogStatus.upgradeBadge, mogStatus.upgradeBadgeRing = upgradeBadge, upgradeBadgeRing
@@ -1662,7 +1873,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
 
     mogStatusBackground:SetAlpha(alpha)
 
-    mogStatus:SetAlpha(alpha)
+    SetOwnAlpha(mogStatus, alpha, "alpha: drawn")
     mogStatus.assignedAlpha = alpha
 
     -- A status with no icon of its own (or one this window does not show) leaves the texture empty.
@@ -1691,7 +1902,7 @@ function CaerdonWardrobeMixin:SetItemButtonStatus(originalButton, item, feature,
             mogStatus:SetVertexColor(options.filterColor:GetRGB())
         else
             mogStatusBackground:SetAlpha(0.3)
-            mogStatus:SetAlpha(0.3)
+            SetOwnAlpha(mogStatus, 0.3, "alpha: drawn dimmed, its item is filtered out")
         end
     else
         mogStatus:SetDesaturated(false)
@@ -1720,7 +1931,9 @@ end
 -- left the digits crammed against the edge once it sat in a corner by itself.
 local LEVEL_GAIN_INSET = 4
 
--- The player's layout for the level gain; hand-fitted windows keep the bottom right.
+-- The player's layout for the level gain; hand-fitted windows keep the bottom right. The fifth
+-- value is the space from the slot's edge. On a slot smaller than a bag's (options.slotScale)
+-- the number, that space and the player's nudge are smaller by as much.
 local function GetLevelGainLayout(caerdonButton)
     local point, scale, nudgeX, nudgeY = "BOTTOMRIGHT", 1, 0, 0
     local layout = CaerdonWardrobeConfig.Icon.UpgradeDelta
@@ -1729,7 +1942,8 @@ local function GetLevelGainLayout(caerdonButton)
         scale = PercentToScale(layout.Scale)
         nudgeX, nudgeY = tonumber(layout.OffsetX) or 0, tonumber(layout.OffsetY) or 0
     end
-    return point, scale, nudgeX, nudgeY
+    local slotScale = caerdonButton.caerdonSlotScale or 1
+    return point, scale * slotScale, nudgeX * slotScale, nudgeY * slotScale, LEVEL_GAIN_INSET * slotScale
 end
 
 local function RowOf(anchor)
@@ -1786,14 +2000,14 @@ local function GetLevelGainClearance(caerdonButton, slotWidth, textAnchor, textL
         return nil
     end
 
-    local point, scale, nudgeX, nudgeY = GetLevelGainLayout(caerdonButton)
+    local point, scale, nudgeX, nudgeY, edge = GetLevelGainLayout(caerdonButton)
     local row = RowOf(point)
     if row ~= RowOf(textAnchor) then
         return nil
     end
 
-    local inset = (string.find(point, "RIGHT") and -LEVEL_GAIN_INSET) or
-        (string.find(point, "LEFT") and LEVEL_GAIN_INSET) or 0
+    local inset = (string.find(point, "RIGHT") and -edge) or
+        (string.find(point, "LEFT") and edge) or 0
     local gainWidth = MeasureStringWidth(deltaText, caerdonButton.caerdonSample) * scale
     local gainLeft, gainRight = HorizontalSpan(point, gainWidth, inset + nudgeX, slotWidth)
     if textRight <= gainLeft + 1 or textLeft >= gainRight - 1 then
@@ -1803,9 +2017,9 @@ local function GetLevelGainClearance(caerdonButton, slotWidth, textAnchor, textL
     local _, fontHeight = deltaText:GetFont()
     local height = (fontHeight or 12) * scale
     if row == "BOTTOM" then
-        return LEVEL_GAIN_INSET + nudgeY + height + 1
+        return edge + nudgeY + height + 1
     elseif row == "TOP" then
-        return LEVEL_GAIN_INSET - nudgeY + height + 1
+        return edge - nudgeY + height + 1
     end
     return (height + textHeight) / 2 + 1
 end
@@ -1841,11 +2055,11 @@ function CaerdonWardrobeMixin:UpdateUpgradeDeltaPosition(originalButton)
         return
     end
     -- The same space from every edge it touches; none along an axis it is centered on.
-    local point, scale, nudgeX, nudgeY = GetLevelGainLayout(caerdonButton)
-    local xOffset = (string.find(point, "RIGHT") and -LEVEL_GAIN_INSET) or
-        (string.find(point, "LEFT") and LEVEL_GAIN_INSET) or 0
-    local yOffset = (string.find(point, "BOTTOM") and LEVEL_GAIN_INSET) or
-        (string.find(point, "TOP") and -LEVEL_GAIN_INSET) or 0
+    local point, scale, nudgeX, nudgeY, edge = GetLevelGainLayout(caerdonButton)
+    local xOffset = (string.find(point, "RIGHT") and -edge) or
+        (string.find(point, "LEFT") and edge) or 0
+    local yOffset = (string.find(point, "BOTTOM") and edge) or
+        (string.find(point, "TOP") and -edge) or 0
 
     deltaText:ClearAllPoints()
     deltaText:SetScale(scale)
@@ -1927,7 +2141,7 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
         -- The host addon anchors the text and shows it; here it only gets its size. Measured on a
         -- string of its own, because measuring in place would mean taking its anchors away.
         local _, hostUserScale = GetTextLayout(options, IsGearSetStatus(bindingStatus, item))
-        local hostScale = (options.bindingScale or 1) * hostUserScale
+        local hostScale = (options.bindingScale or 1) * (tonumber(options.slotScale) or 1) * hostUserScale
         local _, hostFontHeight = bindsOnText:GetFont()
         local hostWidth = math.min(MeasureStringWidth(bindsOnText, true) + 1, button:GetWidth() / hostScale)
         bindsOnText:SetSize(hostWidth, hostFontHeight or bindsOnText:GetStringHeight() or 0)
@@ -1956,7 +2170,10 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
     -- text truncation after SetScale shrinks the effective render area.
     local isGearSet = IsGearSetStatus(bindingStatus, item)
     local bindingPosition, userScale, nudgeX, nudgeY, handFitted = GetTextLayout(options, isGearSet)
-    local bindingScale = (options.bindingScale or 1) * userScale
+    -- On a slot smaller than a bag's (options.slotScale) the text is smaller by as much, and so
+    -- are its space from the edge, which follows the window's own scale, and the player's nudge.
+    local slotScale = tonumber(options.slotScale) or 1
+    local bindingScale = (options.bindingScale or 1) * slotScale * userScale
     local scaledWidth = (bindingScale < 1) and (newWidth / bindingScale) or newWidth
     if bindingScale > 1 then
         -- Enlarged text: what it covers on screen still has to fit the button.
@@ -2024,8 +2241,8 @@ function CaerdonWardrobeMixin:SetItemButtonBindType(button, item, feature, locat
         xOffset = xOffset / userScale
         yOffset = yOffset / userScale
     end
-    xOffset = xOffset + nudgeX / bindingScale
-    yOffset = yOffset + nudgeY / bindingScale
+    xOffset = xOffset + nudgeX * slotScale / bindingScale
+    yOffset = yOffset + nudgeY * slotScale / bindingScale
 
     -- A level gain on the same row keeps its place and the text moves clear of it, the way it
     -- already sits above a stack count. Hand-fitted windows stay as they were tuned. What moved
@@ -2101,9 +2318,9 @@ local function AskAsCore(self, button, item, feature, locationInfo, options)
     end
 end
 
-local function ClearAsCore(self, button)
+local function ClearAsCore(self, button, why)
     local serial = button and askSerials[button]
-    self:ClearButton(button)
+    self:ClearButton(button, why)
     if button then
         askSerials[button] = serial
     end
@@ -2407,14 +2624,21 @@ function CaerdonWardrobeMixin:ProcessItem(button, item, feature, locationInfo, o
         self:SetItemButtonBindType(button, item, feature, locationInfo, options, mogStatus, bindingStatus,
             displayInfo)
         self:SetButtonRefreshGeneration(button, self.refreshGeneration)
+        self:WatchDrawnAlphas(button)
         if not milestones.firstDraw then
             Counters:Milestone("firstDraw")
         end
 
         -- For a feature that has to know when its button was drawn and what is on it (Baganator
         -- decides per corner which widget shows). An error there must not stop the other items.
+        NoteOnRecord(button, "drawn", mogStatus or "no status")
         if feature and feature.OnButtonDrawn then
             Contained(feature.OnButtonDrawn, feature, button, item, locationInfo, options)
+        end
+        -- The same for a window another addon registered, told to the integration that knows
+        -- it (NoteDrawsFor).
+        if feature and feature.caerdonDrawnListener then
+            Contained(feature.caerdonDrawnListener, button, item, locationInfo, options)
         end
 
         -- Debug only: remember what was drawn where, for the export's [Button Geometry] section.
@@ -2431,36 +2655,253 @@ function CaerdonWardrobeMixin:GetDrawnParts(originalButton)
     if not caerdonButton then
         return false, false, false
     end
+    -- The fourth: an upgrade is on it in any of its forms (the arrow or the mark of one to come
+    -- as the icon, the arrow as the badge on another icon).
     return caerdonButton.caerdonHasIcon == true, caerdonButton.caerdonHasText == true,
-        caerdonButton.caerdonHasGain == true
+        caerdonButton.caerdonHasGain == true,
+        caerdonButton.caerdonHasUpgradeIcon == true or caerdonButton.caerdonHasUpgradeBadge == true
+end
+
+-- A window whose button is a frame laid on another addon's (a holder that addon attaches to its
+-- tile, a frame of this addon's on a row) says which frame it stands on: the tooltip's owner is
+-- that frame, and its parents do not lead to the button. Kept here and not on the other
+-- addon's frame, by weak references: both frames are their windows'.
+local buttonsOn = setmetatable({}, { __mode = "kv" })
+
+function CaerdonWardrobeMixin:NoteButtonOn(frame, button)
+    if type(frame) == "table" then
+        buttonsOn[frame] = button
+    end
+end
+
+-- For the Debug Frame: why a button's icon hangs over its corner or was moved inside its slot,
+-- in the numbers the decision is made from (GetClipInsideScale). A list's least room stands
+-- for the session, so the note says when each side's was seen and on what. nil where the
+-- window does not ask for clip-aware placement.
+function CaerdonWardrobeMixin:GetClipNote(button)
+    local caerdonButton = self:GetCaerdonButton(button)
+    local args = caerdonButton and caerdonButton.caerdonPositionArgs
+    local options, icon = args and args.options, args and args.icon
+    if not (options and icon and options.keepInsideWhenClipped) or options.fixedStatusPosition then
+        return nil
+    end
+
+    local statusPosition = GetIconLayout(options)
+    local baseSize = icon.caerdonBaseSize or icon:GetSize()
+    local extent = math.max(baseSize, icon.caerdonBaseBackgroundSize or baseSize)
+    local xOffset = options.statusOffsetX or (4 * baseSize / ICON_PROMINENT_SIZE)
+    local parts = { format("%s, %.2f across and drawn %.2f, over the slot's edge by %.2f of which %.2f may be cut off",
+        statusPosition, extent, (icon:GetSize()), extent / 2 - xOffset,
+        math.max(0.5, extent * (tonumber(options.clipCutAllowed) or 0))) }
+
+    local clipper = FindClippingParent(button)
+    if not clipper then
+        parts[#parts + 1] = "no frame above it cuts anything off"
+        return table.concat(parts, "; ")
+    end
+    local depth, frame = 0, button
+    while frame and frame ~= clipper do
+        frame = frame:GetParent()
+        depth = depth + 1
+    end
+    parts[#parts + 1] = format("cut off by a %s %d above its button (%s), which %s", clipper:GetObjectType(), depth,
+        tostring(clipper.GetDebugName and clipper:GetDebugName() or "no name"),
+        GetClipInsideScale(clipper, statusPosition, extent, xOffset, options.clipCutAllowed) and "moves it inside" or
+        "leaves it over the corner")
+
+    local scale = caerdonButton:GetEffectiveScale()
+    local overlayLeft, overlayRight = GetScreenEdges(caerdonButton)
+    local clipLeft, clipRight = GetScreenEdges(clipper)
+    if overlayLeft and clipLeft and scale and scale > 0 then
+        parts[#parts + 1] = format("room now %.2f left and %.2f right (slot %.2f wide, list %.2f wide, scale %.3f)",
+            (overlayLeft - clipLeft) / scale, (clipRight - overlayRight) / scale, (overlayRight - overlayLeft) / scale,
+            (clipRight - clipLeft) / scale, scale)
+    else
+        parts[#parts + 1] = "room now: not laid out"
+    end
+
+    local info = clipRoom[clipper]
+    if not info then
+        parts[#parts + 1] = "least room: never measured"
+    else
+        for _, side in ipairs({ "left", "right" }) do
+            local seen = info[side .. "Seen"]
+            parts[#parts + 1] = format("least room %s %s%s", side, info[side] and format("%.2f", info[side]) or "none",
+                seen and format(" (%.0f s ago, slot %.2f wide, list %.2f wide, scale %.3f)", GetTime() - seen.at,
+                    seen.slot, seen.list, seen.scale) or "")
+        end
+    end
+    return table.concat(parts, "; ")
+end
+
+-- For the Debug Frame: a button's record as a line. `frame` is the button or a part of it, as
+-- for GetAskedOf. nil for a frame nothing was ever said of.
+function CaerdonWardrobeMixin:GetButtonRecord(frame)
+    for _ = 1, 4 do
+        if type(frame) ~= "table" then
+            return nil
+        end
+        local record = buttonRecords[frame] or (buttonsOn[frame] and buttonRecords[buttonsOn[frame]])
+        if record then
+            local now, parts = GetTime(), {}
+            local function Part(what, said, with)
+                if record[what] then
+                    parts[#parts + 1] = format("%s %d times, last %.1f s ago%s%s", said, record[what], now - record[what .. "At"],
+                        record[what .. "Detail"] and format(with, tostring(record[what .. "Detail"])) or "",
+                        record[what .. "By"] and (" by " .. tostring(record[what .. "By"])) or "")
+                else
+                    parts[#parts + 1] = said .. " never"
+                end
+            end
+            Part("asked", "asked for", " with %s")
+            Part("cleared", "cleared", " (%s)")
+            Part("drawn", "drawn", " as %s")
+            Part("dropped", "a request dropped undrawn", " (%s)")
+            return table.concat(parts, "; ")
+        end
+        frame = type(frame.GetParent) == "function" and frame:GetParent() or nil
+    end
+    return nil
+end
+
+-- For the Debug Frame: where a button's request stands, and whether the icon's region can be
+-- seen. A button with no icon has one of four reasons, which look the same on screen: its
+-- request is still in the queue, it is held until its item's data is here (with every other
+-- request of its window's that was unloaded in the same pass, until the last of them has
+-- answered), it is owed a draw for when it comes on screen, or it was drawn and the region is
+-- hidden or faded (a host addon shows and hides the icon itself).
+function CaerdonWardrobeMixin:GetRequestNote(button, feature)
+    local note
+    local held = feature and self.featureProcessItems[feature]
+    local request = held and held[button]
+    if request then
+        local count = 0
+        for _ in pairs(held) do
+            count = count + 1
+        end
+        note = format("held until its item's data is here, for %.0f s, %d of its window's held in all",
+            GetTime() - (request.heldAt or GetTime()), count)
+    elseif self.waitingToProcess[button] or self.processQueue[button] then
+        note = "in the queue"
+    else
+        note = "none waiting"
+    end
+    local caerdonButton = self:GetCaerdonButton(button)
+    if caerdonButton and caerdonButton.caerdonOwedTo then
+        note = note .. ", owed a draw for when it is on screen"
+    end
+    local icon = caerdonButton and caerdonButton.mogStatus
+    if icon then
+        local now = GetTime()
+        note = note .. format("; the icon's region: shown %s, on screen %s, alpha %.2f", icon:IsShown() and "yes" or "no",
+            icon:IsVisible() and "yes" or "no", icon:GetAlpha() or 0)
+        note = note .. format("; the client's silent changes of an alpha put back on this button: %d",
+            caerdonButton.caerdonAlphaPutBack or 0)
+        note = note .. format("; this addon last set its alpha to %s%s; others set it %d times%s",
+            icon.caerdonAlphaOwn and format("%.2f", icon.caerdonAlphaOwn) or "nothing",
+            icon.caerdonAlphaOwnAt and format(", %.1f s ago", now - icon.caerdonAlphaOwnAt) or "",
+            icon.caerdonAlphaOther or 0,
+            icon.caerdonAlphaOther and format(", last to %.2f, %.1f s ago, from %s", icon.caerdonAlphaOtherValue or 0,
+                now - icon.caerdonAlphaOtherAt, tostring(icon.caerdonAlphaOtherBy)) or "")
+        -- Daylight UI fades a mark in with an animation of its own on the region, kept there.
+        local motion = rawget(icon, "__duiMotion")
+        local fade = type(motion) == "table" and motion.fade or nil
+        if type(fade) == "table" then
+            local step = rawget(fade, "__alpha")
+            note = note .. format("; Daylight UI's fade on it: playing %s, done %s, keeps its end %s, from %s to %s over %s s",
+                tostring(fade.IsPlaying and fade:IsPlaying()), tostring(fade.IsDone and fade:IsDone()),
+                tostring(fade.IsSetToFinalAlpha and fade:IsSetToFinalAlpha()),
+                tostring(step and step.GetFromAlpha and step:GetFromAlpha()),
+                tostring(step and step.GetToAlpha and step:GetToAlpha()),
+                tostring(step and step.GetDuration and step:GetDuration()))
+        else
+            note = note .. "; no fade of Daylight UI's on it"
+        end
+        local log = icon.caerdonLog
+        if log then
+            local parts = {}
+            for step = 1, ICON_LOG_SIZE do
+                local entry = log[(log.at + step - 1) % ICON_LOG_SIZE + 1]
+                if entry and entry.what then
+                    parts[#parts + 1] = format("%.2f s ago %s%s%s", now - entry.time, entry.what,
+                        entry.value and format(" %.2f", entry.value) or "", entry.by and (" [" .. entry.by .. "]") or "")
+                end
+            end
+            note = note .. "; its last changes, oldest first: " .. table.concat(parts, " | ")
+        end
+    end
+    return note
 end
 
 -- For the Debug Frame: what a button was last asked to show, and what is on it now. `frame` is
 -- the button or a part of it (a tooltip's owner is often a cell of a row), so its parents are
 -- asked too, a few levels up. Returns the item the window gave, with what it passed beside the
--- link (item.extraData: an auction row's item level, a set entry's source), and a line for the
--- export. nil for a frame no window asked for.
+-- link (item.extraData: an auction row's item level, a set entry's source), a line for the
+-- export, and one on where its icon was placed in a list that cuts icons off (GetClipNote).
+-- nil for a frame no window asked for.
 function CaerdonWardrobeMixin:GetAskedOf(frame)
     for _ = 1, 4 do
         if type(frame) ~= "table" then
             return nil
         end
-        local state = GetButtonState(frame)
+        -- The button is the frame itself, or one that stands on it (NoteButtonOn).
+        local button = frame
+        local state = GetButtonState(button)
         local asked = state and state.asked
+        if not asked and buttonsOn[frame] then
+            button = buttonsOn[frame]
+            state = GetButtonState(button)
+            asked = state and state.asked
+        end
         if asked then
-            local hasIcon, hasText, hasGain = self:GetDrawnParts(frame)
-            local caerdonButton = self:GetCaerdonButton(frame)
+            local hasIcon, hasText, hasGain = self:GetDrawnParts(button)
+            local caerdonButton = self:GetCaerdonButton(button)
             local feature = asked.feature
-            return asked.item, format("asked for by %s; on it now: icon %s, upgrade badge %s, small mark %s, level gain %s, text %s",
+            -- The note is for the export alone: one that fails leaves the rest of it.
+            local noted, placed = pcall(self.GetClipNote, self, button)
+            local _, requestNote = pcall(self.GetRequestNote, self, button, feature)
+            return asked.item, format("asked for by %s; on it now: icon %s, upgrade badge %s, small mark %s, level gain %s, text %s; its request: %s",
                 tostring(feature and feature.GetName and feature:GetName() or "a window"),
                 hasIcon and "yes" or "no",
                 caerdonButton and caerdonButton.caerdonHasUpgradeBadge and "yes" or "no",
                 caerdonButton and caerdonButton.caerdonSmallMark or "none",
-                hasGain and "yes" or "no", hasText and "yes" or "no")
+                hasGain and "yes" or "no", hasText and "yes" or "no", tostring(requestNote)),
+                noted and placed or (not noted and "not known: " .. tostring(placed)) or nil
         end
         frame = type(frame.GetParent) == "function" and frame:GetParent() or nil
     end
     return nil
+end
+
+-- A window another addon registers with this one hands its own placement with each of its
+-- requests (Daylight UI's bags: a corner and a size of their own, whatever the player's layout
+-- says). An integration of this addon's that knows that window can answer for its placement:
+-- answer(button, item, locationInfo, options) is asked at every request made for the window's
+-- feature, and what it returns is what the button is drawn with; nil leaves the window's
+-- options. The request that is remembered holds the answer, so at a refresh the function is
+-- handed what it answered before and has to know it from the window's own. An answer that
+-- raises an error is reported and the request goes on with the window's options: the caller is
+-- the other addon's code.
+local optionsAnswers = {}
+
+function CaerdonWardrobeMixin:AnswerOptionsFor(featureName, answer)
+    optionsAnswers[featureName] = answer
+    local feature = availableFeatures[featureName]
+    if feature then
+        feature.caerdonOptionsAnswer = answer
+    end
+end
+
+-- The same integration can be told of each draw made for that window's feature, as a feature
+-- of this addon's is by its OnButtonDrawn: listener(button, item, locationInfo, options),
+-- after the button is drawn, with what is on it to be had from GetDrawnParts. Kept beside the
+-- answers, under a key no feature's name is.
+function CaerdonWardrobeMixin:NoteDrawsFor(featureName, listener)
+    optionsAnswers[featureName .. "\0drawn"] = listener
+    local feature = availableFeatures[featureName]
+    if feature then
+        feature.caerdonDrawnListener = listener
+    end
 end
 
 function CaerdonWardrobeMixin:RegisterFeature(mixin)
@@ -2468,6 +2909,8 @@ function CaerdonWardrobeMixin:RegisterFeature(mixin)
     local name = instance:GetName()
     if not availableFeatures[name] then
         availableFeatures[name] = instance
+        instance.caerdonOptionsAnswer = optionsAnswers[name]
+        instance.caerdonDrawnListener = optionsAnswers[name .. "\0drawn"]
     else
         error(format("Caerdon Wardrobe: Feature name collision: %s already exists", name))
     end
@@ -2518,9 +2961,11 @@ function CaerdonWardrobeMixin:AskWhenOnScreen(button, feature, context)
     return true
 end
 
-function CaerdonWardrobeMixin:ClearButton(button)
+-- why: for the button's record in the export; a window's own clear needs none.
+function CaerdonWardrobeMixin:ClearButton(button, why)
     if button then
         NextAskSerial(button)
+        NoteOnRecord(button, "cleared", why or "its window cleared it")
     end
     local caerdonButton = self:GetCaerdonButton(button)
     if caerdonButton then
@@ -2603,6 +3048,13 @@ function CaerdonWardrobeMixin:CancelPending(feature)
 end
 
 function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, options)
+    local answer = feature and feature.caerdonOptionsAnswer
+    if answer then
+        local ok, answered = Contained(answer, button, item, locationInfo, options)
+        if ok and answered ~= nil then
+            options = answered
+        end
+    end
     if button then
         NextAskSerial(button)
     end
@@ -2624,13 +3076,17 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
         end
     end
 
+    local askedBy = feature and feature.GetName and feature:GetName() or nil
     if item == nil then
-        self:ClearButton(button)
+        NoteOnRecord(button, "asked", "nothing", askedBy)
+        self:ClearButton(button, "asked for with nothing to show")
         return
     elseif item:IsItemEmpty() and item:GetCaerdonItemType() == CaerdonItemType.Empty then
-        self:ClearButton(button)
+        NoteOnRecord(button, "asked", "an item the client says is not there", askedBy)
+        self:ClearButton(button, "asked for with an item the client says is not there")
         return
     end
+    NoteOnRecord(button, "asked", item:IsItemEmpty() and "an item with no item ID" or ("item " .. tostring(item:GetItemID())), askedBy)
 
     if createdNew then
         self:SetItemButtonStatus(button, item, feature, locationInfo, options, "waiting", nil, nil)
@@ -2645,7 +3101,7 @@ function CaerdonWardrobeMixin:UpdateButton(button, item, feature, locationInfo, 
             local itemID = item:GetItemID()
             if self:GetButtonItemID(button) ~= itemID then
                 self:SetButtonItemID(button, itemID)
-                self:ClearButton(button)
+                self:ClearButton(button, "asked for with another item than it showed (the request follows)")
             end
         end
 
@@ -2719,7 +3175,7 @@ function CaerdonWardrobeMixin:Decorate(feature, button, source, locationInfo, op
         item = CaerdonItem:CreateFromItemID(source)
     end
     if not item then
-        self:ClearButton(button)
+        self:ClearButton(button, "its window handed over nothing to show")
         return nil
     end
 
@@ -2774,7 +3230,7 @@ end
 function CaerdonWardrobeMixin:ProcessQueuedItem(button, item, feature, locationInfo, options)
     if not Contained(self.ProcessItem, self, button, item, feature, locationInfo, options) then
         Counters:Unwound()
-        Contained(ClearAsCore, self, button)
+        Contained(ClearAsCore, self, button, "its draw raised an error")
     end
 end
 
@@ -2787,10 +3243,11 @@ function CaerdonWardrobeMixin:ProcessRequest(queueKey, request)
     -- Whatever was asked last stands: this request is not drawn, and it clears nothing either,
     -- since a newer request for the button may be waiting.
     if self:GetButtonLocationKey(button) ~= request.locationKey then
+        NoteOnRecord(button, "dropped", "asked for another place since, or given up")
         return
     end
     if not feature:IsSameItem(button, item, locationInfo) then
-        ClearAsCore(self, button)
+        ClearAsCore(self, button, "its window said the button shows another item by now")
         return
     end
 
@@ -2817,6 +3274,8 @@ function CaerdonWardrobeMixin:ProcessRequest(queueKey, request)
         items = {}
         self.featureProcessItems[feature] = items
     end
+    -- For the export (GetRequestNote): since when it is held.
+    request.heldAt = request.heldAt or GetTime()
     items[queueKey] = request
 end
 
@@ -3052,6 +3511,16 @@ function CaerdonWardrobeMixin:RefreshItems(reason, detail, changed)
         local name, instance
         for name, instance in pairs(registeredFeatures) do
             Contained(instance.Refresh, instance)
+        end
+        -- A feature registered after the features were started is another addon's own (its
+        -- addon loads after this one). It was never started, so its Refresh() is not this
+        -- list's to call: the core asks again for the buttons it asked for, as for a window
+        -- with no Refresh() of its own, which leaves a button that is not on screen for when
+        -- it is.
+        for name, instance in pairs(availableFeatures) do
+            if not registeredFeatures[name] then
+                Contained(CaerdonWardrobeFeatureMixin.Refresh, instance)
+            end
         end
     end, 1)
 end

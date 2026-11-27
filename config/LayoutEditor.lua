@@ -748,6 +748,9 @@ local BASE_HEIGHT = 458
 -- What the installed addons do differently from what this window shows. An integration says it
 -- itself: GetLayoutNote on its feature returns a sentence that starts with the addon's name and
 -- a colon, and optionally a button's text and what it does (opening that addon's own settings).
+-- With a fourth value, true or false, the text is a box's instead, ticked or not, and what it
+-- does is handed the new choice: where it is this addon's to decide whether the layout applies
+-- in the other addon's window.
 -- Integrations only register when their addon is loaded, so a player only reads about addons
 -- they have.
 local function IntegrationNotes()
@@ -755,13 +758,15 @@ local function IntegrationNotes()
     local features = CaerdonWardrobe.GetRegisteredFeatures and CaerdonWardrobe:GetRegisteredFeatures()
     for _, feature in pairs(features or {}) do
         if type(feature.GetLayoutNote) == "function" then
-            local ok, note, actionText, action = pcall(feature.GetLayoutNote, feature)
+            local ok, note, actionText, action, checked = pcall(feature.GetLayoutNote, feature)
             if ok and type(note) == "string" and note ~= "" then
                 local hasAction = type(actionText) == "string" and type(action) == "function"
                 notes[#notes + 1] = {
                     text = note,
                     actionText = hasAction and actionText or nil,
-                    action = hasAction and action or nil
+                    action = hasAction and action or nil,
+                    isChoice = hasAction and type(checked) == "boolean",
+                    checked = checked == true
                 }
             end
         end
@@ -775,6 +780,7 @@ end
 -- nobody read them, while the controls above looked as if they moved everything.
 local BANNER_LEFT, BANNER_TOP, BANNER_WIDTH = 20, -38, 508
 local BANNER_PADDING, BANNER_ICON, BANNER_BUTTON, BANNER_ROW_GAP, BANNER_BELOW = 8, 20, 150, 6, 8
+local BANNER_CHECK = 24
 
 function Editor:GetFrame()
     if self.frame then
@@ -1003,11 +1009,18 @@ function Editor:RefreshIntegrationNotes()
             row.text:SetWordWrap(true)
             row.button = CreateFrame("Button", nil, banner, "UIPanelButtonTemplate")
             row.button:SetSize(BANNER_BUTTON, 22)
+            -- A choice of this addon's own about that window: a box under the note.
+            row.check = CreateFrame("CheckButton", nil, banner, "UICheckButtonTemplate")
+            row.check:SetSize(BANNER_CHECK, BANNER_CHECK)
+            row.checkLabel = banner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.checkLabel:SetJustifyH("LEFT")
+            row.checkLabel:SetPoint("LEFT", row.check, "RIGHT", 2, 0)
             banner.rows[index] = row
         end
 
+        local hasButton = note.action ~= nil and not note.isChoice
         local textLeft = BANNER_PADDING + BANNER_ICON + 8
-        local textWidth = BANNER_WIDTH - textLeft - BANNER_PADDING - (note.action and (BANNER_BUTTON + 8) or 0)
+        local textWidth = BANNER_WIDTH - textLeft - BANNER_PADDING - (hasButton and (BANNER_BUTTON + 8) or 0)
         row.text:SetWidth(textWidth)
         -- The addon's name in gold, so several notes are told apart at a glance.
         row.text:SetText((note.text:gsub("^([^:]+:)", "|cffffd100%1|r")))
@@ -1024,7 +1037,7 @@ function Editor:RefreshIntegrationNotes()
         row.text:SetPoint("TOPLEFT", banner, "TOPLEFT", textLeft, y - 2)
         row.icon:Show()
         row.text:Show()
-        if note.action then
+        if hasButton then
             row.button:SetText(note.actionText)
             row.button:ClearAllPoints()
             row.button:SetPoint("TOPRIGHT", banner, "TOPRIGHT", -BANNER_PADDING, y)
@@ -1036,7 +1049,26 @@ function Editor:RefreshIntegrationNotes()
                 end
             end)
         end
-        row.button:SetShown(note.action ~= nil)
+        row.button:SetShown(hasButton)
+        if note.isChoice then
+            row.check:ClearAllPoints()
+            row.check:SetPoint("TOPLEFT", banner, "TOPLEFT", textLeft - 4, y - height - 2)
+            row.check:SetChecked(note.checked)
+            row.checkLabel:SetText(note.actionText)
+            row.check:SetScript("OnClick", function(box)
+                local chosen = box:GetChecked() and true or false
+                PlaySound(chosen and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+                local ok, err = pcall(note.action, chosen)
+                if not ok then
+                    geterrorhandler()(err)
+                end
+                -- The note says what holds now, and the open windows are drawn again.
+                self:Changed()
+            end)
+            height = height + 2 + BANNER_CHECK
+        end
+        row.check:SetShown(note.isChoice)
+        row.checkLabel:SetShown(note.isChoice)
         y = y - height - BANNER_ROW_GAP
     end
     for index = #notes + 1, #banner.rows do
@@ -1044,6 +1076,8 @@ function Editor:RefreshIntegrationNotes()
         row.icon:Hide()
         row.text:Hide()
         row.button:Hide()
+        row.check:Hide()
+        row.checkLabel:Hide()
     end
 
     local offset = 0

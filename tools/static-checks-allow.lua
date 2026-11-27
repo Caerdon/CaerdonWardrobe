@@ -36,6 +36,7 @@ return {
         Bagnonium = "Bagnonium",
         BaudBag = "BaudBag",
         CanIMogIt = "Can I Mog It",
+        DaylightUI = "Daylight UI",
         DUIDialogItemButtonMixin = "Dialogue UI",
         ElvUI = "ElvUI",
         KkthnxUI = "KkthnxUI",
@@ -123,6 +124,7 @@ return {
 
         -- Forever's game type, talent groups and classic bag kinds.
         ["WOW_PROJECT_CAMELOT"] = { "forever", "`or 18` in CaerdonAPI" },
+        ["C_AuctionHouse.GetItemKeySampleLink"] = { "forever", "read into a local and tested before the call in SampleLinkOf (features/Auction.lua)" },
         ["C_Traits.GetGroupDisplayInfoByTreeID"] = { "forever", "ReadTalentTrees returns early without it" },
         ["C_Traits.GetGroupCurrencyInfo"] = { "forever", "ReadTalentTrees returns early without it" },
         ["C_SpecializationInfo.GetCombatConfigIDForSpecGroup"] = { "forever", "tested before the call in ReadTalentTrees" },

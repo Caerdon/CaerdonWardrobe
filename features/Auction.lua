@@ -468,6 +468,24 @@ local function NoteKeySuffix(extraData, itemKey, itemKeyInfo)
 	return extraData
 end
 
+-- The link of a real piece of a key that names a suffix, where the client has one for it
+-- (WoW Forever: C_AuctionHouse.GetItemKeySampleLink, a piece among the key's results, which
+-- its own list shows as the row's tooltip). The link the client gives for the key itself is
+-- the item's without the suffix and its stats, which is nothing Pawn can be asked about. The
+-- equipment code still tells whether a link is the row's own, by the name and the level
+-- passed beside it (IsKnownByAnotherLink), so a sample of another name changes nothing.
+local function SampleLinkOf(itemKey)
+	if type(itemKey.itemSuffix) ~= "number" or itemKey.itemSuffix == 0 then
+		return nil
+	end
+	local getSampleLink = C_AuctionHouse and C_AuctionHouse.GetItemKeySampleLink
+	local link = getSampleLink and getSampleLink(itemKey)
+	if type(link) ~= "string" or C_Item.GetItemInfoInstant(link) ~= itemKey.itemID then
+		return nil
+	end
+	return link
+end
+
 -- An item for an item key, as a row of the results has it (ProcessItemKeyInfo): the level and
 -- the suffix the key names go beside the link, which is the plain item's, and the look where
 -- the row names one.
@@ -484,6 +502,8 @@ function AuctionMixin:MakeItemForKey(itemKey, appearanceLink)
 		extraData.appearanceSourceID = appearanceSourceID
 		extraData.appearanceID = itemAppearanceID
 		link = itemLink
+	else
+		link = SampleLinkOf(itemKey)
 	end
 	local item
 	if link then
@@ -825,9 +845,13 @@ function AuctionMixin:ProcessItemKeyInfo(itemKey, itemKeyInfo, button)
 		local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemKey.itemID)
 		local isRecipe = classID == Enum.ItemClass.Recipe
 
+		local sampleLink = not isRecipe and SampleLinkOf(itemKey) or nil
 		if isRecipe then
 			item = CaerdonItem:CreateFromItemID(itemKey.itemID)
 			item.extraData = extraData
+		elseif sampleLink then
+			-- A row that names a suffix: a real piece of it, with the suffix's stats.
+			item = CaerdonItem:CreateFromItemLink(sampleLink, extraData)
 		else
 			local requiredLevel = C_AuctionHouse.GetItemKeyRequiredLevel(itemKey)
 			local tooltipData = C_TooltipInfo and C_TooltipInfo.GetItemKey(itemKey.itemID, itemKey.itemLevel, itemKey.itemSuffix, requiredLevel)

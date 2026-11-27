@@ -1156,7 +1156,7 @@ function DebugFrameMixin:ProcessCurrentItem(item, keySuffix)
 end
 
 -- What the window under the pointer asked the addon to judge for this item, where the button
--- the tooltip belongs to is one the addon decorates: { link, extraData, drawn }. A window can
+-- the tooltip belongs to is one the addon decorates: { link, extraData, drawn, placed }. A window can
 -- pass more than a link (an auction row its item level, since the link the client gives for a
 -- row is the plain item's): the export is then of the piece as the window gave it, the one
 -- the icon was made for, and not of the link alone.
@@ -1165,12 +1165,23 @@ local function AskedUnderPointer(itemLink)
     if not (tooltip and tooltip.IsShown and tooltip:IsShown() and tooltip.GetOwner and CaerdonWardrobe.GetAskedOf) then
         return nil
     end
-    local asked, drawn = CaerdonWardrobe:GetAskedOf(tooltip:GetOwner())
+    local asked, drawn, placed = CaerdonWardrobe:GetAskedOf(tooltip:GetOwner())
     if not asked or type(asked.GetItemID) ~= "function" or
         asked:GetItemID() ~= C_Item.GetItemInfoInstant(itemLink) then
         return nil
     end
-    return { link = asked.extraData and asked:GetItemLink() or nil, extraData = asked.extraData, drawn = drawn }
+    return { link = asked.extraData and asked:GetItemLink() or nil, extraData = asked.extraData, drawn = drawn,
+        placed = placed }
+end
+
+-- What was ever said of the button the tooltip belongs to (CaerdonWardrobe:GetButtonRecord): it
+-- is there for a button that shows nothing too, which has no request to tell of.
+local function RecordUnderPointer()
+    local tooltip = GameTooltip
+    if not (tooltip and tooltip.IsShown and tooltip:IsShown() and tooltip.GetOwner and CaerdonWardrobe.GetButtonRecord) then
+        return nil
+    end
+    return CaerdonWardrobe:GetButtonRecord(tooltip:GetOwner())
 end
 
 -- kept: what AskedUnderPointer said when the item was first taken, for a refresh of it (the
@@ -1183,6 +1194,8 @@ function DebugFrameMixin:SetCurrentItem(itemLink, kept)
         if not ask then
             local ok, found = pcall(AskedUnderPointer, itemLink)
             ask = ok and found or nil
+            local recorded, record = pcall(RecordUnderPointer)
+            self.currentRecord = recorded and record or nil
         end
         self.currentAsk = ask
 
@@ -1203,6 +1216,19 @@ function DebugFrameMixin:SetCurrentItemFromBagAndSlot(bag, slot)
         return
     end
     if item then
+        -- What its window asked for the slot's button and what is on it, as for an item taken by
+        -- its link. A refresh of the same slot comes with the pointer somewhere else, and keeps
+        -- what was found when the slot was taken.
+        local sameSlot = self.currentItemLocation and self.currentItemLocation.bag == bag and
+            self.currentItemLocation.slot == slot
+        local ok, found = pcall(AskedUnderPointer, item:GetItemID())
+        local recorded, record = pcall(RecordUnderPointer)
+        if (ok and found) or not sameSlot then
+            self.currentAsk = ok and found or nil
+        end
+        if (recorded and record) or not sameSlot then
+            self.currentRecord = recorded and record or nil
+        end
         -- Prefer showing the hyperlink if available; otherwise show a placeholder until load completes
         self.currentItem = item:GetItemLink() or ("Bag " .. tostring(bag) .. ", Slot " .. tostring(slot))
         self.currentItemLocation = { bag = bag, slot = slot }
@@ -2457,6 +2483,15 @@ function DebugFrameMixin:BuildClipboardPayload(item)
         end
         if ask and ask.drawn then
             addKV(1, "Its Button", ask.drawn)
+        end
+        -- In a list that cuts off what hangs over its edge: where the icon was placed, and from
+        -- what numbers (as they were when the item was taken from under the pointer).
+        if ask and ask.placed then
+            addKV(1, "Its Icon's Place", ask.placed)
+        end
+        -- Everything said of the button this session, whether or not a request stands now.
+        if self.currentRecord then
+            addKV(1, "Its Button's Record", self.currentRecord)
         end
     end
     if self.openedFrom then

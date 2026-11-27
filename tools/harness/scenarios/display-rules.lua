@@ -184,7 +184,7 @@ return function(H, S)
         end
         return {}
     end
-    FUNCTIONS.Merchant, FUNCTIONS.BetterBagsVendor = Vendor, Vendor
+    FUNCTIONS.Merchant, FUNCTIONS.BetterBagsVendor, FUNCTIONS.DaylightUIVendor = Vendor, Vendor, Vendor
     FUNCTIONS.ArkInventory, FUNCTIONS.Bagnon, FUNCTIONS.Bagnonium = BagView, BagView, BagView
 
     -- GetDisplayInfoInternal as it was, with the window's function standing as a table.
@@ -401,8 +401,9 @@ return function(H, S)
             end
             -- The scenario's own five, and the shipped ones.
             Check(declaring >= 5 + 28, label .. "the windows that declare were read (" .. declaring .. ", " .. named .. " rules)")
-            -- The vendor and its window in BetterBags, three bag addons, and the scenario's own.
-            Equal(choosing, 6, label .. "the windows that choose among declarations by the draw")
+            -- The vendor and its windows in BetterBags and in Daylight UI, three bag addons, and
+            -- the scenario's own.
+            Equal(choosing, 7, label .. "the windows that choose among declarations by the draw")
         end
 
         ------------------------------------------------------------------------------------
@@ -582,7 +583,7 @@ return function(H, S)
                 end
                 Set(config, path, value)
             end
-            Equal(windows, 31, label .. "every window of the list was compared")
+            Equal(windows, 32, label .. "every window of the list was compared")
             Check(compared > 100000, label .. "each setting alone was compared (" .. compared .. ")")
             Equal(differing, 0, label .. "the declared rules give what the functions gave (first: " .. tostring(first) .. ")")
 
@@ -615,7 +616,9 @@ return function(H, S)
             end
             table.sort(never)
             Equal(table.concat(always, " "), "", label .. "no window declares the quest icon as always on")
-            Equal(table.concat(never, " "), "CustomerOrders ItemConversion Skillet TradeSkill", label .. "the windows that never show the quest icon")
+            -- Daylight UI's profession window answers with the TradeSkill feature's rules.
+            Equal(table.concat(never, " "), "CustomerOrders DaylightUICraft ItemConversion Skillet TradeSkill",
+                label .. "the windows that never show the quest icon")
 
             -- A window that draws another's content has that window's declaration itself, and
             -- its answer for a draw.
@@ -649,6 +652,21 @@ return function(H, S)
                         label .. "BetterBags' vendor: the star only on what is not carried (" .. tostring(held) .. ")")
                     Equal(Shown(bagsVendor, {}).otherIcon.shouldShow, not held,
                         label .. "BetterBags' vendor: and the icon for another toon (" .. tostring(held) .. ")")
+                end
+                -- So does its window in Daylight UI.
+                local daylightVendor = core:GetFeature("DaylightUIVendor")
+                Check(daylightVendor ~= nil, label .. "Daylight UI's vendor is registered")
+                if daylightVendor then
+                    for _, held in ipairs({ false, true }) do
+                        carried = held
+                        local chosen = vendor:GetDisplayRules(button, item)
+                        Check(daylightVendor:GetDisplayRules(button, item) == chosen and chosen ~= nil,
+                            label .. "Daylight UI's vendor answers with the vendor's rules themselves, a copy carried: " .. tostring(held))
+                        Equal(Shown(daylightVendor, {}).ownIcon.shouldShow, not held,
+                            label .. "Daylight UI's vendor: the star only on what is not carried (" .. tostring(held) .. ")")
+                    end
+                    Equal(daylightVendor:GetDisplayInfo(button, item), nil,
+                        label .. "Daylight UI's vendor answers for no draw beyond the vendor's declaration")
                 end
                 carried = false
                 Check(vendor:GetDisplayRules(button, item) == vendor.displayRules, label .. "the vendor: nothing carried is its own declaration")
