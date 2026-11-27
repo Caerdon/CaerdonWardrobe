@@ -441,6 +441,7 @@ return function(H, S)
             { "AngrierWorldQuests", "external/AngrierWorldQuests/Core.AngrierWorldQuests.lua" },
             { "Auctionator", "external/Auctionator/Core.Auctionator.lua" },
             { "cargBags_Nivaya", "external/CargBags/Core.CargBags.lua" },
+            { "GudaBags", "external/GudaBags/Core.GudaBags.lua" },
             { "LiteBag", "external/LiteBag/Core.LiteBag.lua" },
             { "Skillet", "external/Skillet/Core.Skillet.lua" },
             { "Sorted", "external/Sorted/Core.Sorted.lua" },

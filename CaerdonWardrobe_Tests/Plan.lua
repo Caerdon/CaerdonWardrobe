@@ -51,7 +51,7 @@ CaerdonWardrobeTestsPlan = {
     rotation = {
         addons = {
             "AdiBags", "ArkInventory", "Baganator", "Bagnon", "Bagnonium", "BaudBag", "BetterBags",
-            "cargBags_Nivaya", "ElvUI", "Inventorian", "KkthnxUI", "LiteBag", "NDui", "Sorted",
+            "cargBags_Nivaya", "ElvUI", "GudaBags", "Inventorian", "KkthnxUI", "LiteBag", "NDui", "Sorted",
         },
     },
 }
